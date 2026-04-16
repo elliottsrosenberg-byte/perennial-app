@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PR-05 – Presence Events</title>
+<style>
+/* ── Design system ── */
+:root {
+  --bg:#f5f4f1; --surface:#fff; --surface-2:#f0ede8; --surface-hover:#f7f5f2;
+  --border:rgba(0,0,0,0.07); --border-strong:rgba(0,0,0,0.13);
+  --text-primary:#1a1916; --text-secondary:#6b6860; --text-tertiary:#a8a49e;
+  --accent:#3d6b4f; --accent-light:rgba(61,107,79,0.08);
+  --red:#c0392b; --red-light:rgba(192,57,43,0.08);
+  --amber:#b8860b; --amber-light:rgba(184,134,11,0.10);
+  --blue:#2563ab; --blue-light:rgba(37,99,171,0.08);
+  --purple:#6d4fa3; --purple-light:rgba(109,79,163,0.08);
+  --teal:#148c8c; --teal-light:rgba(20,140,140,0.08);
+  --shadow-card:0 1px 4px rgba(0,0,0,0.07),0 0 0 0.5px rgba(0,0,0,0.07);
+  --shadow-float:0 4px 20px rgba(0,0,0,0.12);
+  --radius:12px; --radius-sm:8px; --radius-xs:6px;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#181715; --surface:#222120; --surface-2:#2a2927; --surface-hover:#272523;
+  --border:rgba(255,255,255,0.06); --border-strong:rgba(255,255,255,0.11);
+  --text-primary:#f0ede8; --text-secondary:#9a9690; --text-tertiary:#5c5a56;
+  --accent:#5a9470; --accent-light:rgba(90,148,112,0.12);
+  --shadow-card:0 1px 4px rgba(0,0,0,0.2),0 0 0 0.5px rgba(255,255,255,0.06);
+  --shadow-float:0 4px 20px rgba(0,0,0,0.35);
+}}
+
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text-primary);height:100vh;display:flex;overflow:hidden;font-size:13px;}
+
+/* ── Sidebar ── */
+.app-sidebar{width:56px;background:#d94f3d;flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:6px;}
+.sidebar-logo{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.2);margin-bottom:10px;}
+.sidebar-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.55);cursor:pointer;}
+.sidebar-icon:hover{background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.85);}
+.sidebar-icon.active{background:rgba(255,255,255,0.22);color:white;}
+
+/* ── Shell ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.section-topbar{display:flex;align-items:stretch;border-bottom:0.5px solid var(--border-strong);background:var(--surface);flex-shrink:0;height:44px;}
+.section-title-wrap{padding:0 20px;display:flex;align-items:center;gap:10px;border-right:0.5px solid var(--border-strong);flex-shrink:0;}
+.section-title{font-size:14px;font-weight:650;}
+.section-period{font-size:11px;color:var(--text-tertiary);}
+.topbar-tabs{display:flex;align-items:stretch;flex:1;}
+.topbar-tab{padding:0 18px;font-size:12px;color:var(--text-secondary);cursor:pointer;border-bottom:1.5px solid transparent;display:flex;align-items:center;border-right:0.5px solid var(--border);white-space:nowrap;}
+.topbar-tab:hover{color:var(--text-primary);background:var(--surface-hover);}
+.topbar-tab.active{color:var(--text-primary);font-weight:600;border-bottom-color:var(--text-primary);}
+.topbar-fill{flex:1;}
+.topbar-actions{display:flex;align-items:center;gap:7px;padding:0 16px;flex-shrink:0;}
+.btn{padding:5px 12px;font-size:11px;border-radius:var(--radius-xs);cursor:pointer;border:none;font-family:inherit;}
+.btn-ghost{background:transparent;color:var(--text-secondary);border:0.5px solid var(--border-strong);}
+.btn-ghost:hover{background:var(--surface-2);}
+.btn-primary{background:var(--text-primary);color:var(--bg);font-weight:500;}
+.btn-accent{background:var(--accent);color:white;font-weight:500;}
+
+/* ── Tab content ── */
+.tab-content{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
+.tab-hidden{display:none;}
+
+/* ── Filter bar ── */
+.filter-bar{display:flex;align-items:center;gap:16px;padding:10px 24px;background:var(--surface);border-bottom:0.5px solid var(--border);flex-shrink:0;}
+.filter-label-wrap{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.filter-label{font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;font-weight:600;}
+.tooltip-icon{width:14px;height:14px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:0.5px solid var(--border-strong);color:var(--text-tertiary);font-size:9px;cursor:help;}
+.filter-pills{display:flex;align-items:center;gap:6px;flex:1;justify-content:center;flex-wrap:wrap;}
+.filter-pill{padding:5px 12px;border-radius:20px;font-size:11px;cursor:pointer;border:0.5px solid var(--border);background:transparent;color:var(--text-secondary);white-space:nowrap;}
+.filter-pill.active{background:var(--text-primary);color:var(--bg);border-color:var(--text-primary);}
+.filter-pill:hover{background:var(--surface-2);}
+.filter-right{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.filter-dropdown-btn{padding:4px 8px;font-size:11px;background:transparent;color:var(--text-secondary);border:none;cursor:pointer;}
+.filter-chip{padding:4px 10px;border-radius:12px;font-size:11px;background:var(--surface-2);color:var(--text-secondary);display:flex;align-items:center;gap:5px;}
+
+/* ── Events content area ── */
+.events-list{padding:22px 24px;display:flex;flex-direction:column;gap:20px;overflow-y:auto;}
+
+/* ── Section headers ── */
+.event-section-header{display:flex;align-items:center;gap:8px;padding:10px 0 8px 12px;border-left:4px solid;margin-bottom:4px;}
+.event-section-header.act-soon{border-left-color:var(--red);}
+.event-section-header.upcoming{border-left-color:var(--accent);}
+.event-section-header.later{border-left-color:var(--text-tertiary);}
+.event-section-label{font-size:12px;font-weight:700;}
+.event-section-label.act-soon{color:var(--red);}
+.event-section-label.upcoming{color:var(--accent);}
+.event-section-label.later{color:var(--text-tertiary);}
+.event-section-badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--red-light);color:var(--red);}
+.event-section-badge.upcoming{background:var(--accent-light);color:var(--accent);}
+.event-section-badge.later{background:var(--surface-2);color:var(--text-tertiary);}
+
+/* ── Event rows ── */
+.event-row{display:flex;align-items:flex-start;gap:14px;padding:14px 0;border-bottom:0.5px solid var(--border);}
+.event-row:hover{background:var(--surface-hover);border-radius:8px;padding:14px 8px;}
+.event-row:last-child{border-bottom:none;}
+
+.event-date-block{width:44px;flex-shrink:0;text-align:center;background:var(--surface-2);border-radius:8px;padding:5px 0;}
+.event-date-month{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);font-weight:600;}
+.event-date-day{font-size:18px;font-weight:700;line-height:1.1;color:var(--text-primary);}
+
+.event-body{flex:1;display:flex;flex-direction:column;gap:5px;}
+.event-title-row{display:flex;align-items:center;gap:8px;}
+.event-title{font-size:13px;font-weight:600;color:var(--text-primary);}
+.event-type-badge{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:2px 8px;border-radius:10px;flex-shrink:0;}
+.event-type-badge.teal{background:var(--teal-light);color:var(--teal);}
+.event-type-badge.blue{background:var(--blue-light);color:var(--blue);}
+.event-type-badge.purple{background:var(--purple-light);color:var(--purple);}
+
+.event-meta{font-size:11px;color:var(--text-secondary);}
+.event-meta.muted{color:var(--text-tertiary);}
+
+.event-tags-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.event-deadline-pill{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--red-light);color:var(--red);}
+.event-tag{font-size:10px;color:var(--text-tertiary);padding:2px 0;}
+.event-tag::before{content:" · ";}
+.event-tag:first-of-type::before{content:"";}
+
+.event-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.event-actions .btn{padding:4px 10px;font-size:10px;}
+
+.event-note{background:var(--amber-light);border-left:3px solid var(--amber);padding:10px 12px;margin:10px 0 0 50px;border-radius:4px;font-size:11px;color:var(--amber);}
+.event-note a{color:var(--amber);text-decoration:underline;cursor:pointer;font-weight:600;}
+
+.event-status-badge{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:3px 8px;border-radius:10px;flex-shrink:0;}
+.event-status-badge.attending{background:var(--accent-light);color:var(--accent);}
+.event-status-badge.exhibiting{background:var(--accent);color:white;}
+.event-status-badge.saved{background:var(--surface-2);color:var(--text-secondary);}
+
+/* ── Ash + annotation ── */
+.ash-icon{position:fixed;bottom:24px;right:24px;width:36px;height:36px;border-radius:50%;background:var(--surface);border:.5px solid var(--border-strong);box-shadow:0 2px 8px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:20;}
+.annotation{position:fixed;bottom:16px;left:72px;font-size:10px;color:var(--text-tertiary);font-style:italic;}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="app-sidebar">
+  <div class="sidebar-logo"></div>
+  <div class="sidebar-icon" title="Projects">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Contacts">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Outreach">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Finance">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 6.5h14"/><path d="M5 10h2M10 10h1"/></svg>
+  </div>
+  <div class="sidebar-icon active" title="Presence">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 2c0 0-3 2.5-3 6s3 6 3 6"/><path d="M8 2c0 0 3 2.5 3 6s-3 6-3 6"/><path d="M2 8h12"/></svg>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="section-topbar">
+    <div class="section-title-wrap">
+      <span class="section-title">Presence</span>
+      <span class="section-period">Apr 2026</span>
+    </div>
+    <div class="topbar-tabs">
+      <div class="topbar-tab" onclick="navigateTab('overview')">Overview</div>
+      <div class="topbar-tab" onclick="navigateTab('website')">Website</div>
+      <div class="topbar-tab" onclick="navigateTab('socials')">Socials</div>
+      <div class="topbar-tab" onclick="navigateTab('newsletter')">Newsletter</div>
+      <div class="topbar-tab active" onclick="navigateTab('events')">Events</div>
+    </div>
+    <div class="topbar-fill"></div>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost">Sync calendar</button>
+      <button class="btn btn-primary">+ Add event</button>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <div class="filter-label-wrap">
+      <span class="filter-label">Perennial Feed</span>
+      <div class="tooltip-icon" title="Curated opportunities for designers">i</div>
+    </div>
+    <div class="filter-pills">
+      <button class="filter-pill active">All</button>
+      <button class="filter-pill">Open Calls</button>
+      <button class="filter-pill">Fairs & Shows</button>
+      <button class="filter-pill">Grants</button>
+      <button class="filter-pill">Residencies</button>
+    </div>
+    <div class="filter-right">
+      <button class="filter-dropdown-btn">Showing: All types ▾</button>
+      <div class="filter-chip">Saved (2)</div>
+    </div>
+  </div>
+
+  <!-- Events list content -->
+  <div class="events-list">
+
+    <!-- ACT SOON section -->
+    <div>
+      <div class="event-section-header act-soon">
+        <span class="event-section-label act-soon">Act soon</span>
+        <span class="event-section-badge">2 deadlines</span>
+      </div>
+
+      <!-- Event 1: Design Miami Application -->
+      <div class="event-row">
+        <div class="event-date-block">
+          <div class="event-date-month">Apr</div>
+          <div class="event-date-day">28</div>
+        </div>
+        <div class="event-body">
+          <div class="event-title-row">
+            <span class="event-title">Design Miami Application</span>
+            <span class="event-type-badge teal">Open Call</span>
+          </div>
+          <div class="event-meta">📍 Miami, FL · Art & design fair application</div>
+          <div class="event-tags-row">
+            <span class="event-deadline-pill">Deadline in 13 days</span>
+            <span class="event-tag">Gallery</span>
+            <span class="event-tag">Collectibles</span>
+          </div>
+        </div>
+        <div class="event-actions">
+          <button class="btn btn-accent">Apply now</button>
+          <button class="btn btn-ghost" title="Save">💾</button>
+        </div>
+      </div>
+      <div class="event-note">
+        <strong>Ash:</strong> Your work aligns with their collectible design track — want me to draft the application? <a>Draft →</a>
+      </div>
+
+      <!-- Event 2: Collect Art Fair Application -->
+      <div class="event-row">
+        <div class="event-date-block">
+          <div class="event-date-month">May</div>
+          <div class="event-date-day">1</div>
+        </div>
+        <div class="event-body">
+          <div class="event-title-row">
+            <span class="event-title">Collect Art Fair Application</span>
+            <span class="event-type-badge teal">Open Call</span>
+          </div>
+          <div class="event-meta">📍 London, UK · Annual fair for modern and contemporary art and design</div>
+          <div class="event-tags-row">
+            <span class="event-deadline-pill">Deadline in 16 days</span>
+            <span class="event-tag">Gallery</span>
+            <span class="event-tag">International</span>
+          </div>
+        </div>
+        <div class="event-actions">
+          <button class="btn btn-accent">Apply now</button>
+          <button class="btn btn-ghost" title="Save">💾</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- UPCOMING section -->
+    <div>
+      <div class="event-section-header upcoming">
+        <span class="event-section-label upcoming">Upcoming</span>
+        <span class="event-section-badge upcoming">5 events</span>
+      </div>
+
+      <!-- Event 1: NYCxDesign 2026 -->
+      <div class="event-row">
+        <div class="event-date-block">
+          <div class="event-date-month">May</div>
+          <div class="event-date-day">14</div>
+        </div>
+        <div class="event-body">
+          <div class="event-title-row">
+            <span class="event-title">NYCxDesign 2026</span>
+            <span class="event-type-badge blue">Fair</span>
+          </div>
+          <div class="event-meta">May 14–22 · New York, NY · Annual NYC design week — exhibitions, talks, studio tours</div>
+          <div class="event-tags-row">
+            <span class="event-tag">Citywide</span>
+            <span class="event-tag">Free</span>
+            <span class="event-status-badge attending">Attending</span>
+          </div>
+        </div>
+        <div class="event-actions">
+          <button class="btn btn-ghost">View details</button>
+        </div>
+      </div>
+
+      <!-- Event 2: ICFF 2026 -->
+      <div class="event-row">
+        <div class="event-date-block">
+          <div class="event-date-month">May</div>
+          <div class="event-date-day">19</div>
+        </div>
+        <div class="event-body">
+          <div class="event-title-row">
+            <span class="event-title">ICFF 2026</span>
+            <span class="event-type-badge blue">Fair</span>
+          </div>
+          <div class="event-meta">May 19–23 · New York, NY · Javits Center</div>
+          <div class="event-tags-row">
+            <span class="event-tag">Booth: Hall 3</span>
+            <span class="event-tag">B14</span>
+            <span class="event-status-badge exhibiting">Exhibiting</span>
+          </div>
+        </div>
+        <div class="event-actions">
+          <button class="btn btn-accent">Manage booth →</button>
+        </div>
+      </div>
+
+      <!-- Event 3: Salon Art + Design Open Call -->
+      <div class="event-row">
+        <div class="event-date-block">
+          <div class="event-date-month">Jun</div>
+          <div class="event-date-day">1</div>
+        </div>
+        <div class="event-body">
+          <div class="event-title-row">
+            <span class="event-title">Salon Art + Design Open Call</span>
+            <span class="event-type-badge teal">Open Call</span>
+          </div>
+          <div class="event-meta">📍 New York, NY (Park Avenue Armory) · Curated gallery of 20th and 21st century design</div>
+          <div class="event-tags-row">
+            <span class="event-tag">Collectible</span>
+            <span class="event-tag">High-end</span>
+          </div>
+        </div>
+        <div class="event-actions">
+          <button class="btn btn-accent">Apply</button>
+          <button class="btn btn-ghost" title="Save">💾</button>
+        </div>
+      </div>
+
+      <!-- Event 4: Surface Design Show -->
+      <div class="event-row">
+        <div class="event-date-block">
+          <div class="event-date-month">Jun</div>
+          <div class="event-date-day">3</div>
+        </div>
+        <div class="event-body">
+          <div class="event-title-row">
+            <span class="event-title">Surface Design Show</span>
+            <span class="event-type-badge blue">Fair</span>
+          </div>
+          <div class="event-meta">Jun 3–5 · London, UK</div>
+          <div class="event-tags-row">
+            <span class="event-tag">International</span>
+            <span class="event-tag">Materials</span>
+            <span class="event-status-badge saved">Saved</span>
+          </div>
+        </div>
+        <div class="event-actions">
+          <button class="btn btn-ghost">View details</button>
+        </div>
+      </div>
+
+      <!-- Event 5: NYCxDesign Emerging Designer Grant -->
+      <div class="event-row">
+        <div class="event-date-block">
+          <div class="event-date-month">Jun</div>
+          <div class="event-date-day">15</div>
+        </div>
+        <div class="event-body">
+          <div class="event-title-row">
+            <span class="event-title">NYCxDesign Emerging Designer Grant — $5,000</span>
+            <span class="event-type-badge purple">Grant</span>
+          </div>
+          <div class="event-meta">For NYC-based designers in early to mid career</div>
+          <div class="event-tags-row">
+            <span class="event-tag">NYC</span>
+            <span class="event-tag">Career stage: Early-mid</span>
+          </div>
+        </div>
+        <div class="event-actions">
+          <button class="btn btn-accent">Apply</button>
+          <button class="btn btn-ghost" title="Save">💾</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LATER THIS YEAR section -->
+    <div>
+      <div class="event-section-header later">
+        <span class="event-section-label later">Later this year</span>
+        <span class="event-section-badge later">3 events</span>
+      </div>
+
+      <!-- Event 1: Design Miami/Basel -->
+      <div class="event-row">
+        <div class="event-date-block">
+          <div class="event-date-month">Jun</div>
+          <div class="event-date-day">10</div>
+        </div>
+        <div class="event-body">
+          <div class="event-title-row">
+            <span class="event-title">Design Miami/Basel</span>
+            <span class="event-type-badge blue">Fair</span>
+          </div>
+          <div class="event-meta muted">Jun 10–15 · Basel, Switzerland</div>
+          <div class="event-tags-row">
+          </div>
+        </div>
+        <div class="event-actions">
+          <button class="btn btn-ghost">View details</button>
+        </div>
+      </div>
+      <div class="event-note" style="background:var(--amber-light);border-left-color:var(--amber);color:var(--amber);">
+        Save for next year?
+      </div>
+
+      <!-- Event 2: Objects & Curiosities Fair -->
+      <div class="event-row">
+        <div class="event-date-block">
+          <div class="event-date-month">Jul</div>
+          <div class="event-date-day">8</div>
+        </div>
+        <div class="event-body">
+          <div class="event-title-row">
+            <span class="event-title">Objects & Curiosities Fair</span>
+            <span class="event-type-badge blue">Fair</span>
+          </div>
+          <div class="event-meta muted">Jul 8–12 · Los Angeles, CA</div>
+          <div class="event-tags-row">
+            <span class="event-status-badge saved">Saved</span>
+          </div>
+        </div>
+        <div class="event-actions">
+          <button class="btn btn-ghost">View details</button>
+        </div>
+      </div>
+
+      <!-- Event 3: Graham Foundation Grant -->
+      <div class="event-row">
+        <div class="event-date-block">
+          <div class="event-date-month">Aug</div>
+          <div class="event-date-day">1</div>
+        </div>
+        <div class="event-body">
+          <div class="event-title-row">
+            <span class="event-title">Graham Foundation Grant — $8,000</span>
+            <span class="event-type-badge purple">Grant</span>
+          </div>
+          <div class="event-meta muted">Supports architecture and arts projects</div>
+          <div class="event-tags-row">
+            <span class="event-tag">Architecture</span>
+            <span class="event-tag">Arts</span>
+          </div>
+        </div>
+        <div class="event-actions">
+          <button class="btn btn-ghost">View details</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /events-list -->
+
+</div><!-- /main -->
+
+<!-- Ash icon -->
+<div class="ash-icon">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+    <path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/>
+    <path d="M12 12c-2-1.5-3-3-2-5"/>
+    <path d="M12 12c2-1.5 3-3 2-5"/>
+  </svg>
+</div>
+
+<div class="annotation">PR-05 · Events — Perennial Feed. Filter by type. Three sections: Act soon / Upcoming / Later. Full-width event rows.</div>
+
+<script>
+function navigateTab(tabName) {
+  // Determine the URL based on tab name
+  const urls = {
+    overview: 'PR-01-presence-overview.html',
+    website: 'PR-02-presence-website.html',
+    socials: 'PR-03-presence-socials.html',
+    newsletter: 'PR-04-presence-newsletter.html',
+    events: 'PR-05-presence-events.html'
+  };
+
+  if (urls[tabName]) {
+    window.location.href = urls[tabName];
+  }
+}
+</script>
+</body>
+</html>

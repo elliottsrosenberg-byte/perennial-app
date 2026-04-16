@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASH-01 – Ash Resting State</title>
+<style>
+/* ── Design system ── */
+:root {
+  --bg:#f5f4f1; --surface:#fff; --surface-2:#f0ede8; --surface-hover:#f7f5f2;
+  --border:rgba(0,0,0,0.07); --border-strong:rgba(0,0,0,0.13);
+  --text-primary:#1a1916; --text-secondary:#6b6860; --text-tertiary:#a8a49e;
+  --accent:#3d6b4f; --accent-light:rgba(61,107,79,0.08);
+  --red:#c0392b; --red-light:rgba(192,57,43,0.08);
+  --amber:#b8860b; --amber-light:rgba(184,134,11,0.10);
+  --blue:#2563ab; --blue-light:rgba(37,99,171,0.08);
+  --shadow-card:0 1px 4px rgba(0,0,0,0.07),0 0 0 0.5px rgba(0,0,0,0.07);
+  --radius:12px; --radius-sm:8px; --radius-xs:6px;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#181715; --surface:#222120; --surface-2:#2a2927; --surface-hover:#272523;
+  --border:rgba(255,255,255,0.06); --border-strong:rgba(255,255,255,0.11);
+  --text-primary:#f0ede8; --text-secondary:#9a9690; --text-tertiary:#5c5a56;
+  --accent:#5a9470; --accent-light:rgba(90,148,112,0.12);
+  --shadow-card:0 1px 4px rgba(0,0,0,0.2),0 0 0 0.5px rgba(255,255,255,0.06);
+}}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text-primary);height:100vh;display:flex;overflow:hidden;font-size:13px;}
+
+/* ── Sidebar ── */
+.app-sidebar{width:56px;background:#d94f3d;flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:6px;}
+.sidebar-logo{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.2);margin-bottom:10px;}
+.sidebar-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.55);cursor:pointer;}
+.sidebar-icon:hover{background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.85);}
+.sidebar-icon.active{background:rgba(255,255,255,0.22);color:white;}
+.sidebar-avatar{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:600;margin-top:auto;}
+
+/* ── Main shell ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+
+/* ── Topbar ── */
+.section-topbar{display:flex;align-items:stretch;border-bottom:0.5px solid var(--border-strong);background:var(--surface);flex-shrink:0;height:44px;}
+.section-title-wrap{padding:0 16px;display:flex;align-items:center;gap:10px;border-right:0.5px solid var(--border-strong);flex-shrink:0;}
+.list-toggle-btn{width:28px;height:28px;border-radius:var(--radius-xs);border:0.5px solid var(--border-strong);background:var(--surface-2);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-secondary);}
+.list-toggle-btn svg{width:12px;height:12px;}
+.section-title{font-size:14px;font-weight:650;}
+.topbar-tabs{display:flex;align-items:stretch;flex:1;}
+.topbar-tab{padding:0 18px;font-size:12px;color:var(--text-secondary);cursor:pointer;border-bottom:1.5px solid transparent;display:flex;align-items:center;border-right:0.5px solid var(--border);white-space:nowrap;}
+.topbar-tab:hover{color:var(--text-primary);background:var(--surface-hover);}
+.topbar-tab.active{color:var(--text-primary);font-weight:600;border-bottom-color:var(--text-primary);}
+.topbar-fill{flex:1;}
+.topbar-actions{display:flex;align-items:center;gap:7px;padding:0 16px;flex-shrink:0;}
+.btn{padding:5px 12px;font-size:11px;border-radius:var(--radius-xs);cursor:pointer;border:none;font-family:inherit;}
+.btn-ghost{background:transparent;color:var(--text-secondary);border:0.5px solid var(--border-strong);}
+.btn-ghost:hover{background:var(--surface-2);}
+.btn-primary{background:var(--text-primary);color:var(--bg);font-weight:500;}
+.divider-vertical{width:0.5px;height:16px;background:var(--border-strong);}
+
+/* ── Content area ── */
+.content-wrapper{flex:1;display:flex;overflow:hidden;}
+
+/* ── Writing surface ── */
+.writing-area{flex:1;background:var(--surface);overflow-y:auto;padding:44px 64px;}
+.note-title{font-size:24px;font-weight:650;letter-spacing:-0.02em;color:var(--text-primary);line-height:1.2;}
+.note-metadata{margin-top:8px;font-size:11px;color:var(--text-tertiary);}
+.note-body{margin-top:28px;font-size:15px;line-height:1.8;color:var(--text-secondary);}
+.note-body p{margin-bottom:14px;}
+.note-body p:last-child{color:var(--text-tertiary);}
+
+/* ── Bottom bar ── */
+.bottom-bar{height:40px;border-top:0.5px solid var(--border);background:var(--surface);display:flex;align-items:center;padding:0 20px;gap:8px;flex-shrink:0;}
+.bottom-left{display:flex;align-items:center;gap:6px;}
+.tag{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding:3px 9px;border-radius:20px;display:flex;align-items:center;gap:4px;color:var(--accent);background:var(--accent-light);border:0.5px solid rgba(61,107,79,0.2);}
+.tag-icon{width:10px;height:10px;}
+.word-count{font-size:10px;color:var(--text-tertiary);}
+.bottom-right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+.saved-status{font-size:10px;color:var(--text-tertiary);display:flex;align-items:center;gap:4px;}
+
+/* ── Ash icon ── */
+.ash-icon{position:fixed;bottom:24px;right:24px;width:36px;height:36px;border-radius:50%;background:var(--surface);border:0.5px solid var(--border-strong);box-shadow:0 2px 8px rgba(0,0,0,.14);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:20;color:var(--accent);}
+.ash-icon svg{width:18px;height:18px;}
+
+/* ── Annotation ── */
+.annotation{position:fixed;bottom:16px;left:72px;font-size:10px;color:var(--text-tertiary);font-style:italic;}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="app-sidebar">
+  <div class="sidebar-logo"></div>
+  <div class="sidebar-icon" title="Home">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 7l6-4 6 4v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7z"/><path d="M6 14v-3h4v3"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Projects">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Contacts">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+  </div>
+  <div class="sidebar-icon active" title="Notes">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2h8l1 1v11H3a1 1 0 0 1-1-1V2z"/><path d="M10 2v1h1"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Finance">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 6.5h14"/><path d="M5 10h2M10 10h1"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Presence">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M8 3v5l3 1.5"/></svg>
+  </div>
+  <div class="sidebar-avatar">E</div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <!-- Topbar -->
+  <div class="section-topbar">
+    <div class="section-title-wrap">
+      <button class="list-toggle-btn">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/>
+        </svg>
+      </button>
+      <span class="section-title">Notes</span>
+    </div>
+    <div class="topbar-tabs">
+      <div class="topbar-tab active">Notes</div>
+      <div class="topbar-tab">Reminders</div>
+    </div>
+    <div class="topbar-fill"></div>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost">To reminder</button>
+      <button class="btn btn-ghost">Pin</button>
+      <button class="btn btn-ghost">Date</button>
+      <div class="divider-vertical"></div>
+      <button class="btn btn-primary">+ New note</button>
+    </div>
+  </div>
+
+  <!-- Content wrapper -->
+  <div class="content-wrapper">
+    <div class="writing-area">
+      <div class="note-title">Walnut slab idea for gallery show</div>
+      <div class="note-metadata">Created 2 hours ago · Notes</div>
+      <div class="note-body">
+        <p>Need to source 8/4 walnut stock for the gallery show piece. Check with Murray's mill about availability — last quoted $14/bf for 8/4. Want to confirm lead time before committing to the show.</p>
+        <p>Dimensions roughly 36" × 72" after milling. Keeping the live edge on one side. May work well with the brass base from the Lehman commission if the proportions line up.</p>
+        <p>Budget: $800–1,200 for the slab depending on figure. Could stretch to $1,400 if the grain is exceptional.</p>
+        <p>Follow up: pull the Lehman commission drawings to check base dimensions.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom bar -->
+  <div class="bottom-bar">
+    <div class="bottom-left">
+      <div class="tag">
+        <svg class="tag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/><path d="M12 12c-2-1.5-3-3-2-5"/><path d="M12 12c2-1.5 3-3 2-5"/></svg>
+        Ash
+      </div>
+      <span class="word-count">142 words</span>
+    </div>
+    <div class="bottom-right">
+      <div class="saved-status">
+        <svg style="width:10px;height:10px;" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="2 8 6 12 14 4"/></svg>
+        Saved
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Ash icon — resting state (the point of this file) -->
+<div class="ash-icon" title="Click to open Ash">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+    <path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/>
+    <path d="M12 12c-2-1.5-3-3-2-5"/>
+    <path d="M12 12c2-1.5 3-3 2-5"/>
+  </svg>
+</div>
+
+<div class="annotation">ASH-01 · Ash resting state — sapling icon, bottom right corner, quiet until clicked.</div>
+
+</body>
+</html>
