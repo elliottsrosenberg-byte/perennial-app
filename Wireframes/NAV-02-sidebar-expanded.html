@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NAV-02 – Sidebar Expanded (Labels)</title>
+<style>
+:root {
+  --bg:#f5f4f1; --surface:#fff; --surface-2:#f0ede8; --surface-hover:#f7f5f2;
+  --border:rgba(0,0,0,0.07); --border-strong:rgba(0,0,0,0.13);
+  --text-primary:#1a1916; --text-secondary:#6b6860; --text-tertiary:#a8a49e;
+  --accent:#3d6b4f; --accent-light:rgba(61,107,79,0.08);
+  --shadow-card:0 1px 4px rgba(0,0,0,0.07),0 0 0 0.5px rgba(0,0,0,0.07);
+  --radius:12px; --radius-sm:8px; --radius-xs:6px;
+  --sidebar-red:#d94f3d;
+  --sw:196px;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#181715; --surface:#222120; --surface-2:#2a2927; --surface-hover:#272523;
+  --border:rgba(255,255,255,0.06); --border-strong:rgba(255,255,255,0.11);
+  --text-primary:#f0ede8; --text-secondary:#9a9690; --text-tertiary:#5c5a56;
+  --accent:#5a9470; --accent-light:rgba(90,148,112,0.12);
+  --shadow-card:0 1px 4px rgba(0,0,0,0.2),0 0 0 0.5px rgba(255,255,255,0.06);
+  --sidebar-red:#b83e2e;
+}}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:var(--bg);
+  color:var(--text-primary);
+  height:100vh;
+  display:flex;
+  overflow:hidden;
+  font-size:13px;
+}
+
+/* ── Sidebar ── */
+.app-sidebar{
+  width:var(--sw);
+  background:var(--sidebar-red);
+  flex-shrink:0;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+
+/* Studio header */
+.studio-header{
+  padding:13px 12px 11px;
+  display:flex;align-items:center;gap:9px;
+  border-bottom:0.5px solid rgba(255,255,255,0.12);
+  flex-shrink:0;
+}
+.studio-mark{
+  width:28px;height:28px;border-radius:7px;
+  background:rgba(255,255,255,0.2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;color:white;flex-shrink:0;
+}
+.studio-info{flex:1;min-width:0;}
+.studio-name{font-size:12px;font-weight:650;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.studio-sub{font-size:9px;color:rgba(255,255,255,0.5);margin-top:1px;}
+
+/* Primary nav */
+.nav-section{padding:8px 6px 4px;display:flex;flex-direction:column;gap:1px;flex-shrink:0;}
+.nav-item{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 9px;border-radius:7px;
+  color:rgba(255,255,255,0.6);cursor:pointer;
+}
+.nav-item:hover{background:rgba(255,255,255,0.10);color:rgba(255,255,255,0.9);}
+.nav-item.active{background:rgba(255,255,255,0.18);color:white;}
+.nav-item-icon{width:15px;height:15px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.nav-label{font-size:12px;font-weight:500;white-space:nowrap;}
+.nav-divider{height:0.5px;background:rgba(255,255,255,0.12);margin:4px 9px;}
+
+/* Pinned section */
+.pinned-section{
+  flex:1;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  padding:0 6px 6px;
+  border-top:0.5px solid rgba(255,255,255,0.12);
+  margin-top:2px;
+}
+.pinned-header{
+  display:flex;align-items:center;gap:5px;
+  padding:9px 9px 6px;
+  flex-shrink:0;
+}
+.pinned-header-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,0.38);}
+.pinned-items{display:flex;flex-direction:column;gap:1px;overflow-y:auto;}
+.pinned-items::-webkit-scrollbar{display:none;}
+.pinned-item{
+  display:flex;align-items:center;gap:7px;
+  padding:5px 9px;border-radius:6px;
+  color:rgba(255,255,255,0.6);cursor:pointer;
+}
+.pinned-item:hover{background:rgba(255,255,255,0.09);color:rgba(255,255,255,0.88);}
+.type-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.dot-note{background:rgba(255,255,255,0.5);}
+.dot-project{background:rgba(255,210,100,0.7);}
+.dot-contact{background:rgba(150,200,255,0.7);}
+.dot-reminder{background:rgba(255,130,130,0.7);}
+.pinned-item-label{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;}
+.pinned-item-type{font-size:9px;color:rgba(255,255,255,0.28);flex-shrink:0;}
+
+/* Settings utility (bottom, above user) */
+.util-section{padding:4px 6px;border-top:0.5px solid rgba(255,255,255,0.12);flex-shrink:0;}
+.util-item{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 9px;border-radius:7px;
+  color:rgba(255,255,255,0.45);cursor:pointer;
+}
+.util-item:hover{background:rgba(255,255,255,0.09);color:rgba(255,255,255,0.7);}
+
+/* User footer */
+.user-footer{
+  padding:9px 12px 12px;
+  display:flex;align-items:center;gap:8px;
+  border-top:0.5px solid rgba(255,255,255,0.12);
+  cursor:pointer;flex-shrink:0;
+}
+.user-footer:hover{background:rgba(255,255,255,0.06);}
+.user-avatar{
+  width:24px;height:24px;border-radius:50%;
+  background:rgba(255,255,255,0.22);
+  display:flex;align-items:center;justify-content:center;
+  color:white;font-size:10px;font-weight:600;flex-shrink:0;
+}
+.user-info{flex:1;min-width:0;}
+.user-name{font-size:11px;font-weight:550;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.user-email{font-size:9px;color:rgba(255,255,255,0.4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* ── Main content area ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.section-topbar{
+  height:44px;display:flex;align-items:center;
+  padding:0 20px;
+  border-bottom:0.5px solid var(--border-strong);
+  background:var(--surface);
+  flex-shrink:0;
+}
+.topbar-title{font-size:14px;font-weight:650;}
+.content-area{flex:1;background:var(--surface);display:flex;align-items:center;justify-content:center;}
+.content-hint{font-size:12px;color:var(--text-tertiary);font-style:italic;}
+
+/* ── Annotation ── */
+.annotation{position:fixed;bottom:16px;right:24px;font-size:10px;color:rgba(255,255,255,0.35);font-style:italic;}
+</style>
+</head>
+<body>
+
+<div class="app-sidebar">
+
+  <!-- Studio header -->
+  <div class="studio-header">
+    <div class="studio-mark">T</div>
+    <div class="studio-info">
+      <div class="studio-name">Thornwood Studio</div>
+      <div class="studio-sub">perennial.design</div>
+    </div>
+  </div>
+
+  <!-- Primary nav -->
+  <div class="nav-section">
+    <div class="nav-item active">
+      <div class="nav-item-icon"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7l6-4 6 4v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7z"/><path d="M6 14v-3h4v3"/></svg></div>
+      <span class="nav-label">Home</span>
+    </div>
+    <div class="nav-item">
+      <div class="nav-item-icon"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="9" rx="1.5"/><path d="M5 14h6M8 11v3"/></svg></div>
+      <span class="nav-label">Projects</span>
+    </div>
+    <div class="nav-item">
+      <div class="nav-item-icon"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.5" r="2.5"/><path d="M2.5 14c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/></svg></div>
+      <span class="nav-label">Contacts</span>
+    </div>
+    <div class="nav-item">
+      <div class="nav-item-icon"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="3.5" height="9" rx="1"/><rect x="6.25" y="2" width="3.5" height="11" rx="1"/><rect x="11.5" y="6" width="3.5" height="7" rx="1"/></svg></div>
+      <span class="nav-label">Outreach</span>
+    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-item">
+      <div class="nav-item-icon"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2h8l1 1v11H3a1 1 0 0 1-1-1V2z"/><path d="M10 2v1h1"/><line x1="5" y1="6" x2="9" y2="6"/><line x1="5" y1="9" x2="8" y2="9"/></svg></div>
+      <span class="nav-label">Notes</span>
+    </div>
+    <div class="nav-item">
+      <div class="nav-item-icon"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 1v3M11 1v3M2 7h12"/><rect x="5" y="10" width="2" height="2" rx=".5" fill="currentColor" stroke="none"/></svg></div>
+      <span class="nav-label">Calendar</span>
+    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-item">
+      <div class="nav-item-icon"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="14" height="9" rx="1.5"/><path d="M1 7.5h14"/><circle cx="5" cy="11" r="1" fill="currentColor" stroke="none"/></svg></div>
+      <span class="nav-label">Finance</span>
+    </div>
+    <div class="nav-item">
+      <div class="nav-item-icon"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5a7 7 0 0 1 0-7M5.5 9.5a4 4 0 0 1 0-3M8 8.5v-.01"/><path d="M13 4.5a7 7 0 0 1 0 7M10.5 6.5a4 4 0 0 1 0 3"/></svg></div>
+      <span class="nav-label">Presence</span>
+    </div>
+    <div class="nav-item">
+      <div class="nav-item-icon"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h9A1.5 1.5 0 0 1 14 4.5v7a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5V4.5z"/><path d="M2 7.5h12"/><path d="M6 3v4.5"/></svg></div>
+      <span class="nav-label">Resources</span>
+    </div>
+  </div>
+
+  <!-- Pinned section -->
+  <div class="pinned-section">
+    <div class="pinned-header">
+      <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="rgba(255,255,255,0.38)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2l4 4-7 7-1-3-3-1 7-7z"/><line x1="2" y1="14" x2="6" y2="10"/></svg>
+      <span class="pinned-header-label">Pinned</span>
+    </div>
+    <div class="pinned-items">
+      <div class="pinned-item">
+        <div class="type-dot dot-note"></div>
+        <span class="pinned-item-label">Walnut slab idea</span>
+        <span class="pinned-item-type">note</span>
+      </div>
+      <div class="pinned-item">
+        <div class="type-dot dot-project"></div>
+        <span class="pinned-item-label">Lehman table</span>
+        <span class="pinned-item-type">project</span>
+      </div>
+      <div class="pinned-item">
+        <div class="type-dot dot-contact"></div>
+        <span class="pinned-item-label">Sarah Okonkwo</span>
+        <span class="pinned-item-type">contact</span>
+      </div>
+      <div class="pinned-item">
+        <div class="type-dot dot-reminder"></div>
+        <span class="pinned-item-label">Invoice — Lehman</span>
+        <span class="pinned-item-type">reminder</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings utility -->
+  <div class="util-section">
+    <div class="util-item">
+      <div class="nav-item-icon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4"/></svg></div>
+      <span class="nav-label">Settings</span>
+    </div>
+  </div>
+
+  <!-- User footer -->
+  <div class="user-footer">
+    <div class="user-avatar">E</div>
+    <div class="user-info">
+      <div class="user-name">Elliott</div>
+      <div class="user-email">elliott@waitingmag.com</div>
+    </div>
+    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.5" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg>
+  </div>
+
+  <div class="annotation">NAV-02 · 196px · Pinned</div>
+</div>
+
+<!-- Main content -->
+<div class="main">
+  <div class="section-topbar">
+    <span class="topbar-title">Home</span>
+  </div>
+  <div class="content-area">
+    <span class="content-hint">← main content area</span>
+  </div>
+</div>
+
+</body>
+</html>

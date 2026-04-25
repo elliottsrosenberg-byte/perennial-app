@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RES-01 – Resources</title>
+<style>
+:root {
+  --bg:#f5f4f1; --surface:#fff; --surface-2:#f0ede8; --surface-hover:#f7f5f2;
+  --border:rgba(0,0,0,0.07); --border-strong:rgba(0,0,0,0.13);
+  --text-primary:#1a1916; --text-secondary:#6b6860; --text-tertiary:#a8a49e;
+  --accent:#3d6b4f; --accent-light:rgba(61,107,79,0.09);
+  --red:#c0392b; --red-light:rgba(192,57,43,0.08);
+  --amber:#b8860b; --amber-light:rgba(184,134,11,0.10);
+  --blue:#2563ab; --blue-light:rgba(37,99,171,0.08);
+  --purple:#6d4fa3; --purple-light:rgba(109,79,163,0.08);
+  --shadow-card:0 1px 4px rgba(0,0,0,0.07),0 0 0 0.5px rgba(0,0,0,0.07);
+  --shadow-float:0 8px 40px rgba(0,0,0,0.16),0 0 0 0.5px rgba(0,0,0,0.07);
+  --radius:12px; --radius-sm:8px; --radius-xs:6px;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#181715; --surface:#222120; --surface-2:#2a2927; --surface-hover:#272523;
+  --border:rgba(255,255,255,0.06); --border-strong:rgba(255,255,255,0.11);
+  --text-primary:#f0ede8; --text-secondary:#9a9690; --text-tertiary:#5c5a56;
+  --accent:#5a9470; --accent-light:rgba(90,148,112,0.12);
+  --shadow-card:0 1px 4px rgba(0,0,0,0.2),0 0 0 0.5px rgba(255,255,255,0.06);
+  --shadow-float:0 8px 40px rgba(0,0,0,0.5),0 0 0 0.5px rgba(255,255,255,0.08);
+}}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text-primary);height:100vh;display:flex;overflow:hidden;font-size:13px;}
+
+/* ── Red sidebar ── */
+.app-sidebar{width:56px;background:#d94f3d;flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:6px;}
+.sidebar-logo{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.2);margin-bottom:10px;}
+.sidebar-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.55);cursor:pointer;}
+.sidebar-icon:hover{background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.85);}
+.sidebar-icon.active{background:rgba(255,255,255,0.22);color:white;}
+
+/* ── Category nav ── */
+.cat-nav{width:204px;flex-shrink:0;background:var(--surface);border-right:0.5px solid var(--border-strong);display:flex;flex-direction:column;overflow:hidden;}
+.cat-nav-header{padding:14px 16px 10px;border-bottom:0.5px solid var(--border-strong);flex-shrink:0;}
+.cat-nav-title{font-size:14px;font-weight:650;}
+.cat-nav-sub{font-size:11px;color:var(--text-tertiary);margin-top:2px;}
+.cat-search{display:flex;align-items:center;gap:6px;margin-top:10px;background:var(--surface-2);border:0.5px solid var(--border-strong);border-radius:var(--radius-xs);padding:5px 9px;}
+.cat-search input{background:none;border:none;outline:none;font-size:11px;color:var(--text-primary);width:100%;}
+.cat-search input::placeholder{color:var(--text-tertiary);}
+.cat-nav-body{flex:1;overflow-y:auto;padding:8px 0;}
+.cat-section-label{font-size:9px;font-weight:600;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.07em;padding:8px 14px 3px;}
+.cat-item{display:flex;align-items:center;gap:9px;padding:8px 14px;cursor:pointer;border-left:2.5px solid transparent;}
+.cat-item:hover{background:var(--surface-2);}
+.cat-item.active{background:var(--surface-2);border-left-color:var(--text-primary);color:var(--text-primary);font-weight:600;}
+.cat-icon-wrap{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.cat-label{font-size:12px;flex:1;}
+.cat-health{display:flex;align-items:center;gap:4px;flex-shrink:0;}
+.health-pip{width:5px;height:5px;border-radius:50%;}
+.pip-full{background:var(--accent);}
+.pip-partial{background:var(--amber);}
+.pip-empty{background:var(--border-strong);}
+.cat-fraction{font-size:9px;color:var(--text-tertiary);}
+.cat-divider{height:0.5px;background:var(--border-strong);margin:6px 12px;}
+
+/* ── Main area ── */
+.main-area{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.main-topbar{display:flex;align-items:center;gap:10px;padding:11px 20px;border-bottom:0.5px solid var(--border-strong);background:var(--surface);flex-shrink:0;}
+.main-section-title{font-size:14px;font-weight:650;flex:1;}
+.main-section-sub{font-size:11px;color:var(--text-tertiary);}
+.view-toggle{display:flex;border:0.5px solid var(--border-strong);border-radius:var(--radius-xs);overflow:hidden;}
+.view-btn{padding:4px 9px;font-size:11px;color:var(--text-tertiary);cursor:pointer;background:transparent;border:none;display:flex;align-items:center;}
+.view-btn.active{background:var(--surface-2);color:var(--text-primary);}
+.btn{padding:5px 12px;font-size:11px;border-radius:var(--radius-xs);cursor:pointer;border:none;font-family:inherit;}
+.btn-ghost{background:transparent;color:var(--text-secondary);border:0.5px solid var(--border-strong);}
+.btn-ghost:hover{background:var(--surface-2);}
+.btn-primary{background:var(--text-primary);color:var(--bg);font-weight:500;}
+.main-content{flex:1;overflow-y:auto;padding:20px;}
+
+/* ── Health bar ── */
+.section-health{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--shadow-card);margin-bottom:18px;}
+.health-label{font-size:11px;color:var(--text-secondary);flex:1;}
+.health-track{flex:2;height:4px;background:var(--surface-2);border-radius:3px;overflow:hidden;}
+.health-fill{height:100%;border-radius:3px;background:var(--accent);}
+.health-fraction{font-size:11px;font-weight:600;color:var(--text-secondary);}
+.health-cta{font-size:11px;color:var(--blue);cursor:pointer;}
+
+/* ── Item grid ── */
+.item-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;}
+.item-section-label{grid-column:1/-1;font-size:10px;font-weight:600;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.07em;padding-top:8px;}
+.item-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);display:flex;flex-direction:column;overflow:hidden;cursor:pointer;transition:box-shadow 0.12s;}
+.item-card:hover{box-shadow:0 2px 12px rgba(0,0,0,0.1),0 0 0 0.5px rgba(0,0,0,0.1);}
+.item-preview{height:80px;display:flex;align-items:center;justify-content:center;position:relative;}
+.item-card-body{padding:11px 13px;display:flex;flex-direction:column;gap:3px;}
+.item-name{font-size:12px;font-weight:600;}
+.item-meta{font-size:10px;color:var(--text-tertiary);}
+.item-actions{display:flex;gap:5px;margin-top:7px;flex-wrap:wrap;}
+.item-btn{padding:3px 9px;font-size:10px;border-radius:var(--radius-xs);cursor:pointer;border:0.5px solid var(--border-strong);background:transparent;color:var(--text-secondary);white-space:nowrap;}
+.item-btn:hover{background:var(--surface-2);}
+.item-btn.primary{background:var(--text-primary);color:var(--bg);border-color:var(--text-primary);}
+.finder-btn{display:flex;align-items:center;gap:3px;padding:3px 9px;font-size:10px;border-radius:var(--radius-xs);cursor:pointer;border:0.5px solid var(--border-strong);background:transparent;color:var(--text-tertiary);}
+.finder-btn:hover{color:var(--text-secondary);background:var(--surface-2);}
+
+/* Alias badge */
+.alias-badge{position:absolute;top:8px;right:8px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 6px;border-radius:10px;background:rgba(255,255,255,0.85);color:var(--text-secondary);display:flex;align-items:center;gap:3px;}
+
+/* Partial */
+.partial-progress{width:100%;height:3px;background:var(--surface-2);border-radius:2px;overflow:hidden;margin-top:5px;}
+.partial-fill{height:100%;background:var(--amber);border-radius:2px;}
+
+/* Empty */
+.item-card.empty{border:0.5px dashed var(--border-strong);box-shadow:none;background:transparent;}
+.item-card.empty:hover{background:var(--surface);box-shadow:var(--shadow-card);}
+.item-card.empty .item-preview{background:transparent;height:60px;}
+.empty-icon{width:32px;height:32px;border-radius:8px;background:var(--surface-2);border:0.5px dashed var(--border-strong);display:flex;align-items:center;justify-content:center;color:var(--text-tertiary);}
+.empty-why{font-size:10px;color:var(--text-tertiary);line-height:1.4;margin-top:2px;}
+
+/* Linked */
+.item-card.linked .item-preview{background:var(--blue-light);}
+
+
+/* ════════════════════════════════════════
+   CENTER PEEK MODAL
+════════════════════════════════════════ */
+.modal-backdrop{position:fixed;inset:0;background:rgba(20,18,16,0.52);backdrop-filter:blur(5px);z-index:100;display:flex;align-items:center;justify-content:center;padding:24px;}
+.modal-backdrop.hidden{display:none;}
+.modal-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-float);width:100%;max-width:540px;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;animation:modal-in 0.18s cubic-bezier(0.34,1.4,0.64,1);}
+@keyframes modal-in{from{opacity:0;transform:scale(0.96) translateY(6px);}to{opacity:1;transform:scale(1) translateY(0);}}
+
+.modal-header{display:flex;align-items:flex-start;gap:12px;padding:18px 20px 14px;border-bottom:0.5px solid var(--border);}
+.modal-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.modal-title-wrap{flex:1;}
+.modal-title{font-size:16px;font-weight:650;}
+.modal-sub{font-size:11px;color:var(--text-tertiary);margin-top:2px;}
+.modal-close{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-tertiary);flex-shrink:0;border:none;background:transparent;font-size:18px;line-height:1;}
+.modal-close:hover{background:var(--surface-2);color:var(--text-primary);}
+
+.modal-body{flex:1;overflow-y:auto;padding:20px;}
+
+/* Why-card */
+.why-card{background:var(--accent-light);border:0.5px solid rgba(61,107,79,0.18);border-radius:var(--radius-sm);padding:12px 14px;font-size:11px;color:var(--text-secondary);line-height:1.55;margin-bottom:18px;}
+.why-card strong{color:var(--accent);}
+
+/* Ash-first primary CTA */
+.ash-primary{display:flex;align-items:center;gap:14px;padding:16px 18px;background:var(--text-primary);border-radius:var(--radius);cursor:pointer;margin-bottom:10px;transition:opacity 0.1s;}
+.ash-primary:hover{opacity:0.9;}
+.ash-primary-icon{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ash-primary-text{flex:1;}
+.ash-primary-title{font-size:13px;font-weight:650;color:white;}
+.ash-primary-sub{font-size:11px;color:rgba(255,255,255,0.6);margin-top:2px;}
+.ash-primary-arrow{color:rgba(255,255,255,0.4);font-size:16px;}
+
+.or-divider{display:flex;align-items:center;gap:10px;margin:12px 0;}
+.or-line{flex:1;height:0.5px;background:var(--border-strong);}
+.or-text{font-size:10px;color:var(--text-tertiary);}
+
+.manual-link{display:block;text-align:center;font-size:11px;color:var(--text-tertiary);cursor:pointer;padding:6px;border-radius:var(--radius-xs);}
+.manual-link:hover{color:var(--text-secondary);background:var(--surface-2);}
+
+/* Manual prompts area (hidden until toggled) */
+.manual-area{display:none;margin-top:16px;padding-top:16px;border-top:0.5px solid var(--border);}
+.manual-area.visible{display:block;}
+.prompt-progress-row{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--text-tertiary);margin-bottom:14px;}
+.prompt-progress-track{flex:1;height:3px;background:var(--surface-2);border-radius:2px;overflow:hidden;}
+.prompt-progress-fill{height:100%;background:var(--amber);border-radius:2px;}
+.prompt-field{margin-bottom:12px;}
+.prompt-label{font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;display:flex;align-items:center;gap:4px;}
+.prompt-status{font-size:9px;font-weight:400;margin-left:auto;color:var(--text-tertiary);}
+.prompt-status.done{color:var(--accent);}
+.prompt-input{width:100%;background:var(--surface-2);border:0.5px solid var(--border-strong);border-radius:var(--radius-xs);padding:7px 10px;font-size:11px;color:var(--text-primary);outline:none;resize:none;font-family:inherit;line-height:1.4;}
+.prompt-input::placeholder{color:var(--text-tertiary);}
+.prompt-input:focus{border-color:rgba(0,0,0,0.28);background:var(--surface);}
+
+/* Template options */
+.template-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border:0.5px solid var(--border-strong);border-radius:var(--radius-xs);cursor:pointer;margin-bottom:6px;background:var(--surface-2);}
+.template-row:hover{background:var(--surface-hover);}
+
+/* Upload zone */
+.upload-zone{border:0.5px dashed var(--border-strong);border-radius:var(--radius-sm);padding:16px;text-align:center;cursor:pointer;margin-top:12px;}
+.upload-zone:hover{background:var(--surface-2);}
+.upload-zone-text{font-size:11px;color:var(--text-tertiary);}
+.upload-zone-sub{font-size:10px;color:var(--text-tertiary);margin-top:2px;}
+
+.modal-footer{padding:12px 20px;border-top:0.5px solid var(--border);display:flex;gap:7px;flex-shrink:0;}
+
+/* ── Section visibility ── */
+.section-view{display:none;}
+.section-view.active{display:block;}
+
+.ash-icon{position:fixed;bottom:24px;right:24px;width:36px;height:36px;border-radius:50%;background:var(--surface);border:0.5px solid var(--border-strong);box-shadow:0 2px 8px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:20;}
+.annotation{position:fixed;bottom:16px;left:72px;font-size:10px;color:var(--text-tertiary);font-style:italic;pointer-events:none;}
+</style>
+</head>
+<body>
+
+<!-- Red sidebar -->
+<div class="app-sidebar">
+  <div class="sidebar-logo"></div>
+  <div class="sidebar-icon" title="Projects"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg></div>
+  <div class="sidebar-icon" title="Contacts"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg></div>
+  <div class="sidebar-icon" title="Outreach"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg></div>
+  <div class="sidebar-icon" title="Finance"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 6.5h14"/><path d="M5 10h2M10 10h1"/></svg></div>
+  <div class="sidebar-icon active" title="Resources"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg></div>
+</div>
+
+<!-- Category nav -->
+<div class="cat-nav">
+  <div class="cat-nav-header">
+    <div class="cat-nav-title">Resources</div>
+    <div class="cat-nav-sub">Your business, in one place</div>
+    <div class="cat-search">
+      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><circle cx="7" cy="7" r="5"/><path d="M11 11l3 3"/></svg>
+      <input type="text" placeholder="Search resources…">
+    </div>
+  </div>
+  <div class="cat-nav-body">
+    <div class="cat-section-label">Categories</div>
+
+    <div class="cat-item active" onclick="selectCat(this,'operations')" id="nav-operations">
+      <div class="cat-icon-wrap" style="background:rgba(184,134,11,0.1);color:var(--amber);"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 5h6M5 8h4M5 11h3"/></svg></div>
+      <span class="cat-label">Operations</span>
+      <div class="cat-health"><div class="health-pip pip-partial"></div><span class="cat-fraction">3/7</span></div>
+    </div>
+
+    <div class="cat-item" onclick="selectCat(this,'brand')" id="nav-brand">
+      <div class="cat-icon-wrap" style="background:var(--purple-light);color:var(--purple);"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5"/><path d="M8 4v2M8 10v2M4 8h2M10 8h2"/></svg></div>
+      <span class="cat-label">Brand</span>
+      <div class="cat-health"><div class="health-pip pip-partial"></div><span class="cat-fraction">4/7</span></div>
+    </div>
+
+    <div class="cat-item" onclick="selectCat(this,'press')" id="nav-press">
+      <div class="cat-icon-wrap" style="background:var(--blue-light);color:var(--blue);"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2h12v9H2z"/><path d="M5 6h6M5 9h4"/></svg></div>
+      <span class="cat-label">Press</span>
+      <div class="cat-health"><div class="health-pip pip-empty"></div><span class="cat-fraction">1/4</span></div>
+    </div>
+
+    <div class="cat-item" onclick="selectCat(this,'design')" id="nav-design">
+      <div class="cat-icon-wrap" style="background:var(--accent-light);color:var(--accent);"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12L10 4l4 4-8 8-4 0 0-4z"/></svg></div>
+      <span class="cat-label">Design</span>
+      <div class="cat-health"><div class="health-pip pip-partial"></div><span class="cat-fraction">2/5</span></div>
+    </div>
+
+    <div class="cat-divider"></div>
+    <div class="cat-section-label">Linked resources</div>
+    <div class="cat-item" onclick="selectCat(this,'links')" id="nav-links">
+      <div class="cat-icon-wrap" style="background:var(--surface-2);color:var(--text-secondary);"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 8a3 3 0 0 1 4.24 0l1.42 1.42A3 3 0 0 1 7.42 13.7l-.7-.7"/><path d="M10 8a3 3 0 0 1-4.24 0L4.34 6.58A3 3 0 0 1 8.58 2.3l.7.7"/></svg></div>
+      <span class="cat-label">Links</span>
+      <div class="cat-health"><span class="cat-fraction" style="color:var(--text-tertiary)">5</span></div>
+    </div>
+
+    <div class="cat-divider"></div>
+    <div style="padding:10px 14px;">
+      <button style="width:100%;padding:7px 10px;font-size:11px;color:var(--text-tertiary);background:transparent;border:0.5px dashed var(--border-strong);border-radius:var(--radius-xs);cursor:pointer;text-align:left;display:flex;align-items:center;gap:6px;">
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+        Add category
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Main area -->
+<div class="main-area">
+
+  <!-- Topbar — updates with section -->
+  <div class="main-topbar">
+    <div>
+      <div class="main-section-title" id="section-title">Operations</div>
+      <div class="main-section-sub" id="section-sub">Legal, financial, and logistics documents</div>
+    </div>
+    <div style="flex:1"></div>
+    <div class="view-toggle">
+      <button class="view-btn active"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg></button>
+      <button class="view-btn"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="3" y1="4" x2="13" y2="4"/><line x1="3" y1="8" x2="13" y2="8"/><line x1="3" y1="12" x2="13" y2="12"/></svg></button>
+    </div>
+    <button class="btn btn-ghost">Add resource</button>
+  </div>
+
+  <div class="main-content">
+
+    <!-- ════ OPERATIONS ════ -->
+    <div class="section-view active" id="view-operations">
+      <div class="section-health">
+        <span class="health-label">Operations profile complete</span>
+        <div class="health-track"><div class="health-fill" style="width:43%"></div></div>
+        <span class="health-fraction">3 / 7</span>
+        <span class="health-cta" onclick="openModal('bizplan')">Complete profile →</span>
+      </div>
+
+      <div class="item-grid">
+
+        <!-- ✓ Business Information — partial (some filled) -->
+        <div class="item-card" onclick="">
+          <div class="item-preview" style="background:var(--surface-2);flex-direction:column;padding:12px 14px;align-items:flex-start;gap:5px;">
+            <div style="font-size:10px;color:var(--amber);font-weight:600;">3 of 5 fields complete</div>
+            <div class="partial-progress"><div class="partial-fill" style="width:60%"></div></div>
+            <div style="font-size:9px;color:var(--text-tertiary);line-height:1.4;">EIN · LLC name · State of formation<br><span style="color:var(--amber)">Missing: registered agent, fiscal year</span></div>
+          </div>
+          <div class="item-card-body">
+            <div class="item-name">Business Information</div>
+            <div class="item-meta">LLC/entity details, EIN, formation</div>
+            <div class="item-actions">
+              <button class="item-btn primary">Continue →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ✓ W9 / Tax Forms — complete, stored -->
+        <div class="item-card" onclick="">
+          <div class="item-preview" style="background:rgba(61,107,79,0.06);">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              <span style="font-size:9px;color:var(--accent);font-weight:600;">W-9 · 2026</span>
+            </div>
+            <div class="alias-badge" style="background:rgba(61,107,79,0.12);color:var(--accent);"><svg width="6" height="6" viewBox="0 0 10 10" fill="currentColor"><circle cx="5" cy="5" r="5"/></svg> Stored</div>
+          </div>
+          <div class="item-card-body">
+            <div class="item-name">W-9 / Tax Forms</div>
+            <div class="item-meta">W-9 · Updated Jan 2026</div>
+            <div class="item-actions">
+              <button class="item-btn">Open</button>
+              <button class="finder-btn">
+                <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="14" height="14" rx="2"/><path d="M5 8h6M8 5v6"/></svg>
+                Finder
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ✓ Lease Agreements — 2 files -->
+        <div class="item-card" onclick="">
+          <div class="item-preview" style="background:rgba(37,99,171,0.05);">
+            <div style="display:flex;gap:10px;align-items:center;">
+              <div style="display:flex;flex-direction:column;gap:5px;">
+                <div style="display:flex;align-items:center;gap:5px;font-size:9px;color:var(--text-secondary);">
+                  <svg width="12" height="14" viewBox="0 0 12 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 1H2a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5z"/><path d="M7 1v4h4"/></svg>
+                  Studio Lease · 2024
+                </div>
+                <div style="display:flex;align-items:center;gap:5px;font-size:9px;color:var(--text-secondary);">
+                  <svg width="12" height="14" viewBox="0 0 12 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 1H2a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5z"/><path d="M7 1v4h4"/></svg>
+                  Storage Unit · 2025
+                </div>
+              </div>
+            </div>
+            <div class="alias-badge" style="background:rgba(61,107,79,0.12);color:var(--accent);">2 files</div>
+          </div>
+          <div class="item-card-body">
+            <div class="item-name">Lease Agreements</div>
+            <div class="item-meta">Studio · Storage · Renewal May 2026</div>
+            <div class="item-actions">
+              <button class="item-btn">View all</button>
+              <button class="finder-btn">
+                <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="14" height="14" rx="2"/><path d="M5 8h6M8 5v6"/></svg>
+                Finder
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Alias → Finance -->
+        <div class="item-card linked" onclick="">
+          <div class="item-preview">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
+              <svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="var(--blue)" stroke-width="1.5"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 6.5h14"/><path d="M5 10h2M10 10h1"/></svg>
+              <span style="font-size:9px;color:var(--blue);font-weight:600;">→ Finance</span>
+            </div>
+            <div class="alias-badge">Alias</div>
+          </div>
+          <div class="item-card-body">
+            <div class="item-name">Financial Records</div>
+            <div class="item-meta">Receipts, invoices, statements · Lives in Finance</div>
+            <div class="item-actions">
+              <button class="item-btn">Go to Finance</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ✓ NDAs & Agreements — 3 files, finder -->
+        <div class="item-card" onclick="">
+          <div class="item-preview" style="background:var(--surface-2);">
+            <div style="display:flex;flex-direction:column;gap:4px;padding:12px;">
+              <div style="font-size:9px;color:var(--text-secondary);display:flex;align-items:center;gap:5px;"><svg width="10" height="12" viewBox="0 0 10 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 1H1a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4z"/><path d="M6 1v3h3"/></svg>Gallery NDA — Parlour</div>
+              <div style="font-size:9px;color:var(--text-secondary);display:flex;align-items:center;gap:5px;"><svg width="10" height="12" viewBox="0 0 10 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 1H1a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4z"/><path d="M6 1v3h3"/></svg>Client Agreement — Lehmann</div>
+              <div style="font-size:9px;color:var(--text-tertiary);font-style:italic;">+1 more</div>
+            </div>
+            <div class="alias-badge" style="background:rgba(61,107,79,0.12);color:var(--accent);">3 files</div>
+          </div>
+          <div class="item-card-body">
+            <div class="item-name">NDAs & Agreements</div>
+            <div class="item-meta">3 documents · Last added Feb 2026</div>
+            <div class="item-actions">
+              <button class="item-btn">View all</button>
+              <button class="finder-btn">
+                <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="14" height="14" rx="2"/><path d="M5 8h6M8 5v6"/></svg>
+                Finder
+              </button>
+              <button class="item-btn">+ Add</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ✗ Shipping & Logistics — empty prompt -->
+        <div class="item-card empty" onclick="openModal('shipping')">
+          <div class="item-preview">
+            <div class="empty-icon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="5" width="10" height="9" rx="1"/><path d="M11 7h2l2 3v3h-4V7z"/><circle cx="4" cy="14" r="1.5"/><circle cx="13" cy="14" r="1.5"/></svg></div>
+          </div>
+          <div class="item-card-body">
+            <div class="item-name" style="color:var(--text-secondary)">Shipping & Logistics</div>
+            <div class="empty-why">Preferred shippers, crating specs, international procedures, insurance contacts.</div>
+            <div class="item-actions"><button class="item-btn primary" onclick="openModal('shipping')">Set up →</button></div>
+          </div>
+        </div>
+
+        <!-- ✗ Business Plan — empty, ash prompt -->
+        <div class="item-card empty" onclick="openModal('bizplan')">
+          <div class="item-preview">
+            <div class="empty-icon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 10l4-4 3 3 4-5"/><path d="M11 4h4v4"/></svg></div>
+          </div>
+          <div class="item-card-body">
+            <div class="item-name" style="color:var(--text-secondary)">Business Plan & Strategy</div>
+            <div class="empty-why">Goals, revenue targets, growth plans. Useful for grants, loans, and clarity.</div>
+            <div class="item-actions"><button class="item-btn primary" onclick="openModal('bizplan')">Build with Ash →</button></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ════ BRAND ════ -->
+    <div class="section-view" id="view-brand">
+      <div class="section-health">
+        <span class="health-label">Brand profile complete</span>
+        <div class="health-track"><div class="health-fill" style="width:57%"></div></div>
+        <span class="health-fraction">4 / 7</span>
+        <span class="health-cta" onclick="openModal('missionvision')">Complete profile →</span>
+      </div>
+      <div class="item-grid">
+
+        <!-- Logo Files — complete, finder -->
+        <div class="item-card" onclick="">
+          <div class="item-preview" style="background:var(--surface-2);">
+            <div style="display:flex;gap:10px;align-items:center;">
+              <div style="width:36px;height:36px;background:var(--text-primary);border-radius:6px;display:flex;align-items:center;justify-content:center;"><span style="color:var(--bg);font-size:10px;font-weight:800;letter-spacing:-.02em">P</span></div>
+              <div style="width:28px;height:28px;border-radius:50%;background:var(--text-primary);display:flex;align-items:center;justify-content:center;"><span style="color:var(--bg);font-size:8px;font-weight:800">P</span></div>
+              <div style="width:44px;height:16px;border-radius:3px;background:var(--text-primary);opacity:0.85;"></div>
+            </div>
+            <div class="alias-badge" style="background:rgba(61,107,79,0.12);color:var(--accent);">3 files</div>
+          </div>
+          <div class="item-card-body">
+            <div class="item-name">Logo Files</div>
+            <div class="item-meta">Primary, mark, wordmark · SVG + PNG</div>
+            <div class="item-actions">
+              <button class="item-btn">Open</button>
+              <button class="finder-btn"><svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="14" height="14" rx="2"/><path d="M5 8h6M8 5v6"/></svg> Finder</button>
+              <button class="item-btn">Download all</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Brand Colors -->
+        <div class="item-card" onclick="">
+          <div class="item-preview" style="background:var(--surface-2);flex-direction:column;gap:6px;padding:14px;">
+            <div style="display:flex;gap:5px;width:100%;">
+              <div style="flex:1;height:28px;border-radius:4px;background:#1a1916;"></div>
+              <div style="flex:1;height:28px;border-radius:4px;background:#d94f3d;"></div>
+              <div style="flex:1;height:28px;border-radius:4px;background:#f5f4f1;border:0.5px solid rgba(0,0,0,0.1);"></div>
+              <div style="flex:1;height:28px;border-radius:4px;background:#b8a89a;"></div>
+              <div style="flex:1;height:28px;border-radius:4px;background:#3d6b4f;"></div>
+            </div>
+          </div>
+          <div class="item-card-body">
+            <div class="item-name">Brand Colors</div>
+            <div class="item-meta">5 colors · Hex, RGB, CMYK</div>
+            <div class="item-actions">
+              <button class="item-btn">Edit palette</button>
+              <button class="item-btn">Copy codes</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Typography -->
+        <div class="item-card" onclick="">
+          <div class="item-preview" style="background:var(--surface-2);flex-direction:column;padding:12px 16px;align-items:flex-start;gap:4px;">
+            <div style="font-size:18px;font-weight:700;letter-spacing:-.02em;line-height:1;">Aa</div>
+            <div style="font-size:11px;font-weight:500;">Canela Text</div>
+            <div style="font-size:10px;color:var(--text-tertiary);">+ GT America · body</div>
+          </div>
+          <div class="item-card-body">
+            <div class="item-name">Typography</div>
+            <div class="item-meta">2 typefaces · Display + body</div>
+            <div class="item-actions">
+              <button class="item-btn">View</button>
+              <button class="finder-btn"><svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="14" height="14" rx="2"/><path d="M5 8h6M8 5v6"/></svg> Finder</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Brand Deck — linked -->
+        <div class="item-card linked" onclick="">
+          <div class="item-preview">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+              <span style="font-size:10px;color:var(--blue);font-weight:500;">Dropbox</span>
+            </div>
+            <div class="alias-badge"><svg width="7" height="7" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 9L9 1M5 1h4v4"/></svg> Linked</div>
+          </div>
+          <div class="item-card-body">
+            <div class="item-name">Brand Deck</div>
+            <div class="item-meta">dropbox.com/perennial-brand · Linked Dec 2025</div>
+            <div class="item-actions">
+              <button class="item-btn">Open ↗</button>
+              <button class="item-btn">Edit link</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Positioning Statement — partial -->
+        <div class="item-card" onclick="">
+          <div class="item-preview" style="background:var(--amber-light);">
+            <div style="padding:14px;width:100%;display:flex;flex-direction:column;gap:6px;">
+              <div style="font-size:10px;color:var(--amber);font-weight:600;">2 of 5 sections complete</div>
+              <div class="partial-progress"><div class="partial-fill" style="width:40%"></div></div>
+              <div style="font-size:10px;color:var(--text-tertiary);line-height:1.3;">Audience defined · Value prop in progress…</div>
+            </div>
+          </div>
+          <div class="item-card-body">
+            <div class="item-name">Positioning Statement</div>
+            <div class="item-meta">Defines your market position and voice</div>
+            <div class="item-actions"><button class="item-btn primary">Continue →</button></div>
+          </div>
+        </div>
+
+        <!-- Mission & Vision — empty -->
+        <div class="item-card empty" onclick="openModal('missionvision')">
+          <div class="item-preview"><div class="empty-icon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg></div></div>
+          <div class="item-card-body">
+            <div class="item-name" style="color:var(--text-secondary)">Mission & Vision</div>
+            <div class="empty-why">Purpose, values, and long-term direction. Essential for gallery and press pitching.</div>
+            <div class="item-actions"><button class="item-btn primary">Build with Ash →</button></div>
+          </div>
+        </div>
+
+        <!-- Proposal Template — empty -->
+        <div class="item-card empty" onclick="openModal('proposal')">
+          <div class="item-preview"><div class="empty-icon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="1" width="10" height="14" rx="1.5"/><path d="M6 5h4M6 8h4M6 11h2"/></svg></div></div>
+          <div class="item-card-body">
+            <div class="item-name" style="color:var(--text-secondary)">Proposal Template</div>
+            <div class="empty-why">A reusable template for quoting project work to clients.</div>
+            <div class="item-actions"><button class="item-btn primary">Build with Ash →</button></div>
+          </div>
+        </div>
+
+        <!-- Product Photos — alias -->
+        <div class="item-card linked" onclick="">
+          <div class="item-preview" style="background:var(--accent-light);">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
+              <svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="var(--accent)" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+              <span style="font-size:9px;color:var(--accent);font-weight:600;">→ Projects</span>
+            </div>
+            <div class="alias-badge" style="background:rgba(61,107,79,0.12);color:var(--accent);">Alias</div>
+          </div>
+          <div class="item-card-body">
+            <div class="item-name">Product Photos</div>
+            <div class="item-meta">Lives in Projects · automatically synced</div>
+            <div class="item-actions"><button class="item-btn">Go to Projects</button></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ════ PRESS / DESIGN / LINKS placeholders ════ -->
+    <div class="section-view" id="view-press"><div style="padding:40px;text-align:center;color:var(--text-tertiary);font-size:12px;">Press section — Media kit, pitch decks, and coverage</div></div>
+    <div class="section-view" id="view-design"><div style="padding:40px;text-align:center;color:var(--text-tertiary);font-size:12px;">Design section — Templates, product photos, InDesign files</div></div>
+    <div class="section-view" id="view-links"><div style="padding:40px;text-align:center;color:var(--text-tertiary);font-size:12px;">Links — External URLs and references</div></div>
+
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════
+     CENTER PEEK MODAL
+════════════════════════════════════════ -->
+<div class="modal-backdrop hidden" id="modal-backdrop" onclick="handleBackdropClick(event)">
+  <div class="modal-card" id="modal-card">
+
+    <div class="modal-header">
+      <div class="modal-icon" id="modal-icon" style="background:var(--accent-light);">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--accent)" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
+      </div>
+      <div class="modal-title-wrap">
+        <div class="modal-title" id="modal-title">Mission & Vision</div>
+        <div class="modal-sub" id="modal-sub">Guided prompts · ~15 min · or let Ash draft it in 2</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+
+    <div class="modal-body">
+
+      <!-- Why this matters -->
+      <div class="why-card" id="modal-why">
+        <strong>Mission & Vision</strong> tells galleries, press, and collectors who you are beyond the work itself. A clear statement makes pitching faster and positions you for long-term representation. Designers with a defined mission close gallery deals significantly more often.
+      </div>
+
+      <!-- ASH — PRIMARY CTA -->
+      <div class="ash-primary" onclick="triggerAsh()">
+        <div class="ash-primary-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5"><path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/><path d="M12 12c-2-1.5-3-3-2-5"/><path d="M12 12c2-1.5 3-3 2-5"/></svg>
+        </div>
+        <div class="ash-primary-text">
+          <div class="ash-primary-title">Draft this with Ash</div>
+          <div class="ash-primary-sub">Answer a few quick questions and Ash writes a first draft — takes about 2 minutes</div>
+        </div>
+        <div class="ash-primary-arrow">→</div>
+      </div>
+
+      <!-- Or divider -->
+      <div class="or-divider">
+        <div class="or-line"></div>
+        <div class="or-text">or</div>
+        <div class="or-line"></div>
+      </div>
+
+      <div class="manual-link" onclick="toggleManual()">Fill in manually →</div>
+
+      <!-- Manual area (hidden by default) -->
+      <div class="manual-area" id="manual-area">
+
+        <div class="prompt-progress-row">
+          <span>0 of 5 complete</span>
+          <div class="prompt-progress-track"><div class="prompt-progress-fill" style="width:0%"></div></div>
+        </div>
+
+        <div class="prompt-field">
+          <div class="prompt-label">What do you make? <span class="prompt-status">Empty</span></div>
+          <textarea class="prompt-input" rows="2" placeholder="Describe your practice in one or two sentences. What medium, category, or approach?"></textarea>
+        </div>
+        <div class="prompt-field">
+          <div class="prompt-label">Who is it for? <span class="prompt-status">Empty</span></div>
+          <textarea class="prompt-input" rows="2" placeholder="Who collects, commissions, or champions your work?"></textarea>
+        </div>
+        <div class="prompt-field">
+          <div class="prompt-label">What makes your work distinct? <span class="prompt-status">Empty</span></div>
+          <textarea class="prompt-input" rows="3" placeholder="Process, materials, perspective — what no one else brings."></textarea>
+        </div>
+        <div class="prompt-field">
+          <div class="prompt-label">What are you building toward? <span class="prompt-status">Empty</span></div>
+          <textarea class="prompt-input" rows="2" placeholder="Your 5–10 year vision. Museum collection? Gallery representation? A defining body of work?"></textarea>
+        </div>
+        <div class="prompt-field">
+          <div class="prompt-label">Core values (2–3 words) <span class="prompt-status">Empty</span></div>
+          <textarea class="prompt-input" rows="1" placeholder="e.g. Materiality · Restraint · Longevity"></textarea>
+        </div>
+
+        <div style="height:0.5px;background:var(--border-strong);margin:16px 0;"></div>
+
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-tertiary);margin-bottom:8px;">Or use an existing document</div>
+        <div class="upload-zone">
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 5px;display:block;" opacity="0.3"><path d="M8 2v8M5 5L8 2l3 3"/><path d="M2 12h12v2H2z"/></svg>
+          <div class="upload-zone-text">Drop a file or click to upload</div>
+          <div class="upload-zone-sub">PDF, Word, Pages, or plain text</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" style="flex:1;" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" style="flex:1.5;">Save draft</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="ash-icon">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/><path d="M12 12c-2-1.5-3-3-2-5"/><path d="M12 12c2-1.5 3-3 2-5"/></svg>
+</div>
+<div class="annotation">RES-01 · Click Operations or Brand in the nav to switch sections. Click any empty card to open the center peek modal. "Fill in manually" expands prompts. Show in Finder on file-based items.</div>
+
+<script>
+// ── Category switching ──
+const sectionMeta = {
+  operations: { title: 'Operations', sub: 'Legal, financial, and logistics documents' },
+  brand:       { title: 'Brand',      sub: 'Identity assets, positioning, and templates' },
+  press:       { title: 'Press',      sub: 'Media kit, pitch decks, and press coverage' },
+  design:      { title: 'Design',     sub: 'Templates, product photos, and working files' },
+  links:       { title: 'Links',      sub: 'External URLs and references' },
+};
+function selectCat(el, cat) {
+  document.querySelectorAll('.cat-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.section-view').forEach(v => v.classList.remove('active'));
+  const view = document.getElementById('view-' + cat);
+  if (view) view.classList.add('active');
+  const meta = sectionMeta[cat] || {};
+  document.getElementById('section-title').textContent = meta.title || cat;
+  document.getElementById('section-sub').textContent = meta.sub || '';
+}
+
+// ── Modal ──
+const modalContent = {
+  missionvision: {
+    title: 'Mission & Vision',
+    sub: 'Guided prompts · ~15 min · or let Ash draft it in 2',
+    icon: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--accent)" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>`,
+    iconBg: 'var(--accent-light)',
+    why: '<strong>Mission & Vision</strong> tells galleries, press, and collectors who you are beyond the work itself. A clear statement makes pitching faster and positions you for long-term representation.',
+  },
+  shipping: {
+    title: 'Shipping & Logistics',
+    sub: 'Key contacts, procedures, and specs in one place',
+    icon: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--amber)" stroke-width="1.5"><rect x="1" y="5" width="10" height="9" rx="1"/><path d="M11 7h2l2 3v3h-4V7z"/><circle cx="4" cy="14" r="1.5"/><circle cx="13" cy="14" r="1.5"/></svg>`,
+    iconBg: 'var(--amber-light)',
+    why: '<strong>Shipping & logistics</strong> info prevents costly delays. Having your preferred shipper, crating specs, and insurance contacts documented means you\'re ready when a gallery or collector asks.',
+  },
+  bizplan: {
+    title: 'Business Plan & Strategy',
+    sub: 'Goals, revenue targets, and growth direction',
+    icon: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--blue)" stroke-width="1.5"><path d="M3 10l4-4 3 3 4-5"/><path d="M11 4h4v4"/></svg>`,
+    iconBg: 'var(--blue-light)',
+    why: '<strong>A business plan</strong> focuses your decisions and is often required for grants, loans, or artist residencies. Even a short version helps you allocate time and money toward what matters.',
+  },
+  proposal: {
+    title: 'Proposal Template',
+    sub: 'A reusable starting point for quoting client work',
+    icon: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--purple)" stroke-width="1.5"><rect x="3" y="1" width="10" height="14" rx="1.5"/><path d="M6 5h4M6 8h4M6 11h2"/></svg>`,
+    iconBg: 'var(--purple-light)',
+    why: '<strong>A strong proposal</strong> sets professional expectations from the start. Having a polished template saves hours per project and signals confidence to clients.',
+  },
+};
+function openModal(type) {
+  const content = modalContent[type] || modalContent.missionvision;
+  document.getElementById('modal-title').textContent = content.title;
+  document.getElementById('modal-sub').textContent = content.sub;
+  document.getElementById('modal-icon').innerHTML = content.icon;
+  document.getElementById('modal-icon').style.background = content.iconBg;
+  document.getElementById('modal-why').innerHTML = content.why;
+  document.getElementById('manual-area').classList.remove('visible');
+  document.getElementById('modal-backdrop').classList.remove('hidden');
+}
+function closeModal() {
+  document.getElementById('modal-backdrop').classList.add('hidden');
+}
+function handleBackdropClick(e) {
+  if (e.target === document.getElementById('modal-backdrop')) closeModal();
+}
+function toggleManual() {
+  const area = document.getElementById('manual-area');
+  area.classList.toggle('visible');
+}
+function triggerAsh() {
+  closeModal();
+  // In production: opens Ash chat with context about the document type
+  alert('Ash would open here with context-specific questions to draft this document.');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CAL-01 – Calendar</title>
+<style>
+:root {
+  --bg:#f5f4f1; --surface:#fff; --surface-2:#f0ede8; --surface-hover:#f7f5f2;
+  --border:rgba(0,0,0,0.06); --border-strong:rgba(0,0,0,0.12);
+  --text-primary:#1a1916; --text-secondary:#6b6860; --text-tertiary:#a8a49e;
+  --accent:#3d6b4f; --accent-light:rgba(61,107,79,0.09);
+  --amber:#b8860b; --amber-light:rgba(184,134,11,0.12);
+  --blue:#2563ab; --blue-light:rgba(37,99,171,0.08);
+  --red:#d94f3d;
+  --shadow-card:0 1px 3px rgba(0,0,0,0.07),0 0 0 0.5px rgba(0,0,0,0.07);
+  --radius:8px; --radius-xs:5px;
+  --px-hr:60; /* pixels per hour — used in JS too */
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#181715; --surface:#1e1d1b; --surface-2:#252321; --surface-hover:#272523;
+  --border:rgba(255,255,255,0.05); --border-strong:rgba(255,255,255,0.10);
+  --text-primary:#f0ede8; --text-secondary:#9a9690; --text-tertiary:#5c5a56;
+  --accent:#5a9470; --accent-light:rgba(90,148,112,0.12);
+  --shadow-card:0 1px 3px rgba(0,0,0,0.25),0 0 0 0.5px rgba(255,255,255,0.06);
+}}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text-primary);height:100vh;display:flex;overflow:hidden;font-size:13px;}
+
+/* ── App sidebar ── */
+.app-sidebar{width:56px;background:#d94f3d;flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:6px;}
+.sidebar-logo{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.2);margin-bottom:10px;}
+.sidebar-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.55);cursor:pointer;}
+.sidebar-icon:hover{background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.85);}
+.sidebar-icon.active{background:rgba(255,255,255,0.22);color:white;}
+
+/* ── Left panel ── */
+.left-panel{width:222px;flex-shrink:0;background:var(--surface);border-right:0.5px solid var(--border-strong);display:flex;flex-direction:column;overflow:hidden;}
+
+/* Mini calendar */
+.mini-cal{padding:14px 12px 8px;flex-shrink:0;}
+.mini-cal-nav{display:flex;align-items:center;margin-bottom:10px;}
+.mini-cal-title{font-size:12px;font-weight:650;flex:1;}
+.mini-cal-arrow{width:20px;height:20px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:4px;color:var(--text-tertiary);}
+.mini-cal-arrow:hover{background:var(--surface-2);}
+.mini-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;}
+.mini-cal-dow{font-size:9px;color:var(--text-tertiary);text-align:center;padding:2px 0;font-weight:600;}
+.mini-cal-day{font-size:11px;text-align:center;padding:3px 1px;border-radius:50%;cursor:pointer;width:24px;height:24px;display:flex;align-items:center;justify-content:center;margin:0 auto;}
+.mini-cal-day:hover{background:var(--surface-2);}
+.mini-cal-day.today{background:var(--red);color:white;font-weight:700;}
+.mini-cal-day.in-week{background:var(--surface-2);font-weight:600;}
+.mini-cal-day.empty{color:transparent;pointer-events:none;}
+.mini-cal-day.other-month{color:var(--text-tertiary);}
+
+/* Calendar list */
+.cal-list{flex:1;overflow-y:auto;padding:0 0 16px;}
+.cal-section{padding:8px 12px 2px;}
+.cal-section-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-tertiary);padding:4px 0;}
+.cal-account{padding:4px 0 2px;}
+.cal-account-name{font-size:10px;color:var(--text-tertiary);padding:2px 0;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cal-item{display:flex;align-items:center;gap:7px;padding:2px 0 2px 8px;cursor:pointer;border-radius:4px;}
+.cal-item:hover{background:var(--surface-2);}
+.cal-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.cal-dot.square{border-radius:2px;}
+.cal-item-label{font-size:11px;flex:1;}
+.cal-eye{color:var(--text-tertiary);opacity:0;width:14px;font-size:11px;}
+.cal-item:hover .cal-eye{opacity:1;}
+
+/* Perennial Feed section — distinct */
+.feed-section{padding:8px 12px 4px;border-top:0.5px solid var(--border-strong);margin-top:4px;}
+.feed-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;display:flex;align-items:center;gap:6px;}
+.feed-badge{font-size:8px;font-weight:700;text-transform:uppercase;padding:1px 5px;border-radius:10px;background:var(--accent-light);color:var(--accent);}
+.feed-item{display:flex;align-items:center;gap:7px;padding:3px 0;cursor:pointer;border-radius:4px;}
+.feed-item:hover{background:var(--surface-2);}
+.feed-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0;}
+
+/* ── Main calendar ── */
+.cal-main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);}
+
+/* Topbar */
+.cal-topbar{display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--surface);border-bottom:0.5px solid var(--border-strong);flex-shrink:0;}
+.cal-month-title{font-size:16px;font-weight:650;flex:1;}
+.view-switcher{display:flex;background:var(--surface-2);border:0.5px solid var(--border-strong);border-radius:6px;overflow:hidden;}
+.view-btn{padding:4px 10px;font-size:11px;color:var(--text-secondary);cursor:pointer;border:none;background:transparent;font-family:inherit;}
+.view-btn.active{background:var(--surface);color:var(--text-primary);font-weight:600;box-shadow:0 0 0 0.5px var(--border-strong);}
+.today-btn{padding:4px 11px;font-size:11px;color:var(--text-secondary);border:0.5px solid var(--border-strong);border-radius:5px;cursor:pointer;background:var(--surface);}
+.today-btn:hover{background:var(--surface-2);}
+.nav-arrow{width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:5px;color:var(--text-secondary);border:0.5px solid var(--border-strong);background:var(--surface);}
+.nav-arrow:hover{background:var(--surface-2);}
+.new-event-btn{padding:4px 12px;font-size:11px;background:var(--text-primary);color:var(--bg);border:none;border-radius:5px;cursor:pointer;font-family:inherit;font-weight:500;}
+
+/* Day header row */
+.day-header-row{display:flex;flex-shrink:0;border-bottom:0.5px solid var(--border-strong);background:var(--surface);}
+.tz-gutter{width:52px;flex-shrink:0;font-size:8px;color:var(--text-tertiary);display:flex;align-items:flex-end;justify-content:flex-end;padding:4px 6px 4px 0;}
+.day-header{flex:1;text-align:center;padding:8px 4px 6px;border-left:0.5px solid var(--border);cursor:pointer;}
+.day-header:hover{background:var(--surface-hover);}
+.day-dow{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);}
+.day-num{font-size:20px;font-weight:300;line-height:1.2;color:var(--text-secondary);}
+.day-header.today .day-num{background:var(--red);color:white;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;margin:0 auto;font-weight:600;font-size:16px;}
+.day-header.today .day-dow{color:var(--red);}
+
+/* Perennial Feed banner — distinct curated strip below day headers */
+.perennial-banner-row{display:grid;grid-template-columns:52px repeat(7,1fr);background:rgba(61,107,79,0.055);border-bottom:0.5px solid rgba(61,107,79,0.2);padding:5px 0;flex-shrink:0;}
+.banner-gutter{grid-column:1;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;color:var(--accent);}
+.banner-event{font-size:10px;font-weight:500;padding:2px 7px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;align-self:center;margin:1px 2px;cursor:pointer;transition:opacity .1s;}
+.banner-event:hover{opacity:.8;}
+
+/* All-day user events row */
+.allday-span-row{display:grid;grid-template-columns:52px repeat(7,1fr);border-bottom:0.5px solid var(--border-strong);background:var(--surface);padding:3px 0;min-height:32px;flex-shrink:0;}
+.allday-gutter{grid-column:1;font-size:9px;color:var(--text-tertiary);display:flex;align-items:center;justify-content:flex-end;padding-right:6px;}
+.allday-span-event{font-size:10px;font-weight:500;padding:2px 7px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;align-self:center;margin:1px 2px;cursor:pointer;}
+
+/* Calendar toggled-off state */
+.cal-item.vis-off .cal-dot{opacity:.2;}
+.cal-item.vis-off .cal-item-label{opacity:.35;text-decoration:line-through;}
+.cal-item.vis-off .cal-eye{opacity:.25;}
+
+/* Scrollable time grid */
+.time-grid-wrap{flex:1;overflow-y:scroll;overflow-x:hidden;position:relative;}
+.time-grid{display:flex;position:relative;}
+.time-col{width:52px;flex-shrink:0;position:relative;}
+.time-label{position:absolute;right:8px;font-size:9px;color:var(--text-tertiary);transform:translateY(-50%);white-space:nowrap;}
+.day-cols{display:flex;flex:1;position:relative;}
+.day-col{flex:1;border-left:0.5px solid var(--border);position:relative;}
+/* Hour lines */
+.hour-line{position:absolute;left:0;right:0;height:0.5px;background:var(--border);}
+.half-line{position:absolute;left:0;right:0;height:0.5px;background:var(--border);opacity:0.4;border-top:0.5px dashed var(--border);}
+/* Current time */
+.now-line{position:absolute;left:0;right:0;height:1.5px;background:var(--red);z-index:5;}
+.now-dot{position:absolute;left:-4px;top:-3.5px;width:8px;height:8px;border-radius:50%;background:var(--red);}
+
+/* ── Events ── */
+.ev{position:absolute;border-radius:4px;padding:3px 6px;font-size:11px;overflow:hidden;cursor:pointer;transition:opacity 0.1s;z-index:2;}
+.ev:hover{opacity:0.85;z-index:10;}
+.ev-title{font-weight:500;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ev-time{font-size:9px;opacity:0.75;white-space:nowrap;}
+/* Feed events — outlined style */
+.ev.feed{background:transparent!important;border-width:1px!important;border-style:solid;}
+/* Reminder pill style */
+.ev.reminder{border-left:3px solid;}
+
+.ash-icon{position:fixed;bottom:24px;right:24px;width:36px;height:36px;border-radius:50%;background:var(--surface);border:0.5px solid var(--border-strong);box-shadow:0 2px 8px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:20;}
+.annotation{position:fixed;bottom:16px;left:72px;font-size:10px;color:var(--text-tertiary);font-style:italic;pointer-events:none;}
+</style>
+</head>
+<body>
+
+<!-- App sidebar -->
+<div class="app-sidebar">
+  <div class="sidebar-logo"></div>
+  <div class="sidebar-icon" title="Projects"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg></div>
+  <div class="sidebar-icon" title="Contacts"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg></div>
+  <div class="sidebar-icon" title="Outreach"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg></div>
+  <div class="sidebar-icon" title="Finance"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 6.5h14"/><path d="M5 10h2M10 10h1"/></svg></div>
+  <div class="sidebar-icon" title="Resources"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg></div>
+  <div class="sidebar-icon active" title="Calendar"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 2v2M11 2v2M2 7h12"/></svg></div>
+</div>
+
+<!-- Left panel -->
+<div class="left-panel">
+  <!-- Mini calendar -->
+  <div class="mini-cal">
+    <div class="mini-cal-nav">
+      <span class="mini-cal-title">April 2026</span>
+      <div class="mini-cal-arrow"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 2L4 5l3 3"/></svg></div>
+      <div class="mini-cal-arrow"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2l3 3-3 3"/></svg></div>
+    </div>
+    <div class="mini-cal-grid">
+      <div class="mini-cal-dow">S</div><div class="mini-cal-dow">M</div><div class="mini-cal-dow">T</div><div class="mini-cal-dow">W</div><div class="mini-cal-dow">T</div><div class="mini-cal-dow">F</div><div class="mini-cal-dow">S</div>
+      <!-- Apr 1 = Wednesday, so 3 blanks first -->
+      <div class="mini-cal-day empty">.</div><div class="mini-cal-day empty">.</div><div class="mini-cal-day empty">.</div><div class="mini-cal-day">1</div><div class="mini-cal-day">2</div><div class="mini-cal-day">3</div><div class="mini-cal-day">4</div>
+      <div class="mini-cal-day">5</div><div class="mini-cal-day">6</div><div class="mini-cal-day">7</div><div class="mini-cal-day">8</div><div class="mini-cal-day">9</div><div class="mini-cal-day">10</div><div class="mini-cal-day">11</div>
+      <div class="mini-cal-day in-week">12</div><div class="mini-cal-day in-week">13</div><div class="mini-cal-day today">14</div><div class="mini-cal-day in-week">15</div><div class="mini-cal-day in-week">16</div><div class="mini-cal-day in-week">17</div><div class="mini-cal-day in-week">18</div>
+      <div class="mini-cal-day">19</div><div class="mini-cal-day">20</div><div class="mini-cal-day">21</div><div class="mini-cal-day">22</div><div class="mini-cal-day">23</div><div class="mini-cal-day">24</div><div class="mini-cal-day">25</div>
+      <div class="mini-cal-day">26</div><div class="mini-cal-day">27</div><div class="mini-cal-day">28</div><div class="mini-cal-day">29</div><div class="mini-cal-day">30</div><div class="mini-cal-day other-month">1</div><div class="mini-cal-day other-month">2</div>
+    </div>
+  </div>
+
+  <!-- Calendar list -->
+  <div class="cal-list">
+    <!-- Gmail -->
+    <div class="cal-section">
+      <div class="cal-section-label">My calendars</div>
+      <div class="cal-account">
+        <div class="cal-account-name"><svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5l2-2 2 2"/></svg>nadia.shore@gmail.com</div>
+        <div class="cal-item"><div class="cal-dot" style="background:#8b4a4a"></div><span class="cal-item-label">Default</span><span class="cal-eye">●</span></div>
+        <div class="cal-item"><div class="cal-dot" style="background:#5c7a44"></div><span class="cal-item-label">Personal</span><span class="cal-eye">●</span></div>
+        <div class="cal-item vis-off"><div class="cal-dot" style="background:#4a6b8a"></div><span class="cal-item-label">Holidays</span><span class="cal-eye">○</span></div>
+      </div>
+      <div class="cal-account" style="margin-top:6px;">
+        <div class="cal-account-name"><svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5l2-2 2 2"/></svg>nadia@shoreobjects.co</div>
+        <div class="cal-item"><div class="cal-dot" style="background:#2d7a6b"></div><span class="cal-item-label">Shore Objects</span><span class="cal-eye">●</span></div>
+        <div class="cal-item"><div class="cal-dot" style="background:#2563ab"></div><span class="cal-item-label">Reminders</span><span class="cal-eye">●</span></div>
+      </div>
+      <div class="cal-account" style="margin-top:6px;">
+        <div class="cal-account-name"><svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5l2-2 2 2"/></svg>nadia@formpress.co</div>
+        <div class="cal-item"><div class="cal-dot" style="background:#2d7a5c"></div><span class="cal-item-label">Form Press</span><span class="cal-eye">●</span></div>
+        <div class="cal-item vis-off"><div class="cal-dot" style="background:#5c6b44"></div><span class="cal-item-label">Editorial</span><span class="cal-eye">○</span></div>
+        <div class="cal-item"><div class="cal-dot" style="background:#8b4a4a"></div><span class="cal-item-label">Staff Shared</span><span class="cal-eye">●</span></div>
+      </div>
+    </div>
+
+    <!-- Perennial Feed — distinct section -->
+    <div class="feed-section">
+      <div class="feed-label" style="color:var(--accent);">
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z" transform="scale(0.7) translate(3,1)"/></svg>
+        Perennial Feed
+        <span class="feed-badge">Curated</span>
+      </div>
+      <div class="feed-item"><div class="feed-dot" style="background:#148c8c"></div><span class="cal-item-label" style="font-size:11px">Design Events</span><span class="cal-eye">●</span></div>
+      <div class="feed-item"><div class="feed-dot" style="background:#b8860b"></div><span class="cal-item-label" style="font-size:11px">Grants & Deadlines</span><span class="cal-eye">●</span></div>
+      <div class="feed-item"><div class="feed-dot" style="background:#6d4fa3"></div><span class="cal-item-label" style="font-size:11px">Award Cycles</span><span class="cal-eye">●</span></div>
+      <div style="margin-top:8px;padding:2px 0;">
+        <div style="font-size:10px;color:var(--text-tertiary);line-height:1.4;padding:6px 8px;background:var(--surface-2);border-radius:5px;">Perennial maintains this calendar. <span style="color:var(--accent);cursor:pointer">Browse upcoming events →</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main calendar -->
+<div class="cal-main">
+
+  <!-- Topbar -->
+  <div class="cal-topbar">
+    <span class="cal-month-title">April 2026</span>
+    <button class="today-btn">Today</button>
+    <div class="nav-arrow"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 2L4 5l3 3"/></svg></div>
+    <div class="nav-arrow"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2l3 3-3 3"/></svg></div>
+    <div style="flex:1"></div>
+    <div class="view-switcher">
+      <button class="view-btn">Day</button>
+      <button class="view-btn">3 Day</button>
+      <button class="view-btn active">Week</button>
+      <button class="view-btn">Month</button>
+    </div>
+    <button class="new-event-btn">+ Event</button>
+  </div>
+
+  <!-- Day headers -->
+  <div class="day-header-row">
+    <div class="tz-gutter">EDT</div>
+    <div class="day-header"><div class="day-dow">Sun</div><div class="day-num">12</div></div>
+    <div class="day-header"><div class="day-dow">Mon</div><div class="day-num">13</div></div>
+    <div class="day-header today"><div class="day-dow">Tue</div><div class="day-num">14</div></div>
+    <div class="day-header"><div class="day-dow">Wed</div><div class="day-num">15</div></div>
+    <div class="day-header"><div class="day-dow">Thu</div><div class="day-num">16</div></div>
+    <div class="day-header"><div class="day-dow">Fri</div><div class="day-num">17</div></div>
+    <div class="day-header"><div class="day-dow">Sat</div><div class="day-num">18</div></div>
+  </div>
+
+  <!-- Perennial Feed banner — curated industry events, grants, award cycles -->
+  <div class="perennial-banner-row" id="perennial-banner">
+    <div class="banner-gutter" title="Perennial Feed">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="8" cy="11" rx="5" ry="3.5"/><path d="M8 7.5V3"/><path d="M5.5 5.5c0 0 2.5.5 2.5 3.5"/></svg>
+    </div>
+  </div>
+
+  <!-- All-day user events row -->
+  <div class="allday-span-row" id="allday-span">
+    <div class="allday-gutter">All day</div>
+  </div>
+
+  <!-- Time grid -->
+  <div class="time-grid-wrap" id="grid-wrap">
+    <div class="time-grid" id="time-grid">
+      <div class="time-col" id="time-col"></div>
+      <div class="day-cols" id="day-cols">
+        <div class="day-col" id="day-0"></div>
+        <div class="day-col" id="day-1"></div>
+        <div class="day-col" id="day-2"></div><!-- today -->
+        <div class="day-col" id="day-3"></div>
+        <div class="day-col" id="day-4"></div>
+        <div class="day-col" id="day-5"></div>
+        <div class="day-col" id="day-6"></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /cal-main -->
+
+<div class="ash-icon">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/><path d="M12 12c-2-1.5-3-3-2-5"/><path d="M12 12c2-1.5 3-3 2-5"/></svg>
+</div>
+<div class="annotation">CAL-01 · Week view. Personal calendars from multiple accounts + Perennial Feed (curated design events, grants, deadlines). Teal/outlined = industry events. Amber = deadlines. Blue pills = Perennial reminders from pipeline.</div>
+
+<script>
+/* ── Config ── */
+const GRID_START = 6;  // 6am
+const GRID_END   = 23; // 11pm
+const PX_HR      = 60;
+const TOTAL_PX   = (GRID_END - GRID_START) * PX_HR;
+
+/* ── Helpers ── */
+function t2y(t){ // "HH:MM" → px from grid top
+  const [h,m] = t.split(':').map(Number);
+  return (h - GRID_START) * PX_HR + m;
+}
+function dur(s,e){ return t2y(e) - t2y(s); }
+
+/* ── Event data ── */
+// type: 'personal'|'waiting'|'perennial'|'feed-design'|'feed-deadline'|'reminder'
+const EVENTS = [
+  // Sunday Apr 12 (day 0)
+  {day:0, s:'9:00',  e:'10:00', title:'Showing up at 9',   color:'#8b4a4a', bg:'rgba(139,74,74,0.82)'},
+  {day:0, s:'10:30', e:'11:15', title:'Jason King',         color:'#8b4a4a', bg:'rgba(139,74,74,0.82)'},
+  {day:0, s:'11:30', e:'12:45', title:'Kaheim',             color:'#8b4a4a', bg:'rgba(139,74,74,0.82)'},
+  {day:0, s:'12:30', e:'13:30', title:'Emma Zipp',          color:'#7a5c44', bg:'rgba(122,92,68,0.82)', ox:0.5},
+  {day:0, s:'15:00', e:'15:40', title:'Ps4',                color:'#5c6b44', bg:'rgba(92,107,68,0.82)'},
+  {day:0, s:'18:00', e:'18:25', title:'publish / insta link', color:'#2d7a5c', bg:'rgba(45,122,92,0.82)'},
+
+  // Monday Apr 13 (day 1)
+  {day:1, s:'8:30',  e:'9:00',  title:'↑ Follow up: Sight Unseen', color:'#2563ab', bg:'rgba(37,99,171,0.12)', type:'reminder'},
+  {day:1, s:'10:00', e:'10:25', title:'Topping The Week',   color:'#2d607a', bg:'rgba(45,96,122,0.82)'},
+  {day:1, s:'12:15', e:'14:30', title:'Travel kit — shoot prep', color:'#2d6b5c', bg:'rgba(45,107,92,0.85)'},
+  {day:1, s:'13:00', e:'14:00', title:'Lunch w/ Priya',     color:'#5c7a44', bg:'rgba(92,122,68,0.82)', ox:0.5},
+  {day:1, s:'15:00', e:'16:00', title:'Nadia + Jeanie — studio check', color:'#2d6b5c', bg:'rgba(45,107,92,0.85)'},
+  {day:1, s:'17:30', e:'18:00', title:'Quiet close',        color:'#5c5a56', bg:'rgba(92,90,86,0.6)'},
+  {day:1, s:'20:00', e:'22:00', title:'Game night',         color:'#5c6b44', bg:'rgba(92,107,68,0.82)'},
+
+  // Tuesday Apr 14 TODAY (day 2)
+  {day:2, s:'9:00',  e:'9:30',  title:'R&O / Form Press',   color:'#2d7a5c', bg:'rgba(45,122,92,0.82)'},
+  {day:2, s:'9:30',  e:'10:00', title:'Editorial stack',    color:'#2d607a', bg:'rgba(45,96,122,0.82)', ox:0.5},
+  {day:2, s:'10:15', e:'10:45', title:'↑ Follow up: Materials Gallery', color:'#2563ab', bg:'rgba(37,99,171,0.12)', type:'reminder', ox:0.5},
+  {day:2, s:'11:30', e:'13:00', title:'Ceramics studio',    color:'#7a5c44', bg:'rgba(122,92,68,0.78)'},
+  {day:2, s:'14:00', e:'15:00', title:'Shore Objects — Q2 review', color:'#2d7a6b', bg:'rgba(45,122,107,0.82)'},
+  {day:2, s:'15:30', e:'16:30', title:'Deep work block',    color:'#5c5a56', bg:'rgba(92,90,86,0.55)'},
+  {day:2, s:'17:00', e:'17:25', title:'× Meanwhile New York', color:'#2d7a5c', bg:'rgba(45,122,92,0.75)'},
+  {day:2, s:'19:00', e:'21:00', title:'Office Hours',       color:'#2d7a5c', bg:'rgba(45,122,92,0.82)'},
+
+  // Wednesday Apr 15 (day 3)
+  {day:3, s:'9:00',  e:'9:20',  title:'Morning pages',      color:'#5c5a56', bg:'rgba(92,90,86,0.55)'},
+  {day:3, s:'10:00', e:'10:30', title:'↑ Follow up: R&D Gallery', color:'#2563ab', bg:'rgba(37,99,171,0.12)', type:'reminder'},
+  {day:3, s:'11:00', e:'11:35', title:'Liz / Candlestick meet', color:'#2563ab', bg:'rgba(37,99,171,0.82)'},
+  {day:3, s:'12:30', e:'14:00', title:'A&D Weekly',         color:'#555', bg:'rgba(90,90,90,0.10)', border:'rgba(90,90,90,0.5)', dashed:true},
+  {day:3, s:'14:30', e:'15:00', title:'Kenna',              color:'#2563ab', bg:'rgba(37,99,171,0.82)'},
+  {day:3, s:'15:30', e:'16:30', title:'Photo shoot — tabletop', color:'#6b4a7a', bg:'rgba(107,74,122,0.82)'},
+  {day:3, s:'17:00', e:'17:30', title:'BTA Review',         color:'#444', bg:'rgba(60,60,60,0.82)'},
+  // Perennial: AIGA deadline
+  {day:3, s:'9:30',  e:'9:55',  title:'⚑ AIGA Design Award — submissions close', color:'#b8860b', bg:'rgba(184,134,11,0.1)', border:'#b8860b', type:'deadline', ox:0.5},
+  {day:3, s:'19:00', e:'21:45', title:"Marie's Crisis Cafe", color:'#8b3a3a', bg:'rgba(139,58,58,0.82)'},
+
+  // Thursday Apr 16 (day 4)
+  {day:4, s:'8:00',  e:'8:30',  title:'Paychecks',          color:'#2d7a5c', bg:'rgba(45,122,92,0.82)'},
+  {day:4, s:'8:00',  e:'8:30',  title:'Invoices',           color:'#2563ab', bg:'rgba(37,99,171,0.82)', ox:0.5},
+  // Perennial: Salone deadline
+  {day:4, s:'9:00',  e:'9:25',  title:'⚑ Salone del Mobile — reg. closes', color:'#b8860b', bg:'rgba(184,134,11,0.1)', border:'#b8860b', type:'deadline'},
+  {day:4, s:'11:00', e:'13:00', title:'Bucket Check Weekly',color:'#2d4a6b', bg:'rgba(45,74,107,0.85)'},
+  {day:4, s:'14:00', e:'15:30', title:'Tabletop series — second pass', color:'#6b4a7a', bg:'rgba(107,74,122,0.82)'},
+  {day:4, s:'17:00', e:'17:30', title:'ER / LG',            color:'#444', bg:'rgba(60,60,60,0.82)'},
+  {day:4, s:'19:00', e:'19:30', title:'Table',              color:'#444', bg:'rgba(60,60,60,0.82)'},
+
+  // Friday Apr 17 (day 5)
+  {day:5, s:'9:00',  e:'9:20',  title:'↑ Follow up: Remodelista', color:'#2563ab', bg:'rgba(37,99,171,0.12)', type:'reminder'},
+  {day:5, s:'10:00', e:'11:30', title:'Studio time',        color:'#5c6b44', bg:'rgba(92,107,68,0.82)'},
+  {day:5, s:'12:00', e:'13:00', title:'Studio lunch',       color:'#7a5c44', bg:'rgba(122,92,68,0.72)'},
+  {day:5, s:'14:00', e:'15:30', title:'Jake Brenner',       color:'#8b4a4a', bg:'rgba(139,74,74,0.82)'},
+  {day:5, s:'16:00', e:'17:00', title:'Wrap / close week',  color:'#5c5a56', bg:'rgba(92,90,86,0.55)'},
+  // Perennial: design event
+  {day:5, s:'10:30', e:'11:00', title:'◆ Design Miami 2026 — open call announced', color:'#148c8c', bg:'rgba(20,140,140,0.1)', border:'#148c8c', dashed:true, ox:0.5},
+
+  // Saturday Apr 18 (day 6)
+  {day:6, s:'11:00', e:'13:00', title:'LeTish Popup',       color:'#8b3a3a', bg:'rgba(139,58,58,0.85)'},
+  {day:6, s:'15:00', e:'17:00', title:'Ceramics class',     color:'#7a5c44', bg:'rgba(122,92,68,0.78)'},
+  {day:6, s:'19:00', e:'21:30', title:'Dinner — Tom + Lena',color:'#5c6b44', bg:'rgba(92,107,68,0.82)'},
+];
+
+// Perennial Feed banner events
+// col = day index + 2 (grid col 1 = 52px gutter, col 2 = Sun, col 3 = Mon, …, col 8 = Sat)
+const PERENNIAL_EVENTS = [
+  {col:3, span:2, title:'◆ Wallpaper* Design Award — cycle open',   color:'#6d4fa3', bg:'rgba(109,79,163,0.13)', border:'rgba(109,79,163,0.32)'},
+  {col:5, span:1, title:'ICFF 2026 — applications open',             color:'#148c8c', bg:'rgba(20,140,140,0.13)', border:'rgba(20,140,140,0.32)'},
+  {col:6, span:3, title:'NYCxDesign 2026 — dates announced',         color:'#148c8c', bg:'rgba(20,140,140,0.13)', border:'rgba(20,140,140,0.32)'},
+];
+
+// User all-day / multi-day events
+const ALLDAY_USER = [
+  {col:5, span:3, title:'Shore Objects — product launch sprint',      color:'#2d7a6b', bg:'rgba(45,122,107,0.13)', border:'rgba(45,122,107,0.3)'},
+];
+
+/* ── Build time grid ── */
+(function buildGrid(){
+  const grid = document.getElementById('time-grid');
+  const timeCol = document.getElementById('time-col');
+  grid.style.height = TOTAL_PX + 'px';
+  timeCol.style.height = TOTAL_PX + 'px';
+
+  // Time labels + hour lines
+  for(let h = GRID_START; h <= GRID_END; h++){
+    const y = (h - GRID_START) * PX_HR;
+    // label
+    const lbl = document.createElement('div');
+    lbl.className = 'time-label';
+    lbl.style.top = y + 'px';
+    lbl.textContent = h === 12 ? '12 PM' : h > 12 ? (h-12)+' PM' : h+' AM';
+    timeCol.appendChild(lbl);
+    // hour lines on each day col
+    for(let d = 0; d < 7; d++){
+      const col = document.getElementById('day-'+d);
+      if(h > GRID_START){
+        const line = document.createElement('div');
+        line.className = 'hour-line';
+        line.style.top = y + 'px';
+        col.appendChild(line);
+      }
+      if(h < GRID_END){
+        const half = document.createElement('div');
+        half.className = 'half-line';
+        half.style.top = (y + 30) + 'px';
+        col.appendChild(half);
+      }
+    }
+  }
+
+  // Set all day-col heights
+  for(let d = 0; d < 7; d++){
+    document.getElementById('day-'+d).style.height = TOTAL_PX + 'px';
+  }
+
+  // Current time line (today = day 2, show at ~11:37am)
+  const nowH = 11, nowM = 37;
+  const nowY = (nowH - GRID_START) * PX_HR + nowM;
+  const nowLine = document.createElement('div');
+  nowLine.className = 'now-line';
+  nowLine.style.top = nowY + 'px';
+  const nowDot = document.createElement('div');
+  nowDot.className = 'now-dot';
+  nowLine.appendChild(nowDot);
+  document.getElementById('day-2').appendChild(nowLine);
+
+  // Today column highlight
+  document.getElementById('day-2').style.background = 'rgba(217,79,61,0.025)';
+
+  // Scroll to 8am on load
+  setTimeout(() => {
+    document.getElementById('grid-wrap').scrollTop = (8 - GRID_START) * PX_HR - 20;
+  }, 0);
+})();
+
+/* ── Render events ── */
+EVENTS.forEach(ev => {
+  const col = document.getElementById('day-'+ev.day);
+  const top = t2y(ev.s);
+  const height = Math.max(dur(ev.s, ev.e), 18);
+  const el = document.createElement('div');
+  el.className = 'ev' + (ev.type === 'reminder' ? ' reminder' : '') + (ev.type === 'deadline' ? ' feed' : '');
+
+  const ox = ev.ox || 0;
+  const w = ev.ox ? '52%' : '95%';
+  const l = ev.ox ? '47%' : '2%';
+
+  el.style.cssText = `
+    top:${top}px;
+    height:${height}px;
+    left:${l};
+    width:${w};
+    background:${ev.bg || ev.color};
+    color:${ev.type === 'reminder' || ev.type === 'deadline' ? ev.color : 'white'};
+    ${ev.border ? 'border:1px solid '+ev.border+';' : ''}
+    ${ev.type === 'reminder' ? 'border-left:2.5px solid '+ev.color+';background:'+ev.bg+';' : ''}
+    ${ev.dashed ? 'border:1px dashed '+ev.border+';background:'+ev.bg+';' : ''}
+  `;
+
+  const titleEl = document.createElement('div');
+  titleEl.className = 'ev-title';
+  titleEl.textContent = ev.title;
+  el.appendChild(titleEl);
+
+  if(height >= 36){
+    const timeEl = document.createElement('div');
+    timeEl.className = 'ev-time';
+    timeEl.textContent = ev.s + ' – ' + ev.e;
+    el.appendChild(timeEl);
+  }
+
+  col.appendChild(el);
+});
+
+/* ── Perennial Feed banner ── */
+PERENNIAL_EVENTS.forEach(ev => {
+  const el = document.createElement('div');
+  el.className = 'banner-event';
+  el.style.cssText = `grid-column:${ev.col}/span ${ev.span};background:${ev.bg};color:${ev.color};border:0.5px solid ${ev.border};`;
+  el.textContent = ev.title;
+  document.getElementById('perennial-banner').appendChild(el);
+});
+
+/* ── All-day user events ── */
+ALLDAY_USER.forEach(ev => {
+  const el = document.createElement('div');
+  el.className = 'allday-span-event';
+  el.style.cssText = `grid-column:${ev.col}/span ${ev.span};background:${ev.bg};color:${ev.color};border:0.5px solid ${ev.border};`;
+  el.textContent = ev.title;
+  document.getElementById('allday-span').appendChild(el);
+});
+</script>
+</body>
+</html>

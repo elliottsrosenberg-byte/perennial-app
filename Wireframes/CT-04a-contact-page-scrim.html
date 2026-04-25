@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CT-04a – Contact Page (Scrim overlay)</title>
+<style>
+  :root {
+    --bg: #f5f4f1; --surface: #ffffff; --surface-2: #f0ede8; --surface-hover: #f7f5f2;
+    --border: rgba(0,0,0,0.07); --border-strong: rgba(0,0,0,0.13);
+    --text-primary: #1a1916; --text-secondary: #6b6860; --text-tertiary: #a8a49e;
+    --accent: #3d6b4f; --accent-light: rgba(61,107,79,0.08);
+    --red: #c0392b; --red-light: rgba(192,57,43,0.08);
+    --amber: #b8860b; --amber-light: rgba(184,134,11,0.10);
+    --blue: #2563ab; --blue-light: rgba(37,99,171,0.08);
+    --purple: #6d4fa3; --purple-light: rgba(109,79,163,0.08);
+    --teal: #148c8c; --teal-light: rgba(20,140,140,0.08);
+    --shadow-float: 0 8px 40px rgba(0,0,0,0.22);
+    --radius: 12px; --radius-sm: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #181715; --surface: #222120; --surface-2: #2a2927; --surface-hover: #272523;
+      --border: rgba(255,255,255,0.06); --border-strong: rgba(255,255,255,0.11);
+      --text-primary: #f0ede8; --text-secondary: #9a9690; --text-tertiary: #5c5a56;
+      --accent: #5a9470; --accent-light: rgba(90,148,112,0.12);
+      --blue-light: rgba(37,99,171,0.15); --purple-light: rgba(109,79,163,0.15);
+      --amber-light: rgba(184,134,11,0.15); --teal-light: rgba(20,140,140,0.12);
+      --shadow-float: 0 8px 40px rgba(0,0,0,0.5);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text-primary); height: 100vh; display: flex; overflow: hidden; font-size: 13px; }
+
+  /* ── Sidebar (above scrim) ── */
+  .sidebar { width: 56px; background: #d94f3d; flex-shrink: 0; display: flex; align-items: center; justify-content: center; writing-mode: vertical-rl; color: white; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.7; position: relative; z-index: 10; }
+
+  /* ── Ghost contacts table behind everything ── */
+  .ghost-layer {
+    position: absolute;
+    top: 0; left: 56px; right: 0; bottom: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .ghost-topbar { display: flex; align-items: center; gap: 10px; padding: 14px 24px; border-bottom: 0.5px solid var(--border-strong); background: var(--surface); }
+  .ghost-title { font-size: 15px; font-weight: 600; }
+  .ghost-count { font-size: 12px; color: var(--text-tertiary); }
+  .ghost-spacer { flex: 1; }
+  .ghost-search { width: 220px; height: 30px; background: var(--surface-2); border: 0.5px solid var(--border-strong); border-radius: var(--radius-sm); }
+  .ghost-btn { height: 30px; width: 56px; background: var(--surface-2); border: 0.5px solid var(--border-strong); border-radius: var(--radius-sm); }
+  .ghost-btn.add { background: var(--accent); border-color: var(--accent); width: 96px; }
+  .ghost-subbar { height: 36px; border-bottom: 0.5px solid var(--border-strong); background: var(--surface); padding: 0 24px; display: flex; align-items: center; gap: 8px; }
+  .ghost-tag { height: 20px; border-radius: 10px; }
+  .ghost-col-header { display: grid; grid-template-columns: 32px 2.6fr 1.6fr 1.2fr 1.1fr 0.8fr; padding: 8px 24px; border-bottom: 0.5px solid var(--border-strong); background: var(--surface-2); }
+  .ghost-th { height: 12px; width: 60%; background: var(--border-strong); border-radius: 3px; }
+  .ghost-row { display: grid; grid-template-columns: 32px 2.6fr 1.6fr 1.2fr 1.1fr 0.8fr; padding: 12px 24px; border-bottom: 0.5px solid var(--border); align-items: center; min-height: 48px; background: var(--surface); }
+  .ghost-row.selected { background: var(--accent-light); }
+  .ghost-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--surface-2); border: 0.5px solid var(--border-strong); }
+  .ghost-name-wrap { display: flex; align-items: center; gap: 10px; }
+  .ghost-name-lines { display: flex; flex-direction: column; gap: 5px; }
+  .ghost-line { height: 10px; border-radius: 3px; background: var(--border-strong); }
+  .ghost-pill { height: 16px; width: 48px; border-radius: 10px; background: var(--blue-light); }
+
+  /* ── Four-sided scrim overlay ── */
+  .scrim {
+    position: absolute;
+    top: 0; left: 56px; right: 0; bottom: 0;
+    z-index: 1;
+    background: rgba(20, 18, 16, 0.52);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    cursor: pointer;
+  }
+
+  /* ── Back chip (top-left gap) ── */
+  .back-btn {
+    position: absolute;
+    top: 48px;
+    left: calc(56px + 48px);
+    z-index: 2;
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,0.14);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 0.5px solid rgba(255,255,255,0.22);
+    border-radius: 20px;
+    padding: 6px 12px 6px 10px;
+    font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.85);
+    cursor: pointer;
+    user-select: none;
+  }
+  .back-btn:hover { background: rgba(255,255,255,0.22); }
+
+  /* Expand icon (switch to full screen) */
+  .expand-btn {
+    position: absolute;
+    top: 48px;
+    left: calc(56px + 48px + 148px);
+    z-index: 2;
+    width: 30px; height: 30px;
+    background: rgba(255,255,255,0.14);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 0.5px solid rgba(255,255,255,0.22);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: rgba(255,255,255,0.8);
+  }
+  .expand-btn:hover { background: rgba(255,255,255,0.22); }
+
+  /* ── Floating contact panel ── */
+  .contact-panel {
+    position: absolute;
+    top: 48px;
+    bottom: 48px;
+    left: calc(56px + 48px);
+    right: 48px;
+    z-index: 2;
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-float);
+    border: 0.5px solid var(--border-strong);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Panel header ── */
+  .panel-header {
+    border-bottom: 0.5px solid var(--border-strong);
+    flex-shrink: 0;
+  }
+  /* Row 1: actions */
+  .header-actions {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 20px 0;
+    justify-content: flex-end;
+  }
+  .header-action-btn {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11px; color: var(--text-secondary);
+    background: transparent; border: 0.5px solid var(--border-strong);
+    border-radius: var(--radius-sm); padding: 5px 10px; cursor: pointer;
+  }
+  .header-action-btn:hover { background: var(--surface-2); }
+  .header-action-btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  .header-action-btn.danger  { color: var(--red); }
+  .header-action-btn.danger:hover { background: var(--red-light); }
+  .action-sep { width: 0.5px; height: 16px; background: var(--border-strong); }
+
+  /* Row 2: identity */
+  .header-identity {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 20px 12px;
+  }
+  .avatar-lg {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--surface-2); border: 0.5px solid var(--border-strong);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 600; color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+  .identity-body { flex: 1; }
+  .contact-name { font-size: 17px; font-weight: 650; line-height: 1.2; margin-bottom: 5px; }
+  .identity-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .identity-role { font-size: 12px; color: var(--text-secondary); }
+  .tag-pill { font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 10px; }
+  .tag-gallery { background: var(--blue-light); color: var(--blue); }
+  .tag-client  { background: var(--accent-light); color: var(--accent); }
+  .status-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; color: var(--accent); }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+  /* Row 3: quick facts */
+  .header-facts {
+    display: flex; align-items: center;
+    padding: 0 20px;
+    border-top: 0.5px solid var(--border);
+  }
+  .fact-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 14px 7px 0;
+    margin-right: 14px;
+    border-right: 0.5px solid var(--border);
+  }
+  .fact-item:last-child { border-right: none; }
+  .fact-icon { opacity: 0.4; flex-shrink: 0; }
+  .fact-text { font-size: 11px; color: var(--text-secondary); }
+  .fact-text.link { color: var(--blue); }
+  .fact-text.fresh { color: var(--accent); font-weight: 500; }
+
+  /* ── Panel body — two columns ── */
+  .panel-body { flex: 1; display: flex; overflow: hidden; }
+
+  /* Left col: About + Activity */
+  .col-left {
+    flex: 1.4; overflow-y: auto;
+    padding: 18px 18px 18px 20px;
+    display: flex; flex-direction: column;
+  }
+
+  /* Right col: Properties + Linked + Notes */
+  .col-right {
+    width: 248px; flex-shrink: 0;
+    border-left: 0.5px solid var(--border-strong);
+    overflow-y: auto;
+    padding: 18px 18px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+
+  /* Cards */
+  .card { background: var(--surface); border: 0.5px solid var(--border-strong); border-radius: var(--radius); margin-bottom: 14px; overflow: hidden; }
+  .card:last-child { margin-bottom: 0; }
+  .card-header { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 0.5px solid var(--border); }
+  .card-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); flex: 1; }
+  .card-action { font-size: 11px; color: var(--blue); background: none; border: none; cursor: pointer; }
+  .card-count  { font-size: 10px; color: var(--text-tertiary); background: var(--surface-2); border: 0.5px solid var(--border-strong); border-radius: 10px; padding: 1px 7px; }
+  .card-body { padding: 12px 14px; }
+
+  /* About */
+  .about-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 12px; }
+  .field-row { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 9px; }
+  .field-row:last-child { margin-bottom: 0; }
+  .field-icon { width: 13px; flex-shrink: 0; margin-top: 1px; opacity: 0.4; display: flex; align-items: center; justify-content: center; }
+  .field-body { flex: 1; }
+  .field-label { font-size: 10px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1px; }
+  .field-value { font-size: 12px; color: var(--text-secondary); }
+  .field-value.link { color: var(--blue); }
+  .add-field-btn { font-size: 11px; color: var(--blue); background: none; border: none; cursor: pointer; padding: 5px 0 0; display: block; }
+
+  /* Activity card */
+  .activity-tabs { display: flex; gap: 2px; padding: 8px 14px 0; border-bottom: 0.5px solid var(--border); }
+  .atab { padding: 5px 10px; font-size: 11px; color: var(--text-tertiary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -0.5px; }
+  .atab.active { color: var(--text-primary); font-weight: 600; border-bottom-color: var(--accent); }
+  .add-activity {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; border-bottom: 0.5px solid var(--border);
+  }
+  .add-activity input { flex: 1; background: none; border: none; outline: none; font-size: 12px; color: var(--text-primary); }
+  .add-activity input::placeholder { color: var(--text-tertiary); }
+  .add-type-btn { font-size: 10px; padding: 3px 8px; border-radius: 10px; cursor: pointer; border: 0.5px solid var(--border-strong); background: var(--surface-2); color: var(--text-secondary); }
+
+  .feed { padding: 10px 14px; }
+  .feed-date-sep { font-size: 10px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; padding: 5px 0 8px; }
+  .feed-item { display: flex; gap: 9px; margin-bottom: 12px; }
+  .feed-item:last-child { margin-bottom: 0; }
+  .feed-icon-wrap { flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 0.5px solid var(--border-strong); }
+  .icon-email  { background: var(--blue-light); color: var(--blue); }
+  .icon-call   { background: var(--accent-light); color: var(--accent); }
+  .icon-note   { background: var(--amber-light); color: var(--amber); }
+  .icon-meet   { background: var(--purple-light); color: var(--purple); }
+  .feed-body { flex: 1; }
+  .feed-header { display: flex; align-items: baseline; gap: 5px; margin-bottom: 2px; }
+  .feed-type { font-size: 11px; font-weight: 600; color: var(--text-secondary); }
+  .feed-time { font-size: 10px; color: var(--text-tertiary); margin-left: auto; }
+  .feed-text { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+  .feed-meta { font-size: 10px; color: var(--text-tertiary); margin-top: 2px; }
+
+  /* Right col */
+  .prop-field { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; padding: 7px 0; border-bottom: 0.5px solid var(--border); }
+  .prop-field:last-child { border-bottom: none; padding-bottom: 0; }
+  .prop-key { font-size: 11px; color: var(--text-tertiary); flex-shrink: 0; width: 64px; }
+  .prop-val { font-size: 12px; color: var(--text-secondary); text-align: right; }
+  .prop-val.link { color: var(--blue); }
+
+  .linked-item { padding: 9px 0; border-bottom: 0.5px solid var(--border); cursor: pointer; }
+  .linked-item:last-child { border-bottom: none; padding-bottom: 0; }
+  .linked-item-name { font-size: 12px; font-weight: 500; margin-bottom: 2px; }
+  .linked-item-meta { font-size: 10px; color: var(--text-tertiary); display: flex; align-items: center; gap: 4px; }
+  .linked-dot { width: 5px; height: 5px; border-radius: 50%; }
+
+  .note-item { padding: 9px 0; border-bottom: 0.5px solid var(--border); }
+  .note-item:last-child { border-bottom: none; padding-bottom: 0; }
+  .note-text { font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 2px; }
+  .note-meta { font-size: 10px; color: var(--text-tertiary); }
+
+  .ash-icon { position: fixed; bottom: 24px; right: 24px; width: 36px; height: 36px; border-radius: 50%; background: var(--surface); border: 0.5px solid var(--border-strong); box-shadow: 0 2px 8px rgba(0,0,0,0.12); display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 20; }
+  .annotation { position: fixed; bottom: 16px; left: 72px; font-size: 10px; color: rgba(255,255,255,0.45); font-style: italic; z-index: 2; }
+</style>
+</head>
+<body>
+
+<!-- Sidebar — highest z-index -->
+<div class="sidebar">Nav</div>
+
+<!-- Ghost contacts table (z-index 0) -->
+<div class="ghost-layer">
+  <div class="ghost-topbar">
+    <div style="font-size:15px; font-weight:600;">Contacts</div>
+    <div style="font-size:12px; color:var(--text-tertiary);">10 contacts</div>
+    <div class="ghost-spacer"></div>
+    <div class="ghost-search"></div>
+    <div class="ghost-btn"></div>
+    <div class="ghost-btn"></div>
+    <div class="ghost-btn add"></div>
+  </div>
+  <div class="ghost-subbar">
+    <div class="ghost-tag" style="width:52px; background:var(--blue-light);"></div>
+    <div class="ghost-tag" style="width:48px; background:var(--accent-light);"></div>
+    <div class="ghost-tag" style="width:60px; background:var(--amber-light);"></div>
+    <div class="ghost-tag" style="width:44px; background:var(--purple-light);"></div>
+    <div class="ghost-tag" style="width:40px; background:var(--surface-2);"></div>
+  </div>
+  <div class="ghost-col-header">
+    <div></div>
+    <div class="ghost-th" style="width:40px;"></div>
+    <div class="ghost-th" style="width:50px;"></div>
+    <div class="ghost-th" style="width:30px;"></div>
+    <div class="ghost-th" style="width:45px;"></div>
+    <div class="ghost-th" style="width:36px;"></div>
+  </div>
+  <!-- Ghost rows -->
+  <div class="ghost-row selected">
+    <div style="width:15px; height:15px; border-radius:4px; background:var(--accent);"></div>
+    <div class="ghost-name-wrap"><div class="ghost-avatar"></div><div class="ghost-name-lines"><div class="ghost-line" style="width:110px;"></div><div class="ghost-line" style="width:150px;opacity:0.5;"></div></div></div>
+    <div class="ghost-name-lines"><div class="ghost-line" style="width:90px;"></div><div class="ghost-line" style="width:60px;opacity:0.5;"></div></div>
+    <div><div class="ghost-pill" style="background:var(--blue-light);"></div></div>
+    <div><div class="ghost-line" style="width:50px; background:var(--accent); opacity:0.5;"></div></div>
+    <div><div class="ghost-line" style="width:70px;"></div></div>
+  </div>
+  <div class="ghost-row">
+    <div style="width:15px; height:15px; border-radius:4px; border:1.5px solid var(--border-strong);"></div>
+    <div class="ghost-name-wrap"><div class="ghost-avatar"></div><div class="ghost-name-lines"><div class="ghost-line" style="width:90px;"></div><div class="ghost-line" style="width:130px;opacity:0.5;"></div></div></div>
+    <div class="ghost-name-lines"><div class="ghost-line" style="width:70px;"></div><div class="ghost-line" style="width:80px;opacity:0.5;"></div></div>
+    <div><div class="ghost-pill" style="background:var(--teal-light);"></div></div>
+    <div><div class="ghost-line" style="width:50px; background:var(--accent); opacity:0.5;"></div></div>
+    <div><div class="ghost-line" style="width:60px;"></div></div>
+  </div>
+  <div class="ghost-row">
+    <div style="width:15px; height:15px; border-radius:4px; border:1.5px solid var(--border-strong);"></div>
+    <div class="ghost-name-wrap"><div class="ghost-avatar"></div><div class="ghost-name-lines"><div class="ghost-line" style="width:100px;"></div><div class="ghost-line" style="width:140px;opacity:0.5;"></div></div></div>
+    <div class="ghost-name-lines"><div class="ghost-line" style="width:85px;"></div><div class="ghost-line" style="width:50px;opacity:0.5;"></div></div>
+    <div><div class="ghost-pill" style="background:var(--amber-light);"></div></div>
+    <div><div class="ghost-line" style="width:50px; opacity:0.5;"></div></div>
+    <div><div class="ghost-line" style="width:55px;"></div></div>
+  </div>
+  <div class="ghost-row">
+    <div style="width:15px; height:15px; border-radius:4px; border:1.5px solid var(--border-strong);"></div>
+    <div class="ghost-name-wrap"><div class="ghost-avatar"></div><div class="ghost-name-lines"><div class="ghost-line" style="width:105px;"></div><div class="ghost-line" style="width:155px;opacity:0.5;"></div></div></div>
+    <div class="ghost-name-lines"><div class="ghost-line" style="width:75px;"></div><div class="ghost-line" style="width:65px;opacity:0.5;"></div></div>
+    <div><div class="ghost-pill" style="background:var(--accent-light);"></div></div>
+    <div><div class="ghost-line" style="width:55px; opacity:0.5;"></div></div>
+    <div><div class="ghost-line" style="width:65px;"></div></div>
+  </div>
+  <div class="ghost-row">
+    <div style="width:15px; height:15px; border-radius:4px; border:1.5px solid var(--border-strong);"></div>
+    <div class="ghost-name-wrap"><div class="ghost-avatar"></div><div class="ghost-name-lines"><div class="ghost-line" style="width:95px;"></div><div class="ghost-line" style="width:120px;opacity:0.5;"></div></div></div>
+    <div class="ghost-name-lines"><div class="ghost-line" style="width:60px;"></div><div class="ghost-line" style="width:80px;opacity:0.5;"></div></div>
+    <div><div class="ghost-pill"></div></div>
+    <div><div class="ghost-line" style="width:45px; opacity:0.4;"></div></div>
+    <div><div class="ghost-line" style="width:70px;"></div></div>
+  </div>
+</div>
+
+<!-- Scrim (z-index 1) -->
+<div class="scrim"></div>
+
+<!-- Back chip (z-index 2) -->
+<div class="back-btn">
+  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3L5 8l5 5"/></svg>
+  All Contacts
+</div>
+
+<!-- Expand to full screen (z-index 2) -->
+<div class="expand-btn" title="Open full screen (CT-04b)">
+  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8">
+    <path d="M2 6V2h4"/><path d="M2 2l5 5"/>
+    <path d="M14 10v4h-4"/><path d="M14 14l-5-5"/>
+  </svg>
+</div>
+
+<!-- Floating contact panel (z-index 2) -->
+<div class="contact-panel">
+  <!-- Header: actions + identity + facts -->
+  <div class="panel-header">
+    <div class="header-actions">
+      <button class="header-action-btn primary">
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg>
+        Send email
+      </button>
+      <button class="header-action-btn">
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 2a1 1 0 0 0-1 1v2c0 .38.22.72.55.89.4.2.6.64.45 1.06A8 8 0 0 0 13.05 12c.42.15.86-.05 1.06-.45.17-.33.89-.55.89-.55h2a1 1 0 0 0 1-1V8.3a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v.2A5 5 0 0 1 7.5 5.5H7a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1H5z"/></svg>
+        Log call
+      </button>
+      <button class="header-action-btn">
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2h12v9H2z"/><path d="M5 6h6M5 9h4"/></svg>
+        Add note
+      </button>
+      <div class="action-sep"></div>
+      <button class="header-action-btn">Archive</button>
+      <button class="header-action-btn danger">Delete</button>
+    </div>
+    <div class="header-identity">
+      <div class="avatar-lg">SO</div>
+      <div class="identity-body">
+        <div class="contact-name">Sarah Okonkwo</div>
+        <div class="identity-meta">
+          <span class="identity-role">Gallery Director · The Parlour Gallery</span>
+          <span style="color:var(--text-tertiary);">·</span>
+          <span class="tag-pill tag-gallery">Gallery</span>
+          <span class="tag-pill tag-client">Client</span>
+          <span style="color:var(--text-tertiary);">·</span>
+          <span class="status-badge"><span class="status-dot"></span>Active</span>
+        </div>
+      </div>
+    </div>
+    <div class="header-facts">
+      <div class="fact-item">
+        <svg class="fact-icon" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg>
+        <span class="fact-text link">sarah@theparlourgallery.com</span>
+      </div>
+      <div class="fact-item">
+        <svg class="fact-icon" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 2a1 1 0 0 0-1 1v2c0 .38.22.72.55.89.4.2.6.64.45 1.06A8 8 0 0 0 13.05 12c.42.15.86-.05 1.06-.45.17-.33.89-.55.89-.55h2a1 1 0 0 0 1-1V8.3a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v.2A5 5 0 0 1 7.5 5.5H7a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1H5z"/></svg>
+        <span class="fact-text">+1 (212) 555-0142</span>
+      </div>
+      <div class="fact-item">
+        <svg class="fact-icon" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 2c-2 2-3 4-3 6s1 4 3 6"/><path d="M2 8h12"/></svg>
+        <span class="fact-text link">theparlourgallery.com</span>
+      </div>
+      <div class="fact-item">
+        <svg class="fact-icon" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 2v2M11 2v2M2 7h12"/></svg>
+        <span class="fact-text fresh">2 days ago</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Body: two columns -->
+  <div class="panel-body">
+    <!-- Left: About + Activity -->
+    <div class="col-left">
+
+      <!-- About card -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">About</span></div>
+        <div class="card-body">
+          <div class="about-desc">Met at ICFF 2023. Interested in limited-edition lighting and collectible furniture. Gallery rep for the Bower Collection. Potential spring show collaboration.</div>
+          <div class="field-row">
+            <div class="field-icon"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="10" rx="1"/><path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/></svg></div>
+            <div class="field-body"><div class="field-label">Company</div><div class="field-value">The Parlour Gallery</div></div>
+          </div>
+          <div class="field-row">
+            <div class="field-icon"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg></div>
+            <div class="field-body"><div class="field-label">Title</div><div class="field-value">Gallery Director</div></div>
+          </div>
+          <div class="field-row">
+            <div class="field-icon"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2a4 4 0 0 0-4 4c0 3 4 8 4 8s4-5 4-8a4 4 0 0 0-4-4z"/><circle cx="8" cy="6" r="1.5"/></svg></div>
+            <div class="field-body"><div class="field-label">Address</div><div class="field-value">142 Grand St, New York, NY 10013</div></div>
+          </div>
+          <button class="add-field-btn">+ Add field</button>
+        </div>
+      </div>
+
+      <!-- Activity card -->
+      <div class="card">
+        <div class="activity-tabs">
+          <div class="atab active">Activity</div>
+          <div class="atab">Notes</div>
+          <div class="atab">Emails</div>
+        </div>
+        <div class="add-activity">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.35"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+          <input type="text" placeholder="Log a note, call, or email…">
+          <button class="add-type-btn">Note</button>
+          <button class="add-type-btn">Call</button>
+        </div>
+        <div class="feed">
+          <div class="feed-date-sep">Today</div>
+          <div class="feed-item">
+            <div class="feed-icon-wrap icon-email"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg></div>
+            <div class="feed-body">
+              <div class="feed-header"><span class="feed-type">Email sent</span><span class="feed-time">2:14 pm</span></div>
+              <div class="feed-text">Follow-up on Bower Collection lighting. Shared revised quote and lead times for oak pendants.</div>
+            </div>
+          </div>
+          <div class="feed-date-sep">Yesterday</div>
+          <div class="feed-item">
+            <div class="feed-icon-wrap icon-call"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 2a1 1 0 0 0-1 1v2c0 .38.22.72.55.89.4.2.6.64.45 1.06A8 8 0 0 0 13.05 12c.42.15.86-.05 1.06-.45.17-.33.89-.55.89-.55h2a1 1 0 0 0 1-1V8.3a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v.2A5 5 0 0 1 7.5 5.5H7a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1H5z"/></svg></div>
+            <div class="feed-body">
+              <div class="feed-header"><span class="feed-type">Call logged</span><span class="feed-time">11:30 am</span></div>
+              <div class="feed-text">15-min call. Confirmed interest in 3 pendant units. Wants to finalize dimensions this week.</div>
+              <div class="feed-meta">Duration: 15 min</div>
+            </div>
+          </div>
+          <div class="feed-date-sep">Apr 10</div>
+          <div class="feed-item">
+            <div class="feed-icon-wrap icon-meet"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 2v2M11 2v2M2 7h12"/></svg></div>
+            <div class="feed-body">
+              <div class="feed-header"><span class="feed-type">Meeting</span><span class="feed-time">10:00 am</span></div>
+              <div class="feed-text">Studio visit at The Parlour Gallery. Strong reaction to the fluted alabaster sconce — NYC exclusivity discussion.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div><!-- /col-left -->
+
+    <!-- Right: Properties + Linked + Notes -->
+    <div class="col-right">
+      <!-- Properties -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">Properties</span><button class="card-action">Edit</button></div>
+        <div class="card-body" style="padding: 4px 14px 12px;">
+          <div class="prop-field">
+            <span class="prop-key">Status</span>
+            <span class="prop-val" style="color:var(--accent); font-weight:500; display:flex; align-items:center; gap:4px;">
+              <span style="width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;"></span>Active
+            </span>
+          </div>
+          <div class="prop-field">
+            <span class="prop-key">Tags</span>
+            <span class="prop-val" style="display:flex; gap:3px; flex-wrap:wrap; justify-content:flex-end;">
+              <span class="tag-pill tag-gallery">Gallery</span>
+              <span class="tag-pill tag-client">Client</span>
+            </span>
+          </div>
+          <div class="prop-field"><span class="prop-key">Title</span><span class="prop-val">Gallery Director</span></div>
+          <div class="prop-field"><span class="prop-key">Website</span><span class="prop-val link">theparlourgallery.com</span></div>
+          <div class="prop-field"><span class="prop-key">Location</span><span class="prop-val">New York, NY</span></div>
+          <div class="prop-field"><span class="prop-key">Added</span><span class="prop-val">Mar 2023</span></div>
+        </div>
+      </div>
+
+      <!-- Linked projects -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">Linked projects</span><span class="card-count">2</span><button class="card-action">+ Link</button></div>
+        <div class="card-body" style="padding: 4px 14px 12px;">
+          <div class="linked-item">
+            <div class="linked-item-name">Bower Collection — Spring 2025</div>
+            <div class="linked-item-meta"><span class="linked-dot" style="background:var(--accent);"></span>In Progress · Commission</div>
+          </div>
+          <div class="linked-item">
+            <div class="linked-item-name">ICFF 2025 Exhibition Booth</div>
+            <div class="linked-item-meta"><span class="linked-dot" style="background:var(--amber);"></span>Planning · Exhibition</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">Notes</span><button class="card-action">+ Add</button></div>
+        <div class="card-body" style="padding: 4px 14px 12px;">
+          <div class="note-item">
+            <div class="note-text">Interested in NYC exclusivity on the alabaster sconce — 6-month arrangement before wider release.</div>
+            <div class="note-meta">Apr 10, 2025</div>
+          </div>
+          <div class="note-item">
+            <div class="note-text">Warm intro via James Britten. Overlapping collector base.</div>
+            <div class="note-meta">Mar 15, 2023</div>
+          </div>
+        </div>
+      </div>
+    </div><!-- /col-right -->
+  </div><!-- /panel-body -->
+</div><!-- /contact-panel -->
+
+<!-- Ash AI (z-index 20) -->
+<div class="ash-icon">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+    <path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/>
+    <path d="M12 12c-2-1.5-3-3-2-5"/><path d="M12 12c2-1.5 3-3 2-5"/>
+  </svg>
+</div>
+<div class="annotation">CT-04a · Contact page — scrim overlay. Contacts table visible behind. Click scrim to return.</div>
+</body>
+</html>

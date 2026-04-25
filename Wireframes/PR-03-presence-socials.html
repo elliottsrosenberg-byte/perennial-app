@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PR-03 – Presence Socials</title>
+<style>
+/* ── Design system ── */
+:root {
+  --bg:#f5f4f1; --surface:#fff; --surface-2:#f0ede8; --surface-hover:#f7f5f2;
+  --border:rgba(0,0,0,0.07); --border-strong:rgba(0,0,0,0.13);
+  --text-primary:#1a1916; --text-secondary:#6b6860; --text-tertiary:#a8a49e;
+  --accent:#3d6b4f; --accent-light:rgba(61,107,79,0.08);
+  --red:#c0392b; --red-light:rgba(192,57,43,0.08);
+  --amber:#b8860b; --amber-light:rgba(184,134,11,0.10);
+  --blue:#2563ab; --blue-light:rgba(37,99,171,0.08);
+  --purple:#6d4fa3; --purple-light:rgba(109,79,163,0.08);
+  --teal:#148c8c; --teal-light:rgba(20,140,140,0.08);
+  --shadow-card:0 1px 4px rgba(0,0,0,0.07),0 0 0 0.5px rgba(0,0,0,0.07);
+  --shadow-float:0 4px 20px rgba(0,0,0,0.12);
+  --radius:12px; --radius-sm:8px; --radius-xs:6px;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#181715; --surface:#222120; --surface-2:#2a2927; --surface-hover:#272523;
+  --border:rgba(255,255,255,0.06); --border-strong:rgba(255,255,255,0.11);
+  --text-primary:#f0ede8; --text-secondary:#9a9690; --text-tertiary:#5c5a56;
+  --accent:#5a9470; --accent-light:rgba(90,148,112,0.12);
+  --shadow-card:0 1px 4px rgba(0,0,0,0.2),0 0 0 0.5px rgba(255,255,255,0.06);
+  --shadow-float:0 4px 20px rgba(0,0,0,0.35);
+}}
+
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text-primary);height:100vh;display:flex;overflow:hidden;font-size:13px;}
+
+/* ── Sidebar ── */
+.app-sidebar{width:56px;background:#d94f3d;flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:6px;}
+.sidebar-logo{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.2);margin-bottom:10px;}
+.sidebar-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.55);cursor:pointer;}
+.sidebar-icon:hover{background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.85);}
+.sidebar-icon.active{background:rgba(255,255,255,0.22);color:white;}
+
+/* ── Shell ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.section-topbar{display:flex;align-items:stretch;border-bottom:0.5px solid var(--border-strong);background:var(--surface);flex-shrink:0;height:44px;}
+.section-title-wrap{padding:0 20px;display:flex;align-items:center;gap:10px;border-right:0.5px solid var(--border-strong);flex-shrink:0;}
+.section-title{font-size:14px;font-weight:650;}
+.section-period{font-size:11px;color:var(--text-tertiary);}
+.topbar-tabs{display:flex;align-items:stretch;flex:1;}
+.topbar-tab{padding:0 18px;font-size:12px;color:var(--text-secondary);cursor:pointer;border-bottom:1.5px solid transparent;display:flex;align-items:center;border-right:0.5px solid var(--border);white-space:nowrap;}
+.topbar-tab:hover{color:var(--text-primary);background:var(--surface-hover);}
+.topbar-tab.active{color:var(--text-primary);font-weight:600;border-bottom-color:var(--text-primary);}
+.topbar-fill{flex:1;}
+.topbar-actions{display:flex;align-items:center;gap:7px;padding:0 16px;flex-shrink:0;}
+.btn{padding:5px 12px;font-size:11px;border-radius:var(--radius-xs);cursor:pointer;border:none;font-family:inherit;}
+.btn-ghost{background:transparent;color:var(--text-secondary);border:0.5px solid var(--border-strong);}
+.btn-ghost:hover{background:var(--surface-2);}
+.btn-primary{background:var(--text-primary);color:var(--bg);font-weight:500;}
+.btn-accent{background:var(--accent);color:white;font-weight:500;}
+
+/* ── Tab content ── */
+.tab-content{flex:1;overflow-y:auto;padding:22px 24px;display:flex;flex-direction:column;gap:18px;}
+.tab-hidden{display:none;}
+
+/* ── Stat cards ── */
+.stat-row{display:flex;gap:12px;}
+.stat-card{flex:1;background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);padding:16px 18px;display:flex;flex-direction:column;gap:5px;cursor:pointer;}
+.stat-card:hover{background:var(--surface-hover);}
+.stat-card-header{display:flex;align-items:center;gap:7px;margin-bottom:2px;}
+.stat-channel-icon{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.stat-label{font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;font-weight:600;flex:1;}
+.stat-conn{font-size:9px;padding:1px 6px;border-radius:10px;background:var(--accent-light);color:var(--accent);font-weight:600;letter-spacing:.03em;}
+.stat-conn.warn{background:var(--amber-light);color:var(--amber);}
+.stat-value{font-size:24px;font-weight:650;letter-spacing:-.03em;line-height:1.1;}
+.stat-sub{font-size:11px;color:var(--text-tertiary);}
+.stat-sub.up{color:var(--accent);}
+.stat-sub.warn{color:var(--amber);}
+.stat-sub.neutral{color:var(--text-tertiary);}
+.stat-rule{height:.5px;background:var(--border-strong);margin:6px 0;}
+.stat-detail{font-size:11px;color:var(--text-tertiary);}
+.stat-help-icon{width:14px;height:14px;border:0.5px solid var(--border-strong);border-radius:50%;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--text-tertiary);cursor:pointer;flex-shrink:0;position:relative;}
+.stat-help-icon:hover{background:var(--blue-light);color:var(--blue);}
+.stat-help-icon-tooltip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--text-primary);color:var(--bg);font-size:10px;padding:8px 12px;border-radius:6px;white-space:normal;width:160px;text-align:center;line-height:1.3;font-weight:400;text-transform:none;letter-spacing:normal;display:none;z-index:10;}
+.stat-help-icon:hover .stat-help-icon-tooltip{display:block;}
+.stat-improve-link{font-size:10px;color:var(--accent);cursor:pointer;margin-top:4px;}
+.stat-improve-link:hover{text-decoration:underline;}
+
+/* ── Two-column layout ── */
+.cols{display:flex;gap:16px;flex:1;min-height:0;}
+.col-main{flex:1;display:flex;flex-direction:column;gap:12px;min-width:0;}
+.col-side{width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:12px;}
+
+/* ── Card ── */
+.card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);overflow:hidden;}
+.card-head{display:flex;align-items:center;gap:8px;padding:11px 15px;border-bottom:.5px solid var(--border);}
+.card-head-title{font-size:12px;font-weight:650;flex:1;}
+.card-link{font-size:11px;color:var(--blue);cursor:pointer;}
+.card-link:hover{text-decoration:underline;}
+.card-foot{padding:9px 15px;border-top:.5px solid var(--border);background:transparent;}
+
+/* ── Connected accounts strip ── */
+.accounts-strip{display:flex;gap:8px;padding:12px 15px;border-bottom:.5px solid var(--border);flex-wrap:wrap;align-items:center;}
+.account-chip{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:20px;border:.5px solid var(--border-strong);background:var(--surface-2);font-size:11px;cursor:pointer;flex-shrink:0;}
+.account-chip:hover{background:var(--surface-hover);}
+.account-chip.active{border-color:var(--accent);background:var(--accent-light);box-shadow:0 1px 3px rgba(0,0,0,0.05);}
+.account-dot{width:6px;height:6px;border-radius:50%;background:var(--text-tertiary);}
+.account-dot.connected{background:var(--accent);}
+.account-name{font-size:11px;font-weight:600;color:var(--text-primary);}
+.account-chip.inactive .account-name{color:var(--text-tertiary);}
+.account-handle{font-size:10px;color:var(--text-tertiary);}
+.account-status{font-size:10px;color:var(--text-tertiary);}
+.account-chip.active .account-status{color:var(--accent);font-weight:500;}
+.account-add{color:var(--accent);border-style:dashed;flex-shrink:0;margin-left:auto;}
+
+/* ── Connected accounts bar icons ── */
+.icon-ig-rect{width:18px;height:18px;border-radius:4px;background:var(--purple-light);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.icon-tiktok{width:18px;height:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.icon-facebook{width:18px;height:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.icon-linkedin{width:18px;height:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.icon-youtube{width:18px;height:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+
+/* ── Platform sub-tabs ── */
+.platform-tabs{display:flex;gap:4px;padding:12px 15px;border-bottom:.5px solid var(--border);background:transparent;}
+.platform-tab{padding:6px 12px;font-size:11px;border-radius:10px;border:.5px solid var(--border-strong);background:transparent;color:var(--text-secondary);cursor:pointer;font-weight:500;position:relative;}
+.platform-tab:hover:not(.disabled){background:var(--surface-2);}
+.platform-tab.active{color:var(--accent);border-bottom:2px solid var(--accent);border-radius:10px 10px 0 0;}
+.platform-tab.disabled{color:var(--text-tertiary);cursor:not-allowed;opacity:0.6;}
+.platform-tab.disabled::after{content:attr(data-tooltip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--text-primary);color:var(--bg);font-size:9px;padding:4px 8px;border-radius:4px;white-space:nowrap;display:none;z-index:10;pointer-events:none;}
+.platform-tab.disabled:hover::after{display:block;}
+
+/* ── Card inner sections ── */
+.card-body{padding:0;}
+
+/* ── Pill tabs ── */
+.pill-tabs{display:flex;gap:6px;padding:12px 15px;border-bottom:.5px solid var(--border);background:transparent;}
+.pill-tab{padding:4px 10px;font-size:11px;border-radius:10px;border:.5px solid var(--border-strong);background:transparent;color:var(--text-secondary);cursor:pointer;font-weight:500;}
+.pill-tab:hover{background:var(--surface-2);}
+.pill-tab.active{background:var(--blue-light);color:var(--blue);border-color:var(--blue-light);}
+
+/* ── Post card in queue ── */
+.post-item{display:flex;gap:10px;padding:11px 15px;border-bottom:.5px solid var(--border);cursor:pointer;}
+.post-item:last-child{border-bottom:none;}
+.post-item:hover{background:var(--surface-hover);}
+.post-image{width:56px;height:56px;border-radius:var(--radius-sm);background:var(--surface-2);flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.post-image svg{color:var(--text-tertiary);}
+.post-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;}
+.post-caption{font-size:12px;color:var(--text-secondary);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.post-scheduled{font-size:10px;color:var(--text-tertiary);}
+.post-actions{display:flex;gap:6px;align-items:center;}
+.post-status{font-size:9px;font-weight:600;padding:2px 7px;border-radius:10px;background:var(--blue-light);color:var(--blue);}
+.post-action-btn{background:transparent;border:none;color:var(--text-secondary);cursor:pointer;padding:4px;display:flex;align-items:center;justify-content:center;}
+.post-action-btn:hover{color:var(--text-primary);}
+
+/* ── Quick compose ── */
+.compose-section{padding:12px 15px;}
+.compose-textarea{width:100%;min-height:72px;padding:12px;border-radius:var(--radius-sm);border:.5px solid var(--border);background:var(--surface-2);color:var(--text-primary);font-size:12px;font-family:inherit;resize:none;}
+.compose-textarea::placeholder{color:var(--text-tertiary);}
+.compose-row{display:flex;gap:8px;margin-top:8px;align-items:center;}
+.compose-left{display:flex;gap:6px;}
+.compose-right{display:flex;gap:10px;margin-left:auto;font-size:11px;color:var(--text-tertiary);}
+.compose-foot{display:flex;gap:8px;padding:12px 15px;border-top:.5px solid var(--border);}
+
+/* ── Dashed add row ── */
+.add-row{display:flex;align-items:center;justify-content:center;padding:12px 15px;border:.5px dashed var(--border-strong);border-radius:var(--radius-sm);cursor:pointer;color:var(--text-tertiary);font-size:12px;gap:5px;margin:0 15px 12px 15px;}
+.add-row:hover{background:var(--surface-2);}
+
+/* ── Side cards ── */
+.side-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);overflow:hidden;}
+.side-card-head{display:flex;align-items:center;gap:8px;padding:11px 15px;border-bottom:.5px solid var(--border);}
+.side-card-head-title{font-size:12px;font-weight:650;flex:1;}
+.side-card-badge{font-size:9px;color:var(--text-tertiary);font-weight:500;}
+
+/* ── Best performing post ── */
+.top-post-image{width:100%;height:100px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;border-bottom:.5px solid var(--border);}
+.top-post-label{font-size:11px;color:var(--text-tertiary);font-style:italic;}
+.top-post-body{padding:12px 15px;}
+.top-post-caption{font-size:12px;color:var(--text-secondary);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:8px;}
+.top-post-stats{display:flex;gap:12px;font-size:10px;color:var(--text-tertiary);padding-bottom:8px;border-bottom:.5px solid var(--border);}
+.top-post-stat{display:flex;gap:3px;align-items:center;}
+.top-post-stat-icon{width:14px;height:14px;display:flex;align-items:center;justify-content:center;}
+.top-post-posted{font-size:10px;color:var(--text-tertiary);padding:8px 0;}
+.top-post-link{font-size:10px;color:var(--blue);}
+
+/* ── Follower growth chart ── */
+.chart-container{padding:12px 15px;}
+.chart-bars{display:flex;gap:4px;align-items:flex-end;height:60px;margin-bottom:12px;}
+.chart-bar{flex:1;background:var(--purple-light);border-radius:2px 2px 0 0;}
+.chart-bar.current{background:var(--purple);}
+.chart-stats{display:flex;flex-direction:column;gap:4px;}
+.chart-stat-line{display:flex;align-items:center;gap:6px;font-size:11px;}
+.chart-stat-number{font-weight:600;color:var(--accent);}
+.chart-stat-label{color:var(--text-secondary);}
+
+/* ── Best times ── */
+.times-list{padding:12px 15px;}
+.time-item{display:flex;gap:8px;padding:8px 0;align-items:center;border-bottom:.5px solid var(--border);}
+.time-item:last-child{border-bottom:none;}
+.time-icon{width:16px;height:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text-tertiary);}
+.time-day{font-size:11px;color:var(--text-secondary);flex:1;}
+.time-hours{font-size:11px;color:var(--text-secondary);}
+.time-badge{font-size:8px;font-weight:600;padding:2px 6px;border-radius:8px;background:var(--accent-light);color:var(--accent);}
+.times-note{font-size:10px;color:var(--text-tertiary);font-style:italic;padding:8px 0 0 0;border-top:.5px solid var(--border);}
+
+/* ── Ash + annotation ── */
+.ash-icon{position:fixed;bottom:24px;right:24px;width:36px;height:36px;border-radius:50%;background:var(--surface);border:.5px solid var(--border-strong);box-shadow:0 2px 8px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:20;}
+.annotation{position:fixed;bottom:16px;left:72px;font-size:10px;color:var(--text-tertiary);font-style:italic;}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="app-sidebar">
+  <div class="sidebar-logo"></div>
+  <div class="sidebar-icon" title="Projects">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Contacts">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Outreach">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Finance">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 6.5h14"/><path d="M5 10h2M10 10h1"/></svg>
+  </div>
+  <div class="sidebar-icon active" title="Presence">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 2c0 0-3 2.5-3 6s3 6 3 6"/><path d="M8 2c0 0 3 2.5 3 6s-3 6-3 6"/><path d="M2 8h12"/></svg>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="section-topbar">
+    <div class="section-title-wrap">
+      <span class="section-title">Presence</span>
+      <span class="section-period">Apr 2026</span>
+    </div>
+    <div class="topbar-tabs">
+      <div class="topbar-tab" onclick="navTo('overview')">Overview</div>
+      <div class="topbar-tab" onclick="navTo('website')">Website</div>
+      <div class="topbar-tab active" onclick="navTo('socials')">Socials</div>
+      <div class="topbar-tab" onclick="navTo('newsletter')">Newsletter</div>
+      <div class="topbar-tab" onclick="navTo('opportunities')">Opportunities</div>
+    </div>
+    <div class="topbar-fill"></div>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost">Schedule</button>
+      <button class="btn btn-primary">+ New post</button>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="tab-content">
+
+    <!-- Connected accounts bar -->
+    <div class="accounts-strip">
+      <!-- Instagram (connected, active) -->
+      <div class="account-chip active">
+        <div class="icon-ig-rect">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--purple)"><rect x="2" y="2" width="12" height="12" rx="3.5"/><circle cx="8" cy="8" r="2.5"/><circle cx="11.5" cy="4.5" r=".75" fill="currentColor" stroke="none"/></svg>
+        </div>
+        <div>
+          <div class="account-name">@perennial.design</div>
+          <div class="account-handle">4,820 followers</div>
+        </div>
+        <div class="account-dot connected"></div>
+        <div class="account-status">Connected</div>
+      </div>
+
+      <!-- TikTok (not connected) -->
+      <div class="account-chip inactive">
+        <div class="icon-tiktok">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--text-tertiary)"><path d="M8 1c0 0 2 1 2 4v6c0 0-1 2-3 2s-3-2-3-2V5c0 0-1 1-2 1s-2-1-2-1"/></svg>
+        </div>
+        <div class="account-name">TikTok</div>
+        <div class="account-dot"></div>
+        <div class="account-status">Not connected</div>
+      </div>
+
+      <!-- Facebook (not connected) -->
+      <div class="account-chip inactive">
+        <div class="icon-facebook">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--text-tertiary)"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M6 6h2v8M9 6h2.5v2H9"/></svg>
+        </div>
+        <div class="account-name">Facebook</div>
+        <div class="account-dot"></div>
+        <div class="account-status">Not connected</div>
+      </div>
+
+      <!-- LinkedIn (not connected) -->
+      <div class="account-chip inactive">
+        <div class="icon-linkedin">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--text-tertiary)"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M4.5 5.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3M4 7h3v6M9 7h2.5v1M9 7h2.5v6c0 1 .5 2 1.5 2"/></svg>
+        </div>
+        <div class="account-name">LinkedIn</div>
+        <div class="account-dot"></div>
+        <div class="account-status">Not connected</div>
+      </div>
+
+      <!-- YouTube (not connected) -->
+      <div class="account-chip inactive">
+        <div class="icon-youtube">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--text-tertiary)"><rect x="1" y="3" width="14" height="10" rx="2"/><path d="M6.5 8.5l3-2v3l-3-2z" fill="currentColor"/></svg>
+        </div>
+        <div class="account-name">YouTube</div>
+        <div class="account-dot"></div>
+        <div class="account-status">Not connected</div>
+      </div>
+
+      <!-- Add connection -->
+      <div class="account-chip account-add">+ Connect</div>
+    </div>
+
+    <!-- Platform sub-tabs -->
+    <div class="platform-tabs">
+      <div class="platform-tab active">Instagram</div>
+      <div class="platform-tab disabled" data-tooltip="Connect to view">TikTok</div>
+      <div class="platform-tab disabled" data-tooltip="Connect to view">Facebook</div>
+      <div class="platform-tab disabled" data-tooltip="Connect to view">LinkedIn</div>
+      <div class="platform-tab disabled" data-tooltip="Connect to view">YouTube</div>
+    </div>
+
+    <!-- Stat cards (4) -->
+    <div class="stat-row">
+      <!-- Followers -->
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <div class="stat-channel-icon icon-instagram">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--purple)"><rect x="2" y="2" width="12" height="12" rx="3.5"/><circle cx="8" cy="8" r="2.5"/><circle cx="11.5" cy="4.5" r=".75" fill="currentColor" stroke="none"/></svg>
+          </div>
+          <span class="stat-label">Followers</span>
+          <div class="stat-help-icon" title="Total people following you. Growth rate matters more than absolute number — are you reaching new people consistently?">
+            ?
+            <div class="stat-help-icon-tooltip">Total people following you. Growth rate matters more than absolute number — are you reaching new people consistently?</div>
+          </div>
+        </div>
+        <div class="stat-value">4,820</div>
+        <div class="stat-sub up">↑ 940 this month</div>
+        <div class="stat-rule"></div>
+        <div class="stat-detail">@perennial.design · Instagram</div>
+        <div class="stat-improve-link">Ask Ash how to improve →</div>
+      </div>
+
+      <!-- Reach -->
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <div class="stat-channel-icon icon-instagram">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--purple)"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-2.8 3-4 6-4s6 1.2 6 4"/></svg>
+          </div>
+          <span class="stat-label">Reach</span>
+          <div class="stat-help-icon" title="How many accounts saw at least one of your posts. Can be larger than your follower count when posts get shared or discovered.">
+            ?
+            <div class="stat-help-icon-tooltip">How many accounts saw at least one of your posts. Can be larger than your follower count when posts get shared or discovered.</div>
+          </div>
+        </div>
+        <div class="stat-value">8,400</div>
+        <div class="stat-sub neutral">Accounts reached · Apr</div>
+        <div class="stat-rule"></div>
+        <div class="stat-detail">↑ 22% vs March</div>
+        <div class="stat-improve-link">Ask Ash how to improve →</div>
+      </div>
+
+      <!-- Engagement -->
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <div class="stat-channel-icon icon-instagram">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--purple)"><path d="M8 14s4-2 4-6c0-2.2-2-4-4-4s-4 1.8-4 4c0 4 4 6 4 6z"/><path d="M8 6v4M6 8h4"/></svg>
+          </div>
+          <span class="stat-label">Engagement</span>
+          <div class="stat-help-icon" title="Likes + comments as a percentage of reach. Industry average is 1–2%. Above 3% means your audience is genuinely responding to your work.">
+            ?
+            <div class="stat-help-icon-tooltip">Likes + comments as a percentage of reach. Industry average is 1–2%. Above 3% means your audience is genuinely responding to your work.</div>
+          </div>
+        </div>
+        <div class="stat-value">4.2%</div>
+        <div class="stat-sub up">Avg per post · Apr</div>
+        <div class="stat-rule"></div>
+        <div class="stat-detail">Industry avg: 1.8%</div>
+        <div class="stat-improve-link">Ask Ash how to improve →</div>
+      </div>
+
+      <!-- Posts -->
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <div class="stat-channel-icon icon-instagram">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--purple)"><rect x="1" y="2" width="14" height="12" rx="1.5"/><path d="M1 5h14"/><path d="M5 1v2M11 1v2"/></svg>
+          </div>
+          <span class="stat-label">Posts</span>
+          <div class="stat-help-icon" title="How many times you published this month. Consistency matters more than volume — even 1–2 posts per week builds audience over time.">
+            ?
+            <div class="stat-help-icon-tooltip">How many times you published this month. Consistency matters more than volume — even 1–2 posts per week builds audience over time.</div>
+          </div>
+        </div>
+        <div class="stat-value">6</div>
+        <div class="stat-sub neutral">Published in Apr</div>
+        <div class="stat-rule"></div>
+        <div class="stat-detail">Next scheduled: Apr 18</div>
+        <div class="stat-improve-link">Ask Ash how to improve →</div>
+      </div>
+    </div>
+
+    <!-- Two columns -->
+    <div class="cols">
+
+      <!-- LEFT: Post queue + Compose -->
+      <div class="col-main">
+
+        <!-- Post queue card -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-head-title">Post queue</span>
+          </div>
+
+          <!-- Pill tabs -->
+          <div class="pill-tabs">
+            <div class="pill-tab active">Scheduled (2)</div>
+            <div class="pill-tab">Drafts (1)</div>
+            <div class="pill-tab">Published</div>
+          </div>
+
+          <div class="card-body">
+            <!-- Scheduled post 1 -->
+            <div class="post-item">
+              <div class="post-image">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              </div>
+              <div class="post-body">
+                <div class="post-caption">New work in the studio — the walnut slab series is coming together. Full reveal at ICFF, May 19–23 in New York. 🌿</div>
+                <div class="post-scheduled">Tomorrow · Apr 18 · 7:30 PM</div>
+              </div>
+              <div class="post-actions">
+                <span class="post-status">Scheduled</span>
+                <button class="post-action-btn" title="Edit">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 13h10M1 15h14"/><path d="M11.6 2.4l-9 9M10 1.2L14.8 6"/></svg>
+                </button>
+                <button class="post-action-btn" title="Delete">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 4h12M6 4V2.5a.5.5 0 01.5-.5h3a.5.5 0 01.5.5V4M3 4l1 10a1 1 0 001 1h6a1 1 0 001-1l1-10"/><path d="M6.5 7v4M9.5 7v4"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Scheduled post 2 -->
+            <div class="post-item">
+              <div class="post-image">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              </div>
+              <div class="post-body">
+                <div class="post-caption">Five years of making, distilled into a body of work. The brass wall series is the most resolved thing I've made yet.</div>
+                <div class="post-scheduled">Apr 22 · 6:00 PM</div>
+              </div>
+              <div class="post-actions">
+                <span class="post-status">Scheduled</span>
+                <button class="post-action-btn" title="Edit">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 13h10M1 15h14"/><path d="M11.6 2.4l-9 9M10 1.2L14.8 6"/></svg>
+                </button>
+                <button class="post-action-btn" title="Delete">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 4h12M6 4V2.5a.5.5 0 01.5-.5h3a.5.5 0 01.5.5V4M3 4l1 10a1 1 0 001 1h6a1 1 0 001-1l1-10"/><path d="M6.5 7v4M9.5 7v4"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Add row -->
+          <div class="add-row">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v12M2 8h12"/></svg>
+            Schedule new post
+          </div>
+        </div>
+
+        <!-- Quick compose card -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-head-title">Quick compose</span>
+          </div>
+          <div class="compose-section">
+            <textarea class="compose-textarea" placeholder="What's happening in the studio..."></textarea>
+            <div class="compose-row">
+              <div class="compose-left">
+                <button class="btn btn-ghost">Add image</button>
+                <button class="btn btn-ghost">Add hashtags</button>
+              </div>
+              <div class="compose-right">
+                0 / 2,200
+              </div>
+            </div>
+          </div>
+          <div class="compose-foot">
+            <button class="btn btn-ghost">Save as draft</button>
+            <button class="btn btn-primary">Schedule →</button>
+          </div>
+        </div>
+
+      </div><!-- /col-main -->
+
+      <!-- RIGHT: Analytics cards -->
+      <div class="col-side">
+
+        <!-- Top post card -->
+        <div class="side-card">
+          <div class="side-card-head">
+            <span class="side-card-head-title">Top post · Apr</span>
+          </div>
+          <div class="top-post-image">
+            <span class="top-post-label">Walnut slab detail</span>
+          </div>
+          <div class="top-post-body">
+            <div class="top-post-caption">Walnut slab detail — new series in the studio. Grain like this only comes around once.</div>
+            <div class="top-post-stats">
+              <div class="top-post-stat">
+                <div class="top-post-stat-icon">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M8 14s4-2 4-6c0-2.2-2-4-4-4s-4 1.8-4 4c0 4 4 6 4 6z"/></svg>
+                </div>
+                312 likes
+              </div>
+              <div class="top-post-stat">
+                <div class="top-post-stat-icon">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M14 2H2a1 1 0 00-1 1v8a1 1 0 001 1h2l-1 3 4-3h8a1 1 0 001-1V3a1 1 0 00-1-1z"/></svg>
+                </div>
+                28 comments
+              </div>
+              <div class="top-post-stat">
+                <div class="top-post-stat-icon">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><polyline points="2 10 6 5 9 8 14 3"/></svg>
+                </div>
+                4.8% engagement
+              </div>
+            </div>
+            <div class="top-post-posted">Posted Apr 13 · <span class="top-post-link">View on Instagram →</span></div>
+          </div>
+        </div>
+
+        <!-- Follower growth card -->
+        <div class="side-card">
+          <div class="side-card-head">
+            <span class="side-card-head-title">Follower growth</span>
+            <span class="side-card-badge">Last 6 months</span>
+          </div>
+          <div class="chart-container">
+            <div class="chart-bars">
+              <div class="chart-bar" style="height:30px;"></div>
+              <div class="chart-bar" style="height:28px;"></div>
+              <div class="chart-bar" style="height:35px;"></div>
+              <div class="chart-bar" style="height:40px;"></div>
+              <div class="chart-bar" style="height:44px;"></div>
+              <div class="chart-bar current" style="height:55px;"></div>
+            </div>
+            <div class="chart-stats">
+              <div class="chart-stat-line">
+                <span class="chart-stat-number">+940 this month</span>
+              </div>
+              <div class="chart-stat-line">
+                <span class="chart-stat-label">4,820 total</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Best times card -->
+        <div class="side-card">
+          <div class="side-card-head">
+            <span class="side-card-head-title">Best times</span>
+          </div>
+          <div class="times-list">
+            <div class="time-item">
+              <div class="time-icon">
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
+              </div>
+              <div class="time-day">Tuesday & Wednesday</div>
+              <div class="time-hours">7–9 PM</div>
+              <span class="time-badge">Best</span>
+            </div>
+            <div class="time-item">
+              <div class="time-icon">
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
+              </div>
+              <div class="time-day">Saturday</div>
+              <div class="time-hours">10 AM–12 PM</div>
+            </div>
+            <div class="time-item">
+              <div class="time-icon">
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
+              </div>
+              <div class="time-day">Sunday</div>
+              <div class="time-hours">6–8 PM</div>
+            </div>
+            <div class="times-note">Based on your last 30 posts</div>
+          </div>
+        </div>
+
+      </div><!-- /col-side -->
+
+    </div><!-- /cols -->
+
+  </div><!-- /tab-content -->
+
+</div><!-- /main -->
+
+<!-- Ash icon -->
+<div class="ash-icon">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+    <path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/>
+    <path d="M12 12c-2-1.5-3-3-2-5"/>
+    <path d="M12 12c2-1.5 3-3 2-5"/>
+  </svg>
+</div>
+
+<div class="annotation">PR-03 · Socials — Instagram analytics, post queue (Scheduled/Published/Drafts), performance panel.</div>
+
+<script>
+function navTo(section) {
+  const routes = {
+    'overview': '/sessions/cool-tender-bardeen/mnt/Software/PR-01-presence-overview.html',
+    'website': '/sessions/cool-tender-bardeen/mnt/Software/PR-02-presence-website.html',
+    'socials': '/sessions/cool-tender-bardeen/mnt/Software/PR-03-presence-socials.html',
+    'newsletter': '/sessions/cool-tender-bardeen/mnt/Software/PR-04-presence-newsletter.html',
+    'opportunities': '/sessions/cool-tender-bardeen/mnt/Software/PR-05-presence-opportunities.html'
+  };
+  if (routes[section]) {
+    window.location.href = routes[section];
+  }
+}
+</script>
+</body>
+</html>

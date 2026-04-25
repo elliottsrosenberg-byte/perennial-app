@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PR-02 – Presence Website</title>
+<style>
+/* ── Design system ── */
+:root {
+  --bg:#f5f4f1; --surface:#fff; --surface-2:#f0ede8; --surface-hover:#f7f5f2;
+  --border:rgba(0,0,0,0.07); --border-strong:rgba(0,0,0,0.13);
+  --text-primary:#1a1916; --text-secondary:#6b6860; --text-tertiary:#a8a49e;
+  --accent:#3d6b4f; --accent-light:rgba(61,107,79,0.08);
+  --red:#c0392b; --red-light:rgba(192,57,43,0.08);
+  --amber:#b8860b; --amber-light:rgba(184,134,11,0.10);
+  --blue:#2563ab; --blue-light:rgba(37,99,171,0.08);
+  --purple:#6d4fa3; --purple-light:rgba(109,79,163,0.08);
+  --teal:#148c8c; --teal-light:rgba(20,140,140,0.08);
+  --shadow-card:0 1px 4px rgba(0,0,0,0.07),0 0 0 0.5px rgba(0,0,0,0.07);
+  --shadow-float:0 4px 20px rgba(0,0,0,0.12);
+  --radius:12px; --radius-sm:8px; --radius-xs:6px;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#181715; --surface:#222120; --surface-2:#2a2927; --surface-hover:#272523;
+  --border:rgba(255,255,255,0.06); --border-strong:rgba(255,255,255,0.11);
+  --text-primary:#f0ede8; --text-secondary:#9a9690; --text-tertiary:#5c5a56;
+  --accent:#5a9470; --accent-light:rgba(90,148,112,0.12);
+  --shadow-card:0 1px 4px rgba(0,0,0,0.2),0 0 0 0.5px rgba(255,255,255,0.06);
+  --shadow-float:0 4px 20px rgba(0,0,0,0.35);
+}}
+
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text-primary);height:100vh;display:flex;overflow:hidden;font-size:13px;}
+
+/* ── Sidebar ── */
+.app-sidebar{width:56px;background:#d94f3d;flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:6px;}
+.sidebar-logo{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.2);margin-bottom:10px;}
+.sidebar-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.55);cursor:pointer;}
+.sidebar-icon:hover{background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.85);}
+.sidebar-icon.active{background:rgba(255,255,255,0.22);color:white;}
+
+/* ── Shell ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.section-topbar{display:flex;align-items:stretch;border-bottom:0.5px solid var(--border-strong);background:var(--surface);flex-shrink:0;height:44px;}
+.section-title-wrap{padding:0 20px;display:flex;align-items:center;gap:10px;border-right:0.5px solid var(--border-strong);flex-shrink:0;}
+.section-title{font-size:14px;font-weight:650;}
+.section-period{font-size:11px;color:var(--text-tertiary);}
+.topbar-tabs{display:flex;align-items:stretch;flex:1;}
+.topbar-tab{padding:0 18px;font-size:12px;color:var(--text-secondary);cursor:pointer;border-bottom:1.5px solid transparent;display:flex;align-items:center;border-right:0.5px solid var(--border);white-space:nowrap;}
+.topbar-tab:hover{color:var(--text-primary);background:var(--surface-hover);}
+.topbar-tab.active{color:var(--text-primary);font-weight:600;border-bottom-color:var(--text-primary);}
+.topbar-fill{flex:1;}
+.topbar-actions{display:flex;align-items:center;gap:7px;padding:0 16px;flex-shrink:0;}
+.btn{padding:5px 12px;font-size:11px;border-radius:var(--radius-xs);cursor:pointer;border:none;font-family:inherit;}
+.btn-ghost{background:transparent;color:var(--text-secondary);border:0.5px solid var(--border-strong);}
+.btn-ghost:hover{background:var(--surface-2);}
+.btn-primary{background:var(--text-primary);color:var(--bg);font-weight:500;}
+.btn-accent{background:var(--accent);color:white;font-weight:500;}
+
+/* ── Tab content ── */
+.tab-content{flex:1;overflow-y:auto;padding:22px 24px;display:flex;flex-direction:column;gap:18px;}
+.tab-hidden{display:none;}
+
+/* ── Stat cards ── */
+.stat-row{display:flex;gap:12px;}
+.stat-card{flex:1;background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);padding:16px 18px;display:flex;flex-direction:column;gap:5px;cursor:pointer;}
+.stat-card:hover{background:var(--surface-hover);}
+.stat-card-header{display:flex;align-items:center;gap:7px;margin-bottom:2px;}
+.stat-channel-icon{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.stat-label{font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;font-weight:600;flex:1;}
+.stat-conn{font-size:9px;padding:1px 6px;border-radius:10px;background:var(--accent-light);color:var(--accent);font-weight:600;letter-spacing:.03em;}
+.stat-conn.warn{background:var(--amber-light);color:var(--amber);}
+.stat-value{font-size:24px;font-weight:650;letter-spacing:-.03em;line-height:1.1;}
+.stat-sub{font-size:11px;color:var(--text-tertiary);}
+.stat-sub.up{color:var(--accent);}
+.stat-sub.warn{color:var(--amber);}
+.stat-sub.neutral{color:var(--text-tertiary);}
+.stat-rule{height:.5px;background:var(--border-strong);margin:6px 0;}
+.stat-detail{font-size:11px;color:var(--text-tertiary);}
+.stat-help-icon{width:14px;height:14px;border-radius:50%;background:var(--surface-2);border:0.5px solid var(--border-strong);color:var(--text-tertiary);font-size:9px;font-weight:700;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.stat-help-icon:hover{background:var(--blue-light);color:var(--blue);}
+.stat-improve-link{font-size:10px;color:var(--accent);cursor:pointer;margin-top:4px;}
+.stat-improve-link:hover{text-decoration:underline;}
+
+/* ── Two-column layout ── */
+.cols{display:flex;gap:16px;flex:1;min-height:0;}
+.col-main{flex:1;display:flex;flex-direction:column;gap:12px;min-width:0;}
+.col-side{width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:12px;}
+
+/* ── Card ── */
+.card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);overflow:hidden;}
+.card-head{display:flex;align-items:center;gap:8px;padding:11px 15px;border-bottom:.5px solid var(--border);}
+.card-head-title{font-size:12px;font-weight:650;flex:1;}
+.card-meta{font-size:11px;color:var(--text-tertiary);}
+.card-link{font-size:11px;color:var(--blue);cursor:pointer;}
+.card-link:hover{text-decoration:underline;}
+.card-foot{padding:9px 15px;border-top:.5px solid var(--border);background:transparent;}
+
+/* ── Connected site banner ── */
+.connected-banner{background:var(--surface);border-bottom:.5px solid var(--border);padding:10px 24px;display:flex;align-items:center;gap:8px;font-size:12px;}
+.banner-left{display:flex;align-items:center;gap:8px;flex:1;}
+.banner-site{font-weight:600;}
+.banner-platform{color:var(--text-tertiary);}
+.banner-middle{display:flex;align-items:center;gap:4px;}
+.banner-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);}
+.banner-label{color:var(--text-tertiary);}
+.banner-right{margin-left:auto;flex-shrink:0;}
+.banner-manage{font-size:11px;color:var(--blue);cursor:pointer;}
+.banner-manage:hover{text-decoration:underline;}
+
+/* ── Chart styles ── */
+.chart-container{padding:15px;border-bottom:.5px solid var(--border);}
+.chart-bars{display:flex;gap:2px;align-items:flex-end;justify-content:space-between;height:80px;margin:0 0 12px 0;}
+.chart-bar{flex:1;min-width:0;background:var(--blue-light);border-radius:4px 4px 0 0;position:relative;transition:background 0.2s;}
+.chart-bar.spike{background:var(--blue);}
+.chart-bar:hover{opacity:0.8;}
+.chart-day-label{font-size:8px;color:var(--text-tertiary);text-align:center;margin-top:6px;}
+.chart-legend{display:flex;gap:16px;font-size:10px;color:var(--text-secondary);}
+.chart-legend-item{display:flex;align-items:center;gap:6px;}
+.chart-legend-dot{width:6px;height:6px;border-radius:50%;}
+
+/* ── Top pages table ── */
+.pages-table{display:flex;flex-direction:column;}
+.pages-header{display:grid;grid-template-columns:1fr 80px 80px 40px;gap:12px;padding:9px 15px;border-bottom:.5px solid var(--border);font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.04em;font-weight:600;}
+.page-row{display:grid;grid-template-columns:1fr 80px 80px 40px;gap:12px;padding:9px 15px;border-bottom:.5px solid var(--border);cursor:pointer;align-items:center;}
+.page-row:hover{background:var(--surface-hover);}
+.page-row:last-child{border-bottom:none;}
+.page-name{font-size:12px;font-weight:600;margin-bottom:1px;}
+.page-path{font-size:10px;color:var(--text-tertiary);}
+.page-body{display:flex;flex-direction:column;}
+.page-views{font-size:12px;color:var(--text-primary);}
+.page-time{font-size:11px;color:var(--text-tertiary);}
+.page-stat{text-align:right;font-size:11px;}
+.page-stat.up{color:var(--accent);}
+.page-stat.spike{color:var(--red);font-weight:600;}
+.page-stat.neutral{color:var(--text-tertiary);}
+
+/* ── Sources breakdown ── */
+.source-row{display:grid;grid-template-columns:80px 1fr 48px;gap:12px;align-items:center;padding:12px 15px;border-bottom:.5px solid var(--border);}
+.source-row:last-child{border-bottom:none;}
+.source-label{font-size:11px;font-weight:600;color:var(--text-secondary);}
+.source-bar-track{height:5px;background:var(--surface-2);border-radius:2px;overflow:hidden;}
+.source-bar-fill{height:100%;border-radius:2px;}
+.source-percent{font-size:12px;font-weight:600;color:var(--text-primary);text-align:right;}
+
+/* ── Top referrers ── */
+.referrer-row{display:flex;align-items:center;gap:10px;padding:11px 15px;border-bottom:.5px solid var(--border);cursor:pointer;}
+.referrer-row:hover{background:var(--surface-hover);}
+.referrer-row:last-child{border-bottom:none;}
+.referrer-favicon{width:8px;height:8px;border-radius:50%;background:var(--surface-2);flex-shrink:0;}
+.referrer-domain{font-size:11px;flex:1;}
+.referrer-badge{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;padding:2px 7px;border-radius:10px;background:var(--red-light);color:var(--red);}
+.referrer-count{font-size:11px;color:var(--text-tertiary);flex-shrink:0;}
+
+/* ── Shop/ecommerce card ── */
+.shop-stat-row{display:grid;grid-template-columns:1fr 60px;gap:12px;padding:11px 15px;border-bottom:.5px solid var(--border);align-items:center;}
+.shop-stat-row:last-child{border-bottom:none;}
+.shop-stat-label{font-size:11px;color:var(--text-secondary);}
+.shop-stat-value{font-size:12px;font-weight:600;color:var(--text-primary);text-align:right;}
+.shop-product-row{display:flex;align-items:center;gap:8px;padding:11px 15px;border-bottom:.5px solid var(--border);}
+.shop-product-row:last-child{border-bottom:none;}
+.shop-product-img{width:32px;height:32px;border-radius:6px;background:var(--surface-2);flex-shrink:0;}
+.shop-product-info{flex:1;min-width:0;}
+.shop-product-name{font-size:11px;font-weight:600;color:var(--text-primary);}
+.shop-product-price{font-size:10px;color:var(--text-tertiary);}
+.shop-product-badge{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;padding:2px 7px;border-radius:10px;background:var(--accent-light);color:var(--accent);}
+.shop-add-row{display:flex;align-items:center;gap:8px;padding:11px 15px;cursor:pointer;}
+.shop-add-row:hover{background:var(--surface-hover);}
+.shop-add-text{font-size:11px;color:var(--text-secondary);font-weight:500;}
+
+/* ── Ash insight strip ── */
+.insight-strip{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:12px 16px;display:flex;gap:12px;margin-bottom:12px;}
+.insight-left{display:flex;align-items:flex-start;gap:8px;flex:1;}
+.insight-icon{width:16px;height:16px;color:var(--accent);flex-shrink:0;margin-top:2px;}
+.insight-label{font-size:10px;text-transform:uppercase;color:var(--text-tertiary);font-weight:600;letter-spacing:.04em;}
+.insight-text{font-size:13px;color:var(--text-primary);line-height:1.5;margin-top:2px;}
+.insight-link{font-size:10px;color:var(--accent);cursor:pointer;white-space:nowrap;margin-left:auto;flex-shrink:0;}
+.insight-link:hover{text-decoration:underline;}
+
+/* ── Ash + annotation ── */
+.ash-icon{position:fixed;bottom:24px;right:24px;width:36px;height:36px;border-radius:50%;background:var(--surface);border:.5px solid var(--border-strong);box-shadow:0 2px 8px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:20;}
+.annotation{position:fixed;bottom:16px;left:72px;font-size:10px;color:var(--text-tertiary);font-style:italic;}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="app-sidebar">
+  <div class="sidebar-logo"></div>
+  <div class="sidebar-icon" title="Projects">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Contacts">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Outreach">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Finance">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 6.5h14"/><path d="M5 10h2M10 10h1"/></svg>
+  </div>
+  <div class="sidebar-icon active" title="Presence">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 2c0 0-3 2.5-3 6s3 6 3 6"/><path d="M8 2c0 0 3 2.5 3 6s-3 6-3 6"/><path d="M2 8h12"/></svg>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="section-topbar">
+    <div class="section-title-wrap">
+      <span class="section-title">Presence</span>
+      <span class="section-period">Apr 2026</span>
+    </div>
+    <div class="topbar-tabs">
+      <div class="topbar-tab" onclick="navTab(event, 'PR-01-presence-overview.html')">Overview</div>
+      <div class="topbar-tab active" onclick="navTab(event, null)">Website</div>
+      <div class="topbar-tab" onclick="navTab(event, 'PR-03-presence-socials.html')">Socials</div>
+      <div class="topbar-tab" onclick="navTab(event, 'PR-04-presence-newsletter.html')">Newsletter</div>
+      <div class="topbar-tab" onclick="navTab(event, 'PR-05-presence-opportunities.html')">Opportunities</div>
+    </div>
+    <div class="topbar-fill"></div>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost">View site ↗</button>
+    </div>
+  </div>
+
+  <!-- Connected site banner -->
+  <div class="connected-banner">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--blue);flex-shrink:0;"><circle cx="8" cy="8" r="6"/><path d="M8 2c0 0-3 2.5-3 6s3 6 3 6"/><path d="M8 2c0 0 3 2.5 3 6s-3 6-3 6"/><path d="M2 8h12"/></svg>
+    <span class="banner-site">perennial.design</span>
+    <span class="banner-platform">Squarespace</span>
+    <div class="banner-middle">
+      <div class="banner-dot"></div>
+      <span class="banner-label">Connected</span>
+    </div>
+    <div class="banner-right">
+      <span class="banner-manage">Manage connection</span>
+    </div>
+  </div>
+
+  <!-- Ash insight strip -->
+  <div class="insight-strip">
+    <div class="insight-left">
+      <svg class="insight-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/>
+        <path d="M12 12c-2-1.5-3-3-2-5"/>
+        <path d="M12 12c2-1.5 3-3 2-5"/>
+      </svg>
+      <div>
+        <div class="insight-label">Ash insight</div>
+        <div class="insight-text">April was your best month this year — the Sight Unseen feature drove a 6× traffic spike and your /work/brass-series page is converting visitors into 4-minute sessions. Consider linking to specific work pages from your Instagram bio and newsletter.</div>
+      </div>
+    </div>
+    <div class="insight-link">Ask Ash →</div>
+  </div>
+
+  <!-- Stat cards -->
+  <div class="stat-row">
+    <div class="stat-card">
+      <div class="stat-card-header">
+        <span class="stat-label">Visits</span>
+        <div class="stat-help-icon" title="Total times your site was loaded this month. Higher = more people finding your work. A spike usually means press, a share, or a social post driving traffic.">?</div>
+      </div>
+      <div class="stat-value">1,240</div>
+      <div class="stat-sub up">↑ 18% vs March</div>
+      <div class="stat-rule"></div>
+      <div class="stat-detail">Daily avg: 41 visits</div>
+      <div class="stat-improve-link">Ask Ash how to improve →</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-card-header">
+        <span class="stat-label">Unique visitors</span>
+        <div class="stat-help-icon" title="Individual people who visited, regardless of how many times they came back. A better measure of actual audience size than raw visits.">?</div>
+      </div>
+      <div class="stat-value">892</div>
+      <div class="stat-sub up">↑ 12% vs March</div>
+      <div class="stat-rule"></div>
+      <div class="stat-detail">Returning: 34%</div>
+      <div class="stat-improve-link">Ask Ash how to improve →</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-card-header">
+        <span class="stat-label">Avg session</span>
+        <div class="stat-help-icon" title="How long people stay on your site on average. Longer sessions mean visitors are exploring — looking through your portfolio, reading about your process.">?</div>
+      </div>
+      <div class="stat-value">2m 14s</div>
+      <div class="stat-sub up">↑ from 1m 48s</div>
+      <div class="stat-rule"></div>
+      <div class="stat-detail">Pages per session: 2.4</div>
+      <div class="stat-improve-link">Ask Ash how to improve →</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-card-header">
+        <span class="stat-label">Bounce rate</span>
+        <div class="stat-help-icon" title="Percentage of visitors who left without clicking anywhere. Lower is better. High bounce on portfolio pages usually means the first image didn't hook them.">?</div>
+      </div>
+      <div class="stat-value">58%</div>
+      <div class="stat-sub up">↓ 4pts — improving</div>
+      <div class="stat-rule"></div>
+      <div class="stat-detail">Mobile: 71% · Desktop: 44%</div>
+      <div class="stat-improve-link">Ask Ash how to improve →</div>
+    </div>
+  </div>
+
+  <!-- Two-column layout -->
+  <div class="cols">
+    <!-- LEFT: Traffic & pages -->
+    <div class="col-main">
+      <!-- Traffic over time card -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-head-title">Last 30 days</span>
+          <span class="card-meta">Apr 2026</span>
+        </div>
+
+        <div class="chart-container">
+          <div class="chart-bars">
+            <div class="chart-bar" style="height:25px;"></div>
+            <div class="chart-bar" style="height:28px;"></div>
+            <div class="chart-bar" style="height:23px;"></div>
+            <div class="chart-bar" style="height:32px;"></div>
+            <div class="chart-bar" style="height:34px;"></div>
+            <div class="chart-bar" style="height:30px;"></div>
+            <div class="chart-bar spike" style="height:80px;"></div>
+            <div class="chart-bar" style="height:27px;"></div>
+            <div class="chart-bar spike" style="height:53px;"></div>
+            <div class="chart-bar" style="height:24px;"></div>
+            <div class="chart-bar" style="height:29px;"></div>
+            <div class="chart-bar" style="height:26px;"></div>
+            <div class="chart-bar" style="height:33px;"></div>
+            <div class="chart-bar" style="height:28px;"></div>
+            <div class="chart-bar" style="height:25px;"></div>
+            <div class="chart-bar" style="height:31px;"></div>
+            <div class="chart-bar" style="height:35px;"></div>
+            <div class="chart-bar" style="height:27px;"></div>
+            <div class="chart-bar" style="height:23px;"></div>
+            <div class="chart-bar" style="height:33px;"></div>
+            <div class="chart-bar" style="height:28px;"></div>
+            <div class="chart-bar" style="height:25px;"></div>
+            <div class="chart-bar" style="height:37px;"></div>
+            <div class="chart-bar" style="height:27px;"></div>
+            <div class="chart-bar" style="height:30px;"></div>
+            <div class="chart-bar" style="height:24px;"></div>
+            <div class="chart-bar" style="height:32px;"></div>
+            <div class="chart-bar" style="height:28px;"></div>
+            <div class="chart-bar" style="height:26px;"></div>
+            <div class="chart-bar" style="height:31px;"></div>
+          </div>
+
+          <div style="display:flex;gap:12px;font-size:10px;color:var(--text-tertiary);margin-bottom:8px;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <div style="width:8px;height:8px;border-radius:50%;background:var(--blue-light);"></div>
+              <span>Daily visits</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <div style="width:8px;height:8px;border-radius:50%;background:var(--blue);"></div>
+              <span>Apr 7 · Sight Unseen feature</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top pages card -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-head-title">Top pages</span>
+          <span class="card-meta">Apr 2026</span>
+          <span class="card-link">View in Squarespace →</span>
+        </div>
+
+        <div class="pages-table">
+          <div class="pages-header">
+            <div>Page</div>
+            <div>Views</div>
+            <div>Avg time</div>
+            <div></div>
+          </div>
+
+          <div class="page-row">
+            <div class="page-body">
+              <div class="page-name">/</div>
+              <div class="page-path">Home</div>
+            </div>
+            <div class="page-views">480</div>
+            <div class="page-time">1m 12s</div>
+            <div class="page-stat up">↑</div>
+          </div>
+
+          <div class="page-row">
+            <div class="page-body">
+              <div class="page-name">/work</div>
+              <div class="page-path">Portfolio</div>
+            </div>
+            <div class="page-views">312</div>
+            <div class="page-time">3m 44s</div>
+            <div class="page-stat up">↑</div>
+          </div>
+
+          <div class="page-row">
+            <div class="page-body">
+              <div class="page-name">/work/brass-series</div>
+              <div class="page-path">Collection</div>
+            </div>
+            <div class="page-views">228</div>
+            <div class="page-time">4m 22s</div>
+            <div class="page-stat spike">🔥</div>
+          </div>
+
+          <div class="page-row">
+            <div class="page-body">
+              <div class="page-name">/about</div>
+              <div class="page-path">About</div>
+            </div>
+            <div class="page-views">94</div>
+            <div class="page-time">2m 01s</div>
+            <div class="page-stat neutral">-</div>
+          </div>
+
+          <div class="page-row">
+            <div class="page-body">
+              <div class="page-name">/contact</div>
+              <div class="page-path">Contact</div>
+            </div>
+            <div class="page-views">87</div>
+            <div class="page-time">0m 48s</div>
+            <div class="page-stat neutral">-</div>
+          </div>
+
+          <div class="page-row">
+            <div class="page-body">
+              <div class="page-name">/journal</div>
+              <div class="page-path">Blog</div>
+            </div>
+            <div class="page-views">39</div>
+            <div class="page-time">5m 30s</div>
+            <div class="page-stat neutral">↓</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Sources & referrers -->
+    <div class="col-side">
+      <!-- Traffic sources card -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-head-title">Traffic sources</span>
+        </div>
+
+        <div class="source-row">
+          <div class="source-label">Direct</div>
+          <div class="source-bar-track">
+            <div class="source-bar-fill" style="width:42%;background:var(--text-primary);"></div>
+          </div>
+          <div class="source-percent">42%</div>
+        </div>
+
+        <div class="source-row">
+          <div class="source-label">Referral</div>
+          <div class="source-bar-track">
+            <div class="source-bar-fill" style="width:28%;background:var(--blue);"></div>
+          </div>
+          <div class="source-percent">28%</div>
+        </div>
+
+        <div class="source-row">
+          <div class="source-label">Social</div>
+          <div class="source-bar-track">
+            <div class="source-bar-fill" style="width:18%;background:var(--purple);"></div>
+          </div>
+          <div class="source-percent">18%</div>
+        </div>
+
+        <div class="source-row">
+          <div class="source-label">Organic search</div>
+          <div class="source-bar-track">
+            <div class="source-bar-fill" style="width:12%;background:var(--accent);"></div>
+          </div>
+          <div class="source-percent">12%</div>
+        </div>
+      </div>
+
+      <!-- Top referrers card -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-head-title">Top referrers</span>
+        </div>
+
+        <div class="referrer-row">
+          <div class="referrer-favicon"></div>
+          <div class="referrer-domain">sightunseen.com</div>
+          <span class="referrer-badge">↑ new</span>
+          <div class="referrer-count">186</div>
+        </div>
+
+        <div class="referrer-row">
+          <div class="referrer-favicon"></div>
+          <div class="referrer-domain">instagram.com</div>
+          <div class="referrer-count">94</div>
+        </div>
+
+        <div class="referrer-row">
+          <div class="referrer-favicon"></div>
+          <div class="referrer-domain">google.com</div>
+          <div class="referrer-count">71</div>
+        </div>
+
+        <div class="referrer-row">
+          <div class="referrer-favicon"></div>
+          <div class="referrer-domain">are.na</div>
+          <div class="referrer-count">28</div>
+        </div>
+
+        <div class="referrer-row">
+          <div class="referrer-favicon"></div>
+          <div class="referrer-domain">linkinbio.com</div>
+          <div class="referrer-count">19</div>
+        </div>
+      </div>
+
+      <!-- Shop card -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-head-title">Shop</span>
+          <span class="card-meta">Squarespace Commerce</span>
+          <span class="card-link">View store →</span>
+        </div>
+
+        <div class="shop-stat-row">
+          <div class="shop-stat-label">Active listings</div>
+          <div class="shop-stat-value">3</div>
+        </div>
+
+        <div class="shop-stat-row">
+          <div class="shop-stat-label">Orders · Apr</div>
+          <div class="shop-stat-value">2</div>
+        </div>
+
+        <div class="shop-stat-row">
+          <div class="shop-stat-label">Revenue · Apr</div>
+          <div class="shop-stat-value">$1,840</div>
+        </div>
+
+        <div class="shop-product-row">
+          <div class="shop-product-img"></div>
+          <div class="shop-product-info">
+            <div class="shop-product-name">Brass wall sculpture I</div>
+            <div class="shop-product-price">$920</div>
+          </div>
+          <div class="shop-product-badge">Listed</div>
+        </div>
+
+        <div class="shop-add-row">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--text-tertiary);"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg>
+          <span class="shop-add-text">Add product</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- Ash icon -->
+<div class="ash-icon">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+    <path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/>
+    <path d="M12 12c-2-1.5-3-3-2-5"/>
+    <path d="M12 12c2-1.5 3-3 2-5"/>
+  </svg>
+</div>
+
+<div class="annotation">PR-02 · Website — analytics for perennial.design via Squarespace. Traffic chart, top pages, sources breakdown.</div>
+
+<script>
+function navTab(event, url) {
+  if (event) {
+    const tabs = document.querySelectorAll('.topbar-tab');
+    tabs.forEach(t => t.classList.remove('active'));
+    event.target.classList.add('active');
+  }
+  if (url) {
+    window.location.href = url;
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CT-03 – Contacts Pipeline / Follow-up Urgency</title>
+<style>
+  :root {
+    --bg: #f5f4f1; --surface: #ffffff; --surface-2: #f0ede8; --surface-hover: #f7f5f2;
+    --border: rgba(0,0,0,0.07); --border-strong: rgba(0,0,0,0.13);
+    --text-primary: #1a1916; --text-secondary: #6b6860; --text-tertiary: #a8a49e;
+    --accent: #3d6b4f; --accent-light: rgba(61,107,79,0.08);
+    --red: #c0392b; --red-light: rgba(192,57,43,0.09);
+    --amber: #b8860b; --amber-light: rgba(184,134,11,0.10);
+    --blue: #2563ab; --blue-light: rgba(37,99,171,0.08);
+    --purple: #6d4fa3; --purple-light: rgba(109,79,163,0.08);
+    --teal: #148c8c; --teal-light: rgba(20,140,140,0.08);
+    --shadow-float: 0 4px 20px rgba(0,0,0,0.12);
+    --radius: 12px; --radius-sm: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #181715; --surface: #222120; --surface-2: #2a2927; --surface-hover: #272523;
+      --border: rgba(255,255,255,0.06); --border-strong: rgba(255,255,255,0.11);
+      --text-primary: #f0ede8; --text-secondary: #9a9690; --text-tertiary: #5c5a56;
+      --accent: #5a9470; --accent-light: rgba(90,148,112,0.12);
+      --blue-light: rgba(37,99,171,0.15); --purple-light: rgba(109,79,163,0.15);
+      --amber-light: rgba(184,134,11,0.15); --teal-light: rgba(20,140,140,0.12);
+      --red-light: rgba(192,57,43,0.14);
+      --shadow-float: 0 4px 20px rgba(0,0,0,0.35);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text-primary); height: 100vh; display: flex; overflow: hidden; font-size: 13px; }
+  .sidebar { width: 56px; background: #d94f3d; flex-shrink: 0; display: flex; align-items: center; justify-content: center; writing-mode: vertical-rl; color: white; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.7; }
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .topbar { display: flex; align-items: center; gap: 10px; padding: 14px 24px; border-bottom: 0.5px solid var(--border-strong); background: var(--surface); flex-shrink: 0; }
+  .topbar-title { font-size: 15px; font-weight: 600; margin-right: 4px; }
+  .topbar-count { font-size: 12px; color: var(--text-tertiary); }
+  .topbar-spacer { flex: 1; }
+  .search-wrap { display: flex; align-items: center; gap: 8px; background: var(--surface-2); border: 0.5px solid var(--border-strong); border-radius: var(--radius-sm); padding: 6px 12px; width: 220px; }
+  .search-wrap input { background: none; border: none; outline: none; font-size: 12px; color: var(--text-primary); width: 100%; }
+  .search-wrap input::placeholder { color: var(--text-tertiary); }
+  .ctrl-btn { padding: 5px 12px; font-size: 12px; color: var(--text-secondary); border: 0.5px solid var(--border-strong); border-radius: var(--radius-sm); background: transparent; cursor: pointer; }
+  .add-btn { padding: 6px 14px; background: var(--accent); color: white; border: none; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; cursor: pointer; }
+
+  /* Subbar — follow-up mode indicator */
+  .subbar { display: flex; align-items: center; gap: 10px; padding: 8px 24px; border-bottom: 0.5px solid var(--border-strong); background: var(--surface); flex-shrink: 0; }
+  .mode-label { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--amber); }
+  .mode-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); flex-shrink: 0; }
+  .subbar-divider { width: 0.5px; height: 14px; background: var(--border-strong); }
+  .subbar-label { font-size: 11px; color: var(--text-tertiary); }
+  .subbar-btn { font-size: 11px; font-weight: 500; color: var(--text-secondary); background: var(--surface-2); border: 0.5px solid var(--border-strong); border-radius: var(--radius-sm); padding: 3px 10px; cursor: pointer; }
+  .subbar-spacer { flex: 1; }
+  .subbar-tip { font-size: 10px; color: var(--text-tertiary); font-style: italic; }
+
+  .table-wrap { flex: 1; overflow-y: auto; }
+
+  /* Column layout — same as CT-01/02 */
+  .col-header { display: grid; grid-template-columns: 32px 2.8fr 1.5fr 1.2fr 1fr 0.9fr; padding: 8px 24px; border-bottom: 0.5px solid var(--border-strong); background: var(--surface-2); position: sticky; top: 0; z-index: 3; }
+  .th { font-size: 10px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; display: flex; align-items: center; gap: 3px; cursor: pointer; }
+  .th:hover { color: var(--text-secondary); }
+
+  /* Group headers */
+  .group-hdr { display: flex; align-items: center; gap: 10px; padding: 9px 24px; border-bottom: 0.5px solid var(--border-strong); border-left: 3px solid transparent; background: var(--surface-2); position: sticky; top: 34px; z-index: 2; cursor: pointer; user-select: none; }
+  .group-hdr.active-grp { border-left-color: var(--accent); }
+  .group-hdr.attn-grp  { border-left-color: var(--amber); background: color-mix(in srgb, var(--surface-2) 85%, var(--amber-light)); }
+  .group-hdr.dormant-grp { border-left-color: var(--text-tertiary); }
+  .grp-chevron { font-size: 9px; color: var(--text-tertiary); transition: transform 0.15s; }
+  .grp-chevron.open { transform: rotate(90deg); }
+  .grp-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .grp-name { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+  .grp-desc { font-size: 11px; color: var(--text-tertiary); }
+  .grp-count { font-size: 11px; color: var(--text-tertiary); background: var(--surface); border: 0.5px solid var(--border-strong); border-radius: 10px; padding: 1px 8px; margin-left: auto; }
+  .grp-add { font-size: 11px; color: var(--text-tertiary); background: none; border: none; cursor: pointer; opacity: 0; margin-left: 6px; }
+  .group-hdr:hover .grp-add { opacity: 1; }
+
+  /* Attention band for the "Needs attention" section */
+  .grp-urgency { display: flex; align-items: center; gap: 4px; }
+  .urgency-tag { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px; }
+  .urgency-high { background: var(--red-light); color: var(--red); }
+  .urgency-med  { background: var(--amber-light); color: var(--amber); }
+
+  /* Rows */
+  .row { display: grid; grid-template-columns: 32px 2.8fr 1.5fr 1.2fr 1fr 0.9fr; padding: 0 24px; border-bottom: 0.5px solid var(--border); background: var(--surface); cursor: pointer; transition: background 0.1s; align-items: center; min-height: 52px; }
+  .row:hover { background: var(--surface-hover); }
+  .row.selected { background: var(--accent-light); }
+  .row.attn-row { background: color-mix(in srgb, var(--surface) 90%, var(--amber-light)); }
+  .row.attn-row:hover { background: color-mix(in srgb, var(--surface-hover) 80%, var(--amber-light)); }
+  .row.urgent-row { background: color-mix(in srgb, var(--surface) 90%, var(--red-light)); }
+  .row.urgent-row:hover { background: color-mix(in srgb, var(--surface-hover) 80%, var(--red-light)); }
+
+  .check { width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid var(--border-strong); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .check.checked { background: var(--accent); border-color: var(--accent); }
+  .check.checked::after { content: ''; width: 7px; height: 4px; border-left: 1.5px solid white; border-bottom: 1.5px solid white; transform: rotate(-45deg) translateY(-1px); display: block; }
+
+  /* Name cell with recency bar */
+  .name-cell { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--surface-2); border: 0.5px solid var(--border-strong); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); flex-shrink: 0; }
+  .name-stack { display: flex; flex-direction: column; gap: 3px; }
+  .name-text { font-size: 13px; font-weight: 500; line-height: 1; }
+  .name-email { font-size: 11px; color: var(--text-tertiary); }
+
+  /* Recency bar — thin horizontal fill below name */
+  .recency-bar-wrap { display: flex; align-items: center; gap: 5px; }
+  .recency-bar-track { width: 72px; height: 2px; border-radius: 2px; background: var(--border-strong); overflow: hidden; }
+  .recency-bar-fill { height: 100%; border-radius: 2px; }
+  .recency-bar-fill.fresh  { background: var(--accent); }
+  .recency-bar-fill.warm   { background: var(--amber); }
+  .recency-bar-fill.stale  { background: #d97b3a; }
+  .recency-bar-fill.cold   { background: var(--red); }
+  .recency-bar-fill.dormant { background: var(--text-tertiary); }
+  .recency-time { font-size: 10px; color: var(--text-tertiary); }
+
+  .company-cell { font-size: 12px; color: var(--text-secondary); }
+  .company-role { font-size: 11px; color: var(--text-tertiary); }
+  .tags-cell { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .tag-pill { font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 10px; }
+  .tag-gallery  { background: var(--blue-light); color: var(--blue); }
+  .tag-client   { background: var(--accent-light); color: var(--accent); }
+  .tag-supplier { background: var(--amber-light); color: var(--amber); }
+  .tag-press    { background: var(--purple-light); color: var(--purple); }
+  .tag-lead     { background: var(--surface-2); color: var(--text-secondary); }
+  .tag-event    { background: var(--teal-light); color: var(--teal); }
+  .date-cell { font-size: 11px; color: var(--text-tertiary); }
+  .date-cell.recent { color: var(--accent); font-weight: 500; }
+  .date-cell.warm   { color: var(--amber); }
+  .date-cell.hot    { color: var(--red); font-weight: 500; }
+  .date-cell.gray   { color: var(--text-tertiary); }
+
+  /* Follow-up nudge chip on row */
+  .nudge-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+  .nudge-overdue { background: var(--red-light); color: var(--red); }
+  .nudge-due     { background: var(--amber-light); color: var(--amber); }
+  .nudge-ok      { background: var(--accent-light); color: var(--accent); }
+
+  .actions-cell { display: flex; align-items: center; justify-content: flex-end; gap: 4px; opacity: 0; }
+  .row:hover .actions-cell { opacity: 1; }
+  .action-icon { width: 26px; height: 26px; border-radius: 6px; background: var(--surface-2); border: 0.5px solid var(--border-strong); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-secondary); font-size: 11px; }
+
+  /* Bulk bar */
+  .bulk-bar { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: var(--text-primary); border-radius: var(--radius); padding: 10px 16px; display: flex; align-items: center; gap: 4px; box-shadow: var(--shadow-float); z-index: 20; white-space: nowrap; }
+  .bulk-count { font-size: 12px; font-weight: 600; color: var(--surface); margin-right: 8px; padding-right: 12px; border-right: 0.5px solid rgba(255,255,255,0.2); }
+  .bulk-action { padding: 5px 10px; border-radius: var(--radius-sm); font-size: 12px; color: rgba(255,255,255,0.75); cursor: pointer; border: none; background: transparent; }
+  .bulk-action:hover { background: rgba(255,255,255,0.12); color: white; }
+  .bulk-divider { width: 0.5px; height: 20px; background: rgba(255,255,255,0.15); margin: 0 4px; }
+  .bulk-action.danger:hover { background: rgba(192,57,43,0.3); color: #ff9b8c; }
+
+  .ash-icon { position: fixed; bottom: 24px; right: 24px; width: 36px; height: 36px; border-radius: 50%; background: var(--surface); border: 0.5px solid var(--border-strong); box-shadow: 0 2px 8px rgba(0,0,0,0.12); display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; }
+  .annotation { position: fixed; bottom: 16px; left: 72px; font-size: 10px; color: var(--text-tertiary); font-style: italic; }
+</style>
+</head>
+<body>
+<div class="sidebar">Nav</div>
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-title">Contacts</span>
+    <span class="topbar-count">10 contacts</span>
+    <div class="topbar-spacer"></div>
+    <div class="search-wrap">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><circle cx="7" cy="7" r="5"/><path d="M11 11l3 3"/></svg>
+      <input type="text" placeholder="Search contacts…">
+    </div>
+    <button class="ctrl-btn">Import</button>
+    <button class="ctrl-btn">Filter</button>
+    <button class="ctrl-btn">Sort ▾</button>
+    <button class="add-btn">+ New contact</button>
+  </div>
+
+  <!-- Follow-up mode subbar -->
+  <div class="subbar">
+    <span class="mode-label">
+      <span class="mode-dot"></span>
+      Follow-up mode
+    </span>
+    <div class="subbar-divider"></div>
+    <span class="subbar-label">Sorted by</span>
+    <button class="subbar-btn">Last contact ▾</button>
+    <div class="subbar-spacer"></div>
+    <span class="subbar-tip">Contacts grouped by recency · bar shows time since last touch</span>
+  </div>
+
+  <div class="table-wrap">
+    <div class="col-header">
+      <div class="th"></div>
+      <div class="th">Name</div>
+      <div class="th">Company</div>
+      <div class="th">Tags</div>
+      <div class="th">Follow-up</div>
+      <div class="th">Location</div>
+    </div>
+
+    <!-- ── Needs Attention ── -->
+    <div class="group-hdr attn-grp">
+      <span class="grp-chevron open">▶</span>
+      <div class="grp-dot" style="background:var(--amber);"></div>
+      <span class="grp-name">Needs attention</span>
+      <span class="grp-desc" style="margin-left:6px;">· 3+ weeks without contact</span>
+      <span class="grp-count">4</span>
+      <button class="grp-add">+ Add</button>
+    </div>
+
+    <!-- Dana Park — 6 weeks (most stale first) -->
+    <div class="row urgent-row">
+      <div class="check"></div>
+      <div class="name-cell">
+        <div class="avatar">DP</div>
+        <div class="name-stack">
+          <div class="name-text">Dana Park</div>
+          <div class="recency-bar-wrap">
+            <div class="recency-bar-track"><div class="recency-bar-fill cold" style="width:78%;"></div></div>
+            <span class="recency-time">6 wks</span>
+          </div>
+        </div>
+      </div>
+      <div><div class="company-cell">Surface Magazine</div><div class="company-role">Senior Editor</div></div>
+      <div class="tags-cell"><span class="tag-pill tag-press">Press</span></div>
+      <div><span class="nudge-chip nudge-overdue">Overdue</span></div>
+      <div class="actions-cell">
+        <div class="action-icon"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg></div>
+        <div class="action-icon">···</div>
+      </div>
+    </div>
+
+    <!-- Priya Lal — 1 month -->
+    <div class="row urgent-row">
+      <div class="check"></div>
+      <div class="name-cell">
+        <div class="avatar">PL</div>
+        <div class="name-stack">
+          <div class="name-text">Priya Lal</div>
+          <div class="recency-bar-wrap">
+            <div class="recency-bar-track"><div class="recency-bar-fill cold" style="width:65%;"></div></div>
+            <span class="recency-time">1 mo</span>
+          </div>
+        </div>
+      </div>
+      <div><div class="company-cell">Materials Gallery</div><div class="company-role">Co-founder</div></div>
+      <div class="tags-cell"><span class="tag-pill tag-gallery">Gallery</span></div>
+      <div><span class="nudge-chip nudge-overdue">Overdue</span></div>
+      <div class="actions-cell">
+        <div class="action-icon"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg></div>
+        <div class="action-icon">···</div>
+      </div>
+    </div>
+
+    <!-- Elena Vasquez — 26 days -->
+    <div class="row attn-row">
+      <div class="check"></div>
+      <div class="name-cell">
+        <div class="avatar">EV</div>
+        <div class="name-stack">
+          <div class="name-text">Elena Vasquez</div>
+          <div class="recency-bar-wrap">
+            <div class="recency-bar-track"><div class="recency-bar-fill stale" style="width:50%;"></div></div>
+            <span class="recency-time">26 d</span>
+          </div>
+        </div>
+      </div>
+      <div><div class="company-cell">Design Miami</div><div class="company-role">Programming Director</div></div>
+      <div class="tags-cell"><span class="tag-pill tag-event">Event</span><span class="tag-pill tag-lead">Lead</span></div>
+      <div><span class="nudge-chip nudge-due">Follow up</span></div>
+      <div class="actions-cell">
+        <div class="action-icon"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg></div>
+        <div class="action-icon">···</div>
+      </div>
+    </div>
+
+    <!-- Rachel Kim — 3 weeks -->
+    <div class="row attn-row">
+      <div class="check"></div>
+      <div class="name-cell">
+        <div class="avatar">RK</div>
+        <div class="name-stack">
+          <div class="name-text">Rachel Kim</div>
+          <div class="recency-bar-wrap">
+            <div class="recency-bar-track"><div class="recency-bar-fill warm" style="width:40%;"></div></div>
+            <span class="recency-time">3 wks</span>
+          </div>
+        </div>
+      </div>
+      <div><div class="company-cell">Sight Unseen</div><div class="company-role">Gallery Director</div></div>
+      <div class="tags-cell"><span class="tag-pill tag-gallery">Gallery</span><span class="tag-pill tag-lead">Lead</span></div>
+      <div><span class="nudge-chip nudge-due">Follow up</span></div>
+      <div class="actions-cell">
+        <div class="action-icon"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg></div>
+        <div class="action-icon">···</div>
+      </div>
+    </div>
+
+    <!-- ── Active ── -->
+    <div class="group-hdr active-grp">
+      <span class="grp-chevron open">▶</span>
+      <div class="grp-dot" style="background:var(--accent);"></div>
+      <span class="grp-name">Active</span>
+      <span class="grp-desc" style="margin-left:6px;">· contacted within 2 weeks</span>
+      <span class="grp-count">5</span>
+      <button class="grp-add">+ Add</button>
+    </div>
+
+    <!-- Sarah Okonkwo — 2 days (selected) -->
+    <div class="row selected">
+      <div class="check checked"></div>
+      <div class="name-cell">
+        <div class="avatar">SO</div>
+        <div class="name-stack">
+          <div class="name-text">Sarah Okonkwo</div>
+          <div class="recency-bar-wrap">
+            <div class="recency-bar-track"><div class="recency-bar-fill fresh" style="width:8%;"></div></div>
+            <span class="recency-time">2 d</span>
+          </div>
+        </div>
+      </div>
+      <div><div class="company-cell">The Parlour Gallery</div><div class="company-role">Director</div></div>
+      <div class="tags-cell"><span class="tag-pill tag-gallery">Gallery</span></div>
+      <div><span class="nudge-chip nudge-ok">On track</span></div>
+      <div class="actions-cell">
+        <div class="action-icon"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg></div>
+        <div class="action-icon">···</div>
+      </div>
+    </div>
+
+    <!-- Nina Falco — 3 days -->
+    <div class="row">
+      <div class="check"></div>
+      <div class="name-cell">
+        <div class="avatar">NF</div>
+        <div class="name-stack">
+          <div class="name-text">Nina Falco</div>
+          <div class="recency-bar-wrap">
+            <div class="recency-bar-track"><div class="recency-bar-fill fresh" style="width:11%;"></div></div>
+            <span class="recency-time">3 d</span>
+          </div>
+        </div>
+      </div>
+      <div><div class="company-cell">ICFF</div><div class="company-role">Exhibitor Relations</div></div>
+      <div class="tags-cell"><span class="tag-pill tag-event">Event</span></div>
+      <div><span class="nudge-chip nudge-ok">On track</span></div>
+      <div class="actions-cell">
+        <div class="action-icon"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg></div>
+        <div class="action-icon">···</div>
+      </div>
+    </div>
+
+    <!-- Tom Murray — 5 days -->
+    <div class="row">
+      <div class="check"></div>
+      <div class="name-cell">
+        <div class="avatar">TM</div>
+        <div class="name-stack">
+          <div class="name-text">Tom Murray</div>
+          <div class="recency-bar-wrap">
+            <div class="recency-bar-track"><div class="recency-bar-fill fresh" style="width:18%;"></div></div>
+            <span class="recency-time">5 d</span>
+          </div>
+        </div>
+      </div>
+      <div><div class="company-cell">Murray's Mill</div><div class="company-role">Owner</div></div>
+      <div class="tags-cell"><span class="tag-pill tag-supplier">Supplier</span></div>
+      <div><span class="nudge-chip nudge-ok">On track</span></div>
+      <div class="actions-cell">
+        <div class="action-icon"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg></div>
+        <div class="action-icon">···</div>
+      </div>
+    </div>
+
+    <!-- James Britten — 1 week -->
+    <div class="row">
+      <div class="check"></div>
+      <div class="name-cell">
+        <div class="avatar">JB</div>
+        <div class="name-stack">
+          <div class="name-text">James Britten</div>
+          <div class="recency-bar-wrap">
+            <div class="recency-bar-track"><div class="recency-bar-fill fresh" style="width:25%;"></div></div>
+            <span class="recency-time">1 wk</span>
+          </div>
+        </div>
+      </div>
+      <div><div class="company-cell">Britten Studio</div><div class="company-role">Principal</div></div>
+      <div class="tags-cell"><span class="tag-pill tag-client">Client</span></div>
+      <div><span class="nudge-chip nudge-ok">On track</span></div>
+      <div class="actions-cell">
+        <div class="action-icon"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg></div>
+        <div class="action-icon">···</div>
+      </div>
+    </div>
+
+    <!-- Marcus Lehman — 10 days -->
+    <div class="row">
+      <div class="check"></div>
+      <div class="name-cell">
+        <div class="avatar">ML</div>
+        <div class="name-stack">
+          <div class="name-text">Marcus Lehman</div>
+          <div class="recency-bar-wrap">
+            <div class="recency-bar-track"><div class="recency-bar-fill fresh" style="width:33%;"></div></div>
+            <span class="recency-time">10 d</span>
+          </div>
+        </div>
+      </div>
+      <div><div class="company-cell">—</div><div class="company-role">Private collector</div></div>
+      <div class="tags-cell"><span class="tag-pill tag-client">Client</span></div>
+      <div><span class="nudge-chip nudge-ok">On track</span></div>
+      <div class="actions-cell">
+        <div class="action-icon"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg></div>
+        <div class="action-icon">···</div>
+      </div>
+    </div>
+
+    <!-- ── Dormant ── -->
+    <div class="group-hdr dormant-grp">
+      <span class="grp-chevron open">▶</span>
+      <div class="grp-dot" style="background:var(--text-tertiary);"></div>
+      <span class="grp-name">Dormant</span>
+      <span class="grp-desc" style="margin-left:6px;">· no contact in 2+ months</span>
+      <span class="grp-count">1</span>
+      <button class="grp-add">+ Add</button>
+    </div>
+
+    <!-- Chris Wolff — 4 months -->
+    <div class="row">
+      <div class="check"></div>
+      <div class="name-cell">
+        <div class="avatar">CW</div>
+        <div class="name-stack">
+          <div class="name-text">Chris Wolff</div>
+          <div class="recency-bar-wrap">
+            <div class="recency-bar-track"><div class="recency-bar-fill dormant" style="width:92%;"></div></div>
+            <span class="recency-time">4 mo</span>
+          </div>
+        </div>
+      </div>
+      <div><div class="company-cell">Wolff Collect</div><div class="company-role">Founder</div></div>
+      <div class="tags-cell"><span class="tag-pill tag-client">Client</span></div>
+      <div class="date-cell gray">Dec 2024</div>
+      <div class="actions-cell">
+        <div class="action-icon"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg></div>
+        <div class="action-icon">···</div>
+      </div>
+    </div>
+  </div><!-- /table-wrap -->
+</div><!-- /main -->
+
+<!-- Bulk action bar (Sarah selected) -->
+<div class="bulk-bar">
+  <span class="bulk-count">1 selected</span>
+  <button class="bulk-action">Tag</button>
+  <button class="bulk-action">Status</button>
+  <button class="bulk-action">Email</button>
+  <button class="bulk-action">Note</button>
+  <div class="bulk-divider"></div>
+  <button class="bulk-action">Archive</button>
+  <div class="bulk-divider"></div>
+  <button class="bulk-action danger">Delete</button>
+</div>
+
+<!-- Ash AI -->
+<div class="ash-icon">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+    <path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/>
+    <path d="M12 12c-2-1.5-3-3-2-5"/><path d="M12 12c2-1.5 3-3 2-5"/>
+  </svg>
+</div>
+<div class="annotation">CT-03 · Contacts – Pipeline / Follow-up urgency. Sorted by last contact. Bar shows time elapsed.</div>
+</body>
+</html>

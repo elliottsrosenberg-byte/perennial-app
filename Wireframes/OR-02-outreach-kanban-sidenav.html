@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OR-02 – Outreach Kanban (Gallery pipeline)</title>
+<style>
+  :root {
+    --bg: #f5f4f1; --surface: #ffffff; --surface-2: #f0ede8; --surface-hover: #f7f5f2;
+    --border: rgba(0,0,0,0.07); --border-strong: rgba(0,0,0,0.13);
+    --text-primary: #1a1916; --text-secondary: #6b6860; --text-tertiary: #a8a49e;
+    --accent: #3d6b4f; --accent-light: rgba(61,107,79,0.08);
+    --red: #c0392b; --red-light: rgba(192,57,43,0.08);
+    --amber: #b8860b; --amber-light: rgba(184,134,11,0.10);
+    --blue: #2563ab; --blue-light: rgba(37,99,171,0.08);
+    --shadow-card: 0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07);
+    --radius: 12px; --radius-sm: 8px; --radius-xs: 6px;
+
+    --gallery: #2563ab; --gallery-light: rgba(37,99,171,0.08);
+    --press: #6d4fa3; --press-light: rgba(109,79,163,0.08);
+    --events: #148c8c; --events-light: rgba(20,140,140,0.08);
+    --sales: #3d6b4f; --sales-light: rgba(61,107,79,0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #181715; --surface: #222120; --surface-2: #2a2927; --surface-hover: #272523;
+      --border: rgba(255,255,255,0.06); --border-strong: rgba(255,255,255,0.11);
+      --text-primary: #f0ede8; --text-secondary: #9a9690; --text-tertiary: #5c5a56;
+      --accent: #5a9470; --accent-light: rgba(90,148,112,0.12);
+      --gallery-light: rgba(37,99,171,0.15); --press-light: rgba(109,79,163,0.15);
+      --events-light: rgba(20,140,140,0.12); --sales-light: rgba(61,107,79,0.12);
+      --shadow-card: 0 1px 4px rgba(0,0,0,0.2), 0 0 0 0.5px rgba(255,255,255,0.06);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text-primary); height: 100vh; display: flex; overflow: hidden; font-size: 13px; }
+
+  .app-sidebar { width: 56px; background: #d94f3d; flex-shrink: 0; display: flex; align-items: center; justify-content: center; writing-mode: vertical-rl; color: white; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.7; }
+
+  /* ── Pipeline vertical nav ── */
+  .pipeline-nav {
+    width: 188px; flex-shrink: 0;
+    background: var(--surface);
+    border-right: 0.5px solid var(--border-strong);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .pipeline-nav-header {
+    padding: 16px 16px 12px;
+    border-bottom: 0.5px solid var(--border);
+    display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  }
+  .nav-title { font-size: 14px; font-weight: 650; flex: 1; }
+  .nav-settings { width: 24px; height: 24px; border-radius: var(--radius-xs); display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); cursor: pointer; }
+  .nav-settings:hover { background: var(--surface-2); color: var(--text-secondary); }
+
+  .nav-all {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 14px;
+    font-size: 12px; color: var(--text-secondary);
+    cursor: pointer; border-left: 2.5px solid transparent;
+    margin: 6px 0 2px;
+  }
+  .nav-all:hover { background: var(--surface-2); }
+  .nav-all-icon { width: 22px; height: 22px; border-radius: 5px; background: var(--surface-2); border: 0.5px solid var(--border-strong); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .nav-all-count { font-size: 10px; color: var(--text-tertiary); background: var(--surface-2); border: 0.5px solid var(--border-strong); border-radius: 10px; padding: 1px 6px; margin-left: auto; }
+
+  .nav-divider { height: 0.5px; background: var(--border-strong); margin: 6px 14px; }
+  .nav-section-label { font-size: 10px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; padding: 6px 14px 4px; }
+
+  .nav-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 9px 14px;
+    font-size: 12px; color: var(--text-secondary);
+    cursor: pointer; border-left: 2.5px solid transparent;
+  }
+  .nav-item:hover { background: var(--surface-2); }
+  .nav-item.active { color: var(--text-primary); font-weight: 600; background: var(--gallery-light); border-left-color: var(--gallery); }
+  .nav-item-icon { width: 22px; height: 22px; border-radius: 5px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .nav-item-name { flex: 1; }
+  .nav-item-count { font-size: 10px; color: var(--text-tertiary); background: var(--surface-2); border: 0.5px solid var(--border-strong); border-radius: 10px; padding: 1px 6px; }
+  .nav-item.active .nav-item-count { background: var(--gallery-light); color: var(--gallery); border-color: rgba(37,99,171,0.2); }
+
+  /* Stage mini-strip under active item — 5 stages now, no follow-up connectors */
+  .nav-stage-strip { display: flex; gap: 2px; padding: 3px 14px 7px calc(14px + 2.5px + 9px + 22px + 9px); }
+  .nav-stage-dot { height: 3px; border-radius: 3px; flex: 1; }
+
+  .pipeline-nav-items { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+
+  /* Add new pipeline — text link style at bottom */
+  .nav-add-type {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px 14px;
+    font-size: 11px; color: var(--text-tertiary);
+    cursor: pointer; border: none; background: none;
+    width: 100%; text-align: left; border-left: 2.5px solid transparent;
+  }
+  .nav-add-type:hover { color: var(--blue); }
+
+  /* ── Kanban area ── */
+  .kanban-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  .kanban-topbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 20px;
+    border-bottom: 0.5px solid var(--border-strong);
+    background: var(--surface); flex-shrink: 0;
+  }
+  .pipeline-badge { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 650; }
+  .pipeline-badge-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gallery); flex-shrink: 0; }
+  .pipeline-count { font-size: 12px; color: var(--text-tertiary); margin-right: 4px; }
+  .topbar-spacer { flex: 1; }
+  .search-wrap { display: flex; align-items: center; gap: 8px; background: var(--surface-2); border: 0.5px solid var(--border-strong); border-radius: var(--radius-sm); padding: 5px 11px; width: 185px; }
+  .search-wrap input { background: none; border: none; outline: none; font-size: 12px; color: var(--text-primary); width: 100%; }
+  .search-wrap input::placeholder { color: var(--text-tertiary); }
+  .ctrl-btn { padding: 5px 11px; font-size: 12px; color: var(--text-secondary); border: 0.5px solid var(--border-strong); border-radius: var(--radius-sm); background: transparent; cursor: pointer; }
+  .add-btn { padding: 5px 13px; background: var(--gallery); color: white; border: none; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; cursor: pointer; }
+
+  /* ── Board ── */
+  .board-wrap {
+    flex: 1; overflow-x: auto; overflow-y: hidden;
+    padding: 18px 20px 20px;
+    display: flex; gap: 10px;
+    align-items: flex-start;
+  }
+
+  /* Main stage column */
+  .stage-col {
+    width: 236px; flex-shrink: 0;
+    display: flex; flex-direction: column; gap: 8px;
+    max-height: 100%;
+  }
+
+  /* Outcome columns */
+  .stage-col.outcome {
+    width: 192px;
+  }
+
+  .stage-header { display: flex; align-items: center; gap: 7px; padding: 4px 8px; }
+  .stage-name { font-size: 12px; font-weight: 600; color: var(--text-secondary); flex: 1; }
+  .stage-col.outcome .stage-name { font-size: 11px; font-weight: 600; }
+  .stage-count { font-size: 10px; color: var(--text-tertiary); background: var(--surface-2); border: 0.5px solid var(--border-strong); border-radius: 10px; padding: 1px 7px; }
+  .stage-add { font-size: 16px; color: var(--text-tertiary); background: none; border: none; cursor: pointer; line-height: 1; padding: 0 2px; opacity: 0; }
+  .stage-col:hover .stage-add { opacity: 1; }
+
+  /* Stage accent bars */
+  .stage-bar { height: 2px; border-radius: 2px; margin: 0 2px 4px; }
+  .bar-identified  { background: var(--text-tertiary); opacity: 0.25; }
+  .bar-intro       { background: var(--amber); opacity: 0.55; }
+  .bar-meeting     { background: #d97b3a; opacity: 0.75; }
+  .bar-represented { background: var(--gallery); }
+  .bar-ether       { background: var(--text-tertiary); opacity: 0.35; }
+  .bar-wrongfit    { background: var(--red); opacity: 0.3; }
+
+  .stage-cards { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; padding-bottom: 8px; }
+
+  /* Outcome section separator */
+  .outcome-separator {
+    width: 0.5px;
+    background: var(--border-strong);
+    align-self: stretch;
+    margin: 28px 4px 0;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .outcome-separator::before {
+    content: 'Outcome';
+    position: absolute;
+    top: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-card);
+    padding: 11px 12px;
+    cursor: pointer;
+    transition: box-shadow 0.1s, transform 0.1s, margin-left 0.35s cubic-bezier(0.34,1.56,0.64,1);
+    position: relative;
+    overflow: hidden; /* keeps fu-bar clipped to card shape */
+  }
+  .card:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.1), 0 0 0 0.5px rgba(0,0,0,0.1); transform: translateY(-1px); }
+  .card.urgent { border-left: 2.5px solid var(--amber); }
+  .card.overdue { border-left: 2.5px solid var(--red); }
+  /* Outcome cards slightly muted */
+  .stage-col.outcome .card { opacity: 0.82; }
+  .stage-col.outcome .card:hover { opacity: 1; }
+
+  /* ── Follow-up bar ── */
+  /* Thin right-edge strip on cards in followable stages (Intro Sent, Meeting).
+     On card hover it glows amber. On bar hover it expands and shows tooltip.
+     After a follow-up is logged the card shifts rightward (.followed-up).        */
+  .fu-bar {
+    position: absolute;
+    right: 0; top: 0; bottom: 0;
+    width: 5px;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.15s, width 0.18s ease;
+    z-index: 2;
+  }
+  /* Card hover: bar becomes a faint amber hint */
+  .card:hover .fu-bar {
+    background: rgba(184,134,11,0.14);
+  }
+  /* Bar hover: expand + deepen color */
+  .fu-bar:hover {
+    background: rgba(184,134,11,0.35) !important;
+    width: 10px;
+  }
+  /* Tooltip on bar hover */
+  .fu-bar::after {
+    content: 'Log follow-up';
+    position: absolute;
+    right: calc(100% + 8px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--text-primary);
+    color: var(--bg);
+    font-size: 10px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding: 4px 8px;
+    border-radius: 5px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.18);
+  }
+  .fu-bar:hover::after {
+    opacity: 1;
+  }
+
+  /* ── Followed-up card state ── */
+  /* Card drifts right ~20px — creates a left gap implying rightward momentum.
+     The bar goes green to confirm the follow-up landed.                        */
+  .card.followed-up {
+    margin-left: 20px;
+  }
+  .card.followed-up .fu-bar {
+    background: rgba(61,107,79,0.2);
+    width: 5px;
+  }
+  .card.followed-up:hover .fu-bar {
+    background: rgba(61,107,79,0.32);
+  }
+  .card.followed-up .fu-bar:hover {
+    background: rgba(61,107,79,0.42) !important;
+    width: 10px;
+  }
+  .card.followed-up .fu-bar::after {
+    content: 'Log another follow-up';
+  }
+  /* Small check mark inside the bar for followed-up state */
+  .fu-bar-check {
+    display: none;
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--accent);
+    font-size: 7px;
+    line-height: 1;
+  }
+  .card.followed-up .fu-bar-check {
+    display: block;
+  }
+  /* Subtle "followed up" timestamp label that appears at card bottom when followed-up */
+  .fu-timestamp {
+    display: none;
+    font-size: 10px;
+    color: var(--accent);
+    padding-left: 27px;
+    margin-top: 4px;
+    opacity: 0.8;
+  }
+  .card.followed-up .fu-timestamp {
+    display: block;
+  }
+
+  .card-name-row { display: flex; align-items: flex-start; gap: 7px; margin-bottom: 5px; }
+  .target-icon { width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+  .icon-org     { background: var(--gallery-light); color: var(--gallery); }
+  .icon-contact { background: var(--surface-2); color: var(--text-secondary); }
+  .card-name { font-size: 12px; font-weight: 600; color: var(--text-primary); line-height: 1.3; flex: 1; }
+  .card-sub { font-size: 11px; color: var(--text-tertiary); margin-bottom: 8px; padding-left: 27px; }
+
+  .identify-prompt { display: flex; align-items: center; gap: 5px; background: var(--amber-light); border: 0.5px solid rgba(184,134,11,0.2); border-radius: var(--radius-xs); padding: 5px 8px; margin-bottom: 8px; cursor: pointer; }
+  .identify-prompt:hover { background: rgba(184,134,11,0.15); }
+  .identify-text { font-size: 11px; color: var(--amber); font-weight: 500; flex: 1; }
+  .identify-enrich { display: flex; align-items: center; gap: 3px; font-size: 10px; color: var(--amber); opacity: 0.7; background: none; border: none; cursor: pointer; }
+  .identify-enrich:hover { opacity: 1; }
+
+  .card-contact { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .contact-avatar { width: 18px; height: 18px; border-radius: 50%; background: var(--surface-2); border: 0.5px solid var(--border-strong); display: flex; align-items: center; justify-content: center; font-size: 7px; font-weight: 600; color: var(--text-secondary); flex-shrink: 0; }
+  .contact-name-sm { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
+  .contact-role-sm { font-size: 10px; color: var(--text-tertiary); }
+
+  .card-footer { display: flex; align-items: center; gap: 5px; }
+  .card-footer-spacer { flex: 1; }
+  .last-touch { font-size: 10px; color: var(--text-tertiary); }
+  .last-touch.warm  { color: var(--amber); font-weight: 500; }
+  .last-touch.hot   { color: var(--red); font-weight: 500; }
+  .last-touch.fresh { color: var(--accent); }
+
+  .card-actions { position: absolute; top: 7px; right: 10px; display: flex; gap: 3px; opacity: 0; }
+  .card:hover .card-actions { opacity: 1; }
+  .card-action-btn { width: 20px; height: 20px; border-radius: 4px; background: var(--surface-2); border: 0.5px solid var(--border-strong); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-secondary); }
+
+  .add-card { border: 0.5px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 9px 12px; display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--text-tertiary); cursor: pointer; background: transparent; }
+  .add-card:hover { background: var(--surface); color: var(--text-secondary); }
+
+  .add-stage-col { width: 160px; flex-shrink: 0; border: 0.5px dashed var(--border-strong); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 11px; color: var(--text-tertiary); cursor: pointer; padding: 14px; align-self: stretch; background: transparent; max-height: 64px; margin-top: 28px; }
+  .add-stage-col:hover { background: var(--surface); color: var(--text-secondary); }
+
+  .ash-icon { position: fixed; bottom: 24px; right: 24px; width: 36px; height: 36px; border-radius: 50%; background: var(--surface); border: 0.5px solid var(--border-strong); box-shadow: 0 2px 8px rgba(0,0,0,0.12); display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; }
+  .annotation { position: fixed; bottom: 16px; left: 72px; font-size: 10px; color: var(--text-tertiary); font-style: italic; }
+
+  /* Legend callout for wireframe annotation */
+  .fu-legend {
+    position: fixed; bottom: 30px; left: 260px;
+    display: flex; align-items: center; gap: 14px;
+    font-size: 10px; color: var(--text-tertiary); font-style: italic;
+  }
+  .fu-legend-item { display: flex; align-items: center; gap: 5px; }
+  .fu-legend-bar { width: 5px; height: 20px; border-radius: 2px; }
+  .fu-legend-bar.pending { background: rgba(184,134,11,0.32); }
+  .fu-legend-bar.done    { background: rgba(61,107,79,0.28); }
+</style>
+</head>
+<body>
+
+<div class="app-sidebar">Nav</div>
+
+<!-- Pipeline vertical nav -->
+<div class="pipeline-nav">
+  <div class="pipeline-nav-header">
+    <span class="nav-title">Outreach</span>
+    <div class="nav-settings">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 2v1M8 13v1M2 8h1M13 8h1M3.5 3.5l.7.7M11.8 11.8l.7.7M3.5 12.5l.7-.7M11.8 4.2l.7-.7"/></svg>
+    </div>
+  </div>
+
+  <div class="pipeline-nav-items">
+    <div class="nav-all">
+      <div class="nav-all-icon">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+      </div>
+      <span style="flex:1; font-size:12px;">All pipelines</span>
+      <span class="nav-all-count">14</span>
+    </div>
+
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Pipelines</div>
+
+    <!-- Gallery — active -->
+    <div class="nav-item active">
+      <div class="nav-item-icon" style="background:var(--gallery-light); color:var(--gallery);">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="10" rx="1"/><path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/></svg>
+      </div>
+      <span class="nav-item-name">Gallery</span>
+      <span class="nav-item-count">6</span>
+    </div>
+    <!-- Mini stage strip — 5 stages -->
+    <div class="nav-stage-strip">
+      <div class="nav-stage-dot" style="background:var(--text-tertiary); opacity:0.25;"></div>
+      <div class="nav-stage-dot" style="background:var(--amber); opacity:0.55;"></div>
+      <div class="nav-stage-dot" style="background:#d97b3a; opacity:0.75;"></div>
+      <div class="nav-stage-dot" style="background:var(--gallery);"></div>
+    </div>
+
+    <!-- Press -->
+    <div class="nav-item">
+      <div class="nav-item-icon" style="background:var(--press-light); color:var(--press);">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2h12v9H2z"/><path d="M5 6h6M5 9h4"/></svg>
+      </div>
+      <span class="nav-item-name">Press</span>
+      <span class="nav-item-count">3</span>
+    </div>
+
+    <!-- Events -->
+    <div class="nav-item">
+      <div class="nav-item-icon" style="background:var(--events-light); color:var(--events);">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 2v2M11 2v2M2 7h12"/></svg>
+      </div>
+      <span class="nav-item-name">Events</span>
+      <span class="nav-item-count">4</span>
+    </div>
+
+    <!-- Sales -->
+    <div class="nav-item">
+      <div class="nav-item-icon" style="background:var(--sales-light); color:var(--sales);">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 10l4-4 3 3 4-5"/><path d="M11 4h4v4"/></svg>
+      </div>
+      <span class="nav-item-name">Sales</span>
+      <span class="nav-item-count">2</span>
+    </div>
+
+    <div class="nav-divider" style="margin-top:8px;"></div>
+
+    <button class="nav-add-type">
+      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" opacity="0.5"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+      Add pipeline type
+    </button>
+  </div>
+</div>
+
+<!-- Kanban area -->
+<div class="kanban-area">
+  <div class="kanban-topbar">
+    <div class="pipeline-badge">
+      <span class="pipeline-badge-dot"></span>
+      Gallery
+    </div>
+    <span class="pipeline-count">6 targets</span>
+    <div class="topbar-spacer"></div>
+    <div class="search-wrap">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><circle cx="7" cy="7" r="5"/><path d="M11 11l3 3"/></svg>
+      <input type="text" placeholder="Search Gallery…">
+    </div>
+    <button class="ctrl-btn">Filter</button>
+    <button class="add-btn">+ New target</button>
+  </div>
+
+  <div class="board-wrap">
+
+    <!-- ── Identified ── -->
+    <div class="stage-col">
+      <div class="stage-header">
+        <span class="stage-name">Identified</span>
+        <span class="stage-count">2</span>
+        <button class="stage-add">+</button>
+      </div>
+      <div class="stage-bar bar-identified"></div>
+      <div class="stage-cards">
+
+        <div class="card">
+          <div class="card-name-row">
+            <div class="target-icon icon-org"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="10" rx="1"/><path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/></svg></div>
+            <span class="card-name">Tanya Bonakdar Gallery</span>
+          </div>
+          <div class="card-sub">New York · Contemporary</div>
+          <div class="identify-prompt">
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="flex-shrink:0;"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+            <span class="identify-text">Identify contact</span>
+            <button class="identify-enrich"><svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 2c-2 2-3 4-3 6s1 4 3 6"/><path d="M2 8h12"/></svg> Look up</button>
+          </div>
+          <div class="card-footer"><span class="last-touch">Added Mar 2</span></div>
+          <div class="card-actions">
+            <div class="card-action-btn"><svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg></div>
+            <div class="card-action-btn">···</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-name-row">
+            <div class="target-icon icon-org"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="10" rx="1"/><path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/></svg></div>
+            <span class="card-name">Friedman Benda</span>
+          </div>
+          <div class="card-sub">New York · Design Art</div>
+          <div class="identify-prompt">
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="flex-shrink:0;"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+            <span class="identify-text">Identify contact</span>
+            <button class="identify-enrich"><svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 2c-2 2-3 4-3 6s1 4 3 6"/><path d="M2 8h12"/></svg> Look up</button>
+          </div>
+          <div class="card-footer"><span class="last-touch">Added Apr 1</span></div>
+          <div class="card-actions">
+            <div class="card-action-btn"><svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg></div>
+            <div class="card-action-btn">···</div>
+          </div>
+        </div>
+
+        <div class="add-card"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg> Add target</div>
+      </div>
+    </div>
+
+    <!-- ── Intro Sent — cards have follow-up bar ── -->
+    <div class="stage-col">
+      <div class="stage-header">
+        <span class="stage-name">Intro Sent</span>
+        <span class="stage-count">2</span>
+        <button class="stage-add">+</button>
+      </div>
+      <div class="stage-bar bar-intro"></div>
+      <div class="stage-cards">
+
+        <!-- Followed-up state: card drifts right, green bar -->
+        <div class="card followed-up">
+          <div class="card-name-row">
+            <div class="target-icon icon-org"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="10" rx="1"/><path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/></svg></div>
+            <span class="card-name">Materials Gallery</span>
+          </div>
+          <div class="card-sub">Los Angeles · Collectibles</div>
+          <div class="card-contact">
+            <div class="contact-avatar">PL</div>
+            <div><div class="contact-name-sm">Priya Lal</div><div class="contact-role-sm">Co-founder</div></div>
+          </div>
+          <div class="fu-timestamp">↑ Followed up Apr 2</div>
+          <div class="card-footer"><div class="card-footer-spacer"></div><span class="last-touch fresh">12 days ago</span></div>
+          <div class="card-actions">
+            <div class="card-action-btn"><svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg></div>
+            <div class="card-action-btn">···</div>
+          </div>
+          <!-- Follow-up bar: green = followed up -->
+          <div class="fu-bar"><div class="fu-bar-check">✓</div></div>
+        </div>
+
+        <!-- Normal state: amber bar on hover -->
+        <div class="card urgent">
+          <div class="card-name-row">
+            <div class="target-icon icon-org"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="10" rx="1"/><path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/></svg></div>
+            <span class="card-name">Sight Unseen</span>
+          </div>
+          <div class="card-contact">
+            <div class="contact-avatar">RK</div>
+            <div><div class="contact-name-sm">Rachel Kim</div><div class="contact-role-sm">Editor</div></div>
+          </div>
+          <div class="card-footer"><div class="card-footer-spacer"></div><span class="last-touch warm">3 wks ago</span></div>
+          <div class="card-actions">
+            <div class="card-action-btn"><svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg></div>
+            <div class="card-action-btn">···</div>
+          </div>
+          <!-- Follow-up bar: amber = pending -->
+          <div class="fu-bar"></div>
+        </div>
+
+        <div class="add-card"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg> Add target</div>
+      </div>
+    </div>
+
+    <!-- ── Meeting — cards also have follow-up bar ── -->
+    <div class="stage-col">
+      <div class="stage-header">
+        <span class="stage-name">Meeting</span>
+        <span class="stage-count">1</span>
+        <button class="stage-add">+</button>
+      </div>
+      <div class="stage-bar bar-meeting"></div>
+      <div class="stage-cards">
+
+        <div class="card">
+          <div class="card-name-row">
+            <div class="target-icon icon-org"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="10" rx="1"/><path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/></svg></div>
+            <span class="card-name">The Parlour Gallery</span>
+          </div>
+          <div class="card-sub">New York · Design & Objects</div>
+          <div class="card-contact">
+            <div class="contact-avatar">SO</div>
+            <div><div class="contact-name-sm">Sarah Okonkwo</div><div class="contact-role-sm">Gallery Director</div></div>
+          </div>
+          <div class="card-footer"><div class="card-footer-spacer"></div><span class="last-touch fresh">2 days ago</span></div>
+          <div class="card-actions">
+            <div class="card-action-btn"><svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg></div>
+            <div class="card-action-btn">···</div>
+          </div>
+          <!-- Follow-up bar: amber = no follow-up yet -->
+          <div class="fu-bar"></div>
+        </div>
+
+        <div class="add-card"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg> Add target</div>
+      </div>
+    </div>
+
+    <!-- ── Outcome separator ── -->
+    <div class="outcome-separator"></div>
+
+    <!-- ── Represented ── -->
+    <div class="stage-col outcome">
+      <div class="stage-header">
+        <span class="stage-name" style="color:var(--gallery);">Represented</span>
+        <span class="stage-count">0</span>
+      </div>
+      <div class="stage-bar bar-represented"></div>
+      <div class="stage-cards">
+        <div class="add-card"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg> Add</div>
+      </div>
+    </div>
+
+    <!-- ── Ether ── -->
+    <div class="stage-col outcome">
+      <div class="stage-header">
+        <span class="stage-name">Ether</span>
+        <span class="stage-count">1</span>
+      </div>
+      <div class="stage-bar bar-ether"></div>
+      <div class="stage-cards">
+        <div class="card">
+          <div class="card-name-row">
+            <div class="target-icon icon-org"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="10" rx="1"/><path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/></svg></div>
+            <span class="card-name">Volume Gallery</span>
+          </div>
+          <div class="card-contact">
+            <div class="contact-avatar">JC</div>
+            <div><div class="contact-name-sm">Julie Castellano</div></div>
+          </div>
+          <div class="card-footer"><div class="card-footer-spacer"></div><span class="last-touch">Dec 2024</span></div>
+        </div>
+        <div class="add-card"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg> Add</div>
+      </div>
+    </div>
+
+    <!-- ── Wrong Fit ── -->
+    <div class="stage-col outcome">
+      <div class="stage-header">
+        <span class="stage-name" style="color:var(--text-tertiary);">Wrong Fit</span>
+        <span class="stage-count">0</span>
+      </div>
+      <div class="stage-bar bar-wrongfit"></div>
+      <div class="stage-cards">
+        <div class="add-card"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg> Add</div>
+      </div>
+    </div>
+
+    <!-- Add stage -->
+    <div class="add-stage-col">
+      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+      Add stage
+    </div>
+
+  </div>
+</div>
+
+<div class="ash-icon">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+    <path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/>
+    <path d="M12 12c-2-1.5-3-3-2-5"/><path d="M12 12c2-1.5 3-3 2-5"/>
+  </svg>
+</div>
+
+<!-- Wireframe legend -->
+<div class="fu-legend">
+  <div class="fu-legend-item">
+    <div class="fu-legend-bar pending"></div>
+    Hover right edge → log follow-up
+  </div>
+  <div class="fu-legend-item">
+    <div class="fu-legend-bar done"></div>
+    Followed up → card shifts right
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,162 @@
+PERENNIAL WIREFRAME PROJECT - CONTEXT FOR CONTINUATION
+========================================================
+
+WHAT THIS IS
+Perennial is a SaaS product for independent furniture, lighting, and collectible designers. Solo practitioners and small teams (1-5 people). The software covers project management, time tracking, gallery outreach, commissions, portfolio, and education. The key differentiator is an AI agent layer named Ash that understands a maker's voice, style, goals, and availability.
+
+The wireframes in this folder are desktop-first UI wireframes built as standalone HTML files. They are structural/layout references meant to be imported into Figma and rebuilt using Figma Make. They are not production code.
+
+WHO IS BUILDING THIS
+Elliott, founder of Perennial (perennial.design). Brooklyn-based. RISD and Brown background. Runs a design consultancy for independent designers. This SaaS product is a parallel track to the consulting business.
+
+Elliott's working style: direct, decisive, ship fast. Prefers peer-to-peer tone. Does not want pros/cons enumeration or uncritical validation. Wants a collaborator who pushes toward decisions.
+
+
+DESIGN SYSTEM CONVENTIONS USED IN WIREFRAMES
+=============================================
+
+COLOR CODING (for wireframe status, not brand colors)
+- RED background = undesigned / TBD area (currently the nav sidebar)
+- BLUE background/border = "revisit later" marker (currently the list toggle icon and action buttons in notes/reminders)
+- These are wireframe annotations, not part of the final design
+
+LAYOUT STRUCTURE
+- Left sidebar: 56px wide, red (nav TBD, not yet designed)
+- Main content area: flexible, fills remaining space
+- All wireframes use CSS variables for light/dark mode support
+- Border radius: 12px for cards/containers, 8px for smaller elements
+- Borders: 0.5px, subtle
+
+FILE NAMING
+- Pattern: [FEATURE_CODE]-[NUMBER]-[description].html
+- NR = Notes/Reminders
+- ASH = AI assistant (Ash)
+- PJ = Projects (reserved, not started)
+- GL = Gallery/Outreach (reserved, not started)
+- PM = Project Management (reserved, not started)
+- TT = Time Tracking (reserved, not started)
+
+
+APPROVED WIREFRAMES
+===================
+
+NR-01: Notes default (collapsed list)
+- Full writing area, no list panel visible
+- Header: list toggle icon (blue/revisit) | note title | action buttons (blue/revisit)
+- Action buttons: "To reminder", "Pin", "Date" - kept small to prioritize title
+- Tabs below header: Notes (active) | Reminders
+- Editor area: large open space, plain text, metadata at top ("Created 2 hours ago")
+- Ash icon (sapling) sits in bottom right corner
+
+NR-02: Notes expanded (list open)
+- Same as NR-01 but list panel slides in from left (200px wide)
+- List panel: header with close arrow (blue/revisit), "+ New note" button, search, note list
+- Note list items: title, preview text, timestamp
+- Active note highlighted in list
+- Editor area narrows but remains usable
+
+NR-03: Reminders tab (with project tags)
+- Same shell as NR-01 (collapsed list) but Reminders tab is active
+- Sections: "Active" reminders at top, "Completed" below
+- Each reminder: checkbox circle | title | subtitle + project tag | date/status
+- Project tags are small pills next to each reminder (e.g. "Gallery show", "ICFF 2026", "Lehman table")
+- Overdue items flagged in red
+- "+ Add reminder" inline button with dashed circle
+- Completed items: green filled circle with checkmark, struck-through title, faded
+- Action buttons flip context: "To note" instead of "To reminder"
+
+ASH-01: Ash resting state
+- Small circular icon (36px), bottom right corner of the editor area
+- Contains a simple sapling SVG icon (two curved leaves on a stem)
+- No label, no animation, no tooltip - just sits there quietly
+- Present on all views (notes, reminders, any future feature)
+
+ASH-02: Ash floating window
+- Triggered by clicking the sapling icon
+- Floating window (280px wide) anchored to bottom right, overlays the editor
+- Header: sapling icon + "Ash" label | expand button | minimize button
+- Context bar below header: shows which note Ash is currently reading
+- Body: larger sapling icon (faded), "What can I help with?" greeting
+- Suggestion pills: Summarize, Extract tasks, Draft email, Research
+- Input bar at bottom: "Ask Ash anything..." with send button
+- Expand button opens ASH-03 full window
+- Minimize button collapses back to ASH-01 icon
+
+ASH-03: Ash full window
+- Replaces the entire editor area (not a modal, not a sidebar)
+- Header: "Back to note" button | sapling icon + "Ash" | shrink button | minimize button
+- Context bar: shows which notes Ash is referencing as pills, with "+ add" to include more
+- Chat area: alternating user messages (right-aligned, rounded cards) and Ash responses (left-aligned with small avatar)
+- Ash avatar: 24px circle with small sapling icon
+- Ash can take actions shown as inline buttons: "Create reminder", "Draft email", "Copy", "Insert into note", "Send"
+- Input bar at bottom: text field + circular send button
+- "Back to note" returns to the editor view
+
+
+KEY DESIGN DECISIONS
+====================
+
+Notes/Reminders:
+- Notes and reminders live in the SAME view as tabs, not separate sections
+- Notes is the default landing tab
+- The primary experience is a big open writing surface (list collapsed by default)
+- List panel is optional/collapsible, not always visible
+- Reminders connect to projects via inline tags (projects feature not yet designed)
+- The "convert to reminder" / "convert to note" actions bridge the two modes
+
+Ash (AI assistant):
+- Name is "Ash" - gender neutral, one syllable, understated
+- Icon is a simple sapling - NOT sparkles, NOT robot, NOT brain, NOT wand
+- Lives in bottom RIGHT corner (not left)
+- Three states: resting icon -> floating window -> full window
+- Modeled after Notion AI's UI pattern (floating icon, expandable window)
+- Context-aware: knows which note/content you're looking at
+- Can reference multiple notes in full window mode
+- Actions are inline in the conversation (create reminder, draft email, etc.)
+- Should feel deeply integrated, not bolted on
+- The AI is the underwiring that helps Perennial run
+
+
+WHAT HASN'T BEEN DESIGNED YET
+==============================
+- Navigation sidebar (red in all wireframes)
+- Gallery/outreach CRM
+- Commission management (lives within Projects + Time, not its own nav)
+- Portfolio/website (covered conceptually in PR-02 as analytics, actual portfolio editing TBD)
+- Settings/account
+- Mobile views (desktop first, mobile later)
+- Brand system integration (three directions explored: Signal, Aperture, Current - no final decision)
+- Ash's specific capabilities beyond notes context
+- How Ash surfaces in features other than notes
+
+
+PRESENCE FEATURE NOTES
+=======================
+
+UTM Tracking (not yet in UI, but a planned background feature):
+- Perennial should walk users through connecting Google Analytics (or equivalent) to perennial.design
+- Once connected, Perennial auto-generates UTM-tracked links for use in newsletter and social posts
+- These links (e.g. utm_source=instagram&utm_medium=bio&utm_campaign=brass-series) feed back into the Website analytics tab, showing exactly how much traffic each channel is driving
+- This closes the loop between Presence tabs: Newsletter and Socials show "X visits driven to your site this month" rather than just open rates and reach
+- Ash can generate pre-built UTM links when composing posts or newsletter campaigns
+- This is a differentiator from generic analytics tools — Perennial ties the whole presence picture together automatically
+
+
+WORKFLOW FOR CONTINUING
+=======================
+1. Each new feature gets wireframed as 3 options first
+2. Elliott picks a direction, then we iterate
+3. Approved wireframes get saved as standalone HTML files with reference codes
+4. INDEX.md tracks all approved wireframes and design decisions
+5. Red = TBD areas, Blue = revisit later markers
+6. Desktop first, always
+7. Keep wireframes structural - labeled boxes, clear hierarchy, no pixel polish
+8. Use realistic content in wireframes (furniture maker context, not lorem ipsum)
+
+SAMPLE CONTENT FOR WIREFRAMES
+==============================
+Use these types of realistic entries:
+- Notes: "Walnut slab idea for gallery show", "Brass finish test results", "Pricing structure for commissions", "ICFF booth layout sketch"
+- Reminders: "Email Sarah re: consignment terms", "Confirm ICFF booth number", "Invoice for Lehman commission", "Order plywood samples"
+- Projects: "Gallery show", "ICFF 2026", "Lehman table", "Gallery outreach"
+- People: Murray's mill (wood supplier), Sarah (gallery contact), Lehman (commission client)

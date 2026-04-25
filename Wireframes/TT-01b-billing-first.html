@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TT-01b – Billing First (distributed / invoice-centric)</title>
+<style>
+  :root {
+    --bg: #f5f4f1; --surface: #ffffff; --surface-2: #f0ede8; --surface-hover: #f7f5f2;
+    --border: rgba(0,0,0,0.07); --border-strong: rgba(0,0,0,0.13);
+    --text-primary: #1a1916; --text-secondary: #6b6860; --text-tertiary: #a8a49e;
+    --accent: #3d6b4f; --accent-light: rgba(61,107,79,0.09);
+    --red: #c0392b; --red-light: rgba(192,57,43,0.08);
+    --amber: #b8860b; --amber-light: rgba(184,134,11,0.10);
+    --blue: #2563ab; --blue-light: rgba(37,99,171,0.08);
+    --shadow-card: 0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07);
+    --shadow-float: 0 4px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.07);
+    --radius: 12px; --radius-sm: 8px; --radius-xs: 6px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #181715; --surface: #222120; --surface-2: #2a2927;
+      --border: rgba(255,255,255,0.06); --border-strong: rgba(255,255,255,0.11);
+      --text-primary: #f0ede8; --text-secondary: #9a9690; --text-tertiary: #5c5a56;
+      --accent: #5a9470; --accent-light: rgba(90,148,112,0.12);
+      --shadow-card: 0 1px 4px rgba(0,0,0,0.2), 0 0 0 0.5px rgba(255,255,255,0.06);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text-primary); height: 100vh; display: flex; overflow: hidden; font-size: 13px; }
+
+  /* ── Sidebar ── */
+  .app-sidebar {
+    width: 56px; background: #d94f3d; flex-shrink: 0;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 16px 0; gap: 6px;
+  }
+  .sidebar-logo { width: 28px; height: 28px; border-radius: 8px; background: rgba(255,255,255,0.2); margin-bottom: 10px; }
+  .sidebar-icon {
+    width: 36px; height: 36px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.55); cursor: pointer;
+  }
+  .sidebar-icon:hover { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.85); }
+  .sidebar-icon.active { background: rgba(255,255,255,0.2); color: white; }
+
+  /* ── Three-pane layout ── */
+  /* [Sidebar] [Invoice list pane] [Invoice detail pane] */
+  .pane-list {
+    width: 300px; flex-shrink: 0;
+    border-right: 0.5px solid var(--border-strong);
+    background: var(--surface);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .pane-detail {
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* ── List pane header ── */
+  .list-header {
+    padding: 14px 16px 10px;
+    border-bottom: 0.5px solid var(--border-strong);
+    flex-shrink: 0;
+  }
+  .list-header-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .list-title { font-size: 14px; font-weight: 650; flex: 1; }
+  .list-new-btn { padding: 4px 10px; background: var(--text-primary); color: var(--bg); border: none; border-radius: var(--radius-xs); font-size: 11px; font-weight: 500; cursor: pointer; }
+
+  /* Filter pills */
+  .filter-pills { display: flex; gap: 5px; flex-wrap: wrap; }
+  .pill {
+    padding: 3px 9px; border-radius: 20px; font-size: 11px; cursor: pointer;
+    border: 0.5px solid var(--border-strong); background: var(--surface-2); color: var(--text-secondary);
+  }
+  .pill.active { background: var(--text-primary); color: var(--bg); border-color: var(--text-primary); }
+  .pill.overdue { background: var(--red-light); color: var(--red); border-color: rgba(192,57,43,0.2); }
+
+  /* ── Invoice list items ── */
+  .invoice-list { flex: 1; overflow-y: auto; }
+  .invoice-item {
+    padding: 11px 16px;
+    border-bottom: 0.5px solid var(--border);
+    cursor: pointer; display: flex; flex-direction: column; gap: 5px;
+  }
+  .invoice-item:hover { background: var(--surface-hover); }
+  .invoice-item.selected { background: var(--blue-light); border-left: 2px solid var(--blue); }
+  .inv-row1 { display: flex; align-items: center; gap: 8px; }
+  .inv-num { font-size: 10px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+  .inv-client { font-size: 12px; font-weight: 600; flex: 1; }
+  .inv-amount { font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .inv-row2 { display: flex; align-items: center; gap: 6px; }
+  .inv-project { font-size: 11px; color: var(--text-tertiary); flex: 1; }
+  .inv-date { font-size: 10px; color: var(--text-tertiary); }
+  .inv-status {
+    font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 2px 6px; border-radius: 4px;
+  }
+  .status-draft   { background: var(--surface-2); color: var(--text-tertiary); }
+  .status-sent    { background: var(--blue-light); color: var(--blue); }
+  .status-paid    { background: var(--accent-light); color: var(--accent); }
+  .status-overdue { background: var(--red-light); color: var(--red); font-weight: 700; }
+
+  /* ── Summary bar at bottom of list ── */
+  .list-summary {
+    padding: 10px 16px;
+    border-top: 0.5px solid var(--border-strong);
+    display: flex; gap: 12px;
+    background: var(--surface-2);
+    flex-shrink: 0;
+  }
+  .list-sum-item { display: flex; flex-direction: column; gap: 2px; }
+  .list-sum-label { font-size: 9px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.06em; }
+  .list-sum-value { font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; }
+
+  /* ── Detail pane topbar ── */
+  .detail-topbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 20px;
+    border-bottom: 0.5px solid var(--border-strong);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .detail-title { font-size: 14px; font-weight: 650; flex: 1; }
+  .detail-subtitle { font-size: 11px; color: var(--text-tertiary); }
+  .status-badge {
+    font-size: 10px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 3px 9px; border-radius: 20px;
+  }
+  .btn-sm { padding: 5px 12px; font-size: 11px; border-radius: var(--radius-xs); cursor: pointer; border: none; font-family: inherit; }
+  .btn-ghost { background: transparent; color: var(--text-secondary); border: 0.5px solid var(--border-strong); }
+  .btn-ghost:hover { background: var(--surface-2); }
+  .btn-primary { background: var(--text-primary); color: var(--bg); font-weight: 500; }
+  .btn-send { background: var(--blue); color: white; font-weight: 600; }
+
+  /* ── Invoice detail content ── */
+  .detail-content { flex: 1; overflow-y: auto; padding: 24px; display: flex; gap: 20px; }
+  .detail-main { flex: 1; display: flex; flex-direction: column; gap: 16px; }
+  .detail-side { width: 220px; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px; }
+
+  /* Invoice meta card */
+  .meta-card {
+    background: var(--surface); border-radius: var(--radius);
+    box-shadow: var(--shadow-card); padding: 18px 20px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .meta-row { display: flex; justify-content: space-between; align-items: baseline; }
+  .meta-label { font-size: 11px; color: var(--text-tertiary); }
+  .meta-val { font-size: 12px; font-weight: 500; }
+  .meta-total { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; }
+  .meta-divider { height: 0.5px; background: var(--border-strong); }
+
+  /* Line items table */
+  .line-items-card {
+    background: var(--surface); border-radius: var(--radius);
+    box-shadow: var(--shadow-card); overflow: hidden;
+  }
+  .line-items-header {
+    padding: 12px 16px; border-bottom: 0.5px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .line-items-title { font-size: 12px; font-weight: 650; flex: 1; }
+  .pull-btn {
+    font-size: 11px; color: var(--blue); background: var(--blue-light);
+    border: 0.5px solid rgba(37,99,171,0.2); border-radius: var(--radius-xs);
+    padding: 3px 9px; cursor: pointer;
+  }
+  .line-table { width: 100%; border-collapse: collapse; }
+  .line-table th {
+    text-align: left; font-size: 10px; color: var(--text-tertiary);
+    text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+    padding: 8px 16px; border-bottom: 0.5px solid var(--border);
+    background: var(--surface-2);
+  }
+  .line-table th:last-child, .line-table td:last-child { text-align: right; }
+  .line-table td { padding: 9px 16px; border-bottom: 0.5px solid var(--border); font-size: 12px; }
+  .line-table tr:last-child td { border-bottom: none; }
+  .line-table tr:hover td { background: var(--surface-hover); }
+  .line-source {
+    display: inline-block; font-size: 9px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 1px 5px; border-radius: 3px; margin-left: 6px;
+    vertical-align: middle;
+  }
+  .source-time { background: var(--accent-light); color: var(--accent); }
+  .source-expense { background: var(--amber-light); color: var(--amber); }
+  .line-sub { font-size: 10px; color: var(--text-tertiary); }
+  .line-table .total-row td { font-weight: 650; border-top: 0.5px solid var(--border-strong); background: var(--surface-2); }
+  .add-line-btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 9px 16px; font-size: 11px; color: var(--text-tertiary);
+    cursor: pointer; border: none; background: transparent; width: 100%;
+    border-top: 0.5px solid var(--border);
+  }
+  .add-line-btn:hover { color: var(--text-secondary); background: var(--surface-hover); }
+
+  /* Side widgets */
+  .side-widget {
+    background: var(--surface); border-radius: var(--radius);
+    box-shadow: var(--shadow-card); overflow: hidden;
+  }
+  .widget-header {
+    padding: 10px 14px; border-bottom: 0.5px solid var(--border);
+    font-size: 11px; font-weight: 650; display: flex; align-items: center; gap: 6px;
+  }
+  .widget-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .widget-row { display: flex; justify-content: space-between; font-size: 11px; }
+  .widget-label { color: var(--text-tertiary); }
+  .widget-val { font-weight: 500; }
+
+  /* Project time summary widget */
+  .project-time-row {
+    padding: 8px 14px; border-bottom: 0.5px solid var(--border);
+    display: flex; align-items: center; gap: 8px; cursor: pointer;
+  }
+  .project-time-row:last-child { border-bottom: none; }
+  .project-time-row:hover { background: var(--surface-hover); }
+  .project-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .project-name { font-size: 11px; flex: 1; }
+  .project-hrs { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .project-billable { font-size: 9px; color: var(--accent); }
+
+  /* Note on project-embedded time */
+  .context-note {
+    background: rgba(37,99,171,0.06); border: 0.5px solid rgba(37,99,171,0.15);
+    border-radius: var(--radius-sm); padding: 10px 14px;
+    font-size: 11px; color: var(--text-secondary); line-height: 1.5;
+  }
+  .context-note strong { color: var(--blue); }
+
+  .ash-icon { position: fixed; bottom: 24px; right: 24px; width: 36px; height: 36px; border-radius: 50%; background: var(--surface); border: 0.5px solid var(--border-strong); box-shadow: 0 2px 8px rgba(0,0,0,0.12); display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 20; }
+  .annotation { position: fixed; bottom: 16px; left: 72px; font-size: 10px; color: var(--text-tertiary); font-style: italic; }
+</style>
+</head>
+<body>
+
+<!-- Red sidebar -->
+<div class="app-sidebar">
+  <div class="sidebar-logo"></div>
+  <div class="sidebar-icon" title="Projects">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Contacts">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Outreach">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg>
+  </div>
+  <!-- Invoicing — active -->
+  <div class="sidebar-icon active" title="Invoicing">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="1" width="12" height="14" rx="1.5"/><path d="M5 5h6M5 8h6M5 11h3"/></svg>
+  </div>
+</div>
+
+<!-- Invoice list pane -->
+<div class="pane-list">
+  <div class="list-header">
+    <div class="list-header-row">
+      <span class="list-title">Invoices</span>
+      <button class="list-new-btn">+ New</button>
+    </div>
+    <div class="filter-pills">
+      <div class="pill active">All</div>
+      <div class="pill overdue">Overdue 1</div>
+      <div class="pill">Sent</div>
+      <div class="pill">Draft</div>
+      <div class="pill">Paid</div>
+    </div>
+  </div>
+
+  <div class="invoice-list">
+
+    <!-- Overdue — selected -->
+    <div class="invoice-item selected">
+      <div class="inv-row1">
+        <span class="inv-num">#INV-006</span>
+        <span class="inv-client">Lehmann Collection</span>
+        <span class="inv-amount">$1,400</span>
+      </div>
+      <div class="inv-row2">
+        <span class="inv-project">Consulting · March</span>
+        <span class="inv-date">Due Mar 31</span>
+        <span class="inv-status status-overdue">Overdue</span>
+      </div>
+    </div>
+
+    <div class="invoice-item">
+      <div class="inv-row1">
+        <span class="inv-num">#INV-007</span>
+        <span class="inv-client">Sable Chair Project</span>
+        <span class="inv-amount">$2,800</span>
+      </div>
+      <div class="inv-row2">
+        <span class="inv-project">Design services · Q1</span>
+        <span class="inv-date">Due Apr 28</span>
+        <span class="inv-status status-sent">Sent</span>
+      </div>
+    </div>
+
+    <div class="invoice-item">
+      <div class="inv-row1">
+        <span class="inv-num">#INV-008</span>
+        <span class="inv-client">Milan Showroom</span>
+        <span class="inv-amount">$950</span>
+      </div>
+      <div class="inv-row2">
+        <span class="inv-project">Project management</span>
+        <span class="inv-date">Not sent</span>
+        <span class="inv-status status-draft">Draft</span>
+      </div>
+    </div>
+
+    <div class="invoice-item">
+      <div class="inv-row1">
+        <span class="inv-num">#INV-005</span>
+        <span class="inv-client">Sable Chair Project</span>
+        <span class="inv-amount">$3,200</span>
+      </div>
+      <div class="inv-row2">
+        <span class="inv-project">Design services · Feb</span>
+        <span class="inv-date">Paid Mar 28</span>
+        <span class="inv-status status-paid">Paid</span>
+      </div>
+    </div>
+
+    <div class="invoice-item">
+      <div class="inv-row1">
+        <span class="inv-num">#INV-004</span>
+        <span class="inv-client">Lehmann Collection</span>
+        <span class="inv-amount">$2,100</span>
+      </div>
+      <div class="inv-row2">
+        <span class="inv-project">Consulting · Jan</span>
+        <span class="inv-date">Paid Feb 15</span>
+        <span class="inv-status status-paid">Paid</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="list-summary">
+    <div class="list-sum-item">
+      <span class="list-sum-label">Outstanding</span>
+      <span class="list-sum-value" style="color:var(--amber);">$4,200</span>
+    </div>
+    <div class="list-sum-item">
+      <span class="list-sum-label">Collected YTD</span>
+      <span class="list-sum-value">$9,500</span>
+    </div>
+    <div class="list-sum-item">
+      <span class="list-sum-label">Drafts</span>
+      <span class="list-sum-value">$950</span>
+    </div>
+  </div>
+</div>
+
+<!-- Invoice detail pane -->
+<div class="pane-detail">
+
+  <div class="detail-topbar">
+    <div>
+      <div class="detail-title">Lehmann Collection</div>
+      <div class="detail-subtitle">#INV-006 · Issued Mar 1, 2026 · Due Mar 31</div>
+    </div>
+    <span class="status-badge status-overdue" style="font-size:10px; padding:4px 10px; border-radius:20px; background:var(--red-light); color:var(--red);">14 days overdue</span>
+    <div style="flex:1"></div>
+    <button class="btn-sm btn-ghost">Duplicate</button>
+    <button class="btn-sm btn-ghost">Download PDF</button>
+    <button class="btn-sm btn-send">Send reminder →</button>
+  </div>
+
+  <div class="detail-content">
+    <div class="detail-main">
+
+      <!-- Invoice meta -->
+      <div class="meta-card">
+        <div class="meta-row">
+          <span class="meta-label">Client</span>
+          <span class="meta-val">Lehmann Collection / Marcus Lehmann</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Project</span>
+          <span class="meta-val" style="color:var(--blue); cursor:pointer;">Lehmann Collection ↗</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Period</span>
+          <span class="meta-val">March 1–31, 2026</span>
+        </div>
+        <div class="meta-divider"></div>
+        <div class="meta-row">
+          <span class="meta-label">Subtotal</span>
+          <span class="meta-val">$1,250.00</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Expenses</span>
+          <span class="meta-val">$150.00</span>
+        </div>
+        <div class="meta-divider"></div>
+        <div class="meta-row">
+          <span class="meta-label" style="font-weight:650;">Total due</span>
+          <span class="meta-total">$1,400</span>
+        </div>
+      </div>
+
+      <!-- Line items -->
+      <div class="line-items-card">
+        <div class="line-items-header">
+          <span class="line-items-title">Line items</span>
+          <button class="pull-btn">↓ Pull from project time</button>
+        </div>
+        <table class="line-table">
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th>Qty / Hrs</th>
+              <th>Rate</th>
+              <th>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                Studio consulting<span class="line-source source-time">Time</span>
+                <div class="line-sub">Logged Mar 4, 8, 15 · Lehmann Collection</div>
+              </td>
+              <td>5.0 hrs</td>
+              <td>$150/hr</td>
+              <td>$750.00</td>
+            </tr>
+            <tr>
+              <td>
+                Gallery submission prep<span class="line-source source-time">Time</span>
+                <div class="line-sub">Logged Mar 18, 22 · Lehmann Collection</div>
+              </td>
+              <td>3.3 hrs</td>
+              <td>$150/hr</td>
+              <td>$500.00</td>
+            </tr>
+            <tr>
+              <td>
+                Material samples — reference set<span class="line-source source-expense">Expense</span>
+                <div class="line-sub">Added Mar 10 · Reimbursable</div>
+              </td>
+              <td>1</td>
+              <td>$150.00</td>
+              <td>$150.00</td>
+            </tr>
+            <tr class="total-row">
+              <td colspan="3">Total</td>
+              <td>$1,400.00</td>
+            </tr>
+          </tbody>
+        </table>
+        <button class="add-line-btn">
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+          Add line item manually
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Side widgets -->
+    <div class="detail-side">
+
+      <!-- Context note -->
+      <div class="context-note">
+        <strong>Time is logged per-project.</strong> Open a project → Time tab to log hours. Expenses can be attached at project level or added here as line items.
+      </div>
+
+      <!-- Project time breakdown -->
+      <div class="side-widget">
+        <div class="widget-header">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
+          Logged on this project
+        </div>
+        <div class="project-time-row">
+          <div class="project-dot" style="background:#6d4fa3;"></div>
+          <span class="project-name">March (billed)</span>
+          <div style="text-align:right;">
+            <div class="project-hrs">8.3 hrs</div>
+            <div class="project-billable">On this invoice</div>
+          </div>
+        </div>
+        <div class="project-time-row">
+          <div class="project-dot" style="background:#6d4fa3; opacity:0.4;"></div>
+          <span class="project-name">April (unbilled)</span>
+          <div style="text-align:right;">
+            <div class="project-hrs">3.5 hrs</div>
+            <div class="project-billable" style="color:var(--amber);">→ Next invoice</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Payment widget -->
+      <div class="side-widget">
+        <div class="widget-header">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 6.5h14"/></svg>
+          Payment
+        </div>
+        <div class="widget-body">
+          <div class="widget-row">
+            <span class="widget-label">Method</span>
+            <span class="widget-val">Bank transfer</span>
+          </div>
+          <div class="widget-row">
+            <span class="widget-label">Terms</span>
+            <span class="widget-val">Net 30</span>
+          </div>
+          <div class="widget-row">
+            <span class="widget-label">Due</span>
+            <span class="widget-val" style="color:var(--red);">Mar 31 · Overdue</span>
+          </div>
+          <button class="btn-sm btn-ghost" style="width:100%; margin-top:4px; text-align:center;">Mark as paid</button>
+        </div>
+      </div>
+
+      <!-- Sent history -->
+      <div class="side-widget">
+        <div class="widget-header">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg>
+          Send history
+        </div>
+        <div style="padding: 10px 14px; display:flex; flex-direction:column; gap:7px;">
+          <div style="font-size:11px; display:flex; justify-content:space-between;">
+            <span style="color:var(--text-tertiary);">Sent to marcus@lehmann.com</span>
+            <span>Mar 1</span>
+          </div>
+          <div style="font-size:11px; display:flex; justify-content:space-between;">
+            <span style="color:var(--text-tertiary);">Reminder sent</span>
+            <span>Apr 3</span>
+          </div>
+          <div style="font-size:11px; color:var(--text-tertiary); display:flex; align-items:center; gap:4px;">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--red);display:inline-block;"></span>
+            No response · 14 days overdue
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<div class="ash-icon">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+    <path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/>
+    <path d="M12 12c-2-1.5-3-3-2-5"/><path d="M12 12c2-1.5 3-3 2-5"/>
+  </svg>
+</div>
+<div class="annotation">TT-01b · Billing First — Invoices as top-level nav. Time logged per-project (on project page), pulled into invoices. Three-pane: list → detail with line items sourced from time + expenses.</div>
+</body>
+</html>
