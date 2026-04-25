@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PR-04 – Presence Newsletter</title>
+<style>
+/* ── Design system ── */
+:root {
+  --bg:#f5f4f1; --surface:#fff; --surface-2:#f0ede8; --surface-hover:#f7f5f2;
+  --border:rgba(0,0,0,0.07); --border-strong:rgba(0,0,0,0.13);
+  --text-primary:#1a1916; --text-secondary:#6b6860; --text-tertiary:#a8a49e;
+  --accent:#3d6b4f; --accent-light:rgba(61,107,79,0.08);
+  --red:#c0392b; --red-light:rgba(192,57,43,0.08);
+  --amber:#b8860b; --amber-light:rgba(184,134,11,0.10);
+  --blue:#2563ab; --blue-light:rgba(37,99,171,0.08);
+  --purple:#6d4fa3; --purple-light:rgba(109,79,163,0.08);
+  --teal:#148c8c; --teal-light:rgba(20,140,140,0.08);
+  --shadow-card:0 1px 4px rgba(0,0,0,0.07),0 0 0 0.5px rgba(0,0,0,0.07);
+  --shadow-float:0 4px 20px rgba(0,0,0,0.12);
+  --radius:12px; --radius-sm:8px; --radius-xs:6px;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#181715; --surface:#222120; --surface-2:#2a2927; --surface-hover:#272523;
+  --border:rgba(255,255,255,0.06); --border-strong:rgba(255,255,255,0.11);
+  --text-primary:#f0ede8; --text-secondary:#9a9690; --text-tertiary:#5c5a56;
+  --accent:#5a9470; --accent-light:rgba(90,148,112,0.12);
+  --shadow-card:0 1px 4px rgba(0,0,0,0.2),0 0 0 0.5px rgba(255,255,255,0.06);
+  --shadow-float:0 4px 20px rgba(0,0,0,0.35);
+}}
+
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text-primary);height:100vh;display:flex;overflow:hidden;font-size:13px;}
+
+/* ── Sidebar ── */
+.app-sidebar{width:56px;background:#d94f3d;flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:6px;}
+.sidebar-logo{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.2);margin-bottom:10px;}
+.sidebar-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.55);cursor:pointer;}
+.sidebar-icon:hover{background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.85);}
+.sidebar-icon.active{background:rgba(255,255,255,0.22);color:white;}
+
+/* ── Shell ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.section-topbar{display:flex;align-items:stretch;border-bottom:0.5px solid var(--border-strong);background:var(--surface);flex-shrink:0;height:44px;}
+.section-title-wrap{padding:0 20px;display:flex;align-items:center;gap:10px;border-right:0.5px solid var(--border-strong);flex-shrink:0;}
+.section-title{font-size:14px;font-weight:650;}
+.section-period{font-size:11px;color:var(--text-tertiary);}
+.topbar-tabs{display:flex;align-items:stretch;flex:1;}
+.topbar-tab{padding:0 18px;font-size:12px;color:var(--text-secondary);cursor:pointer;border-bottom:1.5px solid transparent;display:flex;align-items:center;border-right:0.5px solid var(--border);white-space:nowrap;}
+.topbar-tab:hover{color:var(--text-primary);background:var(--surface-hover);}
+.topbar-tab.active{color:var(--text-primary);font-weight:600;border-bottom-color:var(--text-primary);}
+.topbar-fill{flex:1;}
+.topbar-actions{display:flex;align-items:center;gap:7px;padding:0 16px;flex-shrink:0;}
+.btn{padding:5px 12px;font-size:11px;border-radius:var(--radius-xs);cursor:pointer;border:none;font-family:inherit;}
+.btn-ghost{background:transparent;color:var(--text-secondary);border:0.5px solid var(--border-strong);}
+.btn-ghost:hover{background:var(--surface-2);}
+.btn-primary{background:var(--text-primary);color:var(--bg);font-weight:500;}
+.btn-accent{background:var(--accent);color:white;font-weight:500;}
+
+/* ── Tab content ── */
+.tab-content{flex:1;overflow-y:auto;padding:22px 24px;display:flex;flex-direction:column;gap:18px;}
+.tab-hidden{display:none;}
+
+/* ── Stat cards ── */
+.stat-row{display:flex;gap:12px;}
+.stat-card{flex:1;background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);padding:16px 18px;display:flex;flex-direction:column;gap:5px;cursor:pointer;}
+.stat-card:hover{background:var(--surface-hover);}
+.stat-card-header{display:flex;align-items:center;gap:7px;margin-bottom:2px;}
+.stat-channel-icon{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.stat-label{font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;font-weight:600;flex:1;}
+.stat-conn{font-size:9px;padding:1px 6px;border-radius:10px;background:var(--accent-light);color:var(--accent);font-weight:600;letter-spacing:.03em;}
+.stat-conn.warn{background:var(--amber-light);color:var(--amber);}
+.stat-value{font-size:24px;font-weight:650;letter-spacing:-.03em;line-height:1.1;}
+.stat-sub{font-size:11px;color:var(--text-tertiary);}
+.stat-sub.up{color:var(--accent);}
+.stat-sub.warn{color:var(--amber);}
+.stat-sub.neutral{color:var(--text-tertiary);}
+.stat-rule{height:.5px;background:var(--border-strong);margin:6px 0;}
+.stat-detail{font-size:11px;color:var(--text-tertiary);}
+.stat-help-icon{width:14px;height:14px;border-radius:50%;background:var(--surface-2);border:0.5px solid var(--border-strong);color:var(--text-tertiary);font-size:9px;font-weight:700;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:background-color 150ms ease,color 150ms ease;}
+.stat-help-icon:hover{background:var(--blue-light);color:var(--blue);}
+.stat-help-icon[title]{cursor:help;}
+.stat-improve-link{font-size:10px;color:var(--accent);cursor:pointer;margin-top:4px;}
+.stat-improve-link:hover{text-decoration:underline;}
+
+/* ── Two-column layout ── */
+.cols{display:flex;gap:16px;flex:1;min-height:0;}
+.col-main{flex:1;display:flex;flex-direction:column;gap:12px;min-width:0;}
+.col-side{width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:12px;}
+
+/* ── Card ── */
+.card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);overflow:hidden;}
+.card-head{display:flex;align-items:center;gap:8px;padding:11px 15px;border-bottom:.5px solid var(--border);}
+.card-head-title{font-size:12px;font-weight:650;flex:1;}
+.card-head-meta{font-size:10px;color:var(--text-tertiary);}
+.card-link{font-size:11px;color:var(--blue);cursor:pointer;}
+.card-link:hover{text-decoration:underline;}
+.card-foot{padding:9px 15px;border-top:.5px solid var(--border);background:transparent;}
+
+/* ── Connected provider bar ── */
+.provider-bar{display:flex;align-items:center;gap:8px;padding:11px 15px;border-bottom:.5px solid var(--border);background:var(--surface);}
+.provider-icon{width:18px;height:18px;border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.provider-icon.email{background:var(--amber-light);color:var(--amber);}
+.provider-name{font-size:11px;font-weight:600;}
+.provider-type{font-size:11px;color:var(--text-tertiary);}
+.provider-status{display:flex;align-items:center;gap:4px;margin-left:auto;font-size:11px;color:var(--accent);flex-shrink:0;}
+.provider-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);}
+
+/* ── Campaign list ── */
+.campaign-row{display:flex;flex-direction:column;padding:11px 15px;border-bottom:.5px solid var(--border);cursor:pointer;}
+.campaign-row:hover{background:var(--surface-hover);}
+.campaign-row-1{display:flex;align-items:baseline;gap:6px;margin-bottom:4px;}
+.campaign-subject{font-size:12px;font-weight:500;flex:1;}
+.campaign-date{font-size:10px;color:var(--text-tertiary);white-space:nowrap;}
+.campaign-row-2{display:flex;align-items:center;gap:8px;}
+.campaign-badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;}
+.campaign-badge.accent-light{background:var(--accent-light);color:var(--accent);}
+.campaign-badge.surface-2{background:var(--surface-2);color:var(--text-secondary);}
+.campaign-badge.red-light{background:var(--red-light);color:var(--red);}
+.campaign-stat{font-size:10px;color:var(--text-secondary);}
+.campaign-pill{font-size:9px;font-weight:600;padding:2px 7px;border-radius:10px;background:var(--amber-light);color:var(--amber);white-space:nowrap;}
+.campaign-add-row{display:flex;align-items:center;justify-content:center;padding:11px 15px;border-top:.5px dashed var(--border);color:var(--text-tertiary);font-size:11px;cursor:pointer;}
+.campaign-add-row:hover{background:var(--surface-hover);}
+
+/* ── Next send card ── */
+.next-send-status{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
+.status-chip{font-size:10px;font-weight:600;padding:3px 10px;border-radius:20px;background:var(--blue-light);color:var(--blue);}
+.next-send-field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
+.next-send-label{font-size:10px;color:var(--text-tertiary);text-transform:uppercase;font-weight:600;letter-spacing:.04em;}
+.next-send-subject{background:var(--surface-2);border-radius:var(--radius-xs);padding:6px 10px;font-size:12px;color:var(--text-primary);border:.5px solid var(--border);}
+.next-send-date{font-size:11px;color:var(--text-secondary);display:flex;align-items:center;gap:4px;}
+.next-send-date-icon{width:14px;height:14px;display:flex;align-items:center;justify-content:center;}
+.next-send-audience{font-size:11px;color:var(--text-secondary);}
+.next-send-actions{display:flex;gap:7px;}
+
+/* ── Chart (bar chart) ── */
+.chart-container{display:flex;flex-direction:column;gap:12px;margin-bottom:8px;}
+.chart-bars{display:flex;align-items:flex-end;justify-content:space-between;gap:6px;height:80px;}
+.chart-bar{flex:1;background:var(--amber-light);border-radius:2px 2px 0 0;min-height:2px;}
+.chart-bar.current{background:var(--amber);}
+.chart-labels{display:flex;justify-content:space-between;font-size:9px;color:var(--text-tertiary);margin-top:4px;}
+.chart-summary{display:flex;align-items:center;gap:8px;}
+.chart-value{font-size:13px;font-weight:600;color:var(--accent);}
+.chart-total{font-size:11px;color:var(--text-secondary);}
+.chart-note{font-size:10px;color:var(--text-tertiary);margin-top:8px;}
+
+/* ── Audience card rows ── */
+.audience-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:.5px solid var(--border);}
+.audience-row:last-child{border-bottom:none;}
+.audience-label{font-size:11px;color:var(--text-secondary);}
+.audience-value{font-size:11px;font-weight:500;color:var(--text-primary);}
+.audience-tag{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--accent-light);color:var(--accent);}
+.audience-upgrade{font-size:10px;color:var(--blue);cursor:pointer;}
+.audience-upgrade:hover{text-decoration:underline;}
+
+/* ── Ash suggestion card ── */
+.ash-card{padding:14px 15px;background:var(--accent-light);border:.5px solid rgba(61,107,79,0.18);}
+.ash-header{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.ash-icon-circle{width:22px;height:22px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ash-label{font-size:11px;font-weight:600;color:var(--accent);}
+.ash-text{font-size:11px;color:var(--accent);line-height:1.5;margin-bottom:10px;}
+.ash-button{background:var(--accent);color:white;font-size:10px;padding:4px 10px;}
+
+/* ── Ash + annotation ── */
+.ash-icon{position:fixed;bottom:24px;right:24px;width:36px;height:36px;border-radius:50%;background:var(--surface);border:.5px solid var(--border-strong);box-shadow:0 2px 8px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:20;}
+.annotation{position:fixed;bottom:16px;left:72px;font-size:10px;color:var(--text-tertiary);font-style:italic;}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="app-sidebar">
+  <div class="sidebar-logo"></div>
+  <div class="sidebar-icon" title="Projects">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Contacts">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Outreach">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Finance">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 6.5h14"/><path d="M5 10h2M10 10h1"/></svg>
+  </div>
+  <div class="sidebar-icon active" title="Presence">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 2c0 0-3 2.5-3 6s3 6 3 6"/><path d="M8 2c0 0 3 2.5 3 6s-3 6-3 6"/><path d="M2 8h12"/></svg>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="section-topbar">
+    <div class="section-title-wrap">
+      <span class="section-title">Presence</span>
+      <span class="section-period">Apr 2026</span>
+    </div>
+    <div class="topbar-tabs">
+      <div class="topbar-tab" onclick="navigateTo('PR-01-presence-overview.html')">Overview</div>
+      <div class="topbar-tab" onclick="navigateTo('PR-02-presence-website.html')">Website</div>
+      <div class="topbar-tab" onclick="navigateTo('PR-03-presence-socials.html')">Socials</div>
+      <div class="topbar-tab active">Newsletter</div>
+      <div class="topbar-tab" onclick="navigateTo('PR-05-presence-opportunities.html')">Opportunities</div>
+    </div>
+    <div class="topbar-fill"></div>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost">View on Substack ↗</button>
+      <button class="btn btn-primary">+ New campaign</button>
+    </div>
+  </div>
+
+  <!-- Connected provider bar -->
+  <div class="card" style="margin:0;border-radius:0;box-shadow:none;border-bottom:.5px solid var(--border-strong);">
+    <div class="provider-bar">
+      <div class="provider-icon email">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg>
+      </div>
+      <span class="provider-name">Perennial Notes</span>
+      <span class="provider-type">Substack</span>
+      <div class="provider-status">
+        <div class="provider-dot"></div>
+        <span>Connected</span>
+      </div>
+      <span class="card-link" style="margin-left:auto;">Open Substack ↗</span>
+    </div>
+  </div>
+
+  <!-- Tab content -->
+  <div class="tab-content">
+
+    <!-- Stat cards -->
+    <div class="stat-row">
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <div class="stat-label">Subscribers</div>
+          <div class="stat-help-icon" title="People who signed up to hear from you — your most engaged audience. This is your owned channel, unlike social media where an algorithm controls reach.">?</div>
+        </div>
+        <div class="stat-value">312</div>
+        <div class="stat-sub up">↑ 14 this month</div>
+        <div class="stat-rule"></div>
+        <div class="stat-detail">Total active subscribers</div>
+        <div class="stat-improve-link">Ask Ash how to improve →</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <div class="stat-label">Avg open rate</div>
+          <div class="stat-help-icon" title="Percentage of recipients who opened your email. Anything above 30% is strong. The industry average is around 21%.">?</div>
+        </div>
+        <div class="stat-value">44%</div>
+        <div class="stat-sub up">Industry avg: 21%</div>
+        <div class="stat-rule"></div>
+        <div class="stat-detail">Last send: 47%</div>
+        <div class="stat-improve-link">Ask Ash how to improve →</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <div class="stat-label">Avg click rate</div>
+          <div class="stat-help-icon" title="Percentage who clicked a link inside the email. Shows whether your content prompted action — a visit to your site, a portfolio piece, an application link.">?</div>
+        </div>
+        <div class="stat-value">3.0%</div>
+        <div class="stat-sub up">Industry avg: 2.6%</div>
+        <div class="stat-rule"></div>
+        <div class="stat-detail">Last send: 3.1%</div>
+        <div class="stat-improve-link">Ask Ash how to improve →</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <div class="stat-label">Sends this year</div>
+          <div class="stat-help-icon" title="How many newsletters you've sent. Consistency builds trust — your audience starts to expect and look forward to hearing from you.">?</div>
+        </div>
+        <div class="stat-value">8</div>
+        <div class="stat-sub neutral">Last sent Apr 9</div>
+        <div class="stat-rule"></div>
+        <div class="stat-detail">Approx every 2 weeks</div>
+        <div class="stat-improve-link">Ask Ash how to improve →</div>
+      </div>
+    </div>
+
+    <!-- Two columns -->
+    <div class="cols">
+
+      <!-- Left: Campaigns and Next Send -->
+      <div class="col-main">
+
+        <!-- Campaigns card -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-head-title">Campaigns</span>
+            <span class="card-head-meta">All time</span>
+            <button class="btn btn-accent" style="margin-left:auto;padding:4px 10px;font-size:10px;">+ New</button>
+          </div>
+
+          <!-- Campaign 1 -->
+          <div class="campaign-row">
+            <div class="campaign-row-1">
+              <span class="campaign-subject">Pricing your work as a collectible maker</span>
+              <span class="campaign-date">Apr 9</span>
+            </div>
+            <div class="campaign-row-2">
+              <span class="campaign-badge accent-light">47%</span>
+              <span class="campaign-stat">3.1% · 312 sent</span>
+              <span class="campaign-pill">Best ↑</span>
+            </div>
+          </div>
+
+          <!-- Campaign 2 -->
+          <div class="campaign-row">
+            <div class="campaign-row-1">
+              <span class="campaign-subject">The gallery relationship — what they actually want from you</span>
+              <span class="campaign-date">Mar 12</span>
+            </div>
+            <div class="campaign-row-2">
+              <span class="campaign-badge accent-light">52%</span>
+              <span class="campaign-stat">2.9% · 298 sent</span>
+              <span class="campaign-pill">Best ↑</span>
+            </div>
+          </div>
+
+          <!-- Campaign 3 -->
+          <div class="campaign-row">
+            <div class="campaign-row-1">
+              <span class="campaign-subject">What I learned exhibiting at NYCxDesign</span>
+              <span class="campaign-date">Mar 26</span>
+            </div>
+            <div class="campaign-row-2">
+              <span class="campaign-badge surface-2">41%</span>
+              <span class="campaign-stat">3.3% · 305 sent</span>
+            </div>
+          </div>
+
+          <!-- Campaign 4 -->
+          <div class="campaign-row">
+            <div class="campaign-row-1">
+              <span class="campaign-subject">Studio update: brass series complete</span>
+              <span class="campaign-date">Feb 28</span>
+            </div>
+            <div class="campaign-row-2">
+              <span class="campaign-badge surface-2">38%</span>
+              <span class="campaign-stat">2.2% · 291 sent</span>
+            </div>
+          </div>
+
+          <!-- Campaign 5 -->
+          <div class="campaign-row">
+            <div class="campaign-row-1">
+              <span class="campaign-subject">Open calls worth applying to this spring</span>
+              <span class="campaign-date">Feb 14</span>
+            </div>
+            <div class="campaign-row-2">
+              <span class="campaign-badge surface-2">44%</span>
+              <span class="campaign-stat">2.8% · 278 sent</span>
+            </div>
+          </div>
+
+          <div class="campaign-add-row">+ New campaign</div>
+        </div>
+
+        <!-- Next send card -->
+        <div class="card" style="padding:15px;">
+          <div class="card-head" style="padding:0 0 12px 0;border-bottom:none;">
+            <span class="card-head-title">Next send</span>
+            <span class="card-head-meta">Scheduled</span>
+          </div>
+          <div class="next-send-status">
+            <span class="status-chip">Drafting</span>
+          </div>
+          <div class="next-send-field">
+            <span class="next-send-label">Subject</span>
+            <div class="next-send-subject">May dispatch</div>
+          </div>
+          <div class="next-send-field">
+            <span class="next-send-label">Scheduled</span>
+            <div class="next-send-date">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" class="next-send-date-icon" style="color:var(--text-tertiary)"><rect x="1" y="3" width="14" height="11" rx="2"/><path d="M1 7h14"/><path d="M5 1v3M11 1v3"/></svg>
+              May 14 · 9:00 AM
+            </div>
+          </div>
+          <div class="next-send-field">
+            <span class="next-send-label">Audience</span>
+            <div class="next-send-audience">All subscribers · 312</div>
+          </div>
+          <div class="next-send-actions">
+            <button class="btn btn-ghost">Edit draft</button>
+            <button class="btn btn-ghost">Preview</button>
+            <button class="btn btn-ghost">Send test</button>
+          </div>
+        </div>
+
+      </div><!-- /col-main -->
+
+      <!-- Right: Growth chart and Audience -->
+      <div class="col-side">
+
+        <!-- Subscriber growth card -->
+        <div class="card" style="padding:15px;">
+          <div class="card-head" style="padding:0 0 12px 0;border-bottom:none;">
+            <span class="card-head-title">Subscriber growth</span>
+            <span class="card-head-meta">Last 6 months</span>
+          </div>
+          <div class="chart-container">
+            <div class="chart-bars">
+              <div class="chart-bar" style="height:28px;"></div>
+              <div class="chart-bar" style="height:32px;"></div>
+              <div class="chart-bar" style="height:30px;"></div>
+              <div class="chart-bar" style="height:38px;"></div>
+              <div class="chart-bar" style="height:44px;"></div>
+              <div class="chart-bar" style="height:46px;"></div>
+              <div class="chart-bar current" style="height:52px;"></div>
+            </div>
+            <div class="chart-labels">
+              <span>Oct</span>
+              <span>Nov</span>
+              <span>Dec</span>
+              <span>Jan</span>
+              <span>Feb</span>
+              <span>Mar</span>
+              <span>Apr</span>
+            </div>
+          </div>
+          <div class="chart-summary">
+            <span class="chart-value">+14 this month</span>
+            <span class="chart-total">312 total</span>
+          </div>
+          <div class="chart-note">Unsubscribes this month: 2</div>
+        </div>
+
+        <!-- Audience card -->
+        <div class="card" style="padding:15px;">
+          <div class="card-head" style="padding:0 0 12px 0;border-bottom:none;">
+            <span class="card-head-title">Audience</span>
+          </div>
+          <div class="audience-row">
+            <span class="audience-label">Avg read time</span>
+            <span class="audience-value">4m 12s</span>
+          </div>
+          <div class="audience-row">
+            <span class="audience-label">Most engaged segment</span>
+            <span class="audience-tag">Past clients</span>
+          </div>
+          <div class="audience-row">
+            <span class="audience-label">Top location</span>
+            <span class="audience-value">New York, NY</span>
+          </div>
+          <div class="audience-row">
+            <span class="audience-label">Platform</span>
+            <span class="audience-value">Substack Web (64%) · Email (36%)</span>
+          </div>
+          <div class="audience-row">
+            <span class="audience-label">Paid subscribers</span>
+            <span class="audience-value">0 (Free plan) <span class="audience-upgrade">Upgrade</span></span>
+          </div>
+        </div>
+
+        <!-- Ash suggestion card -->
+        <div class="card ash-card">
+          <div class="ash-header">
+            <div class="ash-icon-circle">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5"><path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/><path d="M12 12c-2-1.5-3-3-2-5"/><path d="M12 12c2-1.5 3-3 2-5"/></svg>
+            </div>
+            <span class="ash-label">Ash</span>
+          </div>
+          <div class="ash-text">Your 'gallery relationship' send had your highest open rate (52%). Want me to outline a follow-up piece on pitching collectors directly?</div>
+          <button class="btn ash-button">Draft with Ash</button>
+        </div>
+
+      </div><!-- /col-side -->
+
+    </div><!-- /cols -->
+
+  </div><!-- /tab-content -->
+
+</div><!-- /main -->
+
+<!-- Ash icon -->
+<div class="ash-icon">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+    <path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/>
+    <path d="M12 12c-2-1.5-3-3-2-5"/>
+    <path d="M12 12c2-1.5 3-3 2-5"/>
+  </svg>
+</div>
+
+<div class="annotation">PR-04 · Newsletter — Substack connected. Campaign list with open/click rates, subscriber growth chart, audience panel.</div>
+
+<script>
+function navigateTo(url) {
+  window.location.href = url;
+}
+</script>
+
+</body>
+</html>

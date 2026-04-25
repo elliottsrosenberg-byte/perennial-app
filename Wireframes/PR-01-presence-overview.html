@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PR-01 – Presence Overview</title>
+<style>
+/* ── Design system ── */
+:root {
+  --bg:#f5f4f1; --surface:#fff; --surface-2:#f0ede8; --surface-hover:#f7f5f2;
+  --border:rgba(0,0,0,0.07); --border-strong:rgba(0,0,0,0.13);
+  --text-primary:#1a1916; --text-secondary:#6b6860; --text-tertiary:#a8a49e;
+  --accent:#3d6b4f; --accent-light:rgba(61,107,79,0.08);
+  --red:#c0392b; --red-light:rgba(192,57,43,0.08);
+  --amber:#b8860b; --amber-light:rgba(184,134,11,0.10);
+  --blue:#2563ab; --blue-light:rgba(37,99,171,0.08);
+  --purple:#6d4fa3; --purple-light:rgba(109,79,163,0.08);
+  --teal:#148c8c; --teal-light:rgba(20,140,140,0.08);
+  --shadow-card:0 1px 4px rgba(0,0,0,0.07),0 0 0 0.5px rgba(0,0,0,0.07);
+  --shadow-float:0 4px 20px rgba(0,0,0,0.12);
+  --radius:12px; --radius-sm:8px; --radius-xs:6px;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#181715; --surface:#222120; --surface-2:#2a2927; --surface-hover:#272523;
+  --border:rgba(255,255,255,0.06); --border-strong:rgba(255,255,255,0.11);
+  --text-primary:#f0ede8; --text-secondary:#9a9690; --text-tertiary:#5c5a56;
+  --accent:#5a9470; --accent-light:rgba(90,148,112,0.12);
+  --shadow-card:0 1px 4px rgba(0,0,0,0.2),0 0 0 0.5px rgba(255,255,255,0.06);
+  --shadow-float:0 4px 20px rgba(0,0,0,0.35);
+}}
+
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text-primary);height:100vh;display:flex;overflow:hidden;font-size:13px;}
+
+/* ── Sidebar ── */
+.app-sidebar{width:56px;background:#d94f3d;flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:6px;}
+.sidebar-logo{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.2);margin-bottom:10px;}
+.sidebar-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.55);cursor:pointer;}
+.sidebar-icon:hover{background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.85);}
+.sidebar-icon.active{background:rgba(255,255,255,0.22);color:white;}
+
+/* ── Shell ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.section-topbar{display:flex;align-items:stretch;border-bottom:0.5px solid var(--border-strong);background:var(--surface);flex-shrink:0;height:44px;}
+.section-title-wrap{padding:0 20px;display:flex;align-items:center;gap:10px;border-right:0.5px solid var(--border-strong);flex-shrink:0;}
+.section-title{font-size:14px;font-weight:650;}
+.section-period{font-size:11px;color:var(--text-tertiary);}
+.topbar-tabs{display:flex;align-items:stretch;flex:1;}
+.topbar-tab{padding:0 18px;font-size:12px;color:var(--text-secondary);cursor:pointer;border-bottom:1.5px solid transparent;display:flex;align-items:center;border-right:0.5px solid var(--border);white-space:nowrap;}
+.topbar-tab:hover{color:var(--text-primary);background:var(--surface-hover);}
+.topbar-tab.active{color:var(--text-primary);font-weight:600;border-bottom-color:var(--text-primary);}
+.topbar-fill{flex:1;}
+.topbar-actions{display:flex;align-items:center;gap:7px;padding:0 16px;flex-shrink:0;}
+.btn{padding:5px 12px;font-size:11px;border-radius:var(--radius-xs);cursor:pointer;border:none;font-family:inherit;}
+.btn-ghost{background:transparent;color:var(--text-secondary);border:0.5px solid var(--border-strong);}
+.btn-ghost:hover{background:var(--surface-2);}
+.btn-primary{background:var(--text-primary);color:var(--bg);font-weight:500;}
+.btn-accent{background:var(--accent);color:white;font-weight:500;}
+
+/* ── Tab content ── */
+.tab-content{flex:1;overflow-y:auto;padding:22px 24px;display:flex;flex-direction:column;gap:18px;}
+.tab-hidden{display:none;}
+
+/* ── Stat cards ── */
+.stat-row{display:flex;gap:12px;}
+.stat-card{flex:1;background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);padding:16px 18px;display:flex;flex-direction:column;gap:5px;cursor:pointer;}
+.stat-card:hover{background:var(--surface-hover);}
+.stat-card-header{display:flex;align-items:center;gap:7px;margin-bottom:2px;}
+.stat-channel-icon{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.stat-label{font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;font-weight:600;flex:1;}
+.stat-conn{font-size:9px;padding:1px 6px;border-radius:10px;background:var(--accent-light);color:var(--accent);font-weight:600;letter-spacing:.03em;}
+.stat-conn.warn{background:var(--amber-light);color:var(--amber);}
+.stat-help-icon{width:14px;height:14px;border-radius:50%;background:var(--surface-2);border:0.5px solid var(--border-strong);color:var(--text-tertiary);font-size:9px;font-weight:700;letter-spacing:0;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background 0.2s,color 0.2s;}
+.stat-help-icon:hover{background:var(--blue-light);color:var(--blue);}
+.stat-value{font-size:24px;font-weight:650;letter-spacing:-.03em;line-height:1.1;}
+.stat-sub{font-size:11px;color:var(--text-tertiary);}
+.stat-sub.up{color:var(--accent);}
+.stat-sub.warn{color:var(--amber);}
+.stat-sub.neutral{color:var(--text-tertiary);}
+.stat-rule{height:.5px;background:var(--border-strong);margin:6px 0;}
+.stat-detail{font-size:11px;color:var(--text-tertiary);}
+.stat-ask-ash{font-size:10px;color:var(--accent);cursor:pointer;margin-top:4px;transition:text-decoration 0.2s;}
+.stat-ask-ash:hover{text-decoration:underline;}
+
+/* ── Two-column layout ── */
+.cols{display:flex;gap:16px;flex:1;min-height:0;}
+.col-main{flex:1;display:flex;flex-direction:column;gap:12px;min-width:0;}
+.col-side{width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:12px;}
+
+/* ── Card ── */
+.card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);overflow:hidden;}
+.card-head{display:flex;align-items:center;gap:8px;padding:11px 15px;border-bottom:.5px solid var(--border);}
+.card-head-title{font-size:12px;font-weight:650;flex:1;}
+.card-link{font-size:11px;color:var(--blue);cursor:pointer;}
+.card-link:hover{text-decoration:underline;}
+.card-foot{padding:9px 15px;border-top:.5px solid var(--border);background:transparent;}
+
+/* ── Activity feed ── */
+.feed-item{display:flex;gap:11px;padding:11px 15px;border-bottom:.5px solid var(--border);cursor:pointer;}
+.feed-item:last-child{border-bottom:none;}
+.feed-item:hover{background:var(--surface-hover);}
+.feed-icon-wrap{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;}
+.feed-body{flex:1;min-width:0;}
+.feed-row1{display:flex;align-items:baseline;gap:6px;margin-bottom:2px;}
+.feed-type{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;}
+.feed-channel{font-size:10px;color:var(--text-tertiary);}
+.feed-time{font-size:10px;color:var(--text-tertiary);margin-left:auto;white-space:nowrap;flex-shrink:0;}
+.feed-text{font-size:12px;color:var(--text-secondary);line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.feed-meta{font-size:10px;color:var(--text-tertiary);margin-top:2px;}
+.feed-meta span{display:inline-block;margin-right:10px;}
+.feed-meta .up{color:var(--accent);}
+.feed-meta .warn{color:var(--amber);}
+
+/* ── Channel icon colors ── */
+.icon-website{background:var(--blue-light);}
+.icon-instagram{background:var(--purple-light);}
+.icon-newsletter{background:var(--amber-light);}
+.icon-event{background:var(--teal-light);}
+
+/* ── Events list ── */
+.event-item{display:flex;align-items:flex-start;gap:10px;padding:11px 15px;border-bottom:.5px solid var(--border);cursor:pointer;}
+.event-item:last-child{border-bottom:none;}
+.event-item:hover{background:var(--surface-hover);}
+.event-date-block{width:34px;flex-shrink:0;text-align:center;background:var(--surface-2);border-radius:6px;padding:4px 0;}
+.event-date-month{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-tertiary);}
+.event-date-day{font-size:16px;font-weight:700;line-height:1.1;color:var(--text-primary);}
+.event-body{flex:1;min-width:0;}
+.event-name{font-size:12px;font-weight:600;margin-bottom:2px;}
+.event-meta{font-size:10px;color:var(--text-tertiary);}
+.event-badge{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;border-radius:10px;flex-shrink:0;align-self:center;}
+.badge-exhibiting{background:var(--accent-light);color:var(--accent);}
+.badge-attending{background:var(--blue-light);color:var(--blue);}
+.badge-apply{background:var(--amber-light);color:var(--amber);}
+.badge-deadline{background:var(--red-light);color:var(--red);}
+
+/* ── Connected accounts strip ── */
+.accounts-strip{display:flex;gap:8px;padding:12px 15px;border-bottom:.5px solid var(--border);flex-wrap:wrap;}
+.account-chip{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:20px;border:.5px solid var(--border-strong);background:var(--surface-2);font-size:11px;cursor:pointer;}
+.account-chip:hover{background:var(--surface-hover);}
+.account-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);}
+.account-dot.warn{background:var(--amber);}
+.account-name{font-size:11px;font-weight:500;}
+.account-handle{font-size:10px;color:var(--text-tertiary);}
+.account-add{color:var(--blue);border-style:dashed;}
+
+/* ── Stub tab placeholder ── */
+.stub-pane{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--text-tertiary);}
+.stub-label{font-size:13px;font-weight:500;color:var(--text-secondary);}
+.stub-sub{font-size:11px;}
+.stub-badge{font-size:10px;font-weight:600;padding:3px 10px;border-radius:20px;border:1.5px solid var(--blue);color:var(--blue);}
+
+/* ── Ash + annotation ── */
+.ash-icon{position:fixed;bottom:24px;right:24px;width:36px;height:36px;border-radius:50%;background:var(--surface);border:.5px solid var(--border-strong);box-shadow:0 2px 8px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:20;}
+.annotation{position:fixed;bottom:16px;left:72px;font-size:10px;color:var(--text-tertiary);font-style:italic;}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="app-sidebar">
+  <div class="sidebar-logo"></div>
+  <div class="sidebar-icon" title="Projects">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Contacts">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Outreach">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg>
+  </div>
+  <div class="sidebar-icon" title="Finance">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 6.5h14"/><path d="M5 10h2M10 10h1"/></svg>
+  </div>
+  <div class="sidebar-icon active" title="Presence">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 2c0 0-3 2.5-3 6s3 6 3 6"/><path d="M8 2c0 0 3 2.5 3 6s-3 6-3 6"/><path d="M2 8h12"/></svg>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="section-topbar">
+    <div class="section-title-wrap">
+      <span class="section-title">Presence</span>
+      <span class="section-period">Apr 2026</span>
+    </div>
+    <div class="topbar-tabs">
+      <div class="topbar-tab active" onclick="showTab(this,'overview')">Overview</div>
+      <div class="topbar-tab" onclick="showTab(this,'website')">Website</div>
+      <div class="topbar-tab" onclick="showTab(this,'socials')">Socials</div>
+      <div class="topbar-tab" onclick="showTab(this,'newsletter')">Newsletter</div>
+      <div class="topbar-tab" onclick="showTab(this,'opportunities')">Opportunities</div>
+    </div>
+    <div class="topbar-fill"></div>
+    <div class="topbar-actions" id="actions-overview">
+      <button class="btn btn-ghost">Connect account</button>
+      <button class="btn btn-primary">+ New post</button>
+    </div>
+    <div class="topbar-actions tab-hidden" id="actions-website">
+      <button class="btn btn-ghost">View site</button>
+    </div>
+    <div class="topbar-actions tab-hidden" id="actions-socials">
+      <button class="btn btn-ghost">Schedule</button>
+      <button class="btn btn-primary">+ New post</button>
+    </div>
+    <div class="topbar-actions tab-hidden" id="actions-newsletter">
+      <button class="btn btn-ghost">View campaigns</button>
+      <button class="btn btn-primary">+ New campaign</button>
+    </div>
+    <div class="topbar-actions tab-hidden" id="actions-opportunities">
+      <button class="btn btn-ghost">Sync calendar</button>
+      <button class="btn btn-primary">+ Add opportunity</button>
+    </div>
+  </div>
+
+  <!-- ════════════ OVERVIEW ════════════ -->
+  <div class="tab-content" id="tab-overview">
+
+    <!-- Connected accounts strip -->
+    <div class="card" style="padding:0;">
+      <div class="accounts-strip">
+        <div class="account-chip">
+          <div class="account-dot"></div>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--blue)"><circle cx="8" cy="8" r="6"/><path d="M8 2c0 0-3 2.5-3 6s3 6 3 6"/><path d="M8 2c0 0 3 2.5 3 6s-3 6-3 6"/><path d="M2 8h12"/></svg>
+          <span class="account-name">perennial.design</span>
+          <span class="account-handle">Squarespace</span>
+        </div>
+        <div class="account-chip">
+          <div class="account-dot"></div>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--purple)"><rect x="2" y="2" width="12" height="12" rx="3.5"/><circle cx="8" cy="8" r="2.5"/><circle cx="11.5" cy="4.5" r=".75" fill="currentColor" stroke="none"/></svg>
+          <span class="account-name">@perennial.design</span>
+          <span class="account-handle">Instagram</span>
+        </div>
+        <div class="account-chip">
+          <div class="account-dot"></div>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--amber)"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg>
+          <span class="account-name">Perennial Notes</span>
+          <span class="account-handle">Substack · 312 subscribers</span>
+        </div>
+        <div class="account-chip account-add">
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2v8M2 6h8"/></svg>
+          <span style="font-size:11px;">Connect account</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stat cards -->
+    <div class="stat-row">
+
+      <!-- Website -->
+      <div class="stat-card" onclick="showTab(document.querySelector('.topbar-tab:nth-child(2)'),'website')">
+        <div class="stat-card-header">
+          <div class="stat-channel-icon icon-website">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--blue)"><circle cx="8" cy="8" r="6"/><path d="M8 2c0 0-3 2.5-3 6s3 6 3 6"/><path d="M8 2c0 0 3 2.5 3 6s-3 6-3 6"/><path d="M2 8h12"/></svg>
+          </div>
+          <span class="stat-label">Website</span>
+          <span class="stat-conn">Connected</span>
+          <div class="stat-help-icon" title="How many times your site was loaded. More visits mean more people discovering your work.">?</div>
+        </div>
+        <div class="stat-value">1,240</div>
+        <div class="stat-sub up">↑ 18% vs March</div>
+        <div class="stat-rule"></div>
+        <div class="stat-detail">Top referral: Sight Unseen feature</div>
+        <div class="stat-ask-ash">Ask Ash how to improve →</div>
+      </div>
+
+      <!-- Socials -->
+      <div class="stat-card" onclick="showTab(document.querySelector('.topbar-tab:nth-child(3)'),'socials')">
+        <div class="stat-card-header">
+          <div class="stat-channel-icon icon-instagram">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--purple)"><rect x="2" y="2" width="12" height="12" rx="3.5"/><circle cx="8" cy="8" r="2.5"/><circle cx="11.5" cy="4.5" r=".75" fill="currentColor" stroke="none"/></svg>
+          </div>
+          <span class="stat-label">Socials</span>
+          <span class="stat-conn">Connected</span>
+          <div class="stat-help-icon" title="Your follower count and engagement rate. Higher engagement means your content resonates with your audience.">?</div>
+        </div>
+        <div class="stat-value">8,400</div>
+        <div class="stat-sub up">↑ 940 followers this month</div>
+        <div class="stat-rule"></div>
+        <div class="stat-detail">4.2% engagement · 6 posts in Apr</div>
+        <div class="stat-ask-ash">Ask Ash how to improve →</div>
+      </div>
+
+      <!-- Newsletter -->
+      <div class="stat-card" onclick="showTab(document.querySelector('.topbar-tab:nth-child(4)'),'newsletter')">
+        <div class="stat-card-header">
+          <div class="stat-channel-icon icon-newsletter">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--amber)"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg>
+          </div>
+          <span class="stat-label">Newsletter</span>
+          <span class="stat-conn">Connected</span>
+          <div class="stat-help-icon" title="What percentage of subscribers opened your most recent email. Higher open rates indicate compelling subject lines and strong audience interest.">?</div>
+        </div>
+        <div class="stat-value">47%</div>
+        <div class="stat-sub up">Open rate · last send Apr 9</div>
+        <div class="stat-rule"></div>
+        <div class="stat-detail">312 subscribers · +14 this month</div>
+        <div class="stat-ask-ash">Ask Ash how to improve →</div>
+      </div>
+
+      <!-- Opportunities -->
+      <div class="stat-card" onclick="showTab(document.querySelector('.topbar-tab:nth-child(5)'),'opportunities')">
+        <div class="stat-card-header">
+          <div class="stat-channel-icon icon-event">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--teal)"><rect x="1" y="3" width="14" height="11" rx="2"/><path d="M1 7h14"/><path d="M5 1v3M11 1v3"/></svg>
+          </div>
+          <span class="stat-label">Opportunities</span>
+          <span class="stat-conn warn">1 deadline soon</span>
+          <div class="stat-help-icon" title="Upcoming fairs, open calls, grants, and residencies. Participating in opportunities expands your reach and credibility in your field.">?</div>
+        </div>
+        <div class="stat-value">3</div>
+        <div class="stat-sub neutral">Upcoming this season</div>
+        <div class="stat-rule"></div>
+        <div class="stat-detail">Next: ICFF · May 19</div>
+        <div class="stat-ask-ash">Ask Ash how to improve →</div>
+      </div>
+
+    </div><!-- /stat-row -->
+
+    <!-- Two columns -->
+    <div class="cols">
+
+      <!-- Left: Activity feed -->
+      <div class="col-main">
+        <div class="card">
+          <div class="card-head">
+            <span class="card-head-title">Recent activity</span>
+            <span class="card-link">View all →</span>
+          </div>
+
+          <!-- Instagram post -->
+          <div class="feed-item">
+            <div class="feed-icon-wrap icon-instagram">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--purple)"><rect x="2" y="2" width="12" height="12" rx="3.5"/><circle cx="8" cy="8" r="2.5"/><circle cx="11.5" cy="4.5" r=".75" fill="currentColor" stroke="none"/></svg>
+            </div>
+            <div class="feed-body">
+              <div class="feed-row1">
+                <span class="feed-type" style="color:var(--purple)">Post</span>
+                <span class="feed-channel">Instagram</span>
+                <span class="feed-time">2 days ago</span>
+              </div>
+              <div class="feed-text">"Walnut slab detail — new series in the studio. Grain like this only comes around once."</div>
+              <div class="feed-meta">
+                <span class="up">↑ 312 likes</span>
+                <span>28 comments</span>
+                <span>4.8% engagement</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Newsletter send -->
+          <div class="feed-item">
+            <div class="feed-icon-wrap icon-newsletter">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--amber)"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg>
+            </div>
+            <div class="feed-body">
+              <div class="feed-row1">
+                <span class="feed-type" style="color:var(--amber)">Newsletter</span>
+                <span class="feed-channel">Substack</span>
+                <span class="feed-time">Apr 9</span>
+              </div>
+              <div class="feed-text">April dispatch — pricing your work as a collectible maker</div>
+              <div class="feed-meta">
+                <span class="up">47% open rate</span>
+                <span>3.1% click-through</span>
+                <span>312 delivered</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Website spike -->
+          <div class="feed-item">
+            <div class="feed-icon-wrap icon-website">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--blue)"><polyline points="2 10 6 5 9 8 14 3"/></svg>
+            </div>
+            <div class="feed-body">
+              <div class="feed-row1">
+                <span class="feed-type" style="color:var(--blue)">Traffic spike</span>
+                <span class="feed-channel">perennial.design</span>
+                <span class="feed-time">Apr 7</span>
+              </div>
+              <div class="feed-text">340 visits in one day — 6× daily average</div>
+              <div class="feed-meta">
+                <span>Source: Sight Unseen feature</span>
+                <span class="up">Top page: /work/brass-series</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Instagram post -->
+          <div class="feed-item">
+            <div class="feed-icon-wrap icon-instagram">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--purple)"><rect x="2" y="2" width="12" height="12" rx="3.5"/><circle cx="8" cy="8" r="2.5"/><circle cx="11.5" cy="4.5" r=".75" fill="currentColor" stroke="none"/></svg>
+            </div>
+            <div class="feed-body">
+              <div class="feed-row1">
+                <span class="feed-type" style="color:var(--purple)">Post</span>
+                <span class="feed-channel">Instagram</span>
+                <span class="feed-time">Apr 3</span>
+              </div>
+              <div class="feed-text">"ICFF booth sneak peek — see you in New York, May 19–23."</div>
+              <div class="feed-meta">
+                <span>248 likes</span>
+                <span>19 comments</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Newsletter send -->
+          <div class="feed-item">
+            <div class="feed-icon-wrap icon-newsletter">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--amber)"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg>
+            </div>
+            <div class="feed-body">
+              <div class="feed-row1">
+                <span class="feed-type" style="color:var(--amber)">Newsletter</span>
+                <span class="feed-channel">Substack</span>
+                <span class="feed-time">Mar 26</span>
+              </div>
+              <div class="feed-text">March dispatch — what I learned exhibiting at NYCxDesign</div>
+              <div class="feed-meta">
+                <span>41% open rate</span>
+                <span>2.8% click-through</span>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /card -->
+      </div><!-- /col-main -->
+
+      <!-- Right: Upcoming events -->
+      <div class="col-side">
+        <div class="card">
+          <div class="card-head">
+            <span class="card-head-title">Coming up</span>
+            <span class="card-link">View all →</span>
+          </div>
+
+          <div class="event-item">
+            <div class="event-date-block">
+              <div class="event-date-month">Apr</div>
+              <div class="event-date-day">28</div>
+            </div>
+            <div class="event-body">
+              <div class="event-name">Design Miami Application</div>
+              <div class="event-meta">Deadline · Miami, FL</div>
+            </div>
+            <span class="event-badge badge-deadline">Deadline</span>
+          </div>
+
+          <div class="event-item">
+            <div class="event-date-block">
+              <div class="event-date-month">May</div>
+              <div class="event-date-day">14</div>
+            </div>
+            <div class="event-body">
+              <div class="event-name">NYCxDesign 2026</div>
+              <div class="event-meta">May 14–22 · New York, NY</div>
+            </div>
+            <span class="event-badge badge-attending">Attending</span>
+          </div>
+
+          <div class="event-item">
+            <div class="event-date-block">
+              <div class="event-date-month">May</div>
+              <div class="event-date-day">19</div>
+            </div>
+            <div class="event-body">
+              <div class="event-name">ICFF 2026</div>
+              <div class="event-meta">May 19–23 · New York, NY</div>
+            </div>
+            <span class="event-badge badge-exhibiting">Exhibiting</span>
+          </div>
+
+          <div class="event-item">
+            <div class="event-date-block">
+              <div class="event-date-month">Jun</div>
+              <div class="event-date-day">3</div>
+            </div>
+            <div class="event-body">
+              <div class="event-name">Surface Design Show</div>
+              <div class="event-meta">Jun 3–5 · London, UK</div>
+            </div>
+            <span class="event-badge badge-attending">Attend?</span>
+          </div>
+
+          <div class="card-foot">
+            <span class="card-link">+ Add event</span>
+          </div>
+        </div>
+
+        <!-- Ash suggestion card -->
+        <div class="card" style="padding:14px 15px;background:var(--accent-light);border:.5px solid rgba(61,107,79,0.18);">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <div style="width:22px;height:22px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5"><path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/><path d="M12 12c-2-1.5-3-3-2-5"/><path d="M12 12c2-1.5 3-3 2-5"/></svg>
+            </div>
+            <span style="font-size:11px;font-weight:600;color:var(--accent)">Ash</span>
+          </div>
+          <div style="font-size:11px;color:var(--accent);line-height:1.5;margin-bottom:10px;">Your Design Miami deadline is in 13 days. Want me to draft the application copy from your project notes?</div>
+          <button class="btn" style="background:var(--accent);color:white;font-size:10px;padding:4px 10px;">Draft with Ash</button>
+        </div>
+
+      </div><!-- /col-side -->
+    </div><!-- /cols -->
+
+  </div><!-- /tab-overview -->
+
+  <!-- ════════════ WEBSITE (stub) ════════════ -->
+  <div class="tab-content tab-hidden" id="tab-website">
+    <div class="stub-pane">
+      <svg width="32" height="32" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" style="color:var(--border-strong)"><circle cx="8" cy="8" r="6"/><path d="M8 2c0 0-3 2.5-3 6s3 6 3 6"/><path d="M8 2c0 0 3 2.5 3 6s-3 6-3 6"/><path d="M2 8h12"/></svg>
+      <div class="stub-label">Website analytics</div>
+      <div class="stub-sub">Traffic overview, top pages, referrers</div>
+      <div class="stub-badge">PR-02 — not yet wireframed</div>
+    </div>
+  </div>
+
+  <!-- ════════════ SOCIALS (stub) ════════════ -->
+  <div class="tab-content tab-hidden" id="tab-socials">
+    <div class="stub-pane">
+      <svg width="32" height="32" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" style="color:var(--border-strong)"><rect x="2" y="2" width="12" height="12" rx="3.5"/><circle cx="8" cy="8" r="2.5"/><circle cx="11.5" cy="4.5" r=".75" fill="currentColor" stroke="none"/></svg>
+      <div class="stub-label">Socials</div>
+      <div class="stub-sub">Analytics, compose & schedule posts</div>
+      <div class="stub-badge">PR-03 — not yet wireframed</div>
+    </div>
+  </div>
+
+  <!-- ════════════ NEWSLETTER (stub) ════════════ -->
+  <div class="tab-content tab-hidden" id="tab-newsletter">
+    <div class="stub-pane">
+      <svg width="32" height="32" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" style="color:var(--border-strong)"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg>
+      <div class="stub-label">Newsletter</div>
+      <div class="stub-sub">Subscriber count, open rates, campaign history</div>
+      <div class="stub-badge">PR-04 — not yet wireframed</div>
+    </div>
+  </div>
+
+  <!-- ════════════ OPPORTUNITIES (stub) ════════════ -->
+  <div class="tab-content tab-hidden" id="tab-opportunities">
+    <div class="stub-pane">
+      <svg width="32" height="32" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" style="color:var(--border-strong)"><rect x="1" y="3" width="14" height="11" rx="2"/><path d="M1 7h14"/><path d="M5 1v3M11 1v3"/></svg>
+      <div class="stub-label">Opportunities</div>
+      <div class="stub-sub">Fairs, open calls, grants, residencies</div>
+      <div class="stub-badge">PR-05 — not yet wireframed</div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- Ash icon -->
+<div class="ash-icon">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+    <path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/>
+    <path d="M12 12c-2-1.5-3-3-2-5"/>
+    <path d="M12 12c2-1.5 3-3 2-5"/>
+  </svg>
+</div>
+
+<div class="annotation">PR-01 · Presence overview — 4-channel stat cards, activity feed, upcoming events. Tabs PR-02–05 are stubs.</div>
+
+<script>
+function showTab(el, name) {
+  // If el is a DOM node from onclick, use it; otherwise find the active tab
+  document.querySelectorAll('.topbar-tab').forEach(t => t.classList.remove('active'));
+  if (el && el.classList) el.classList.add('active');
+
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.add('tab-hidden'));
+  const target = document.getElementById('tab-' + name);
+  if (target) target.classList.remove('tab-hidden');
+
+  document.querySelectorAll('.topbar-actions').forEach(t => t.classList.add('tab-hidden'));
+  const actions = document.getElementById('actions-' + name);
+  if (actions) actions.classList.remove('tab-hidden');
+}
+</script>
+</body>
+</html>

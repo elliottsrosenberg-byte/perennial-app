@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CT-01 – Contacts Table View</title>
+<style>
+  :root {
+    --bg: #f5f4f1;
+    --surface: #ffffff;
+    --surface-2: #f0ede8;
+    --surface-hover: #f7f5f2;
+    --border: rgba(0,0,0,0.07);
+    --border-strong: rgba(0,0,0,0.13);
+    --text-primary: #1a1916;
+    --text-secondary: #6b6860;
+    --text-tertiary: #a8a49e;
+    --accent: #3d6b4f;
+    --accent-light: rgba(61,107,79,0.08);
+    --red: #c0392b;
+    --red-light: rgba(192,57,43,0.08);
+    --amber: #b8860b;
+    --amber-light: rgba(184,134,11,0.1);
+    --blue: #2563ab;
+    --blue-light: rgba(37,99,171,0.08);
+    --purple: #6d4fa3;
+    --purple-light: rgba(109,79,163,0.08);
+    --shadow: 0 1px 3px rgba(0,0,0,0.06);
+    --shadow-float: 0 4px 20px rgba(0,0,0,0.12);
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #181715;
+      --surface: #222120;
+      --surface-2: #2a2927;
+      --surface-hover: #272523;
+      --border: rgba(255,255,255,0.06);
+      --border-strong: rgba(255,255,255,0.11);
+      --text-primary: #f0ede8;
+      --text-secondary: #9a9690;
+      --text-tertiary: #5c5a56;
+      --accent: #5a9470;
+      --accent-light: rgba(90,148,112,0.12);
+      --red-light: rgba(192,57,43,0.15);
+      --amber-light: rgba(184,134,11,0.15);
+      --blue-light: rgba(37,99,171,0.15);
+      --purple-light: rgba(109,79,163,0.15);
+      --shadow-float: 0 4px 20px rgba(0,0,0,0.35);
+    }
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    height: 100vh;
+    display: flex;
+    overflow: hidden;
+    font-size: 13px;
+  }
+
+  .sidebar {
+    width: 56px;
+    background: #d94f3d;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    writing-mode: vertical-rl;
+    color: white;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.7;
+  }
+
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* Top bar */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 24px;
+    border-bottom: 0.5px solid var(--border-strong);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .topbar-title { font-size: 15px; font-weight: 600; margin-right: 4px; }
+  .topbar-count { font-size: 12px; color: var(--text-tertiary); }
+  .topbar-spacer { flex: 1; }
+
+  /* Search */
+  .search-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface-2);
+    border: 0.5px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 6px 12px;
+    width: 220px;
+  }
+
+  .search-wrap input {
+    background: none;
+    border: none;
+    outline: none;
+    font-size: 12px;
+    color: var(--text-primary);
+    width: 100%;
+  }
+
+  .search-wrap input::placeholder { color: var(--text-tertiary); }
+
+  .ctrl-btn {
+    padding: 5px 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    border: 0.5px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .import-btn {
+    padding: 5px 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    border: 0.5px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .add-btn {
+    padding: 6px 14px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  /* Tag filter strip */
+  .tag-strip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 24px;
+    border-bottom: 0.5px solid var(--border-strong);
+    background: var(--surface);
+    flex-shrink: 0;
+    overflow-x: auto;
+  }
+
+  .tag-filter {
+    padding: 3px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 0.5px solid var(--border-strong);
+    background: transparent;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+
+  .tag-filter.active { background: var(--text-primary); color: var(--surface); border-color: var(--text-primary); }
+
+  .tag-filter.gallery { border-color: rgba(37,99,171,0.3); color: var(--blue); }
+  .tag-filter.client  { border-color: rgba(61,107,79,0.3); color: var(--accent); }
+  .tag-filter.supplier { border-color: rgba(184,134,11,0.3); color: var(--amber); }
+  .tag-filter.press   { border-color: rgba(109,79,163,0.3); color: var(--purple); }
+  .tag-filter.lead    { border-color: var(--border-strong); color: var(--text-secondary); }
+
+  .tag-strip-spacer { flex: 1; }
+  .col-toggle { font-size: 11px; color: var(--text-tertiary); cursor: pointer; white-space: nowrap; }
+
+  /* Table */
+  .table-wrap { flex: 1; overflow-y: auto; }
+
+  .table-header {
+    display: grid;
+    grid-template-columns: 32px 2.6fr 1.6fr 1.2fr 0.9fr 1.1fr 0.8fr;
+    padding: 8px 24px;
+    border-bottom: 0.5px solid var(--border-strong);
+    background: var(--surface-2);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  .th {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    user-select: none;
+  }
+
+  .th:hover { color: var(--text-secondary); }
+  .th.sorted { color: var(--text-primary); }
+
+  .row {
+    display: grid;
+    grid-template-columns: 32px 2.6fr 1.6fr 1.2fr 0.9fr 1.1fr 0.8fr;
+    padding: 0 24px;
+    border-bottom: 0.5px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    transition: background 0.1s;
+    align-items: center;
+    min-height: 48px;
+  }
+
+  .row:hover { background: var(--surface-hover); }
+  .row.selected { background: var(--accent-light); }
+
+  /* Checkbox */
+  .check-wrap {
+    display: flex;
+    align-items: center;
+  }
+
+  .check {
+    width: 15px;
+    height: 15px;
+    border-radius: 4px;
+    border: 1.5px solid var(--border-strong);
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .check.checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .check.checked::after {
+    content: '';
+    width: 7px;
+    height: 4px;
+    border-left: 1.5px solid white;
+    border-bottom: 1.5px solid white;
+    transform: rotate(-45deg) translateY(-1px);
+    display: block;
+  }
+
+  /* Name cell */
+  .name-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+  }
+
+  .avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: 0.5px solid var(--border-strong);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+
+  .name-text { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+  .name-email { font-size: 11px; color: var(--text-tertiary); }
+
+  /* Company cell */
+  .company-cell { font-size: 12px; color: var(--text-secondary); }
+  .company-role { font-size: 11px; color: var(--text-tertiary); }
+
+  /* Tags cell */
+  .tags-cell { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+
+  .tag-pill {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 7px;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+
+  .tag-gallery  { background: var(--blue-light); color: var(--blue); }
+  .tag-client   { background: var(--accent-light); color: var(--accent); }
+  .tag-supplier { background: var(--amber-light); color: var(--amber); }
+  .tag-press    { background: var(--purple-light); color: var(--purple); }
+  .tag-lead     { background: var(--surface-2); color: var(--text-secondary); }
+  .tag-event    { background: rgba(20,140,140,0.08); color: #148c8c; }
+
+  /* Status */
+  .status-cell { display: flex; align-items: center; gap: 6px; }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .status-active   { background: var(--accent); }
+  .status-lead     { background: var(--amber); }
+  .status-inactive { background: var(--text-tertiary); }
+  .status-label { font-size: 11px; color: var(--text-secondary); }
+
+  /* Last contacted */
+  .date-cell { font-size: 11px; color: var(--text-tertiary); }
+  .date-cell.recent { color: var(--accent); font-weight: 500; }
+  .date-cell.stale  { color: var(--amber); }
+
+  /* Location */
+  .loc-cell { font-size: 11px; color: var(--text-tertiary); }
+
+  /* ···  actions */
+  .actions-cell {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+
+  .row:hover .actions-cell { opacity: 1; }
+
+  .action-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    background: var(--surface-2);
+    border: 0.5px solid var(--border-strong);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-secondary);
+  }
+
+  /* Bulk action bar — appears when rows selected */
+  .bulk-bar {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--text-primary);
+    color: var(--surface);
+    border-radius: var(--radius);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: var(--shadow-float);
+    z-index: 20;
+  }
+
+  .bulk-count {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--surface);
+    margin-right: 8px;
+    padding-right: 12px;
+    border-right: 0.5px solid rgba(255,255,255,0.2);
+  }
+
+  .bulk-action {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    color: rgba(255,255,255,0.75);
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    transition: background 0.1s, color 0.1s;
+  }
+
+  .bulk-action:hover { background: rgba(255,255,255,0.12); color: white; }
+
+  .bulk-divider {
+    width: 0.5px;
+    height: 20px;
+    background: rgba(255,255,255,0.15);
+    margin: 0 4px;
+  }
+
+  .bulk-action.danger:hover { background: rgba(192,57,43,0.3); color: #ff9b8c; }
+
+  /* Ash */
+  .ash-icon {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 0.5px solid var(--border-strong);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+  }
+
+  .annotation {
+    position: fixed;
+    bottom: 16px;
+    left: 72px;
+    font-size: 10px;
+    color: var(--text-tertiary);
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<div class="sidebar">Nav</div>
+
+<div class="main">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <span class="topbar-title">Contacts</span>
+    <span class="topbar-count">24 contacts</span>
+    <div class="topbar-spacer"></div>
+    <div class="search-wrap">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><circle cx="7" cy="7" r="5"/><path d="M11 11l3 3"/></svg>
+      <input type="text" placeholder="Search contacts…">
+    </div>
+    <button class="import-btn">Import</button>
+    <button class="ctrl-btn">Filter</button>
+    <button class="ctrl-btn">Sort ▾</button>
+    <button class="add-btn">+ New contact</button>
+  </div>
+
+  <!-- Tag filter strip -->
+  <div class="tag-strip">
+    <button class="tag-filter active">All</button>
+    <button class="tag-filter gallery">Galleries</button>
+    <button class="tag-filter client">Clients</button>
+    <button class="tag-filter supplier">Suppliers</button>
+    <button class="tag-filter press">Press</button>
+    <button class="tag-filter lead">Leads</button>
+    <div class="tag-strip-spacer"></div>
+    <span class="col-toggle">Columns ▾</span>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap">
+
+    <div class="table-header">
+      <div class="th">
+        <div class="check"></div>
+      </div>
+      <div class="th sorted">Name ↑</div>
+      <div class="th">Company</div>
+      <div class="th">Tags</div>
+      <div class="th">Status</div>
+      <div class="th">Last contact</div>
+      <div class="th">Location</div>
+    </div>
+
+    <!-- Selected row -->
+    <div class="row selected">
+      <div class="check-wrap"><div class="check checked"></div></div>
+      <div class="name-cell">
+        <div class="avatar">SO</div>
+        <div>
+          <div class="name-text">Sarah Okonkwo</div>
+          <div class="name-email">sarah@theparlourgallery.com</div>
+        </div>
+      </div>
+      <div>
+        <div class="company-cell">The Parlour Gallery</div>
+        <div class="company-role">Director</div>
+      </div>
+      <div class="tags-cell">
+        <span class="tag-pill tag-gallery">Gallery</span>
+      </div>
+      <div class="status-cell">
+        <div class="status-dot status-active"></div>
+        <span class="status-label">Active</span>
+      </div>
+      <div class="date-cell recent">2 days ago</div>
+      <div class="loc-cell">New York</div>
+    </div>
+
+    <!-- Selected row -->
+    <div class="row selected">
+      <div class="check-wrap"><div class="check checked"></div></div>
+      <div class="name-cell">
+        <div class="avatar">RK</div>
+        <div>
+          <div class="name-text">Rachel Kim</div>
+          <div class="name-email">rkim@sightunseen.com</div>
+        </div>
+      </div>
+      <div>
+        <div class="company-cell">Sight Unseen</div>
+        <div class="company-role">Gallery Director</div>
+      </div>
+      <div class="tags-cell">
+        <span class="tag-pill tag-gallery">Gallery</span>
+        <span class="tag-pill tag-lead">Lead</span>
+      </div>
+      <div class="status-cell">
+        <div class="status-dot status-lead"></div>
+        <span class="status-label">Lead</span>
+      </div>
+      <div class="date-cell stale">3 weeks ago</div>
+      <div class="loc-cell">New York</div>
+    </div>
+
+    <div class="row">
+      <div class="check-wrap"><div class="check"></div></div>
+      <div class="name-cell">
+        <div class="avatar">JB</div>
+        <div>
+          <div class="name-text">James Britten</div>
+          <div class="name-email">james@brittenstudio.com</div>
+        </div>
+      </div>
+      <div>
+        <div class="company-cell">Britten Studio</div>
+        <div class="company-role">Principal</div>
+      </div>
+      <div class="tags-cell">
+        <span class="tag-pill tag-client">Client</span>
+      </div>
+      <div class="status-cell">
+        <div class="status-dot status-active"></div>
+        <span class="status-label">Active</span>
+      </div>
+      <div class="date-cell recent">1 week ago</div>
+      <div class="loc-cell">Brooklyn</div>
+    </div>
+
+    <div class="row">
+      <div class="check-wrap"><div class="check"></div></div>
+      <div class="name-cell">
+        <div class="avatar">ML</div>
+        <div>
+          <div class="name-text">Marcus Lehman</div>
+          <div class="name-email">m.lehman@gmail.com</div>
+        </div>
+      </div>
+      <div>
+        <div class="company-cell">—</div>
+        <div class="company-role">Private collector</div>
+      </div>
+      <div class="tags-cell">
+        <span class="tag-pill tag-client">Client</span>
+      </div>
+      <div class="status-cell">
+        <div class="status-dot status-active"></div>
+        <span class="status-label">Active</span>
+      </div>
+      <div class="date-cell">Apr 3</div>
+      <div class="loc-cell">Manhattan</div>
+    </div>
+
+    <div class="row">
+      <div class="check-wrap"><div class="check"></div></div>
+      <div class="name-cell">
+        <div class="avatar">TM</div>
+        <div>
+          <div class="name-text">Tom Murray</div>
+          <div class="name-email">tom@murraymill.com</div>
+        </div>
+      </div>
+      <div>
+        <div class="company-cell">Murray's Mill</div>
+        <div class="company-role">Owner</div>
+      </div>
+      <div class="tags-cell">
+        <span class="tag-pill tag-supplier">Supplier</span>
+      </div>
+      <div class="status-cell">
+        <div class="status-dot status-active"></div>
+        <span class="status-label">Active</span>
+      </div>
+      <div class="date-cell recent">5 days ago</div>
+      <div class="loc-cell">Hudson Valley</div>
+    </div>
+
+    <div class="row">
+      <div class="check-wrap"><div class="check"></div></div>
+      <div class="name-cell">
+        <div class="avatar">DP</div>
+        <div>
+          <div class="name-text">Dana Park</div>
+          <div class="name-email">dpark@surfacemag.com</div>
+        </div>
+      </div>
+      <div>
+        <div class="company-cell">Surface Magazine</div>
+        <div class="company-role">Senior Editor</div>
+      </div>
+      <div class="tags-cell">
+        <span class="tag-pill tag-press">Press</span>
+      </div>
+      <div class="status-cell">
+        <div class="status-dot status-lead"></div>
+        <span class="status-label">Lead</span>
+      </div>
+      <div class="date-cell stale">6 weeks ago</div>
+      <div class="loc-cell">New York</div>
+    </div>
+
+    <div class="row">
+      <div class="check-wrap"><div class="check"></div></div>
+      <div class="name-cell">
+        <div class="avatar">EV</div>
+        <div>
+          <div class="name-text">Elena Vasquez</div>
+          <div class="name-email">e.vasquez@designmiami.com</div>
+        </div>
+      </div>
+      <div>
+        <div class="company-cell">Design Miami</div>
+        <div class="company-role">Programming Director</div>
+      </div>
+      <div class="tags-cell">
+        <span class="tag-pill tag-event">Event</span>
+        <span class="tag-pill tag-lead">Lead</span>
+      </div>
+      <div class="status-cell">
+        <div class="status-dot status-lead"></div>
+        <span class="status-label">Lead</span>
+      </div>
+      <div class="date-cell">Mar 18</div>
+      <div class="loc-cell">Miami</div>
+    </div>
+
+    <div class="row">
+      <div class="check-wrap"><div class="check"></div></div>
+      <div class="name-cell">
+        <div class="avatar">CW</div>
+        <div>
+          <div class="name-text">Chris Wolff</div>
+          <div class="name-email">chris@wolffinteriors.com</div>
+        </div>
+      </div>
+      <div>
+        <div class="company-cell">Wolff Interiors</div>
+        <div class="company-role">Principal Designer</div>
+      </div>
+      <div class="tags-cell">
+        <span class="tag-pill tag-client">Client</span>
+      </div>
+      <div class="status-cell">
+        <div class="status-dot status-inactive"></div>
+        <span class="status-label">Inactive</span>
+      </div>
+      <div class="date-cell" style="color:var(--red);">4 months ago</div>
+      <div class="loc-cell">Los Angeles</div>
+    </div>
+
+    <div class="row">
+      <div class="check-wrap"><div class="check"></div></div>
+      <div class="name-cell">
+        <div class="avatar">NF</div>
+        <div>
+          <div class="name-text">Nina Falco</div>
+          <div class="name-email">nina@icff.com</div>
+        </div>
+      </div>
+      <div>
+        <div class="company-cell">ICFF</div>
+        <div class="company-role">Exhibitor Relations</div>
+      </div>
+      <div class="tags-cell">
+        <span class="tag-pill tag-event">Event</span>
+      </div>
+      <div class="status-cell">
+        <div class="status-dot status-active"></div>
+        <span class="status-label">Active</span>
+      </div>
+      <div class="date-cell recent">3 days ago</div>
+      <div class="loc-cell">New York</div>
+    </div>
+
+    <div class="row">
+      <div class="check-wrap"><div class="check"></div></div>
+      <div class="name-cell">
+        <div class="avatar">PL</div>
+        <div>
+          <div class="name-text">Priya Lal</div>
+          <div class="name-email">priya@materialsgallery.com</div>
+        </div>
+      </div>
+      <div>
+        <div class="company-cell">Materials Gallery</div>
+        <div class="company-role">Co-founder</div>
+      </div>
+      <div class="tags-cell">
+        <span class="tag-pill tag-gallery">Gallery</span>
+      </div>
+      <div class="status-cell">
+        <div class="status-dot status-lead"></div>
+        <span class="status-label">Lead</span>
+      </div>
+      <div class="date-cell stale">1 month ago</div>
+      <div class="loc-cell">London</div>
+    </div>
+
+  </div><!-- /table-wrap -->
+
+</div><!-- /main -->
+
+<!-- Bulk action bar (2 rows selected) -->
+<div class="bulk-bar">
+  <span class="bulk-count">2 selected</span>
+  <button class="bulk-action">
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M5 4V2h6v2M13 4l-1 10H4L3 4"/></svg>
+    Tag
+  </button>
+  <button class="bulk-action">
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/></svg>
+    Status
+  </button>
+  <button class="bulk-action">
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg>
+    Email
+  </button>
+  <button class="bulk-action">
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2l-8 8M6 10l-4 1 1-4"/></svg>
+    Note
+  </button>
+  <div class="bulk-divider"></div>
+  <button class="bulk-action">Archive</button>
+  <div class="bulk-divider"></div>
+  <button class="bulk-action danger">Delete</button>
+</div>
+
+<!-- Ash -->
+<div class="ash-icon">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+    <path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/>
+    <path d="M12 12c-2-1.5-3-3-2-5"/>
+    <path d="M12 12c2-1.5 3-3 2-5"/>
+  </svg>
+</div>
+
+<div class="annotation">CT-01 · Contacts – Table view. 2 rows selected → bulk action bar.</div>
+
+</body>
+</html>
