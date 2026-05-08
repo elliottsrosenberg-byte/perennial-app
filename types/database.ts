@@ -1,5 +1,5 @@
 export type ProjectType = "painting" | "sculpture" | "furniture" | "client_project";
-export type ProjectStatus = "in_progress" | "planning" | "on_hold" | "complete";
+export type ProjectStatus = "in_progress" | "planning" | "on_hold" | "complete" | "cut";
 export type ProjectPriority = "high" | "medium" | "low";
 
 export interface Project {
@@ -11,7 +11,8 @@ export interface Project {
   priority: ProjectPriority;
   start_date: string | null;
   due_date: string | null;
-  description: string | null;
+  description:  string | null;
+  canvas_html:  string | null;
   // Artwork / object fields
   listing_price: number | null;
   dimensions: string | null;
@@ -29,23 +30,39 @@ export interface Project {
 }
 
 export interface Task {
-  id: string;
-  project_id: string;
-  user_id: string;
-  title: string;
-  completed: boolean;
-  created_at: string;
+  id:             string;
+  project_id:     string | null;
+  contact_id:     string | null;
+  opportunity_id: string | null;
+  user_id:        string;
+  title:          string;
+  completed:      boolean;
+  due_date:       string | null;
+  priority:       "high" | "medium" | "low" | null;
+  notes:          string | null;
+  created_at:     string;
+  // Joined
+  project?:     { id: string; title: string } | null;
+  contact?:     { id: string; first_name: string; last_name: string } | null;
+  opportunity?: { id: string; title: string; category: string } | null;
 }
 
 export interface Note {
   id: string;
   user_id: string;
   project_id: string | null;
+  contact_id: string | null;
+  opportunity_id: string | null;
   title: string | null;
   content: string | null;
   pinned: boolean;
+  share_token: string | null;
   created_at: string;
   updated_at: string;
+  // Joined
+  project?: { id: string; title: string } | null;
+  contact?: { id: string; first_name: string; last_name: string } | null;
+  opportunity?: { id: string; title: string; category: string } | null;
 }
 
 export interface Reminder {
@@ -61,7 +78,9 @@ export interface Reminder {
 
 // ── Contacts ─────────────────────────────────────────────────────────────────
 
-export type ContactStatus = "active" | "lead" | "inactive";
+export type ContactStatus = "active" | "inactive" | "former_client";
+export type LeadStage = "new" | "reached_out" | "in_conversation" | "proposal_sent" | "qualified" | "nurturing" | "lost";
+
 export type ContactActivityType = "email" | "call" | "note" | "meeting";
 
 export interface Company {
@@ -72,6 +91,17 @@ export interface Company {
   location: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ContactFile {
+  id:         string;
+  contact_id: string;
+  user_id:    string;
+  name:       string;
+  url:        string;
+  file_type:  string | null;
+  size_bytes: number | null;
+  created_at: string;
 }
 
 export interface Contact {
@@ -89,6 +119,11 @@ export interface Contact {
   website: string | null;
   bio: string | null;
   last_contacted_at: string | null;
+  is_lead: boolean;
+  lead_stage: LeadStage | null;
+  canvas_html: string | null;
+  avatar_url: string | null;
+  archived: boolean;
   created_at: string;
   updated_at: string;
   company?: Company | null;
@@ -139,6 +174,7 @@ export interface OutreachTarget {
   name: string;
   location: string | null;
   description: string | null;
+  canvas_html: string | null;
   contact_id: string | null;
   company_id: string | null;
   last_touched_at: string;

@@ -1,11 +1,56 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Topbar from "@/components/layout/Topbar";
+import { createClient } from "@/lib/supabase/client";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 type Section = "account" | "studio" | "preferences" | "notifications" | "billing" | "integrations";
+
+interface Profile {
+  display_name:         string | null;
+  studio_name:          string | null;
+  tagline:              string | null;
+  location:             string | null;
+  website:              string | null;
+  practice_types:       string[];
+  currency:             string;
+  fiscal_year:          string;
+  date_format:          string;
+  week_start:           string;
+  hourly_rate:          number | null;
+  invoice_prefix:       string;
+  payment_terms:        string;
+  notif_email_enabled:  boolean;
+  notif_deadlines:      boolean;
+  notif_invoice_due:    boolean;
+  notif_overdue:        boolean;
+  notif_weekly:         boolean;
+  notif_monthly:        boolean;
+}
+
+interface IntegrationRow {
+  id:             string;
+  provider:       string;
+  account_name:   string | null;
+  connected_at:   string;
+  last_synced_at: string | null;
+}
+
+const DEFAULT_PROFILE: Profile = {
+  display_name: "", studio_name: "", tagline: "", location: "", website: "",
+  practice_types: [], currency: "USD", fiscal_year: "January",
+  date_format: "MM/DD/YYYY", week_start: "Monday", hourly_rate: null,
+  invoice_prefix: "INV-", payment_terms: "Net 30",
+  notif_email_enabled: true, notif_deadlines: true, notif_invoice_due: true,
+  notif_overdue: true, notif_weekly: false, notif_monthly: false,
+};
+
+const PRACTICE_OPTIONS = [
+  "Furniture", "Objects & lighting", "Ceramics & glass", "Textiles",
+  "Jewelry", "Painting", "Sculpture", "Printmaking", "Client-based work",
+];
 
 // ─── Sub-components ─────────────────────────────────────────────────────────────
 
@@ -102,7 +147,7 @@ function SelectInput({
   );
 }
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   return (
     <button
       type="button"
@@ -133,7 +178,7 @@ function GroupTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-function SaveBar({ saved, onSave }: { saved: boolean; onSave: () => void }) {
+function SaveBar({ saving, saved, onSave }: { saving: boolean; saved: boolean; onSave: () => void }) {
   return (
     <div
       className="flex items-center justify-end gap-3 mt-8 pt-5"
@@ -141,14 +186,16 @@ function SaveBar({ saved, onSave }: { saved: boolean; onSave: () => void }) {
     >
       <button
         onClick={onSave}
+        disabled={saving}
         className="px-4 py-2 text-[12px] font-medium rounded-lg transition-all"
         style={{
           background: saved ? "rgba(141,208,71,0.12)" : "var(--color-charcoal)",
           color:      saved ? "#3d6b4f"               : "var(--color-warm-white)",
           border:     saved ? "0.5px solid rgba(141,208,71,0.25)" : "none",
+          opacity:    saving ? 0.6 : 1,
         }}
       >
-        {saved ? "Saved ✓" : "Save changes"}
+        {saving ? "Saving…" : saved ? "Saved ✓" : "Save changes"}
       </button>
     </div>
   );
@@ -157,49 +204,106 @@ function SaveBar({ saved, onSave }: { saved: boolean; onSave: () => void }) {
 // ─── Main ───────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const [active, setActive] = useState<Section>("account");
-  const [saved,  setSaved]  = useState(false);
+  const [active,  setActive]  = useState<Section>("account");
+  const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
+  const [saved,   setSaved]   = useState(false);
+  const [userId,  setUserId]  = useState<string | null>(null);
+  const [email,   setEmail]   = useState<string>("");
+  const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
+  const [integrations, setIntegrations] = useState<IntegrationRow[]>([]);
 
-  // Account
-  const [displayName, setDisplayName] = useState("");
+  // Load profile + integrations on mount
+  useEffect(() => {
+    async function load() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-  // Studio
-  const [studioName,    setStudioName]    = useState("");
-  const [tagline,       setTagline]       = useState("");
-  const [location,      setLocation]      = useState("");
-  const [website,       setWebsite]       = useState("");
-  const [practiceTypes, setPracticeTypes] = useState<string[]>([]);
-  const PRACTICE_OPTIONS = [
-    "Furniture", "Objects & lighting", "Ceramics & glass", "Textiles",
-    "Jewelry", "Painting", "Sculpture", "Printmaking", "Client-based work",
-  ];
+      setUserId(user.id);
+      setEmail(user.email ?? "");
 
-  // Preferences
-  const [currency,     setCurrency]     = useState("USD");
-  const [fiscalYear,   setFiscalYear]   = useState("January");
-  const [dateFormat,   setDateFormat]   = useState("MM/DD/YYYY");
-  const [weekStart,    setWeekStart]    = useState("Monday");
-  const [hourlyRate,   setHourlyRate]   = useState("");
-  const [invoicePrefix, setInvoicePrefix] = useState("INV-");
-  const [paymentTerms, setPaymentTerms] = useState("Net 30");
+      const [{ data: prof }, { data: intgs }] = await Promise.all([
+        supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle(),
+        supabase.from("integrations").select("id, provider, account_name, connected_at, last_synced_at").eq("user_id", user.id),
+      ]);
 
-  // Notifications
-  const [emailNotifs,    setEmailNotifs]    = useState(true);
-  const [notifDeadlines, setNotifDeadlines] = useState(true);
-  const [notifInvoiceDue, setNotifInvoiceDue] = useState(true);
-  const [notifOverdue,   setNotifOverdue]   = useState(true);
-  const [notifWeekly,    setNotifWeekly]    = useState(false);
-  const [notifMonthly,   setNotifMonthly]   = useState(false);
+      if (prof) {
+        setProfile({
+          display_name:        prof.display_name ?? "",
+          studio_name:         prof.studio_name ?? "",
+          tagline:             prof.tagline ?? "",
+          location:            prof.location ?? "",
+          website:             prof.website ?? "",
+          practice_types:      prof.practice_types ?? [],
+          currency:            prof.currency ?? "USD",
+          fiscal_year:         prof.fiscal_year ?? "January",
+          date_format:         prof.date_format ?? "MM/DD/YYYY",
+          week_start:          prof.week_start ?? "Monday",
+          hourly_rate:         prof.hourly_rate ?? null,
+          invoice_prefix:      prof.invoice_prefix ?? "INV-",
+          payment_terms:       prof.payment_terms ?? "Net 30",
+          notif_email_enabled: prof.notif_email_enabled ?? true,
+          notif_deadlines:     prof.notif_deadlines ?? true,
+          notif_invoice_due:   prof.notif_invoice_due ?? true,
+          notif_overdue:       prof.notif_overdue ?? true,
+          notif_weekly:        prof.notif_weekly ?? false,
+          notif_monthly:       prof.notif_monthly ?? false,
+        });
+      }
+      if (intgs) setIntegrations(intgs as IntegrationRow[]);
+      setLoading(false);
+    }
+    load();
+  }, []);
 
-  function handleSave() {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  function set<K extends keyof Profile>(key: K, val: Profile[K]) {
+    setProfile((p) => ({ ...p, [key]: val }));
   }
 
   function togglePracticeType(type: string) {
-    setPracticeTypes((prev) =>
-      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
-    );
+    set("practice_types", profile.practice_types.includes(type)
+      ? profile.practice_types.filter((t) => t !== type)
+      : [...profile.practice_types, type]);
+  }
+
+  async function handleSave() {
+    if (!userId) return;
+    setSaving(true);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("profiles")
+      .upsert({
+        user_id:              userId,
+        display_name:         profile.display_name || null,
+        studio_name:          profile.studio_name || null,
+        tagline:              profile.tagline || null,
+        location:             profile.location || null,
+        website:              profile.website || null,
+        practice_types:       profile.practice_types,
+        currency:             profile.currency,
+        fiscal_year:          profile.fiscal_year,
+        date_format:          profile.date_format,
+        week_start:           profile.week_start,
+        hourly_rate:          profile.hourly_rate,
+        invoice_prefix:       profile.invoice_prefix,
+        payment_terms:        profile.payment_terms,
+        notif_email_enabled:  profile.notif_email_enabled,
+        notif_deadlines:      profile.notif_deadlines,
+        notif_invoice_due:    profile.notif_invoice_due,
+        notif_overdue:        profile.notif_overdue,
+        notif_weekly:         profile.notif_weekly,
+        notif_monthly:        profile.notif_monthly,
+        updated_at:           new Date().toISOString(),
+      });
+
+    setSaving(false);
+    if (!error) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+      // Broadcast profile update so Sidebar picks it up
+      window.dispatchEvent(new CustomEvent("profile-updated", { detail: { studio_name: profile.studio_name } }));
+    }
   }
 
   const NAV: { id: Section; label: string; group?: "admin" }[] = [
@@ -226,6 +330,25 @@ export default function SettingsPage() {
       >
         {label}
       </button>
+    );
+  }
+
+  const currencySymbol = profile.currency === "EUR" ? "€" : profile.currency === "GBP" ? "£" : "$";
+  const initials = (profile.display_name || email).slice(0, 2).toUpperCase() || "—";
+
+  // Connected integrations lookup
+  function getIntegration(provider: string) {
+    return integrations.find((i) => i.provider === provider) ?? null;
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col h-full">
+        <Topbar title="Settings" />
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-[12px]" style={{ color: "var(--color-grey)" }}>Loading…</p>
+        </div>
+      </div>
     );
   }
 
@@ -270,23 +393,17 @@ export default function SettingsPage() {
 
                 <GroupTitle>Profile</GroupTitle>
 
-                {/* Avatar row */}
                 <div className="flex items-center gap-4 mb-5">
                   <div
                     className="w-16 h-16 rounded-full flex items-center justify-center text-[20px] font-semibold shrink-0"
                     style={{ background: "var(--color-cream)", border: "0.5px solid var(--color-border)", color: "#6b6860" }}
                   >
-                    {displayName ? displayName.slice(0, 2).toUpperCase() : "—"}
+                    {initials}
                   </div>
                   <div>
-                    <button
-                      className="text-[12px] font-medium transition-colors hover:underline"
-                      style={{ color: "#2563ab" }}
-                    >
-                      Upload photo
-                    </button>
+                    <p className="text-[12px] font-medium" style={{ color: "var(--color-charcoal)" }}>Profile photo</p>
                     <p className="text-[10px] mt-0.5" style={{ color: "var(--color-grey)" }}>
-                      JPG or PNG, up to 2 MB
+                      Photo upload coming in a future update.
                     </p>
                   </div>
                 </div>
@@ -295,14 +412,14 @@ export default function SettingsPage() {
                   <div>
                     <FieldLabel>Display name</FieldLabel>
                     <TextInput
-                      value={displayName}
-                      onChange={setDisplayName}
+                      value={profile.display_name ?? ""}
+                      onChange={(v) => set("display_name", v)}
                       placeholder="Your name"
                     />
                   </div>
                   <div>
                     <FieldLabel>Email address</FieldLabel>
-                    <TextInput value="" placeholder="your@email.com" disabled />
+                    <TextInput value={email} placeholder="your@email.com" disabled />
                     <p className="mt-1 text-[10px]" style={{ color: "var(--color-grey)" }}>
                       Contact support to change your email address.
                     </p>
@@ -316,34 +433,33 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-[12px] font-medium" style={{ color: "var(--color-charcoal)" }}>Password</p>
-                      <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>
-                        Last changed — never
-                      </p>
+                      <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>Reset via email link</p>
                     </div>
                     <button
                       className="px-3 py-[6px] text-[11px] font-medium rounded-lg transition-colors"
                       style={{ border: "0.5px solid var(--color-border)", color: "#6b6860", background: "transparent" }}
                       onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
                       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      onClick={async () => {
+                        const supabase = createClient();
+                        await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/login` });
+                        alert(`Password reset email sent to ${email}`);
+                      }}
                     >
-                      Change password
+                      Send reset email
                     </button>
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-[12px] font-medium" style={{ color: "var(--color-charcoal)" }}>Two-factor authentication</p>
-                      <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>
-                        Not enabled
-                      </p>
+                      <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>Coming in a future update</p>
                     </div>
-                    <button
-                      className="px-3 py-[6px] text-[11px] font-medium rounded-lg transition-colors"
-                      style={{ border: "0.5px solid var(--color-border)", color: "#6b6860", background: "transparent" }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    <span
+                      className="text-[10px] font-semibold px-2.5 py-1 rounded-full"
+                      style={{ background: "var(--color-cream)", color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
                     >
-                      Enable
-                    </button>
+                      Soon
+                    </span>
                   </div>
                 </div>
 
@@ -365,12 +481,17 @@ export default function SettingsPage() {
                     style={{ border: "0.5px solid rgba(220,62,13,0.3)", color: "var(--color-red-orange)", background: "transparent" }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(220,62,13,0.08)")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    onClick={() => {
+                      if (window.confirm("Are you absolutely sure? This will permanently delete your account and all data.")) {
+                        alert("Please contact support at support@perennial.design to delete your account.");
+                      }
+                    }}
                   >
                     Delete account
                   </button>
                 </div>
 
-                <SaveBar saved={saved} onSave={handleSave} />
+                <SaveBar saving={saving} saved={saved} onSave={handleSave} />
               </>
             )}
 
@@ -387,16 +508,19 @@ export default function SettingsPage() {
                   <div>
                     <FieldLabel>Studio / practice name</FieldLabel>
                     <TextInput
-                      value={studioName}
-                      onChange={setStudioName}
+                      value={profile.studio_name ?? ""}
+                      onChange={(v) => set("studio_name", v)}
                       placeholder="e.g. Atelier Rosenberg"
                     />
+                    <p className="mt-1 text-[10px]" style={{ color: "var(--color-grey)" }}>
+                      Appears in the sidebar and on your invoices.
+                    </p>
                   </div>
                   <div>
                     <FieldLabel>Tagline or bio</FieldLabel>
                     <TextArea
-                      value={tagline}
-                      onChange={setTagline}
+                      value={profile.tagline ?? ""}
+                      onChange={(v) => set("tagline", v)}
                       placeholder="A short description of your practice…"
                       rows={3}
                     />
@@ -404,11 +528,11 @@ export default function SettingsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <FieldLabel>City</FieldLabel>
-                      <TextInput value={location} onChange={setLocation} placeholder="e.g. New York, NY" />
+                      <TextInput value={profile.location ?? ""} onChange={(v) => set("location", v)} placeholder="e.g. New York, NY" />
                     </div>
                     <div>
                       <FieldLabel>Website</FieldLabel>
-                      <TextInput value={website} onChange={setWebsite} placeholder="https://" type="url" />
+                      <TextInput value={profile.website ?? ""} onChange={(v) => set("website", v)} placeholder="https://" type="url" />
                     </div>
                   </div>
                 </div>
@@ -417,11 +541,11 @@ export default function SettingsPage() {
                 <GroupTitle>Practice type</GroupTitle>
 
                 <p className="text-[11px] mb-4" style={{ color: "var(--color-grey)" }}>
-                  Select all that apply. Ash uses this to tailor advice and context.
+                  Select all that apply. Ash uses this to tailor advice and context to your specific practice.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {PRACTICE_OPTIONS.map((type) => {
-                    const isSelected = practiceTypes.includes(type);
+                    const isSelected = profile.practice_types.includes(type);
                     return (
                       <button
                         key={type}
@@ -439,7 +563,7 @@ export default function SettingsPage() {
                   })}
                 </div>
 
-                <SaveBar saved={saved} onSave={handleSave} />
+                <SaveBar saving={saving} saved={saved} onSave={handleSave} />
               </>
             )}
 
@@ -456,31 +580,31 @@ export default function SettingsPage() {
                   <div>
                     <FieldLabel>Currency</FieldLabel>
                     <SelectInput
-                      value={currency}
-                      onChange={setCurrency}
+                      value={profile.currency}
+                      onChange={(v) => set("currency", v)}
                       options={[
-                        { value: "USD", label: "USD — US Dollar"      },
-                        { value: "EUR", label: "EUR — Euro"           },
-                        { value: "GBP", label: "GBP — British Pound"  },
-                        { value: "CAD", label: "CAD — Canadian Dollar" },
+                        { value: "USD", label: "USD — US Dollar"        },
+                        { value: "EUR", label: "EUR — Euro"             },
+                        { value: "GBP", label: "GBP — British Pound"    },
+                        { value: "CAD", label: "CAD — Canadian Dollar"  },
                         { value: "AUD", label: "AUD — Australian Dollar" },
-                        { value: "CHF", label: "CHF — Swiss Franc"    },
+                        { value: "CHF", label: "CHF — Swiss Franc"      },
                       ]}
                     />
                   </div>
                   <div>
                     <FieldLabel>Fiscal year start</FieldLabel>
                     <SelectInput
-                      value={fiscalYear}
-                      onChange={setFiscalYear}
+                      value={profile.fiscal_year}
+                      onChange={(v) => set("fiscal_year", v)}
                       options={["January","February","March","April","May","June","July","August","September","October","November","December"].map((m) => ({ value: m, label: m }))}
                     />
                   </div>
                   <div>
                     <FieldLabel>Date format</FieldLabel>
                     <SelectInput
-                      value={dateFormat}
-                      onChange={setDateFormat}
+                      value={profile.date_format}
+                      onChange={(v) => set("date_format", v)}
                       options={[
                         { value: "MM/DD/YYYY", label: "MM/DD/YYYY" },
                         { value: "DD/MM/YYYY", label: "DD/MM/YYYY" },
@@ -491,11 +615,11 @@ export default function SettingsPage() {
                   <div>
                     <FieldLabel>Week starts on</FieldLabel>
                     <SelectInput
-                      value={weekStart}
-                      onChange={setWeekStart}
+                      value={profile.week_start}
+                      onChange={(v) => set("week_start", v)}
                       options={[
-                        { value: "Monday",  label: "Monday"  },
-                        { value: "Sunday",  label: "Sunday"  },
+                        { value: "Monday", label: "Monday" },
+                        { value: "Sunday", label: "Sunday" },
                       ]}
                     />
                   </div>
@@ -508,16 +632,13 @@ export default function SettingsPage() {
                   <div>
                     <FieldLabel>Default hourly rate</FieldLabel>
                     <div className="relative">
-                      <span
-                        className="absolute left-3 top-1/2 -translate-y-1/2 text-[12px]"
-                        style={{ color: "var(--color-grey)" }}
-                      >
-                        {currency === "EUR" ? "€" : currency === "GBP" ? "£" : "$"}
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[12px]" style={{ color: "var(--color-grey)" }}>
+                        {currencySymbol}
                       </span>
                       <input
                         type="number"
-                        value={hourlyRate}
-                        onChange={(e) => setHourlyRate(e.target.value)}
+                        value={profile.hourly_rate ?? ""}
+                        onChange={(e) => set("hourly_rate", e.target.value ? Number(e.target.value) : null)}
                         placeholder="0"
                         className="w-full pl-7 pr-3 py-[7px] text-[12px] rounded-lg"
                         style={{
@@ -539,16 +660,16 @@ export default function SettingsPage() {
                     <div>
                       <FieldLabel>Invoice number prefix</FieldLabel>
                       <TextInput
-                        value={invoicePrefix}
-                        onChange={setInvoicePrefix}
+                        value={profile.invoice_prefix}
+                        onChange={(v) => set("invoice_prefix", v)}
                         placeholder="INV-"
                       />
                     </div>
                     <div>
                       <FieldLabel>Default payment terms</FieldLabel>
                       <SelectInput
-                        value={paymentTerms}
-                        onChange={setPaymentTerms}
+                        value={profile.payment_terms}
+                        onChange={(v) => set("payment_terms", v)}
                         options={[
                           { value: "Due on receipt", label: "Due on receipt" },
                           { value: "Net 7",  label: "Net 7"  },
@@ -561,7 +682,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <SaveBar saved={saved} onSave={handleSave} />
+                <SaveBar saving={saving} saved={saved} onSave={handleSave} />
               </>
             )}
 
@@ -575,7 +696,6 @@ export default function SettingsPage() {
 
                 <GroupTitle>Email</GroupTitle>
 
-                {/* Master toggle */}
                 <div
                   className="flex items-center justify-between p-4 rounded-xl mb-4"
                   style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}
@@ -585,20 +705,20 @@ export default function SettingsPage() {
                       Receive email notifications
                     </p>
                     <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>
-                      {emailNotifs ? "Emails are enabled." : "All email notifications are paused."}
+                      {profile.notif_email_enabled ? `Sent to ${email}` : "All email notifications are paused."}
                     </p>
                   </div>
-                  <Toggle checked={emailNotifs} onChange={() => setEmailNotifs((v) => !v)} />
+                  <ToggleSwitch checked={profile.notif_email_enabled} onChange={() => set("notif_email_enabled", !profile.notif_email_enabled)} />
                 </div>
 
-                <div className="space-y-3" style={{ opacity: emailNotifs ? 1 : 0.45, pointerEvents: emailNotifs ? "auto" : "none" }}>
+                <div className="space-y-3" style={{ opacity: profile.notif_email_enabled ? 1 : 0.45, pointerEvents: profile.notif_email_enabled ? "auto" : "none" }}>
                   {[
-                    { label: "Project deadline reminders",  sub: "3 days before a project due date",        checked: notifDeadlines,  toggle: () => setNotifDeadlines((v) => !v)  },
-                    { label: "Invoice due date reminders",  sub: "3 days before an invoice becomes due",     checked: notifInvoiceDue, toggle: () => setNotifInvoiceDue((v) => !v) },
-                    { label: "Overdue invoice alerts",      sub: "When an invoice passes its due date",      checked: notifOverdue,    toggle: () => setNotifOverdue((v) => !v)    },
-                    { label: "Weekly summary",              sub: "Every Monday — projects, finances, todos", checked: notifWeekly,     toggle: () => setNotifWeekly((v) => !v)     },
-                    { label: "Monthly finance summary",     sub: "First of each month — billing overview",   checked: notifMonthly,    toggle: () => setNotifMonthly((v) => !v)    },
-                  ].map(({ label, sub, checked, toggle }) => (
+                    { label: "Project deadline reminders",  sub: "3 days before a project due date",        key: "notif_deadlines"   as const },
+                    { label: "Invoice due date reminders",  sub: "3 days before an invoice becomes due",     key: "notif_invoice_due" as const },
+                    { label: "Overdue invoice alerts",      sub: "When an invoice passes its due date",      key: "notif_overdue"     as const },
+                    { label: "Weekly summary",              sub: "Every Monday — projects, finances, todos", key: "notif_weekly"      as const },
+                    { label: "Monthly finance summary",     sub: "First of each month — billing overview",   key: "notif_monthly"     as const },
+                  ].map(({ label, sub, key }) => (
                     <div
                       key={label}
                       className="flex items-center justify-between py-3 px-4 rounded-lg"
@@ -608,7 +728,7 @@ export default function SettingsPage() {
                         <p className="text-[12px]" style={{ color: "var(--color-charcoal)" }}>{label}</p>
                         <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>{sub}</p>
                       </div>
-                      <Toggle checked={checked} onChange={toggle} />
+                      <ToggleSwitch checked={profile[key]} onChange={() => set(key, !profile[key])} />
                     </div>
                   ))}
                 </div>
@@ -619,7 +739,7 @@ export default function SettingsPage() {
                   In-app push notifications are coming in a future update.
                 </p>
 
-                <SaveBar saved={saved} onSave={handleSave} />
+                <SaveBar saving={saving} saved={saved} onSave={handleSave} />
               </>
             )}
 
@@ -631,7 +751,6 @@ export default function SettingsPage() {
                   Your current plan and usage.
                 </p>
 
-                {/* Plan card */}
                 <div
                   className="rounded-2xl p-6 mb-6"
                   style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}
@@ -639,16 +758,10 @@ export default function SettingsPage() {
                   <div className="flex items-start justify-between mb-4">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        <span
-                          className="text-[18px] font-bold"
-                          style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}
-                        >
+                        <span className="text-[18px] font-bold" style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>
                           Free Beta
                         </span>
-                        <span
-                          className="text-[10px] font-semibold px-2 py-[3px] rounded-full"
-                          style={{ background: "rgba(141,208,71,0.15)", color: "#3d6b4f" }}
-                        >
+                        <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(141,208,71,0.15)", color: "#3d6b4f" }}>
                           Active
                         </span>
                       </div>
@@ -656,35 +769,18 @@ export default function SettingsPage() {
                         You&apos;re on the beta plan. Billing begins when Perennial launches publicly.
                       </p>
                     </div>
-                    <div
-                      className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
-                      style={{ background: "rgba(155,163,122,0.15)" }}
-                    >
-                      <svg width="18" height="18" viewBox="0 0 28 28" fill="none">
-                        <path d="M14 22V12" stroke="#9BA37A" strokeWidth="1.5" strokeLinecap="round"/>
-                        <path d="M14 16C14 16 11 14 10 11C12 11 14 12.5 14 16Z" fill="#9BA37A"/>
-                        <path d="M14 14C14 14 17 12 18 9C16 9 14 10.5 14 14Z" fill="#9BA37A"/>
-                      </svg>
-                    </div>
                   </div>
 
-                  <div
-                    className="rounded-xl p-4"
-                    style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)" }}
-                  >
+                  <div className="rounded-xl p-4" style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)" }}>
                     <p className="text-[10px] font-semibold uppercase tracking-wide mb-3" style={{ color: "var(--color-grey)" }}>
                       Included in beta
                     </p>
                     <div className="grid grid-cols-2 gap-2">
                       {[
-                        "All core modules",
-                        "Unlimited projects & contacts",
-                        "Finance & invoicing",
-                        "Ash AI assistant",
-                        "Notes with rich text",
-                        "Resources vault",
-                        "Priority support",
-                        "Direct feedback to the team",
+                        "All core modules", "Unlimited projects & contacts",
+                        "Finance & invoicing", "Ash AI assistant",
+                        "Notes with rich text", "Resources vault",
+                        "Priority support", "Direct feedback to the team",
                       ].map((f) => (
                         <div key={f} className="flex items-center gap-2">
                           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#3d6b4f" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -697,10 +793,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <div
-                  className="flex items-center gap-3 p-4 rounded-xl"
-                  style={{ background: "rgba(155,163,122,0.07)", border: "0.5px solid rgba(155,163,122,0.2)" }}
-                >
+                <div className="flex items-center gap-3 p-4 rounded-xl" style={{ background: "rgba(155,163,122,0.07)", border: "0.5px solid rgba(155,163,122,0.2)" }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-sage)" strokeWidth="1.5">
                     <circle cx="12" cy="12" r="9"/><path d="M12 8v4l2 2"/>
                   </svg>
@@ -716,65 +809,112 @@ export default function SettingsPage() {
               <>
                 <h2 className="text-[15px] font-semibold mb-1" style={{ color: "var(--color-charcoal)" }}>Integrations</h2>
                 <p className="text-[12px] mb-7" style={{ color: "var(--color-grey)" }}>
-                  Connect the tools you already use. More coming soon.
+                  Connect the tools you already use.
                 </p>
 
+                {/* Active integrations */}
+                {integrations.length > 0 && (
+                  <>
+                    <GroupTitle>Connected</GroupTitle>
+                    <div className="space-y-3 mb-6">
+                      {integrations.map((intg) => (
+                        <div
+                          key={intg.id}
+                          className="flex items-center gap-4 p-4 rounded-xl"
+                          style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] font-medium capitalize" style={{ color: "var(--color-charcoal)" }}>
+                              {intg.provider.replace(/_/g, " ")}
+                            </p>
+                            {intg.account_name && (
+                              <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>{intg.account_name}</p>
+                            )}
+                          </div>
+                          <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(141,208,71,0.15)", color: "#3d6b4f" }}>
+                            Connected
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <GroupTitle>Available</GroupTitle>
                 <div className="space-y-3">
                   {[
                     {
+                      provider: "google_calendar",
                       name: "Google Calendar",
                       desc: "Sync project deadlines and reminders with your Google Calendar.",
-                      icon: "🗓",
-                      iconBg: "rgba(37,99,171,0.10)",
+                      icon: "🗓", iconBg: "rgba(37,99,171,0.10)",
+                      href: "/api/auth/google-calendar",
                     },
                     {
+                      provider: "instagram",
+                      name: "Instagram",
+                      desc: "View follower growth and engagement stats in Presence.",
+                      icon: "📸", iconBg: "rgba(131,58,180,0.10)",
+                      href: "/api/auth/instagram",
+                    },
+                    {
+                      provider: "google_analytics",
+                      name: "Google Analytics",
+                      desc: "Track website traffic and top pages in the Presence module.",
+                      icon: "📈", iconBg: "rgba(234,88,12,0.10)",
+                      href: "/api/auth/google-analytics",
+                    },
+                    {
+                      provider: "teller",
+                      name: "Bank account",
+                      desc: "Connect your bank to see transactions and cash flow in Finance.",
+                      icon: "🏦", iconBg: "rgba(37,99,171,0.08)",
+                      href: null,
+                      note: "Connect from Finance → Banking",
+                    },
+                    {
+                      provider: "stripe",
                       name: "Stripe",
                       desc: "Accept payments and mark invoices paid automatically.",
-                      icon: "💳",
-                      iconBg: "rgba(109,79,163,0.10)",
+                      icon: "💳", iconBg: "rgba(109,79,163,0.10)",
+                      soon: true,
                     },
-                    {
-                      name: "QuickBooks Online",
-                      desc: "Sync invoices and expenses with your accounting software.",
-                      icon: "📊",
-                      iconBg: "rgba(20,140,140,0.10)",
-                    },
-                    {
-                      name: "Dropbox",
-                      desc: "Attach files and assets from your Dropbox to projects and resources.",
-                      icon: "📦",
-                      iconBg: "rgba(37,99,171,0.08)",
-                    },
-                    {
-                      name: "Mailchimp",
-                      desc: "Connect your newsletter and track subscribers from Presence.",
-                      icon: "✉️",
-                      iconBg: "rgba(232,197,71,0.12)",
-                    },
-                  ].map(({ name, desc, icon, iconBg }) => (
-                    <div
-                      key={name}
-                      className="flex items-center gap-4 p-4 rounded-xl"
-                      style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}
-                    >
+                  ].map(({ provider, name, desc, icon, iconBg, href, note, soon }) => {
+                    const connected = !!getIntegration(provider);
+                    if (connected) return null;
+                    return (
                       <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center text-[20px] shrink-0"
-                        style={{ background: iconBg }}
+                        key={provider}
+                        className="flex items-center gap-4 p-4 rounded-xl"
+                        style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}
                       >
-                        {icon}
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-[20px] shrink-0" style={{ background: iconBg }}>
+                          {icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-medium" style={{ color: "var(--color-charcoal)" }}>{name}</p>
+                          <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>{desc}</p>
+                        </div>
+                        {soon ? (
+                          <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full shrink-0" style={{ background: "var(--color-cream)", color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}>
+                            Coming soon
+                          </span>
+                        ) : note ? (
+                          <span className="text-[10px] shrink-0" style={{ color: "var(--color-grey)" }}>{note}</span>
+                        ) : href ? (
+                          <a
+                            href={href}
+                            className="px-3 py-[6px] text-[11px] font-medium rounded-lg shrink-0 transition-colors"
+                            style={{ background: "var(--color-charcoal)", color: "var(--color-warm-white)", textDecoration: "none" }}
+                            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+                            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+                          >
+                            Connect
+                          </a>
+                        ) : null}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-medium" style={{ color: "var(--color-charcoal)" }}>{name}</p>
-                        <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>{desc}</p>
-                      </div>
-                      <span
-                        className="text-[10px] font-semibold px-2.5 py-1 rounded-full shrink-0"
-                        style={{ background: "var(--color-cream)", color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
-                      >
-                        Coming soon
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             )}

@@ -87,6 +87,10 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
     .filter((inv) => inv.status === "paid" && inv.paid_at)
     .sort((a, b) => (b.paid_at ?? "").localeCompare(a.paid_at ?? ""))[0];
 
+  const billableEarningsThisMonth = timeEntries
+    .filter(e => e.billable && e.logged_at >= monthStart)
+    .reduce((s, e) => s + (e.duration_minutes / 60) * (e.project?.rate ?? 0), 0);
+
   const recentTime = timeEntries.slice(0, 4);
   const recentInvoices = [...invoices]
     .sort((a, b) => {
@@ -109,8 +113,10 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
           {
             label: "Billable hrs · " + now.toLocaleString("en-US", { month: "short" }),
             value: fmtHrs(billableMinThisMonth),
-            sub: `${fmtCurrency(billableMinThisMonth / 60 * 150)} at current rates`,
-            subColor: "var(--color-grey)",
+            sub: billableEarningsThisMonth > 0
+              ? `${fmtCurrency(billableEarningsThisMonth)} at project rates`
+              : billableMinThisMonth > 0 ? "Rate not set on projects" : "No billable time this month",
+            subColor: billableEarningsThisMonth > 0 ? "var(--color-grey)" : "var(--color-grey)",
           },
           {
             label: "Outstanding",
@@ -149,7 +155,7 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
               Time · {now.toLocaleString("en-US", { month: "long" })}
             </span>
             <button onClick={() => onSwitchTab("time")}
-              className="text-[11px]" style={{ color: "#2563ab" }}>See all →</button>
+              className="text-[11px]" style={{ color: "var(--color-sage)" }}>See all →</button>
           </div>
           {/* Active timer */}
           {activeTimer && (
@@ -195,7 +201,7 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
           <div className={card} style={cardStyle}>
             <div className={cardHead} style={cardHeadStyle}>
               <span className="text-[12px] font-semibold flex-1" style={{ color: "var(--color-charcoal)" }}>Invoices</span>
-              <button onClick={() => onSwitchTab("invoices")} className="text-[11px]" style={{ color: "#2563ab" }}>See all →</button>
+              <button onClick={() => onSwitchTab("invoices")} className="text-[11px]" style={{ color: "var(--color-sage)" }}>See all →</button>
             </div>
             {recentInvoices.map((inv) => {
               const overdue = isOverdue(inv);
@@ -231,7 +237,7 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
           <div className={card} style={cardStyle}>
             <div className={cardHead} style={cardHeadStyle}>
               <span className="text-[12px] font-semibold flex-1" style={{ color: "var(--color-charcoal)" }}>Recent expenses</span>
-              <button onClick={() => onSwitchTab("expenses")} className="text-[11px]" style={{ color: "#2563ab" }}>See all →</button>
+              <button onClick={() => onSwitchTab("expenses")} className="text-[11px]" style={{ color: "var(--color-sage)" }}>See all →</button>
             </div>
             {recentExpenses.map((e) => (
               <div key={e.id} className="flex items-center gap-2.5 px-4 py-2.5"

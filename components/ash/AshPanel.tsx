@@ -23,13 +23,21 @@ interface ConvSummary {
   preview:    string;
 }
 
+interface ProjectCtx {
+  title:    string;
+  status:   string;
+  priority: string;
+}
+
 interface AshPanelProps {
-  open:       boolean;
-  expanded:   boolean;
-  onClose:    () => void;
-  onExpand:   () => void;
-  onCollapse: () => void;
-  module:     string;
+  open:            boolean;
+  expanded:        boolean;
+  onClose:         () => void;
+  onExpand:        () => void;
+  onCollapse:      () => void;
+  module:          string;
+  autoMessage?:    string;   // auto-send this message when panel opens
+  projectContext?: ProjectCtx;
 }
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -38,15 +46,19 @@ const MODULE_LABELS: Record<string, string> = {
   home: "Home", projects: "Projects", contacts: "Contacts",
   outreach: "Outreach", notes: "Notes", calendar: "Calendar",
   finance: "Finance", presence: "Presence", resources: "Resources",
-  settings: "Settings",
+  tasks: "Tasks", settings: "Settings",
 };
 
 const SUGGESTIONS: Record<string, string[]> = {
   home:      ["What should I prioritize today?", "Give me a business snapshot", "What's been neglected?"],
   projects:  ["Which projects need attention?", "Help me plan a commission", "What's my current workload?"],
   contacts:  ["Who should I follow up with?", "Help me write a gallery pitch", "How's my relationship health?"],
+  outreach:  ["What's in my pipeline right now?", "Who should I reach out to next?", "Help me write a cold email to a gallery"],
   finance:   ["How's my cash flow?", "What's outstanding?", "Help me write a payment follow-up"],
   notes:     ["Summarize my recent notes", "Help me develop this idea", "What patterns do you see?"],
+  calendar:  ["What's coming up this week?", "What deadlines am I close to?", "Help me plan my schedule"],
+  tasks:     ["What's overdue?", "Help me prioritize my tasks", "What should I tackle first today?"],
+  presence:  ["What opportunities are coming up?", "Help me write an open call application", "What fairs should I apply to?"],
   resources: ["What documents am I missing?", "Help me write an artist statement", "Review my contracts"],
   default:   ["What should I focus on today?", "Give me a business snapshot", "What's overdue?"],
 };
@@ -65,7 +77,7 @@ function timeAgo(d: string) {
 // ─── AshPanel ─────────────────────────────────────────────────────────────────
 
 export default function AshPanel({
-  open, expanded, onClose, onExpand, onCollapse, module,
+  open, expanded, onClose, onExpand, onCollapse, module, autoMessage, projectContext,
 }: AshPanelProps) {
   const [messages,       setMessages]       = useState<Message[]>([]);
   const [input,          setInput]          = useState("");
@@ -75,12 +87,21 @@ export default function AshPanel({
   const [recentConvs,    setRecentConvs]    = useState<ConvSummary[]>([]);
   const [activeTool,     setActiveTool]     = useState<string | null>(null);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef       = useRef<HTMLTextAreaElement>(null);
-  const historyRef     = useRef<HTMLDivElement>(null);
+  const messagesEndRef  = useRef<HTMLDivElement>(null);
+  const inputRef        = useRef<HTMLTextAreaElement>(null);
+  const historyRef      = useRef<HTMLDivElement>(null);
+  const lastAutoMessage = useRef<string | undefined>(undefined);
 
   const moduleLabel = MODULE_LABELS[module] ?? "Perennial";
-  const suggestions = SUGGESTIONS[module]   ?? SUGGESTIONS.default;
+
+  // Project-specific suggestions override generic module ones
+  const suggestions = projectContext
+    ? [
+        `What should I prioritize for "${projectContext.title}"?`,
+        `Is "${projectContext.title}" on track — any blockers or risks?`,
+        `Summarize the status of "${projectContext.title}" and suggest next steps`,
+      ]
+    : (SUGGESTIONS[module] ?? SUGGESTIONS.default);
 
   // Dimensions
   const W = expanded ? 680 : 360;
@@ -105,6 +126,7 @@ export default function AshPanel({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [open, showHistory, onClose]);
+
 
   // Click-outside for history dropdown
   useEffect(() => {
@@ -248,6 +270,19 @@ export default function AshPanel({
       setTimeout(() => inputRef.current?.focus(), 80);
     }
   }, [isStreaming, conversationId, module, messages.length, onExpand]);
+
+  // Always-current ref so the auto-send effect can call sendMessage without stale closure
+  const sendRef = useRef(sendMessage);
+  sendRef.current = sendMessage;
+
+  // Auto-send on mount: component is freshly mounted (key={convKey}) when an autoMessage arrives,
+  // so empty deps is intentional — we only want this to fire once per mount.
+  useEffect(() => {
+    if (!autoMessage) return;
+    const msg = autoMessage;
+    const timer = setTimeout(() => sendRef.current(msg), 300);
+    return () => clearTimeout(timer);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input); }
@@ -444,7 +479,9 @@ export default function AshPanel({
                     Hey — what can I help with?
                   </p>
                   <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", lineHeight: 1.3 }}>
-                    I have full context on your {moduleLabel.toLowerCase()} data.
+                    {projectContext
+                      ? `I have full context on "${projectContext.title}" — ${projectContext.status}, ${projectContext.priority} priority.`
+                      : `I have full context on your ${moduleLabel.toLowerCase()} data.`}
                   </p>
                 </div>
               </div>

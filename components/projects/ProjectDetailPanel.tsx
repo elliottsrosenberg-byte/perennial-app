@@ -1,17 +1,42 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Project, Task, Note, Reminder, ProjectType, ProjectStatus, ProjectPriority } from "@/types/database";
-import { Expand, Pencil, Settings, FileText } from "lucide-react";
+import type { Project, Task, Note, Contact, ProjectType, ProjectStatus, ProjectPriority } from "@/types/database";
+import { Maximize2, Minimize2, X, Settings, FileText, CheckSquare, FolderOpen, Trash2, Pencil, Plus, Link2, ExternalLink, Users, Mail, Phone } from "lucide-react";
+import DatePicker from "@/components/ui/DatePicker";
+import { useEditor, EditorContent } from "@tiptap/react";
+import { getRichExtensions, RichToolbar, InlineAshPopover } from "@/components/ui/RichEditor";
+import type { AshPromptState } from "@/components/ui/RichEditor";
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────────────
 
-const ON_TRACK = "var(--color-green)";
+type SectionTab = "canvas" | "tasks" | "notes" | "files" | "contacts";
+
+interface ProjectFile {
+  id:         string;
+  project_id: string;
+  user_id:    string;
+  name:       string;
+  url:        string;
+  file_type:  string | null;
+  size_bytes: number | null;
+  created_at: string;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmt(d: string | null) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function isOverdue(due: string | null) {
+  return !!due && new Date(due + "T23:59:59") < new Date();
+}
+
+function toISODate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function timeAgo(d: string): string {
@@ -22,28 +47,10 @@ function timeAgo(d: string): string {
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return days < 7 ? `${days}d ago` : new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function isOverdue(due: string | null) {
-  return !!due && new Date(due).getTime() < Date.now();
-}
-
-function getDueBadge(due: string | null) {
-  if (!due) return null;
-  const daysLeft = Math.ceil((new Date(due).getTime() - Date.now()) / 86400000);
-  if (daysLeft < 0)  return { label: "Overdue",      color: "var(--color-red-orange)", weight: 500 };
-  if (daysLeft === 0) return { label: "Today",        color: "#a07800",                 weight: 500 };
-  if (daysLeft <= 3)  return { label: `In ${daysLeft}d`, color: "#a07800",              weight: 500 };
-  return {
-    label: new Date(due).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-    color: "var(--color-grey)",
-    weight: 400,
-  };
-}
-
-// ── Style maps ────────────────────────────────────────────────────────────────
+// ── Options ───────────────────────────────────────────────────────────────────
 
 const TYPE_OPTIONS: { value: ProjectType; label: string }[] = [
   { value: "furniture",      label: "Furniture" },
@@ -53,10 +60,11 @@ const TYPE_OPTIONS: { value: ProjectType; label: string }[] = [
 ];
 
 const STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
-  { value: "in_progress", label: "In Progress" },
   { value: "planning",    label: "Planning"    },
+  { value: "in_progress", label: "In Progress" },
   { value: "on_hold",     label: "On Hold"     },
   { value: "complete",    label: "Complete"    },
+  { value: "cut",         label: "Cut"         },
 ];
 
 const PRIORITY_OPTIONS: { value: ProjectPriority; label: string }[] = [
@@ -66,56 +74,109 @@ const PRIORITY_OPTIONS: { value: ProjectPriority; label: string }[] = [
 ];
 
 const TYPE_STYLE: Record<string, { bg: string; color: string }> = {
-  furniture:      { bg: "#f0ebe0", color: "#b8860b" },
-  sculpture:      { bg: "#f0ebe0", color: "#b8860b" },
-  painting:       { bg: "#e8e3f0", color: "#6d4fa3" },
-  small_object:   { bg: "#e0f0e8", color: "#3d6b4f" },
-  client_project: { bg: "#e0eaf5", color: "#2563ab" },
+  furniture:      { bg: "#f0ebe0",                  color: "#b8860b"                   },
+  sculpture:      { bg: "#f0ebe0",                  color: "#b8860b"                   },
+  painting:       { bg: "rgba(37,99,171,0.10)",     color: "#2563ab"                   },
+  client_project: { bg: "#e0eaf5",                  color: "#2563ab"                   },
 };
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
-  in_progress: { bg: "rgba(141,208,71,0.15)",  color: "#5a7040" },
-  planning:    { bg: "rgba(155,163,122,0.14)", color: "#6b6860" },
-  on_hold:     { bg: "rgba(232,197,71,0.15)",  color: "#a07800" },
-  complete:    { bg: "rgba(141,208,71,0.12)",  color: "#3d6b4f" },
+  planning:    { bg: "rgba(155,163,122,0.14)", color: "#6b6860"                      },
+  in_progress: { bg: "rgba(141,208,71,0.15)",  color: "#5a7040"                      },
+  on_hold:     { bg: "rgba(232,197,71,0.15)",  color: "#a07800"                      },
+  complete:    { bg: "rgba(141,208,71,0.12)",  color: "#3d6b4f"                      },
+  cut:         { bg: "rgba(220,62,13,0.08)",   color: "var(--color-red-orange)"      },
 };
 
-const PRIORITY_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  high:   { bg: "rgba(220,62,13,0.10)",   color: "var(--color-red-orange)", label: "High"   },
-  medium: { bg: "rgba(232,197,71,0.15)",  color: "#a07800",                 label: "Medium" },
-  low:    { bg: "rgba(155,163,122,0.12)", color: "#5a7040",                 label: "Low"    },
+const PRIORITY_STYLE: Record<string, { bg: string; color: string }> = {
+  high:   { bg: "rgba(220,62,13,0.10)",   color: "var(--color-red-orange)" },
+  medium: { bg: "rgba(232,197,71,0.15)",  color: "#a07800"                 },
+  low:    { bg: "rgba(155,163,122,0.12)", color: "#5a7040"                 },
 };
+
+// ── CustomSelect ──────────────────────────────────────────────────────────────
+
+function CustomSelect<T extends string>({
+  label, value, options, tagStyle, onSave,
+}: {
+  label:    string;
+  value:    T;
+  options:  readonly { value: T; label: string }[];
+  tagStyle: { bg: string; color: string };
+  onSave:   (v: T) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref   = useRef<HTMLDivElement>(null);
+  const selected = options.find(o => o.value === value);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div className="flex justify-between items-center py-[5px]" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
+      <span className="text-[11px] shrink-0 mr-3" style={{ color: "var(--color-grey)" }}>{label}</span>
+      <div ref={ref} style={{ position: "relative" }}>
+        <button
+          onClick={() => setOpen(v => !v)}
+          className="text-[10px] font-medium px-[8px] py-[2px] rounded-full flex items-center gap-[5px]"
+          style={{ background: tagStyle.bg, color: tagStyle.color, border: "none", cursor: "pointer", fontFamily: "inherit" }}
+        >
+          {selected?.label ?? value}
+          <svg width="7" height="7" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+            <path d="M1 2.5l3 3 3-3"/>
+          </svg>
+        </button>
+        {open && (
+          <div style={{
+            position: "absolute", right: 0, top: "calc(100% + 3px)", zIndex: 200,
+            background: "var(--color-surface-raised)", border: "0.5px solid var(--color-border)",
+            borderRadius: 9, boxShadow: "0 4px 16px rgba(0,0,0,0.10)", overflow: "hidden", minWidth: 120,
+          }}>
+            {options.map(o => (
+              <button
+                key={o.value}
+                onClick={() => { onSave(o.value); setOpen(false); }}
+                style={{
+                  width: "100%", textAlign: "left", padding: "6px 10px", fontSize: 11,
+                  background: o.value === value ? "var(--color-surface-sunken)" : "transparent",
+                  border: "none", cursor: "pointer", color: "var(--color-text-secondary)",
+                  fontWeight: o.value === value ? 600 : 400, fontFamily: "inherit",
+                }}
+                onMouseEnter={e => { if (o.value !== value) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+                onMouseLeave={e => { if (o.value !== value) e.currentTarget.style.background = "transparent"; }}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ── EditableField ─────────────────────────────────────────────────────────────
 
-interface FieldProps {
-  label: string;
-  display: string;
-  editDefault: string;
-  inputType?: "text" | "number" | "date";
-  placeholder?: string;
-  onSave: (raw: string) => void;
-  alert?: boolean;
-}
-
-function EditableField({ label, display, editDefault, inputType = "text", placeholder, onSave, alert = false }: FieldProps) {
-  const [editing, setEditing]   = useState(false);
-  const [draft, setDraft]       = useState(editDefault);
-  const [hovered, setHovered]   = useState(false);
+function EditableField({ label, display, editDefault, inputType = "text", placeholder, onSave, alert = false }: {
+  label: string; display: string; editDefault: string;
+  inputType?: "text" | "number" | "date"; placeholder?: string;
+  onSave: (raw: string) => void; alert?: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft,   setDraft]   = useState(editDefault);
+  const [hovered, setHovered] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
+  useEffect(() => { if (editing && inputType !== "date") inputRef.current?.focus(); }, [editing, inputType]);
   useEffect(() => { setDraft(editDefault); }, [editDefault]);
 
-  function commit() {
-    onSave(draft.trim());
-    setEditing(false);
-  }
-
-  function cancel() {
-    setDraft(editDefault);
-    setEditing(false);
-  }
+  function commit(raw?: string) { onSave((raw ?? draft).trim()); setEditing(false); }
+  function cancel() { setDraft(editDefault); setEditing(false); }
 
   return (
     <div
@@ -126,28 +187,25 @@ function EditableField({ label, display, editDefault, inputType = "text", placeh
     >
       <span className="text-[11px] shrink-0 mr-3" style={{ color: "var(--color-grey)" }}>{label}</span>
 
-      {editing ? (
+      {inputType === "date" && editing ? (
+        <div>
+          <DatePicker
+            value={editDefault ? new Date(editDefault + "T12:00:00") : null}
+            onChange={d => commit(toISODate(d))}
+            placeholder="Pick a date…"
+          />
+        </div>
+      ) : editing ? (
         <input
-          ref={inputRef}
-          type={inputType}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") cancel(); }}
+          ref={inputRef} type={inputType} value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={() => commit()} onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") cancel(); }}
           className="text-[11px] text-right bg-transparent focus:outline-none"
-          style={{
-            color: "#6b6860",
-            borderBottom: "1px solid var(--color-sage)",
-            maxWidth: "130px",
-            minWidth: "60px",
-          }}
+          style={{ color: "#6b6860", borderBottom: "1px solid var(--color-sage)", maxWidth: "130px", minWidth: "60px" }}
           placeholder={placeholder}
         />
       ) : (
-        <div
-          className="flex items-center gap-1.5 cursor-text"
-          onClick={() => setEditing(true)}
-        >
+        <div className="flex items-center gap-1.5 cursor-text" onClick={() => setEditing(true)}>
           <span
             className="text-[11px] font-medium text-right"
             style={{ color: alert ? "var(--color-red-orange)" : display === "—" ? "var(--color-grey)" : "#6b6860", fontWeight: display === "—" ? 400 : 500 }}
@@ -161,61 +219,11 @@ function EditableField({ label, display, editDefault, inputType = "text", placeh
   );
 }
 
-// ── EditableTag ───────────────────────────────────────────────────────────────
-
-interface TagOption { value: string; label: string; }
-
-function EditableTag({
-  value, options, tagStyle, onSave,
-}: {
-  value: string;
-  options: readonly TagOption[];
-  tagStyle: { bg: string; color: string };
-  onSave: (v: string) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [hovered, setHovered] = useState(false);
-  const label = options.find((o) => o.value === value)?.label ?? value;
-
-  if (editing) {
-    return (
-      <select
-        value={value}
-        autoFocus
-        onChange={(e) => { onSave(e.target.value); setEditing(false); }}
-        onBlur={() => setEditing(false)}
-        className="text-[10px] px-[7px] py-[2px] rounded-full focus:outline-none cursor-pointer"
-        style={{ background: tagStyle.bg, color: tagStyle.color, border: "1px solid " + tagStyle.color }}
-      >
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    );
-  }
-
-  return (
-    <div
-      className="flex items-center gap-1 cursor-pointer"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onClick={() => setEditing(true)}
-    >
-      <span
-        className="text-[10px] font-medium px-[7px] py-[2px] rounded-full"
-        style={{ background: tagStyle.bg, color: tagStyle.color }}
-      >
-        {label}
-      </span>
-      {hovered && <Pencil size={9} strokeWidth={1.75} style={{ color: "var(--color-grey)" }} />}
-    </div>
-  );
-}
-
 // ── EditableTitle ─────────────────────────────────────────────────────────────
 
 function EditableTitle({ value, onSave }: { value: string; onSave: (v: string) => void }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft]     = useState(value);
-  const [hovered, setHovered] = useState(false);
+  const [draft,   setDraft]   = useState(value);
   const ref = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (editing) { ref.current?.focus(); ref.current?.select(); } }, [editing]);
@@ -227,31 +235,22 @@ function EditableTitle({ value, onSave }: { value: string; onSave: (v: string) =
     setEditing(false);
   }
 
-  return (
-    <div
-      className="mb-2"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+  return editing ? (
+    <input
+      ref={ref} value={draft} onChange={e => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(value); setEditing(false); } }}
+      className="w-full font-bold bg-transparent focus:outline-none"
+      style={{ fontSize: "17px", color: "var(--color-charcoal)", borderBottom: "1px solid var(--color-sage)", padding: "2px 0", lineHeight: 1.3 }}
+    />
+  ) : (
+    <h2
+      onClick={() => setEditing(true)}
+      className="font-bold cursor-text leading-snug"
+      style={{ fontSize: "17px", color: "var(--color-charcoal)" }}
     >
-      {editing ? (
-        <input
-          ref={ref}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(value); setEditing(false); } }}
-          className="w-full font-bold leading-snug bg-transparent focus:outline-none"
-          style={{ fontSize: "18px", color: "var(--color-charcoal)", borderBottom: "1px solid var(--color-sage)", padding: "2px 0" }}
-        />
-      ) : (
-        <div className="flex items-start gap-2 cursor-text" onClick={() => setEditing(true)}>
-          <h2 className="font-bold leading-snug flex-1" style={{ fontSize: "18px", color: "var(--color-charcoal)" }}>
-            {value}
-          </h2>
-          {hovered && <Pencil size={12} strokeWidth={1.75} style={{ color: "var(--color-grey)", marginTop: 4, flexShrink: 0 }} />}
-        </div>
-      )}
-    </div>
+      {value}
+    </h2>
   );
 }
 
@@ -259,111 +258,520 @@ function EditableTitle({ value, onSave }: { value: string; onSave: (v: string) =
 
 function EditableDescription({ value, onSave }: { value: string | null; onSave: (v: string | null) => void }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft]     = useState(value ?? "");
-  const [hovered, setHovered] = useState(false);
+  const [draft,   setDraft]   = useState(value ?? "");
   const ref = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => { if (editing) { ref.current?.focus(); } }, [editing]);
+  useEffect(() => { if (editing) ref.current?.focus(); }, [editing]);
   useEffect(() => { setDraft(value ?? ""); }, [value]);
 
-  function commit() {
-    onSave(draft.trim() || null);
-    setEditing(false);
-  }
+  function commit() { onSave(draft.trim() || null); setEditing(false); }
 
   return (
-    <div
-      className="mb-5"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
+    <div className="mb-4">
       {editing ? (
         <textarea
-          ref={ref}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => { if (e.key === "Escape") { setDraft(value ?? ""); setEditing(false); } }}
-          rows={3}
-          placeholder="Add a description…"
-          className="w-full text-[12px] leading-relaxed bg-transparent focus:outline-none resize-none"
-          style={{ color: "#6b6860", border: "0.5px solid var(--color-sage)", borderRadius: "6px", padding: "6px 8px" }}
+          ref={ref} value={draft} onChange={e => setDraft(e.target.value)}
+          onBlur={commit} rows={3} placeholder="Add a description…"
+          className="w-full text-[11px] leading-relaxed bg-transparent focus:outline-none resize-none"
+          style={{ color: "#6b6860", border: "0.5px solid var(--color-sage)", borderRadius: "6px", padding: "5px 7px" }}
         />
       ) : (
-        <div className="flex items-start gap-1.5 cursor-text" onClick={() => setEditing(true)}>
-          {value ? (
-            <p className="text-[12px] leading-relaxed flex-1" style={{ color: "#6b6860" }}>{value}</p>
-          ) : (
-            <p className="text-[12px] flex-1" style={{ color: "var(--color-grey)" }}>Add a description…</p>
-          )}
-          {hovered && <Pencil size={10} strokeWidth={1.75} style={{ color: "var(--color-grey)", marginTop: 2, flexShrink: 0 }} />}
+        <div onClick={() => setEditing(true)} className="cursor-text">
+          {value
+            ? <p className="text-[11px] leading-relaxed" style={{ color: "#6b6860" }}>{value}</p>
+            : <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>Add a description…</p>
+          }
         </div>
       )}
     </div>
   );
 }
 
-// ── PropsPanel ────────────────────────────────────────────────────────────────
+// ── CanvasEditor ──────────────────────────────────────────────────────────────
 
-function PropsPanel({ project, onUpdate }: { project: Project; onUpdate: (field: string, value: unknown) => void }) {
-  const typeStyle   = project.type ? TYPE_STYLE[project.type] : { bg: "var(--color-cream)", color: "#6b6860" };
-  const statusStyle = STATUS_STYLE[project.status] ?? STATUS_STYLE.planning;
-  const priority    = PRIORITY_STYLE[project.priority] ?? PRIORITY_STYLE.medium;
-  const overdue     = isOverdue(project.due_date);
-  const isClient    = project.type === "client_project";
+function CanvasEditor({ projectId, initialHtml }: { projectId: string; initialHtml: string | null }) {
+  const [saving,    setSaving]    = useState(false);
+  const [saved,     setSaved]     = useState(false);
+  const [ashPrompt, setAshPrompt] = useState<AshPromptState>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleAshTrigger = useCallback(
+    (pos: number, coords: { top: number; left: number; bottom: number }) => {
+      setAshPrompt({ pos, anchor: coords });
+    },
+    [],
+  );
+
+  const editor = useEditor({
+    immediatelyRender: false,
+    extensions: getRichExtensions({ placeholder: "Start writing…", onAshTrigger: handleAshTrigger }),
+    content: initialHtml ?? "",
+    onUpdate({ editor }) {
+      scheduleSave(editor.getHTML());
+    },
+    editorProps: {
+      attributes: { style: "outline: none; min-height: 300px; font-size: 14px; line-height: 1.8; color: #6b6860;" },
+    },
+  }, [projectId]);
+
+  // Flush pending save on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        const html = editor?.getHTML() ?? "";
+        createClient().from("projects").update({ canvas_html: html || null }).eq("id", projectId);
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
+  function scheduleSave(html: string) {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    setSaving(true); setSaved(false);
+    saveTimer.current = setTimeout(async () => {
+      await createClient().from("projects").update({ canvas_html: html || null }).eq("id", projectId);
+      setSaving(false); setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }, 800);
+  }
+
+  async function handleAshSubmit(prompt: string) {
+    if (!editor || !ashPrompt) return;
+    const context = editor.getText().slice(0, 800);
+    const res = await fetch("/api/notes/ash-inline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, noteContext: context }),
+    });
+    const { text } = await res.json() as { text: string };
+    if (text) editor.chain().focus().setTextSelection(ashPrompt.pos).insertContent(text).run();
+    setAshPrompt(null);
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", position: "relative" }}>
+      <RichToolbar editor={editor} />
+
+      <div style={{ flex: 1, overflowY: "auto", background: "var(--color-off-white)" }}>
+        <div style={{ maxWidth: 760, padding: "36px 60px 80px" }}>
+          <EditorContent editor={editor} />
+        </div>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "flex-end", padding: "5px 20px", borderTop: "0.5px solid var(--color-border)", background: "var(--color-off-white)", flexShrink: 0 }}>
+        {saving  && <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>Saving…</span>}
+        {!saving && saved && <span style={{ fontSize: 10, color: "var(--color-sage)" }}>✓ Saved</span>}
+      </div>
+
+      {ashPrompt && (
+        <InlineAshPopover anchor={ashPrompt.anchor} onSubmit={handleAshSubmit} onClose={() => setAshPrompt(null)} />
+      )}
+    </div>
+  );
+}
+
+// ── Task inline pickers (mirrors TasksClient style) ───────────────────────────
+
+const PRIORITY_DOT: Record<string, string> = {
+  high: "var(--color-red-orange)", medium: "#b8860b", low: "var(--color-text-tertiary)",
+};
+const PRIORITY_LABELS: Record<string, string> = { high: "High", medium: "Medium", low: "Low" };
+
+function toISODateTask(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function taskTodayMidnight(): Date {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function getDueChipLabel(due: string | null): string | null {
+  if (!due) return null;
+  const days = Math.round((new Date(due + "T00:00:00").getTime() - taskTodayMidnight().getTime()) / 86400000);
+  if (days < 0)   return "Overdue";
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  if (days <= 14) return `${days} days`;
+  return new Date(due + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function getDueChipColor(due: string | null): string {
+  if (!due) return "var(--color-text-tertiary)";
+  const days = Math.round((new Date(due + "T00:00:00").getTime() - taskTodayMidnight().getTime()) / 86400000);
+  if (days < 0)  return "var(--color-red-orange)";
+  if (days <= 1) return "#a07800";
+  if (days <= 7) return "var(--color-text-secondary)";
+  return "var(--color-text-tertiary)";
+}
+
+function TaskDatePicker({ value, onChange, onClear }: {
+  value: string | null; onChange: (d: string) => void; onClear?: () => void;
+}) {
+  const [open, setOpen]         = useState(false);
+  const [viewDate, setViewDate] = useState(() => value ? new Date(value + "T12:00:00") : new Date());
+  const [dropPos, setDropPos]   = useState({ top: 0, right: 0 });
+  const ref        = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    function h(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    if (open) document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+
+  const yr = viewDate.getFullYear(), mo = viewDate.getMonth();
+  const daysInMonth = new Date(yr, mo + 1, 0).getDate();
+  const firstDow    = new Date(yr, mo, 1).getDay();
+  const cells = [...Array(firstDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+  const DOW    = ["S","M","T","W","T","F","S"];
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  const isSel = (d: number) => !!value && new Date(value + "T12:00:00").getDate() === d && new Date(value + "T12:00:00").getMonth() === mo && new Date(value + "T12:00:00").getFullYear() === yr;
+  const isTod = (d: number) => { const t = taskTodayMidnight(); return t.getDate() === d && t.getMonth() === mo && t.getFullYear() === yr; };
+
+  const label = getDueChipLabel(value);
+  const labelColor = value ? getDueChipColor(value) : "var(--color-text-tertiary)";
+
+  function handleOpen() {
+    if (triggerRef.current) {
+      const r = triggerRef.current.getBoundingClientRect();
+      setDropPos({ top: r.bottom + 5, right: window.innerWidth - r.right });
+    }
+    setOpen(v => !v);
+  }
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button ref={triggerRef} type="button" onClick={handleOpen} style={{
+        display: "flex", alignItems: "center", gap: 5, fontSize: 11, padding: "3px 8px", borderRadius: 9999,
+        border: `0.5px solid ${open ? "var(--color-border-strong)" : "var(--color-border)"}`,
+        background: value ? "var(--color-surface-sunken)" : "transparent",
+        color: labelColor, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", transition: "all 0.1s ease",
+      }}
+      onMouseEnter={e => { if (!value) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+      onMouseLeave={e => { if (!value) e.currentTarget.style.background = "transparent"; }}
+      >
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M5 1v2M11 1v2M2 7h12"/></svg>
+        {label ?? "Due date"}
+      </button>
+      {open && (
+        <div style={{
+          position: "fixed", top: dropPos.top, right: dropPos.right, zIndex: 9999, width: 220,
+          background: "var(--color-surface-raised)", border: "0.5px solid var(--color-border)",
+          borderRadius: 12, boxShadow: "0 4px 24px rgba(0,0,0,0.12)", padding: 12,
+        }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
+            {[{ label: "Today", days: 0 }, { label: "Tomorrow", days: 1 }, { label: "Next week", days: 7 }].map(s => (
+              <button type="button" key={s.label} onClick={() => { const d = new Date(taskTodayMidnight()); d.setDate(d.getDate() + s.days); onChange(toISODateTask(d)); setOpen(false); }} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 9999, background: "var(--color-surface-sunken)", border: "0.5px solid var(--color-border)", color: "var(--color-text-secondary)", cursor: "pointer", fontFamily: "inherit" }}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--color-border)"}
+              onMouseLeave={e => e.currentTarget.style.background = "var(--color-surface-sunken)"}
+              >{s.label}</button>
+            ))}
+            {value && onClear && (
+              <button type="button" onClick={() => { onClear(); setOpen(false); }} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 9999, background: "transparent", border: "0.5px solid var(--color-border)", color: "var(--color-text-tertiary)", cursor: "pointer", fontFamily: "inherit" }}
+              onMouseEnter={e => { e.currentTarget.style.color = "var(--color-red-orange)"; e.currentTarget.style.borderColor = "var(--color-red-orange)"; }}
+              onMouseLeave={e => { e.currentTarget.style.color = "var(--color-text-tertiary)"; e.currentTarget.style.borderColor = "var(--color-border)"; }}
+              >Clear</button>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <button type="button" onClick={() => setViewDate(new Date(yr, mo - 1, 1))} style={{ width: 22, height: 22, borderRadius: 4, border: "none", background: "transparent", cursor: "pointer", fontSize: 15, color: "var(--color-text-secondary)" }}>‹</button>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-primary)" }}>{MONTHS[mo]} {yr}</span>
+            <button type="button" onClick={() => setViewDate(new Date(yr, mo + 1, 1))} style={{ width: 22, height: 22, borderRadius: 4, border: "none", background: "transparent", cursor: "pointer", fontSize: 15, color: "var(--color-text-secondary)" }}>›</button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", marginBottom: 2 }}>
+            {DOW.map((d, i) => <div key={i} style={{ textAlign: "center", fontSize: 9, fontWeight: 600, color: "var(--color-text-tertiary)", padding: "2px 0" }}>{d}</div>)}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1 }}>
+            {cells.map((day, i) => day === null ? <div key={`e${i}`} /> : (
+              <button type="button" key={day} onClick={() => { onChange(toISODateTask(new Date(yr, mo, day))); setOpen(false); }} style={{
+                width: "100%", aspectRatio: "1", borderRadius: 4, border: "none", fontSize: 10, cursor: "pointer", fontFamily: "inherit",
+                background: isSel(day) ? "var(--color-sage)" : "transparent",
+                color: isSel(day) ? "white" : isTod(day) ? "var(--color-sage)" : "var(--color-text-primary)",
+                fontWeight: isSel(day) ? 600 : 400, outline: isTod(day) && !isSel(day) ? "1.5px solid var(--color-sage)" : "none", outlineOffset: -1,
+              }}
+              onMouseEnter={e => { if (!isSel(day)) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+              onMouseLeave={e => { if (!isSel(day)) e.currentTarget.style.background = "transparent"; }}
+              >{day}</button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TaskPriorityPicker({ value, onChange, align = "right" }: {
+  value: "high" | "medium" | "low" | null; onChange: (v: "high" | "medium" | "low" | null) => void; align?: "left" | "right";
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function h(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    if (open) document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+
+  const dotColor = value ? PRIORITY_DOT[value] : "var(--color-border-strong)";
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button type="button" onClick={() => setOpen(v => !v)} style={{
+        display: "flex", alignItems: "center", gap: 5, fontSize: 11, padding: "3px 8px", borderRadius: 9999,
+        border: `0.5px solid ${open ? "var(--color-border-strong)" : "var(--color-border)"}`,
+        background: value ? "var(--color-surface-sunken)" : "transparent",
+        color: value ? PRIORITY_DOT[value] : "var(--color-text-tertiary)",
+        cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", transition: "all 0.1s ease",
+      }}
+      onMouseEnter={e => { if (!value) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+      onMouseLeave={e => { if (!value) e.currentTarget.style.background = "transparent"; }}
+      >
+        <div style={{ width: 6, height: 6, borderRadius: "50%", background: dotColor, flexShrink: 0 }} />
+        {value ? PRIORITY_LABELS[value] : "Priority"}
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", [align === "right" ? "right" : "left"]: 0, top: "calc(100% + 5px)", zIndex: 200, minWidth: 130,
+          background: "var(--color-surface-raised)", border: "0.5px solid var(--color-border)",
+          borderRadius: 10, boxShadow: "0 4px 20px rgba(0,0,0,0.12)", overflow: "hidden",
+        }}>
+          {value && <button type="button" onClick={() => { onChange(null); setOpen(false); }} style={{ width: "100%", textAlign: "left", padding: "7px 12px", fontSize: 11, background: "transparent", border: "none", cursor: "pointer", color: "var(--color-text-tertiary)", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 8 }}
+            onMouseEnter={e => e.currentTarget.style.background = "var(--color-surface-sunken)"}
+            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+          ><div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-border-strong)" }} />None</button>}
+          {(["high", "medium", "low"] as const).map(p => (
+            <button type="button" key={p} onClick={() => { onChange(p); setOpen(false); }} style={{
+              width: "100%", textAlign: "left", padding: "7px 12px", fontSize: 11,
+              background: p === value ? "var(--color-surface-sunken)" : "transparent",
+              border: "none", cursor: "pointer", fontFamily: "inherit",
+              color: PRIORITY_DOT[p], fontWeight: p === value ? 600 : 400,
+              display: "flex", alignItems: "center", gap: 8,
+            }}
+            onMouseEnter={e => { if (p !== value) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+            onMouseLeave={e => { if (p !== value) e.currentTarget.style.background = "transparent"; }}
+            ><div style={{ width: 6, height: 6, borderRadius: "50%", background: PRIORITY_DOT[p] }} />{PRIORITY_LABELS[p]}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── ProjectTaskRow ────────────────────────────────────────────────────────────
+
+function ProjectTaskRow({
+  task, onToggle, onUpdate,
+}: {
+  task:     Task;
+  onToggle: (id: string, completed: boolean) => void;
+  onUpdate: (id: string, fields: Partial<Task>) => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft,   setDraft]   = useState(task.title);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setDraft(task.title); }, [task.title]);
+
+  function commitEdit() {
+    setEditing(false);
+    const t = draft.trim();
+    if (t && t !== task.title) onUpdate(task.id, { title: t });
+    else setDraft(task.title);
+  }
+
+  function getDueDays(due: string | null) {
+    if (!due) return null;
+    const d = new Date(); d.setHours(0,0,0,0);
+    const diff = Math.round((new Date(due + "T00:00:00").getTime() - d.getTime()) / 86400000);
+    if (diff < 0)  return { label: "Overdue",  color: "var(--color-red-orange)" };
+    if (diff === 0) return { label: "Today",   color: "#a07800" };
+    if (diff === 1) return { label: "Tomorrow", color: "#a07800" };
+    if (diff <= 14) return { label: `${diff}d`, color: "var(--color-text-tertiary)" };
+    return { label: new Date(due + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }), color: "var(--color-text-tertiary)" };
+  }
+
+  const due = getDueDays(task.due_date);
 
   return (
     <div
-      className="flex flex-col"
-      style={{ width: "248px", flexShrink: 0, borderRight: "0.5px solid var(--color-border)", background: "var(--color-off-white)", borderRadius: "12px 0 0 12px" }}
+      style={{
+        display: "flex", alignItems: "center", gap: 9, padding: "8px 16px",
+        borderBottom: "0.5px solid var(--color-border)",
+        background: hovered && !task.completed ? "rgba(0,0,0,0.015)" : "transparent",
+        opacity: task.completed ? 0.5 : 1,
+        transition: "opacity 0.25s ease, background 0.08s ease",
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
-      <div className="flex-1 px-5 py-5 overflow-y-auto">
-        <EditableTitle value={project.title} onSave={(v) => onUpdate("title", v)} />
-        <EditableDescription value={project.description} onSave={(v) => onUpdate("description", v)} />
+      <button
+        onClick={() => onToggle(task.id, !task.completed)}
+        style={{
+          width: 15, height: 15, borderRadius: 4, flexShrink: 0,
+          border: task.completed ? "none" : "1.5px solid var(--color-border-strong)",
+          background: task.completed ? "var(--color-sage)" : "transparent",
+          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+          transition: "all 0.12s ease",
+        }}
+        onMouseEnter={e => { if (!task.completed) e.currentTarget.style.borderColor = "var(--color-sage)"; }}
+        onMouseLeave={e => { if (!task.completed) e.currentTarget.style.borderColor = "var(--color-border-strong)"; }}
+      >
+        {task.completed && <svg width="9" height="7" viewBox="0 0 10 8" fill="none"><path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+      </button>
 
-        <div className="flex flex-wrap items-center gap-1.5 mb-5">
-          {project.type && (
-            <EditableTag value={project.type} options={TYPE_OPTIONS} tagStyle={typeStyle} onSave={(v) => onUpdate("type", v)} />
+      {editing ? (
+        <input
+          ref={inputRef} autoFocus value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={commitEdit}
+          onKeyDown={e => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") { setEditing(false); setDraft(task.title); } }}
+          style={{ flex: 1, fontSize: 12, color: "var(--color-charcoal)", border: "none", outline: "none", background: "transparent", fontFamily: "inherit", padding: 0 }}
+        />
+      ) : (
+        <span
+          onClick={() => !task.completed && setEditing(true)}
+          style={{ flex: 1, fontSize: 12, color: task.completed ? "var(--color-grey)" : "var(--color-charcoal)", textDecoration: task.completed ? "line-through" : "none", cursor: task.completed ? "default" : "text", lineHeight: 1.4, minWidth: 0 }}
+        >
+          {task.title}
+        </span>
+      )}
+
+      {/* Interactive pickers — always visible when set, appear on hover otherwise */}
+      {!task.completed && (
+        <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+          {(task.priority || hovered) && (
+            <TaskPriorityPicker
+              value={task.priority}
+              onChange={p => onUpdate(task.id, { priority: p })}
+            />
           )}
-          <EditableTag value={project.status} options={STATUS_OPTIONS} tagStyle={statusStyle} onSave={(v) => onUpdate("status", v)} />
-          <EditableTag value={project.priority} options={PRIORITY_OPTIONS} tagStyle={{ bg: priority.bg, color: priority.color }} onSave={(v) => onUpdate("priority", v)} />
+          {(task.due_date || hovered) && (
+            <TaskDatePicker
+              value={task.due_date}
+              onChange={d => onUpdate(task.id, { due_date: d })}
+              onClear={() => onUpdate(task.id, { due_date: null })}
+            />
+          )}
+        </div>
+      )}
+      {task.completed && task.due_date && (
+        <span style={{ fontSize: 10, fontWeight: 500, color: getDueChipColor(task.due_date), flexShrink: 0, whiteSpace: "nowrap" }}>
+          {getDueChipLabel(task.due_date)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ── ProjectTasksTab ───────────────────────────────────────────────────────────
+
+function ProjectTasksTab({
+  projectId, tasks, setTasks,
+}: {
+  projectId: string;
+  tasks:     Task[];
+  setTasks:  React.Dispatch<React.SetStateAction<Task[]>>;
+}) {
+  const [newTitle,      setNewTitle]      = useState("");
+  const [newPriority,   setNewPriority]   = useState<"high" | "medium" | "low" | null>(null);
+  const [newDueDate,    setNewDueDate]    = useState<string | null>(null);
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [loading,       setLoading]       = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const active    = tasks.filter(t => !t.completed);
+  const completed = tasks.filter(t => t.completed);
+  const pct       = tasks.length > 0 ? Math.round((completed.length / tasks.length) * 100) : 0;
+
+  async function addTask() {
+    if (!newTitle.trim() || loading) return;
+    setLoading(true);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setLoading(false); return; }
+    const { data } = await supabase.from("tasks").insert({
+      user_id: user.id, project_id: projectId, title: newTitle.trim(),
+      completed: false, priority: newPriority, due_date: newDueDate,
+    }).select().single();
+    if (data) setTasks(prev => [...prev, data as Task]);
+    setNewTitle(""); setNewPriority(null); setNewDueDate(null);
+    setLoading(false);
+    inputRef.current?.focus();
+  }
+
+  async function handleToggle(id: string, newCompleted: boolean) {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: newCompleted } : t));
+    await createClient().from("tasks").update({ completed: newCompleted }).eq("id", id);
+  }
+
+  async function handleUpdate(id: string, fields: Partial<Task>) {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...fields } : t));
+    await createClient().from("tasks").update(fields).eq("id", id);
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      {/* Progress bar — no duplicate "Tasks" label since the top bar already shows it */}
+      {tasks.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px 4px", flexShrink: 0 }}>
+          <div style={{ flex: 1, height: 3, borderRadius: 9999, background: "var(--color-border)" }}>
+            <div style={{ height: "100%", borderRadius: 9999, width: `${pct}%`, background: "var(--color-sage)", transition: "width 0.3s ease" }} />
+          </div>
+          <span style={{ fontSize: 10, color: "var(--color-grey)", flexShrink: 0 }}>{completed.length}/{tasks.length} done</span>
+        </div>
+      )}
+
+      {/* Task list */}
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        {/* Quick add with priority + date */}
+        <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 16px", borderBottom: "0.5px solid var(--color-border)" }}>
+          <div style={{ width: 15, height: 15, borderRadius: 4, flexShrink: 0, border: "1.5px dashed var(--color-border-strong)" }} />
+          <input
+            ref={inputRef} value={newTitle}
+            onChange={e => setNewTitle(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") addTask(); }}
+            placeholder="New task…"
+            style={{ flex: 1, fontSize: 12, border: "none", outline: "none", background: "transparent", color: "var(--color-charcoal)", fontFamily: "inherit", minWidth: 0 }}
+          />
+          <TaskPriorityPicker value={newPriority} onChange={setNewPriority} />
+          <TaskDatePicker value={newDueDate} onChange={setNewDueDate} onClear={() => setNewDueDate(null)} />
+          {newTitle.trim() && (
+            <button onClick={addTask} disabled={loading} style={{ fontSize: 11, fontWeight: 500, padding: "3px 9px", borderRadius: 5, background: "var(--color-sage)", color: "white", border: "none", cursor: "pointer", flexShrink: 0 }}>
+              Add
+            </button>
+          )}
         </div>
 
-        {!isClient ? (
-          <>
-            <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: "var(--color-grey)" }}>Properties</p>
-            <EditableField label="Price"      display={project.listing_price ? `$${project.listing_price.toLocaleString()}` : "—"} editDefault={project.listing_price?.toString() ?? ""} inputType="number" placeholder="0"              onSave={(v) => onUpdate("listing_price", v ? parseFloat(v) : null)} />
-            <EditableField label="Dimensions" display={project.dimensions ?? "—"}  editDefault={project.dimensions ?? ""}  placeholder='84" × 38" × 30"' onSave={(v) => onUpdate("dimensions", v || null)} />
-            <EditableField label="Materials"  display={project.materials  ?? "—"}  editDefault={project.materials  ?? ""}  placeholder="White oak, steel" onSave={(v) => onUpdate("materials",  v || null)} />
-            <EditableField label="Weight"     display={project.weight     ?? "—"}  editDefault={project.weight     ?? ""}  placeholder="~180 lbs"         onSave={(v) => onUpdate("weight",     v || null)} />
-            <div className="mb-4" />
-          </>
-        ) : (
-          <>
-            <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: "var(--color-grey)" }}>Client</p>
-            <EditableField label="Name"       display={project.client_name ?? "—"}  editDefault={project.client_name ?? ""}  placeholder="Client name" onSave={(v) => onUpdate("client_name", v || null)} />
-            <EditableField label="Rate"       display={project.rate ? `$${project.rate}/hr` : "—"} editDefault={project.rate?.toString() ?? ""} inputType="number" placeholder="150" onSave={(v) => onUpdate("rate", v ? parseFloat(v) : null)} />
-            <EditableField label="Billed"     display={`${project.billed_hours} hrs`} editDefault={project.billed_hours.toString()} inputType="number" onSave={(v) => onUpdate("billed_hours", v ? parseFloat(v) : 0)} />
-            <EditableField label="Est. value" display={project.est_value ? `$${project.est_value.toLocaleString()}` : "—"} editDefault={project.est_value?.toString() ?? ""} inputType="number" placeholder="0" onSave={(v) => onUpdate("est_value", v ? parseFloat(v) : null)} />
-            <div className="mb-4" />
-          </>
+        {active.map(task => <ProjectTaskRow key={task.id} task={task} onToggle={handleToggle} onUpdate={handleUpdate} />)}
+
+        {active.length === 0 && completed.length === 0 && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 180, gap: 6, color: "var(--color-grey)" }}>
+            <CheckSquare size={28} strokeWidth={1.25} style={{ opacity: 0.4 }} />
+            <p style={{ fontSize: 12 }}>No tasks yet</p>
+          </div>
         )}
 
-        <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: "var(--color-grey)" }}>Timeline</p>
-        <EditableField label="Start" display={fmt(project.start_date)} editDefault={project.start_date ?? ""} inputType="date" onSave={(v) => onUpdate("start_date", v || null)} />
-        <EditableField label="Due"   display={fmt(project.due_date)}   editDefault={project.due_date   ?? ""} inputType="date" onSave={(v) => onUpdate("due_date",   v || null)} alert={overdue} />
-      </div>
+        {/* Show completed toggle */}
+        <div style={{ padding: "10px 16px 4px", borderTop: completed.length > 0 ? "0.5px solid var(--color-border)" : "none", marginTop: 4 }}>
+          <button
+            onClick={() => setShowCompleted(v => !v)}
+            style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--color-grey)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+            onMouseEnter={e => e.currentTarget.style.color = "#6b6860"}
+            onMouseLeave={e => e.currentTarget.style.color = "var(--color-grey)"}
+          >
+            <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
+              style={{ transform: showCompleted ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s ease" }}>
+              <path d="M2 1l4 3-4 3"/>
+            </svg>
+            {showCompleted ? `Hide completed (${completed.length})` : `Show completed (${completed.length})`}
+          </button>
+        </div>
 
-      <div className="px-4 py-3 shrink-0" style={{ borderTop: "0.5px solid var(--color-border)" }}>
-        <button
-          className="flex items-center gap-2 w-full rounded-lg px-3 py-[8px] text-[12px] transition-colors"
-          style={{ color: "#6b6860" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-        >
-          <Settings size={13} strokeWidth={1.75} style={{ color: "var(--color-grey)" }} />
-          Project settings
-        </button>
+        {showCompleted && completed.map(task => <ProjectTaskRow key={task.id} task={task} onToggle={handleToggle} onUpdate={handleUpdate} />)}
       </div>
     </div>
   );
@@ -371,52 +779,47 @@ function PropsPanel({ project, onUpdate }: { project: Project; onUpdate: (field:
 
 // ── QuickNote ─────────────────────────────────────────────────────────────────
 
-function QuickNote({ projectId, onSave }: { projectId: string; onSave: (note: Note) => void }) {
-  const [title, setTitle] = useState("");
-  const [body, setBody]   = useState("");
+function QuickNote({ projectId, onSave }: { projectId: string; onSave: (n: Note) => void }) {
+  const [focused, setFocused] = useState(false);
+
+  const editor = useEditor({
+    immediatelyRender: false,
+    extensions: getRichExtensions({ placeholder: "Jot a note…" }),
+    onFocus: () => setFocused(true),
+    editorProps: {
+      attributes: { style: "outline: none; min-height: 56px; font-size: 13px; line-height: 1.7; color: var(--color-charcoal);" },
+    },
+  });
+
+  const hasContent = !!(editor && editor.getText().trim());
 
   async function save() {
-    if (!body.trim() && !title.trim()) return;
+    if (!editor || !hasContent) return;
+    const content = editor.getHTML();
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { data } = await supabase
-      .from("notes")
-      .insert({ user_id: user.id, project_id: projectId, title: title.trim() || null, content: body.trim() || null })
-      .select()
-      .single();
+    const { data } = await supabase.from("notes").insert({ user_id: user.id, project_id: projectId, content }).select().single();
     if (data) {
       onSave(data as Note);
-      setTitle("");
-      setBody("");
+      editor.commands.clearContent();
+      setFocused(false);
     }
   }
 
   return (
-    <div>
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="Title (optional)"
-        className="w-full text-[12px] font-medium bg-transparent focus:outline-none mb-1"
-        style={{ color: "var(--color-charcoal)" }}
-      />
-      <textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        placeholder="Write something…"
-        rows={3}
-        className="w-full text-[13px] leading-relaxed focus:outline-none resize-none"
-        style={{ background: "transparent", border: "none", color: "var(--color-charcoal)" }}
-      />
-      {(title.trim() || body.trim()) && (
-        <div className="flex justify-end mt-1">
-          <button
-            onClick={save}
-            className="text-[11px] px-3 py-[5px] rounded-lg font-medium text-white"
-            style={{ background: "var(--color-sage)" }}
-          >
-            Save note
+    <div style={{ borderBottom: "0.5px solid var(--color-border)" }}>
+      {(focused || hasContent) && <RichToolbar editor={editor} />}
+      <div
+        style={{ padding: "10px 16px", cursor: "text" }}
+        onClick={() => editor?.chain().focus().run()}
+      >
+        <EditorContent editor={editor} />
+      </div>
+      {hasContent && (
+        <div style={{ display: "flex", justifyContent: "flex-end", padding: "0 16px 10px" }}>
+          <button onClick={save} style={{ fontSize: 11, fontWeight: 500, padding: "4px 12px", borderRadius: 6, background: "var(--color-sage)", color: "white", border: "none", cursor: "pointer" }}>
+            Save
           </button>
         </div>
       )}
@@ -424,777 +827,930 @@ function QuickNote({ projectId, onSave }: { projectId: string; onSave: (note: No
   );
 }
 
-// ── PanelReminderRow ──────────────────────────────────────────────────────────
+// ── InlineNoteEditor ──────────────────────────────────────────────────────────
 
-function PanelReminderRow({
-  reminder, onToggle, onUpdate, onDelete,
+function InlineNoteEditor({
+  note, onSave, onCancel, onDelete,
 }: {
-  reminder: Reminder;
-  onToggle: (r: Reminder) => void;
-  onUpdate: (id: string, fields: Partial<Reminder>) => void;
+  note:     Note;
+  onSave:   (id: string, title: string | null, content: string | null) => void;
+  onCancel: () => void;
   onDelete: (id: string) => void;
 }) {
-  const [expanded, setExpanded]       = useState(false);
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [title, setTitle]             = useState(reminder.title);
-  const [desc, setDesc]               = useState(reminder.description ?? "");
-  const [dueLocal, setDueLocal]       = useState(
-    reminder.due_date ? new Date(reminder.due_date).toISOString().slice(0, 16) : ""
+  const [title, setTitle] = useState(note.title ?? "");
+
+  const editor = useEditor({
+    immediatelyRender: false,
+    extensions: getRichExtensions({ placeholder: "Note content…" }),
+    content: note.content ?? "",
+    editorProps: {
+      attributes: { style: "outline: none; min-height: 80px; font-size: 13px; line-height: 1.7; color: var(--color-text-secondary);" },
+    },
+  }, [note.id]);
+
+  function save() {
+    const content = editor?.getHTML() ?? null;
+    onSave(note.id, title.trim() || null, content || null);
+  }
+
+  return (
+    <div style={{ borderRadius: 10, background: "var(--color-off-white)", border: "0.5px solid var(--color-sage)", boxShadow: "0 0 0 2px rgba(155,163,122,0.15)", overflow: "hidden", marginBottom: 8 }}>
+      <RichToolbar editor={editor} />
+      <div style={{ padding: "10px 14px 4px" }}>
+        <input
+          value={title} onChange={e => setTitle(e.target.value)}
+          placeholder="Title (optional)"
+          style={{ width: "100%", fontSize: 12, fontWeight: 600, color: "var(--color-charcoal)", background: "transparent", border: "none", outline: "none", marginBottom: 6, fontFamily: "inherit" }}
+        />
+        <div onClick={() => editor?.chain().focus().run()}>
+          <EditorContent editor={editor} />
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", borderTop: "0.5px solid var(--color-border)" }}>
+        <a href={`/notes?id=${note.id}`} style={{ fontSize: 10, color: "var(--color-text-tertiary)", display: "flex", alignItems: "center", gap: 3, textDecoration: "none" }}
+          onMouseEnter={e => (e.currentTarget.style.color = "var(--color-sage)")}
+          onMouseLeave={e => (e.currentTarget.style.color = "var(--color-text-tertiary)")}
+        >
+          <ExternalLink size={10} strokeWidth={1.75} /> Open in Notes
+        </a>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={() => onDelete(note.id)} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, border: "none", background: "transparent", cursor: "pointer", color: "var(--color-text-tertiary)", fontFamily: "inherit" }}
+            onMouseEnter={e => e.currentTarget.style.color = "var(--color-red-orange)"}
+            onMouseLeave={e => e.currentTarget.style.color = "var(--color-text-tertiary)"}
+          >Delete</button>
+          <button onClick={onCancel} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, border: "0.5px solid var(--color-border)", background: "transparent", cursor: "pointer", color: "var(--color-text-secondary)", fontFamily: "inherit" }}>Cancel</button>
+          <button onClick={save} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, border: "none", background: "var(--color-sage)", color: "white", cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}>Save</button>
+        </div>
+      </div>
+    </div>
   );
-  const supabase = createClient();
-  const badge    = getDueBadge(reminder.due_date);
+}
+
+// ── NotesTab ──────────────────────────────────────────────────────────────────
+
+function NotesTab({ projectId, notes, setNotes }: { projectId: string; notes: Note[]; setNotes: React.Dispatch<React.SetStateAction<Note[]>> }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  function handleAdd(note: Note) { setNotes(prev => [note, ...prev]); }
+
+  async function handleSave(id: string, title: string | null, content: string | null) {
+    const updates = { title, content, updated_at: new Date().toISOString() };
+    await createClient().from("notes").update(updates).eq("id", id);
+    setNotes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n));
+    setEditingId(null);
+  }
+
+  async function handleDelete(id: string) {
+    await createClient().from("notes").delete().eq("id", id);
+    setNotes(prev => prev.filter(n => n.id !== id));
+    if (editingId === id) setEditingId(null);
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      {editingId === null && <QuickNote projectId={projectId} onSave={handleAdd} />}
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px 16px" }}>
+        {notes.length === 0 && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 160, gap: 6, color: "var(--color-grey)" }}>
+            <FileText size={28} strokeWidth={1.25} style={{ opacity: 0.4 }} />
+            <p style={{ fontSize: 12 }}>No notes yet</p>
+          </div>
+        )}
+        {notes.map(note => {
+          const isEditing = editingId === note.id;
+          const snippet   = note.content ? note.content.replace(/<[^>]*>/g, " ").trim().slice(0, 120) : null;
+
+          if (isEditing) {
+            return (
+              <InlineNoteEditor
+                key={note.id}
+                note={note}
+                onSave={handleSave}
+                onCancel={() => setEditingId(null)}
+                onDelete={handleDelete}
+              />
+            );
+          }
+
+          return (
+            <div
+              key={note.id}
+              onClick={() => setEditingId(note.id)}
+              style={{ padding: "12px 14px", marginBottom: 8, borderRadius: 10, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", cursor: "pointer", transition: "border-color 0.1s ease" }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--color-border-strong)")}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--color-border)")}
+            >
+              {note.title && <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 3 }}>{note.title}</p>}
+              {snippet
+                ? <p style={{ fontSize: 12, color: "#6b6860", lineHeight: 1.6, marginBottom: 4 }}>{snippet}{note.content && note.content.length > 120 ? "…" : ""}</p>
+                : <p style={{ fontSize: 12, color: "var(--color-grey)", fontStyle: "italic" }}>Empty note</p>
+              }
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 10, color: "var(--color-grey)" }}>{timeAgo(note.updated_at)}</span>
+                <button
+                  onClick={e => { e.stopPropagation(); handleDelete(note.id); }}
+                  style={{ fontSize: 10, color: "var(--color-grey)", background: "none", border: "none", cursor: "pointer" }}
+                  onMouseEnter={e => e.currentTarget.style.color = "var(--color-red-orange)"}
+                  onMouseLeave={e => e.currentTarget.style.color = "var(--color-grey)"}
+                >Delete</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── FilesTab ──────────────────────────────────────────────────────────────────
+
+type AddMode = "upload" | "link" | null;
+
+function FilesTab({ projectId }: { projectId: string }) {
+  const [files,     setFiles]     = useState<ProjectFile[]>([]);
+  const [addMode,   setAddMode]   = useState<AddMode>(null);
+  const [newName,   setNewName]   = useState("");
+  const [newUrl,    setNewUrl]    = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [loading,   setLoading]   = useState(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setTitle(reminder.title);
-    setDesc(reminder.description ?? "");
-    setDueLocal(reminder.due_date ? new Date(reminder.due_date).toISOString().slice(0, 16) : "");
-  }, [reminder.id]);
+    createClient().from("project_files").select("*").eq("project_id", projectId).order("created_at", { ascending: false })
+      .then(({ data }) => { if (data) setFiles(data as ProjectFile[]); setLoading(false); });
+  }, [projectId]);
 
-  async function saveTitle() {
-    if (!title.trim()) { setTitle(reminder.title); setEditingTitle(false); return; }
-    await supabase.from("reminders").update({ title: title.trim() }).eq("id", reminder.id);
-    onUpdate(reminder.id, { title: title.trim() });
-    setEditingTitle(false);
+  async function saveToDb(name: string, url: string, fileType: string | null, sizeBytes: number | null) {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase.from("project_files")
+      .insert({ project_id: projectId, user_id: user.id, name, url, file_type: fileType, size_bytes: sizeBytes })
+      .select().single();
+    if (data) setFiles(prev => [data as ProjectFile, ...prev]);
   }
 
-  async function saveDesc() {
-    const d = desc.trim() || null;
-    await supabase.from("reminders").update({ description: d }).eq("id", reminder.id);
-    onUpdate(reminder.id, { description: d });
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const supabase = createClient();
+      const ext  = file.name.split(".").pop()?.toLowerCase() ?? "";
+      const path = `${projectId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const { error } = await supabase.storage.from("project-files").upload(path, file, { contentType: file.type });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from("project-files").getPublicUrl(path);
+      await saveToDb(file.name, urlData.publicUrl, ext, file.size);
+    } finally {
+      setUploading(false);
+      setAddMode(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   }
 
-  async function saveDue(val: string) {
-    const v = val || null;
-    await supabase.from("reminders").update({ due_date: v }).eq("id", reminder.id);
-    onUpdate(reminder.id, { due_date: v });
+  async function addLink() {
+    if (!newName.trim() || !newUrl.trim()) return;
+    const ext = newUrl.split(".").pop()?.toLowerCase().split("?")[0] ?? null;
+    await saveToDb(newName.trim(), newUrl.trim(), ext, null);
+    setNewName(""); setNewUrl(""); setAddMode(null);
+  }
+
+  async function deleteFile(id: string) {
+    await createClient().from("project_files").delete().eq("id", id);
+    setFiles(prev => prev.filter(f => f.id !== id));
+  }
+
+  function fileIcon(type: string | null) {
+    if (!type) return <Link2 size={14} strokeWidth={1.5} style={{ color: "var(--color-grey)" }} />;
+    if (["jpg","jpeg","png","gif","webp","svg"].includes(type)) return <span style={{ fontSize: 14 }}>🖼</span>;
+    if (type === "pdf") return <span style={{ fontSize: 14 }}>📄</span>;
+    if (["doc","docx"].includes(type)) return <span style={{ fontSize: 14 }}>📝</span>;
+    if (["xls","xlsx"].includes(type)) return <span style={{ fontSize: 14 }}>📊</span>;
+    return <FolderOpen size={14} strokeWidth={1.5} style={{ color: "var(--color-grey)" }} />;
+  }
+
+  function fmtSize(bytes: number | null) {
+    if (!bytes) return null;
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   return (
-    <div style={{ borderBottom: "0.5px solid var(--color-border)", opacity: reminder.completed ? 0.45 : 1 }}>
-      <div className="flex items-start gap-3 py-[10px]">
-        {/* Checkbox */}
-        <div
-          onClick={() => onToggle(reminder)}
-          className="w-[16px] h-[16px] rounded-full shrink-0 mt-[2px] flex items-center justify-center cursor-pointer"
-          style={{
-            border: reminder.completed ? "none" : "1.5px solid var(--color-border)",
-            background: reminder.completed ? "var(--color-sage)" : "transparent",
-          }}
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      {/* Toolbar */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", borderBottom: "0.5px solid var(--color-border)", flexShrink: 0 }}>
+        <input
+          ref={fileInputRef} type="file" style={{ display: "none" }}
+          accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
+          onChange={handleFileUpload}
+        />
+        <button
+          onClick={() => { setAddMode(addMode === "upload" ? null : "upload"); fileInputRef.current?.click(); }}
+          disabled={uploading}
+          style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 500, padding: "5px 10px", borderRadius: 6, border: "0.5px solid var(--color-border)", background: "transparent", cursor: "pointer", color: "var(--color-text-secondary)", fontFamily: "inherit", opacity: uploading ? 0.6 : 1 }}
+          onMouseEnter={e => e.currentTarget.style.background = "var(--color-surface-sunken)"}
+          onMouseLeave={e => e.currentTarget.style.background = "transparent"}
         >
-          {reminder.completed && (
-            <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
-              <path d="M1 3l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          {editingTitle ? (
-            <input
-              autoFocus
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onBlur={saveTitle}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveTitle();
-                if (e.key === "Escape") { setTitle(reminder.title); setEditingTitle(false); }
-              }}
-              className="w-full text-[13px] font-medium bg-transparent focus:outline-none"
-              style={{ color: "var(--color-charcoal)", borderBottom: "1px solid var(--color-sage)" }}
-            />
-          ) : (
-            <p
-              onClick={() => !reminder.completed && setEditingTitle(true)}
-              className="text-[13px] font-medium leading-snug cursor-text"
-              style={{
-                color: "var(--color-charcoal)",
-                textDecoration: reminder.completed ? "line-through" : "none",
-              }}
-            >
-              {reminder.title}
-            </p>
-          )}
-          {/* Subtitle — clicking expands */}
-          <div
-            className="flex items-center gap-2 mt-[2px] cursor-pointer"
-            onClick={() => !reminder.completed && setExpanded((v) => !v)}
-          >
-            {reminder.description ? (
-              <span className="text-[11px] truncate" style={{ color: "var(--color-grey)" }}>{reminder.description}</span>
-            ) : !reminder.completed ? (
-              <span className="text-[10px]" style={{ color: "var(--color-grey)" }}>{expanded ? "▲ less" : "▼ details"}</span>
-            ) : null}
-          </div>
-        </div>
-
-        {badge && (
-          <span className="text-[10px] shrink-0 mt-[2px]" style={{ color: badge.color, fontWeight: badge.weight }}>
-            {badge.label}
-          </span>
-        )}
+          <Plus size={12} strokeWidth={2} />
+          {uploading ? "Uploading…" : "Upload file"}
+        </button>
+        <button
+          onClick={() => setAddMode(m => m === "link" ? null : "link")}
+          style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 500, padding: "5px 10px", borderRadius: 6, border: "0.5px solid var(--color-border)", background: addMode === "link" ? "var(--color-surface-sunken)" : "transparent", cursor: "pointer", color: "var(--color-text-secondary)", fontFamily: "inherit" }}
+          onMouseEnter={e => { if (addMode !== "link") e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+          onMouseLeave={e => { if (addMode !== "link") e.currentTarget.style.background = "transparent"; }}
+        >
+          <Link2 size={12} strokeWidth={2} />
+          Add link
+        </button>
       </div>
 
-      {expanded && (
-        <div className="pb-3 pl-[28px] pr-1 flex flex-col gap-2">
-          <textarea
-            value={desc}
-            onChange={(e) => setDesc(e.target.value)}
-            onBlur={saveDesc}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                saveDesc();
-                setExpanded(false);
-              }
-            }}
-            placeholder="Add notes… (Enter to save, Shift+Enter for new line)"
-            rows={2}
-            className="text-[12px] bg-transparent focus:outline-none resize-none w-full"
-            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)", borderRadius: "6px", padding: "5px 7px" }}
+      {/* Link form */}
+      {addMode === "link" && (
+        <div style={{ padding: "10px 16px", borderBottom: "0.5px solid var(--color-border)", display: "flex", flexDirection: "column", gap: 6, flexShrink: 0, background: "var(--color-surface-sunken)" }}>
+          <input
+            autoFocus value={newName} onChange={e => setNewName(e.target.value)}
+            placeholder="Name (e.g. Brief v2)"
+            style={{ fontSize: 12, padding: "5px 9px", border: "0.5px solid var(--color-border)", borderRadius: 6, background: "var(--color-surface-raised)", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit" }}
           />
-          <div className="flex items-center gap-3">
-            <input
-              type="datetime-local"
-              value={dueLocal}
-              onChange={(e) => { setDueLocal(e.target.value); saveDue(e.target.value); }}
-              className="text-[11px] bg-transparent focus:outline-none"
-              style={{ color: "#6b6860", border: "0.5px solid var(--color-border)", borderRadius: "6px", padding: "3px 6px" }}
-            />
-            <button
-              onClick={() => { if (window.confirm("Delete reminder?")) onDelete(reminder.id); }}
-              className="text-[11px] ml-auto transition-colors"
-              style={{ color: "var(--color-grey)" }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--color-red-orange)")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--color-grey)")}
+          <input
+            value={newUrl} onChange={e => setNewUrl(e.target.value)}
+            placeholder="URL — Google Drive, Dropbox, Figma…"
+            onKeyDown={e => { if (e.key === "Enter") addLink(); if (e.key === "Escape") { setAddMode(null); setNewName(""); setNewUrl(""); } }}
+            style={{ fontSize: 12, padding: "5px 9px", border: "0.5px solid var(--color-border)", borderRadius: 6, background: "var(--color-surface-raised)", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit" }}
+          />
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={addLink} style={{ fontSize: 11, fontWeight: 500, padding: "4px 12px", borderRadius: 6, background: "var(--color-sage)", color: "white", border: "none", cursor: "pointer" }}>Save</button>
+            <button onClick={() => { setAddMode(null); setNewName(""); setNewUrl(""); }} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, background: "transparent", border: "0.5px solid var(--color-border)", cursor: "pointer", color: "var(--color-grey)", fontFamily: "inherit" }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* File list */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "10px 16px" }}>
+        {loading && <p style={{ fontSize: 12, color: "var(--color-grey)" }}>Loading…</p>}
+        {!loading && files.length === 0 && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 160, gap: 6, color: "var(--color-grey)" }}>
+            <FolderOpen size={28} strokeWidth={1.25} style={{ opacity: 0.4 }} />
+            <p style={{ fontSize: 12 }}>No files yet</p>
+            <p style={{ fontSize: 11, textAlign: "center", maxWidth: 200, lineHeight: 1.5 }}>Upload images, PDFs, and documents, or add links to external files</p>
+          </div>
+        )}
+        {files.map(file => (
+          <div key={file.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", marginBottom: 6, borderRadius: 9, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}>
+            <span style={{ flexShrink: 0, width: 20, display: "flex", alignItems: "center", justifyContent: "center" }}>{fileIcon(file.file_type)}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 12, fontWeight: 500, color: "var(--color-charcoal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</p>
+              <p style={{ fontSize: 10, color: "var(--color-grey)" }}>
+                {file.file_type?.toUpperCase()}{file.size_bytes ? ` · ${fmtSize(file.size_bytes)}` : ""}
+              </p>
+            </div>
+            <a href={file.url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-grey)", display: "flex", flexShrink: 0 }}
+              onMouseEnter={e => (e.currentTarget.style.color = "var(--color-charcoal)")}
+              onMouseLeave={e => (e.currentTarget.style.color = "var(--color-grey)")}
             >
-              Delete
+              <ExternalLink size={13} strokeWidth={1.75} />
+            </a>
+            <button
+              onClick={() => deleteFile(file.id)}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-grey)", padding: 0, display: "flex", flexShrink: 0 }}
+              onMouseEnter={e => e.currentTarget.style.color = "var(--color-red-orange)"}
+              onMouseLeave={e => e.currentTarget.style.color = "var(--color-grey)"}
+            >
+              <Trash2 size={13} strokeWidth={1.75} />
             </button>
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Overview tab ──────────────────────────────────────────────────────────────
-
-function OverviewTab({
-  project, tasks, notes, reminders, onToggle, onAddNote, onToggleReminder,
-}: {
-  project: Project;
-  tasks: Task[];
-  notes: Note[];
-  reminders: Reminder[];
-  onToggle: (t: Task) => void;
-  onAddNote: (note: Note) => void;
-  onToggleReminder: (r: Reminder) => void;
-}) {
-  const completed  = tasks.filter((t) => t.completed).length;
-  const total      = tasks.length;
-  const pct        = total > 0 ? (completed / total) * 100 : 0;
-  const overdue    = isOverdue(project.due_date);
-  const barColor   = overdue ? "var(--color-red-orange)" : ON_TRACK;
-  const incomplete = tasks.filter((t) => !t.completed);
-  const activeReminders = reminders
-    .filter((r) => !r.completed)
-    .sort((a, b) => {
-      if (!a.due_date && !b.due_date) return 0;
-      if (!a.due_date) return 1;
-      if (!b.due_date) return -1;
-      return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
-    })
-    .slice(0, 4);
-
-  const s = { background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" };
-
-  return (
-    <div>
-      {/* Tasks mini */}
-      <div className="rounded-xl p-4 mb-4" style={s}>
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-[12px] font-semibold" style={{ color: "var(--color-charcoal)" }}>Tasks</span>
-          {total > 0 && (
-            <div className="flex items-center gap-2">
-              <div className="w-16 h-[3px] rounded-full" style={{ background: "var(--color-border)" }}>
-                <div className="h-full rounded-full" style={{ width: `${pct}%`, background: barColor }} />
-              </div>
-              <span className="text-[11px]" style={{ color: "var(--color-grey)" }}>{completed}/{total}</span>
-            </div>
-          )}
-        </div>
-        {incomplete.slice(0, 4).map((task) => (
-          <div
-            key={task.id}
-            onClick={() => onToggle(task)}
-            className="flex items-center gap-2.5 py-[6px] cursor-pointer rounded-lg px-2 -mx-2 transition-colors"
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-          >
-            <div className="w-3.5 h-3.5 rounded-full shrink-0" style={{ border: "1.5px solid var(--color-border)" }} />
-            <span className="text-[12px]" style={{ color: "var(--color-charcoal)" }}>{task.title}</span>
-          </div>
         ))}
-        {total === 0 && <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>No tasks yet.</p>}
-        {incomplete.length > 4 && (
-          <p className="text-[11px] mt-2" style={{ color: "var(--color-grey)" }}>+{incomplete.length - 4} more — see Tasks tab</p>
-        )}
-      </div>
-
-      {/* Quick note */}
-      <div className="rounded-xl p-4 mb-4" style={s}>
-        <span className="text-[12px] font-semibold block mb-2" style={{ color: "var(--color-charcoal)" }}>Note</span>
-        <QuickNote projectId={project.id} onSave={onAddNote} />
-      </div>
-
-      {/* Reminders mini */}
-      <div className="rounded-xl p-4 mb-4" style={s}>
-        <span className="text-[12px] font-semibold block mb-2" style={{ color: "var(--color-charcoal)" }}>Upcoming reminders</span>
-        {activeReminders.length === 0 ? (
-          <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>No upcoming reminders.</p>
-        ) : (
-          activeReminders.map((r) => {
-            const badge = getDueBadge(r.due_date);
-            return (
-              <div key={r.id} className="flex items-center gap-2.5 py-[6px]">
-                <div
-                  onClick={() => onToggleReminder(r)}
-                  className="w-3.5 h-3.5 rounded-full shrink-0 flex items-center justify-center cursor-pointer"
-                  style={{ border: "1.5px solid var(--color-border)" }}
-                />
-                <span className="text-[12px] flex-1" style={{ color: "var(--color-charcoal)" }}>{r.title}</span>
-                {badge && <span className="text-[10px] shrink-0" style={{ color: badge.color, fontWeight: badge.weight }}>{badge.label}</span>}
-              </div>
-            );
-          })
-        )}
-        {reminders.filter((r) => !r.completed).length > 4 && (
-          <p className="text-[11px] mt-1" style={{ color: "var(--color-grey)" }}>
-            +{reminders.filter((r) => !r.completed).length - 4} more — see Reminders tab
-          </p>
-        )}
-      </div>
-
-      {/* Files placeholder */}
-      <div className="rounded-xl p-4" style={s}>
-        <span className="text-[12px] font-semibold block mb-2" style={{ color: "var(--color-charcoal)" }}>Files</span>
-        <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>File attachments coming soon.</p>
       </div>
     </div>
   );
 }
 
-// ── Tasks tab ─────────────────────────────────────────────────────────────────
+// ── ContactsTab ───────────────────────────────────────────────────────────────
 
-function TasksTab({ project, tasks, onToggle, onAdd }: {
-  project: Project;
-  tasks: Task[];
-  onToggle: (t: Task) => void;
-  onAdd: (title: string) => void;
-}) {
-  const [newTitle, setNewTitle] = useState("");
-  const [adding, setAdding]     = useState(false);
-  const completed = tasks.filter((t) => t.completed).length;
-  const pct       = tasks.length > 0 ? (completed / tasks.length) * 100 : 0;
-  const overdue   = isOverdue(project.due_date);
-  const barColor  = overdue ? "var(--color-red-orange)" : ON_TRACK;
+const STATUS_DOT: Record<string, string> = {
+  active: "var(--color-sage)", lead: "#b8860b", inactive: "var(--color-grey)",
+};
 
-  function submit() {
-    if (!newTitle.trim()) { setAdding(false); return; }
-    onAdd(newTitle.trim());
-    setNewTitle("");
-    setAdding(false);
+function ContactsTab({ projectId }: { projectId: string }) {
+  const [contacts,    setContacts]    = useState<Contact[]>([]);
+  const [allContacts, setAllContacts] = useState<Contact[]>([]);
+  const [search,      setSearch]      = useState("");
+  const [showSearch,  setShowSearch]  = useState(false);
+  const [loading,     setLoading]     = useState(true);
+
+  useEffect(() => {
+    createClient()
+      .from("project_contacts")
+      .select("contact:contacts(id, first_name, last_name, email, phone, title, status, tags)")
+      .eq("project_id", projectId)
+      .then(({ data }) => {
+        if (data) setContacts(data.map((r: Record<string, unknown>) => r.contact as Contact).filter(Boolean));
+        setLoading(false);
+      });
+  }, [projectId]);
+
+  async function loadAll() {
+    if (allContacts.length > 0) return;
+    const { data } = await createClient().from("contacts")
+      .select("id, first_name, last_name, email, phone, title, status, tags")
+      .order("first_name");
+    if (data) setAllContacts(data as Contact[]);
   }
 
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-[14px]">
-        <span className="text-[13px] font-semibold" style={{ color: "var(--color-charcoal)" }}>To-dos</span>
-        {tasks.length > 0 && (
-          <div className="flex items-center gap-2">
-            <div className="w-20 h-[3px] rounded-full" style={{ background: "var(--color-border)" }}>
-              <div className="h-full rounded-full" style={{ width: `${pct}%`, background: barColor }} />
-            </div>
-            <span className="text-[11px]" style={{ color: "var(--color-grey)" }}>{completed} of {tasks.length} complete</span>
-          </div>
-        )}
-      </div>
+  async function attach(c: Contact) {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from("project_contacts")
+      .upsert({ project_id: projectId, contact_id: c.id, user_id: user.id }, { onConflict: "project_id,contact_id" });
+    setContacts(prev => prev.some(x => x.id === c.id) ? prev : [...prev, c]);
+    setSearch(""); setShowSearch(false);
+  }
 
-      <div className="flex flex-col gap-[2px] mb-2">
-        {tasks.map((task) => (
-          <div
-            key={task.id}
-            onClick={() => onToggle(task)}
-            className="flex items-start gap-2.5 px-3 py-[9px] rounded-lg cursor-pointer transition-colors"
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-off-white)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-          >
-            <div
-              className="w-4 h-4 rounded-full shrink-0 mt-[1px] flex items-center justify-center"
-              style={{
-                border: task.completed ? "none" : "1.5px solid var(--color-border)",
-                background: task.completed ? "var(--color-sage)" : "transparent",
-              }}
-            >
-              {task.completed && (
-                <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
-                  <path d="M1 3l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              )}
-            </div>
-            <span
-              className="text-[13px] leading-snug"
-              style={{
-                color: task.completed ? "var(--color-grey)" : "var(--color-charcoal)",
-                textDecoration: task.completed ? "line-through" : "none",
-              }}
-            >
-              {task.title}
-            </span>
-          </div>
-        ))}
-      </div>
+  async function detach(id: string) {
+    await createClient().from("project_contacts")
+      .delete().eq("project_id", projectId).eq("contact_id", id);
+    setContacts(prev => prev.filter(c => c.id !== id));
+  }
 
-      {adding ? (
-        <div className="flex items-center gap-2.5 px-3 py-2">
-          <div className="w-4 h-4 rounded-full border-dashed border shrink-0" style={{ borderColor: "var(--color-border)" }} />
-          <input
-            autoFocus
-            type="text"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") { setAdding(false); setNewTitle(""); } }}
-            onBlur={submit}
-            placeholder="Task name..."
-            className="flex-1 text-[13px] bg-transparent focus:outline-none"
-            style={{ color: "var(--color-charcoal)" }}
-          />
-        </div>
-      ) : (
-        <button
-          onClick={() => setAdding(true)}
-          className="flex items-center gap-2.5 px-3 py-[9px] rounded-lg w-full text-left transition-colors"
-          style={{ color: "var(--color-grey)" }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-off-white)"; e.currentTarget.style.color = "#6b6860"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-grey)"; }}
-        >
-          <div className="w-4 h-4 rounded-full flex items-center justify-center text-[11px] shrink-0" style={{ border: "1.5px dashed var(--color-border)" }}>
-            +
-          </div>
-          <span className="text-[13px]">Add a task</span>
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ── Project Notes tab ─────────────────────────────────────────────────────────
-
-function ProjectNotesTab({
-  projectId, notes, onAdd, onDelete,
-}: {
-  projectId: string;
-  notes: Note[];
-  onAdd: (note: Note) => void;
-  onDelete: (id: string) => void;
-}) {
-  const s = { background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" };
+  const searchResults = allContacts.filter(c =>
+    !contacts.some(lc => lc.id === c.id) &&
+    `${c.first_name} ${c.last_name}`.toLowerCase().includes(search.toLowerCase())
+  ).slice(0, 8);
 
   return (
-    <div>
-      {/* Compose */}
-      <div className="rounded-xl p-4 mb-5" style={s}>
-        <span className="text-[12px] font-semibold block mb-2" style={{ color: "var(--color-charcoal)" }}>New note</span>
-        <QuickNote projectId={projectId} onSave={onAdd} />
-      </div>
-
-      {/* Existing notes */}
-      {notes.length > 0 ? (
-        <div className="flex flex-col gap-2">
-          {notes.map((note) => (
-            <NoteCard key={note.id} note={note} onDelete={onDelete} />
-          ))}
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center py-12 gap-2">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-1" style={{ background: "var(--color-cream)" }}>
-            <FileText size={16} strokeWidth={1.5} style={{ color: "var(--color-grey)" }} />
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      {/* Attach bar */}
+      <div style={{ padding: "10px 16px", borderBottom: "0.5px solid var(--color-border)", flexShrink: 0 }}>
+        {showSearch ? (
+          <div>
+            <input
+              autoFocus value={search}
+              onChange={e => { setSearch(e.target.value); loadAll(); }}
+              onKeyDown={e => { if (e.key === "Escape") { setShowSearch(false); setSearch(""); } }}
+              placeholder="Search contacts to attach…"
+              style={{ width: "100%", fontSize: 12, padding: "6px 10px", border: "0.5px solid var(--color-border)", borderRadius: 7, background: "var(--color-surface-sunken)", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit", marginBottom: search ? 6 : 0 }}
+            />
+            {searchResults.map(c => (
+              <button
+                key={c.id} onClick={() => attach(c)}
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "7px 10px", borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--color-surface-sunken)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+              >
+                <div style={{ width: 26, height: 26, borderRadius: "50%", background: "var(--color-cream)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "var(--color-grey)", flexShrink: 0 }}>
+                  {c.first_name[0]}{c.last_name[0]}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 12, fontWeight: 500, color: "var(--color-charcoal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.first_name} {c.last_name}</p>
+                  {c.title && <p style={{ fontSize: 10, color: "var(--color-grey)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title}</p>}
+                </div>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_DOT[c.status] ?? "var(--color-grey)", flexShrink: 0 }} />
+              </button>
+            ))}
+            {search && searchResults.length === 0 && (
+              <p style={{ fontSize: 11, color: "var(--color-grey)", padding: "6px 10px" }}>No contacts found</p>
+            )}
           </div>
-          <p className="text-[12px] font-medium" style={{ color: "var(--color-charcoal)" }}>No notes yet</p>
-          <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>Write a note above to link it to this project.</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── NoteCard ──────────────────────────────────────────────────────────────────
-
-function NoteCard({ note, onDelete }: { note: Note; onDelete: (id: string) => void }) {
-  const [hovered, setHovered] = useState(false);
-  const snippet = note.content
-    ? note.content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120)
-    : null;
-
-  return (
-    <div
-      className="rounded-xl p-4 relative"
-      style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-semibold mb-[3px]" style={{ color: "var(--color-charcoal)" }}>
-            {note.title || "Untitled"}
-          </p>
-          {snippet && (
-            <p className="text-[12px] leading-relaxed mb-[4px]" style={{ color: "#6b6860" }}>
-              {snippet}{note.content && note.content.length > 120 ? "…" : ""}
-            </p>
-          )}
-          <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>{timeAgo(note.updated_at)}</p>
-        </div>
-        {hovered && (
+        ) : (
           <button
-            onClick={() => { if (window.confirm("Delete note?")) onDelete(note.id); }}
-            className="text-[10px] shrink-0 transition-colors mt-[1px]"
-            style={{ color: "var(--color-grey)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--color-red-orange)")}
-            onMouseLeave={(e) => (e.currentTarget.style.color = "var(--color-grey)")}
+            onClick={() => setShowSearch(true)}
+            style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--color-grey)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+            onMouseEnter={e => e.currentTarget.style.color = "#6b6860"}
+            onMouseLeave={e => e.currentTarget.style.color = "var(--color-grey)"}
           >
-            Delete
+            <Plus size={13} strokeWidth={2} />
+            Attach contact
           </button>
         )}
       </div>
+
+      {/* Contact list */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "10px 16px" }}>
+        {loading && <p style={{ fontSize: 12, color: "var(--color-grey)" }}>Loading…</p>}
+        {!loading && contacts.length === 0 && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 160, gap: 6, color: "var(--color-grey)" }}>
+            <Users size={28} strokeWidth={1.25} style={{ opacity: 0.4 }} />
+            <p style={{ fontSize: 12 }}>No contacts attached</p>
+            <p style={{ fontSize: 11 }}>Attach contacts to track who's involved in this project</p>
+          </div>
+        )}
+        {contacts.map(c => (
+          <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", marginBottom: 6, borderRadius: 10, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}>
+            <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--color-cream)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "var(--color-grey)", flexShrink: 0 }}>
+              {c.first_name[0]}{c.last_name[0]}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-charcoal)" }}>{c.first_name} {c.last_name}</p>
+                <div style={{ width: 5, height: 5, borderRadius: "50%", background: STATUS_DOT[c.status] ?? "var(--color-grey)", flexShrink: 0 }} />
+              </div>
+              {c.title && <p style={{ fontSize: 10, color: "var(--color-grey)", marginTop: 1 }}>{c.title}</p>}
+              <div style={{ display: "flex", gap: 10, marginTop: 3 }}>
+                {c.email && (
+                  <a href={`mailto:${c.email}`} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 10, color: "var(--color-grey)", textDecoration: "none" }}
+                    onMouseEnter={e => (e.currentTarget.style.color = "var(--color-sage)")}
+                    onMouseLeave={e => (e.currentTarget.style.color = "var(--color-grey)")}
+                  >
+                    <Mail size={10} strokeWidth={1.75} />{c.email}
+                  </a>
+                )}
+                {c.phone && (
+                  <a href={`tel:${c.phone}`} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 10, color: "var(--color-grey)", textDecoration: "none" }}
+                    onMouseEnter={e => (e.currentTarget.style.color = "var(--color-sage)")}
+                    onMouseLeave={e => (e.currentTarget.style.color = "var(--color-grey)")}
+                  >
+                    <Phone size={10} strokeWidth={1.75} />{c.phone}
+                  </a>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => detach(c.id)}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-grey)", padding: 0, flexShrink: 0 }}
+              title="Remove"
+              onMouseEnter={e => e.currentTarget.style.color = "var(--color-red-orange)"}
+              onMouseLeave={e => e.currentTarget.style.color = "var(--color-grey)"}
+            >
+              <X size={14} strokeWidth={1.75} />
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-// ── Project Reminders tab ─────────────────────────────────────────────────────
+// ── AshStrip ──────────────────────────────────────────────────────────────────
 
-function ProjectRemindersTab({
-  projectId, reminders, onCreate, onToggle, onUpdate, onDelete,
-}: {
-  projectId: string;
-  reminders: Reminder[];
-  onCreate: (title: string, dueDate: string | null) => void;
-  onToggle: (r: Reminder) => void;
-  onUpdate: (id: string, fields: Partial<Reminder>) => void;
-  onDelete: (id: string) => void;
-}) {
-  const [adding, setAdding]       = useState(false);
-  const [addTitle, setAddTitle]   = useState("");
-  const [addDue, setAddDue]       = useState("");
+function AshStrip({ project, activeTasks }: { project: Project; activeTasks: number }) {
+  function generateContent(): { prompt: string; action: string; buttonLabel: string } {
+    const t = project.title;
+    const n = activeTasks;
+    const tasks = `${n} open task${n !== 1 ? "s" : ""}`;
 
-  const active    = reminders.filter((r) => !r.completed).sort((a, b) => {
-    if (!a.due_date && !b.due_date) return 0;
-    if (!a.due_date) return 1;
-    if (!b.due_date) return -1;
-    return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
-  });
-  const completed = reminders.filter((r) => r.completed);
-
-  function submit() {
-    if (!addTitle.trim()) { setAdding(false); setAddDue(""); return; }
-    onCreate(addTitle.trim(), addDue || null);
-    setAddTitle("");
-    setAddDue("");
-    setAdding(false);
+    if (project.due_date) {
+      const days = Math.round((new Date(project.due_date + "T00:00:00").getTime() - Date.now()) / 86400000);
+      if (days < 0 && n > 0) return {
+        prompt:      `"${t}" is overdue with ${tasks} still open.`,
+        action:      `Triage "${t}" — it's overdue with ${tasks}. Tell me what needs to move, what to drop, and the single most important next step.`,
+        buttonLabel: "Triage tasks",
+      };
+      if (days >= 0 && days <= 7 && n > 0) return {
+        prompt:      `"${t}" is due ${days === 0 ? "today" : `in ${days} day${days !== 1 ? "s" : ""}`} with ${tasks} open.`,
+        action:      `Build a focused plan for "${t}" — it's due ${days === 0 ? "today" : `in ${days} days`} with ${tasks} still open. Prioritize ruthlessly.`,
+        buttonLabel: "Build a plan",
+      };
+    }
+    if (project.status === "on_hold") return {
+      prompt:      `"${t}" is on hold. I can help figure out what's blocking it.`,
+      action:      `Think through what's blocking "${t}" (currently on hold) and suggest a concrete path to get it moving again.`,
+      buttonLabel: "Unblock it",
+    };
+    if (project.status === "planning") return {
+      prompt:      `"${t}" is in planning — I can map out the key tasks and what to tackle first.`,
+      action:      `Plan "${t}" from scratch — give me the key tasks, a rough timeline, and the single best place to start building momentum.`,
+      buttonLabel: "Map it out",
+    };
+    if (project.status === "complete") return {
+      prompt:      `"${t}" is complete. Want a quick wrap-up before moving on?`,
+      action:      `Quick retrospective on "${t}" — what was accomplished, what to document, and any loose ends to tie off.`,
+      buttonLabel: "Wrap it up",
+    };
+    if (n > 3) return {
+      prompt:      `${n} open tasks on "${t}" — I can prioritise and flag what's at risk.`,
+      action:      `Prioritize the ${n} open tasks for "${t}". Flag anything overdue or at risk, then give me a clear focus order.`,
+      buttonLabel: "Prioritize tasks",
+    };
+    if (n > 0) return {
+      prompt:      `"${t}" has ${tasks} — want a clear view of where things stand?`,
+      action:      `Give me a focused view of "${t}" — look at the open tasks, any timeline pressure, and what I should do next.`,
+      buttonLabel: "Where things stand",
+    };
+    return {
+      prompt:      `I can pull together a full picture of where "${t}" stands right now.`,
+      action:      `Give me a full rundown of "${t}" — status, what's in flight, any risks, and the clearest next move.`,
+      buttonLabel: "Full rundown",
+    };
   }
 
-  const SectionLabel = ({ label, count }: { label: string; count: number }) => (
-    <div className="flex items-center gap-2 mb-3" style={{ color: "var(--color-grey)" }}>
-      <span className="text-[10px] font-semibold uppercase tracking-widest">{label}</span>
-      <span className="text-[10px]">{count}</span>
-    </div>
-  );
+  const { prompt, action, buttonLabel } = generateContent();
+  const projectDetail = { title: project.title, status: project.status, priority: project.priority };
+
+  function handleContextual() {
+    window.dispatchEvent(new CustomEvent("open-ash", {
+      detail: { message: action, project: projectDetail },
+    }));
+  }
+
+  function handleOpenAsh() {
+    // No message — just opens the panel with project context but no auto-send
+    window.dispatchEvent(new CustomEvent("open-ash", {
+      detail: { project: projectDetail },
+    }));
+  }
 
   return (
-    <div>
-      <SectionLabel label="Active" count={active.length} />
-
-      {active.map((r) => (
-        <PanelReminderRow key={r.id} reminder={r} onToggle={onToggle} onUpdate={onUpdate} onDelete={onDelete} />
-      ))}
-
-      {/* Inline add */}
-      {adding ? (
-        <div
-          className="flex items-center gap-3 py-[10px]"
-          style={{ borderBottom: "0.5px solid var(--color-border)" }}
-        >
-          <div className="w-[16px] h-[16px] rounded-full shrink-0" style={{ border: "1.5px dashed var(--color-border)" }} />
-          <input
-            autoFocus
-            value={addTitle}
-            onChange={(e) => setAddTitle(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") { setAdding(false); setAddTitle(""); setAddDue(""); } }}
-            onBlur={submit}
-            placeholder="Reminder title…"
-            className="flex-1 text-[13px] font-medium bg-transparent focus:outline-none"
-            style={{ color: "var(--color-charcoal)" }}
-          />
-          <input
-            type="date"
-            value={addDue}
-            onChange={(e) => setAddDue(e.target.value)}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="text-[11px] bg-transparent focus:outline-none shrink-0"
-            style={{ color: addDue ? "#6b6860" : "var(--color-grey)", border: "0.5px solid var(--color-border)", borderRadius: "6px", padding: "3px 6px" }}
-          />
-        </div>
-      ) : (
+    <div style={{
+      flexShrink: 0,
+      display: "flex", alignItems: "center", gap: 12,
+      padding: "0 18px", height: 56,
+      background: "linear-gradient(135deg, #7a9a55 0%, #5a7a38 45%, #3a5228 100%)",
+    }}>
+      <img
+        src="/Ash-Logomak.svg"
+        alt=""
+        style={{ width: 16, height: 16, flexShrink: 0, filter: "brightness(0) invert(1)", opacity: 0.9, animation: "ash-shimmer 4s ease-in-out infinite" }}
+      />
+      <span style={{ flex: 1, fontSize: 11, color: "rgba(255,255,255,0.88)", lineHeight: 1.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {prompt}
+      </span>
+      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+        {/* Contextual action — sends a specific action statement */}
         <button
-          onClick={() => setAdding(true)}
-          className="flex items-center gap-3 w-full py-[10px] text-left transition-colors"
-          style={{ color: "var(--color-grey)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "#6b6860")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--color-grey)")}
+          onClick={handleContextual}
+          style={{
+            fontSize: 11, fontWeight: 700, color: "white",
+            background: "rgba(255,255,255,0.22)", border: "0.5px solid rgba(255,255,255,0.35)",
+            borderRadius: 9999, padding: "4px 12px",
+            cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", lineHeight: 1,
+            transition: "background 0.1s ease",
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.32)"}
+          onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.22)"}
         >
-          <div className="w-[16px] h-[16px] rounded-full shrink-0" style={{ border: "1.5px dashed var(--color-border)" }} />
-          <span className="text-[13px]">+ Add reminder</span>
+          {buttonLabel} →
         </button>
-      )}
-
-      {completed.length > 0 && (
-        <div className="mt-8">
-          <SectionLabel label="Completed" count={completed.length} />
-          {completed.map((r) => (
-            <PanelReminderRow key={r.id} reminder={r} onToggle={onToggle} onUpdate={onUpdate} onDelete={onDelete} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Placeholder tab ───────────────────────────────────────────────────────────
-
-function PlaceholderTab({ name }: { name: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center h-48 gap-2">
-      <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-1" style={{ background: "var(--color-cream)" }}>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--color-grey)" strokeWidth="1.5">
-          <rect x="2" y="2" width="12" height="12" rx="2" />
-          <path d="M5 8h6M5 5.5h4M5 10.5h3" strokeLinecap="round" />
-        </svg>
+        {/* Ask Ash — opens the dialogue without auto-sending */}
+        <button
+          onClick={handleOpenAsh}
+          style={{
+            fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,0.75)",
+            background: "transparent", border: "0.5px solid rgba(255,255,255,0.25)",
+            borderRadius: 9999, padding: "4px 12px",
+            cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", lineHeight: 1,
+            transition: "all 0.1s ease",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; e.currentTarget.style.color = "white"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.75)"; }}
+        >
+          Ask Ash
+        </button>
       </div>
-      <p className="text-[13px] font-medium" style={{ color: "var(--color-charcoal)" }}>{name}</p>
-      <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>Coming soon</p>
     </div>
   );
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-const WORKSPACE_TABS = ["Overview", "Tasks", "Notes", "Reminders", "Files"] as const;
-type WorkspaceTab = typeof WORKSPACE_TABS[number];
-
 interface Props {
-  project: Project;
-  onClose: () => void;
+  project:    Project;
+  onClose:    () => void;
+  onUpdated?: (p: Project) => void;
+  onDeleted?: (id: string) => void;
 }
 
-export default function ProjectDetailPanel({ project: initialProject, onClose }: Props) {
-  const [localProject, setLocalProject] = useState<Project>(initialProject);
-  const [tasks, setTasks]               = useState<Task[]>(initialProject.tasks ?? []);
-  const [notes, setNotes]               = useState<Note[]>([]);
-  const [reminders, setReminders]       = useState<Reminder[]>([]);
-  const [activeTab, setActiveTab]       = useState<WorkspaceTab>("Overview");
+export default function ProjectDetailPanel({ project: initialProject, onClose, onUpdated, onDeleted }: Props) {
+  const [localProject,   setLocalProject]   = useState<Project>(initialProject);
+  const [tasks,          setTasks]          = useState<Task[]>(initialProject.tasks ?? []);
+  const [notes,          setNotes]          = useState<Note[]>([]);
+  const [canvasHtml,     setCanvasHtml]     = useState<string | null | undefined>(undefined);
+  const [activeTab,      setActiveTab]      = useState<SectionTab>("canvas");
+  const [maximized,      setMaximized]      = useState(false);
+  const [settingsOpen,   setSettingsOpen]   = useState(false);
+  const [financeData,    setFinanceData]    = useState<{ hours: number; billableAmount: number; invoiceCount: number; invoiceTotal: number } | null>(null);
 
+  // Hide the floating Ash button in scrim mode; broadcast project context for Ash
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("set-project-context", {
+      detail: { title: localProject.title, status: localProject.status, priority: localProject.priority },
+    }));
+    if (!maximized) {
+      const style = document.createElement("style");
+      style.id = "project-panel-ash-hide";
+      style.textContent = ".ash-fab { opacity: 0 !important; pointer-events: none !important; }";
+      document.head.appendChild(style);
+    }
+    return () => {
+      document.getElementById("project-panel-ash-hide")?.remove();
+    };
+  }, [maximized, localProject.title, localProject.status, localProject.priority]);
+
+  // Clear project context when panel unmounts
+  useEffect(() => {
+    return () => { window.dispatchEvent(new CustomEvent("clear-project-context")); };
+  }, []);
+
+  // Fetch finance data for this project
+  useEffect(() => {
+    const supabase = createClient();
+    Promise.all([
+      supabase.from("time_entries").select("duration_minutes, billable, project:projects(rate)").eq("project_id", initialProject.id),
+      supabase.from("invoices").select("id, line_items:invoice_line_items(amount)").eq("project_id", initialProject.id).neq("status", "draft"),
+    ]).then(([{ data: te }, { data: inv }]) => {
+      const hours = (te ?? []).reduce((s, t) => s + t.duration_minutes, 0) / 60;
+      const billable = (te ?? []).filter(t => t.billable);
+      const rate = (initialProject as Project & { rate?: number }).rate ?? 0;
+      const billableAmount = billable.reduce((s, t) => s + (t.duration_minutes / 60) * rate, 0);
+      type Inv = { id: string; line_items: { amount: number }[] };
+      const invs = (inv ?? []) as unknown as Inv[];
+      const invoiceTotal = invs.reduce((s, i) => s + i.line_items.reduce((ss, l) => ss + Number(l.amount), 0), 0);
+      setFinanceData({ hours: Math.round(hours * 10) / 10, billableAmount, invoiceCount: invs.length, invoiceTotal });
+    });
+  }, [initialProject.id, initialProject]);
+
+  // Fetch fresh data on open — including canvas_html which is not in the server-rendered snapshot
   useEffect(() => {
     setLocalProject(initialProject);
     setTasks(initialProject.tasks ?? []);
-    setActiveTab("Overview");
+    setActiveTab("canvas");
+    setSettingsOpen(false);
+    setCanvasHtml(undefined); // show loading state while fetching
 
     const supabase = createClient();
     Promise.all([
       supabase.from("notes").select("*").eq("project_id", initialProject.id).order("updated_at", { ascending: false }),
-      supabase.from("reminders").select("*").eq("project_id", initialProject.id).order("due_date", { ascending: true, nullsFirst: false }),
-    ]).then(([{ data: n }, { data: r }]) => {
+      supabase.from("tasks").select("*").eq("project_id", initialProject.id).order("created_at", { ascending: true }),
+      supabase.from("projects").select("canvas_html").eq("id", initialProject.id).single(),
+    ]).then(([{ data: n }, { data: t }, { data: p }]) => {
       if (n) setNotes(n as Note[]);
-      if (r) setReminders(r as Reminder[]);
+      if (t) setTasks(t as Task[]);
+      setCanvasHtml(p?.canvas_html ?? null);
     });
   }, [initialProject.id]);
 
   async function handleUpdate(field: string, value: unknown) {
-    setLocalProject((prev) => ({ ...prev, [field]: value }));
-    const supabase = createClient();
-    await supabase.from("projects").update({ [field]: value }).eq("id", localProject.id);
+    const updated = { ...localProject, [field]: value };
+    setLocalProject(updated);
+    onUpdated?.(updated);
+    await createClient().from("projects").update({ [field]: value }).eq("id", localProject.id);
   }
 
-  async function handleToggleTask(task: Task) {
-    const updated = !task.completed;
-    setTasks((prev) => prev.map((t) => t.id === task.id ? { ...t, completed: updated } : t));
-    const supabase = createClient();
-    await supabase.from("tasks").update({ completed: updated }).eq("id", task.id);
+  async function handleDelete() {
+    if (!confirm(`Delete "${localProject.title}"? This cannot be undone.`)) return;
+    await createClient().from("projects").delete().eq("id", localProject.id);
+    onDeleted?.(localProject.id);
+    onClose();
   }
 
-  async function handleAddTask(title: string) {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const { data } = await supabase
-      .from("tasks")
-      .insert({ project_id: localProject.id, user_id: user.id, title })
-      .select()
-      .single();
-    if (data) setTasks((prev) => [...prev, data as Task]);
-  }
+  const typeStyle     = localProject.type ? (TYPE_STYLE[localProject.type] ?? { bg: "var(--color-cream)", color: "#6b6860" }) : { bg: "var(--color-cream)", color: "#6b6860" };
+  const statusStyle   = STATUS_STYLE[localProject.status] ?? STATUS_STYLE.planning;
+  const priorityStyle = PRIORITY_STYLE[localProject.priority] ?? PRIORITY_STYLE.medium;
+  const isClient      = localProject.type === "client_project";
+  const overdue       = isOverdue(localProject.due_date);
 
-  function handleAddNote(note: Note) {
-    setNotes((prev) => [note, ...prev]);
-  }
-
-  async function handleDeleteNote(id: string) {
-    const supabase = createClient();
-    await supabase.from("notes").delete().eq("id", id);
-    setNotes((prev) => prev.filter((n) => n.id !== id));
-  }
-
-  async function handleCreateReminder(title: string, dueDate: string | null) {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const payload: Record<string, unknown> = { user_id: user.id, project_id: localProject.id, title };
-    if (dueDate) payload.due_date = dueDate;
-    const { data } = await supabase.from("reminders").insert(payload).select().single();
-    if (data) setReminders((prev) => [...prev, data as Reminder]);
-  }
-
-  function handleUpdateReminder(id: string, fields: Partial<Reminder>) {
-    setReminders((prev) => prev.map((r) => r.id === id ? { ...r, ...fields } : r));
-  }
-
-  async function handleToggleReminder(r: Reminder) {
-    const completed = !r.completed;
-    setReminders((prev) => prev.map((rem) => rem.id === r.id ? { ...rem, completed } : rem));
-    const supabase = createClient();
-    await supabase.from("reminders").update({ completed }).eq("id", r.id);
-  }
-
-  async function handleDeleteReminder(id: string) {
-    const supabase = createClient();
-    await supabase.from("reminders").delete().eq("id", id);
-    setReminders((prev) => prev.filter((r) => r.id !== id));
-  }
+  const NAV_ITEMS: { key: SectionTab; label: string; icon: React.ReactNode; count?: number }[] = [
+    { key: "canvas",   label: "Canvas",   icon: <FileText    size={13} strokeWidth={1.75} /> },
+    { key: "tasks",    label: "Tasks",    icon: <CheckSquare size={13} strokeWidth={1.75} />, count: tasks.filter(t => !t.completed).length },
+    { key: "contacts", label: "Contacts", icon: <Users       size={13} strokeWidth={1.75} /> },
+    { key: "notes",    label: "Notes",    icon: <FileText    size={13} strokeWidth={1.75} />, count: notes.length },
+    { key: "files",    label: "Files",    icon: <FolderOpen  size={13} strokeWidth={1.75} /> },
+  ];
 
   return (
     <>
       {/* Scrim */}
-      <div
-        className="fixed inset-0 z-10 cursor-pointer"
-        style={{ background: "rgba(20,18,16,0.52)", backdropFilter: "blur(5px)", WebkitBackdropFilter: "blur(5px)" }}
-        onClick={onClose}
-      />
+      {!maximized && (
+        <div
+          className="fixed inset-0 z-10 cursor-pointer"
+          style={{ background: "rgba(20,18,16,0.52)", backdropFilter: "blur(5px)", WebkitBackdropFilter: "blur(5px)" }}
+          onClick={onClose}
+        />
+      )}
 
-      {/* Expand button */}
-      <button
-        className="fixed z-20 w-[28px] h-[28px] flex items-center justify-center rounded-full transition-colors"
-        style={{
-          top: "60px",
-          left: "calc(56px + 6px)",
-          background: "rgba(255,255,255,0.14)",
-          backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)",
-          border: "0.5px solid rgba(255,255,255,0.22)",
-          color: "rgba(255,255,255,0.8)",
-        }}
-        title="Expand to full screen (coming soon)"
-        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.22)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.14)")}
-      >
-        <Expand size={12} strokeWidth={1.75} />
-      </button>
-
-      {/* Floating panel */}
+      {/* Panel */}
       <div
         className="fixed z-20 flex overflow-hidden"
         style={{
-          top: "52px",
-          bottom: "32px",
-          left: "calc(56px + 32px)",
-          right: "32px",
-          background: "var(--color-off-white)",
-          borderRadius: "12px",
-          boxShadow: "0 8px 40px rgba(0,0,0,0.22)",
-          border: "0.5px solid var(--color-border)",
+          top:    maximized ? 0 : "52px",
+          bottom: maximized ? 0 : "32px",
+          left:   maximized ? 0 : "calc(56px + 32px)",
+          right:  maximized ? 0 : "32px",
+          background:   "var(--color-off-white)",
+          borderRadius: maximized ? 0 : 12,
+          boxShadow:    "0 8px 40px rgba(0,0,0,0.22)",
+          border:       "0.5px solid var(--color-border)",
+          transition:   "top 0.2s ease, bottom 0.2s ease, left 0.2s ease, right 0.2s ease, border-radius 0.2s ease",
         }}
       >
-        {/* Left: properties */}
-        <PropsPanel project={localProject} onUpdate={handleUpdate} />
+        {/* ── Left sidebar ── */}
+        <div style={{
+          width: 252, flexShrink: 0, display: "flex", flexDirection: "column", overflow: "hidden",
+          borderRight: "0.5px solid var(--color-border)", background: "var(--color-warm-white)",
+          borderRadius: maximized ? 0 : "12px 0 0 12px",
+        }}>
 
-        {/* Right: workspace */}
-        <div className="flex-1 flex flex-col overflow-hidden" style={{ background: "var(--color-warm-white)", borderRadius: "0 12px 12px 0" }}>
-          {/* Tab bar */}
-          <div
-            className="flex items-center px-7 shrink-0"
-            style={{ borderBottom: "0.5px solid var(--color-border)", background: "var(--color-off-white)", borderRadius: "0 12px 0 0" }}
-          >
-            {WORKSPACE_TABS.map((tab) => (
+          {/* Top: title, desc, tags */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "18px 16px 12px" }}>
+            <EditableTitle value={localProject.title} onSave={v => handleUpdate("title", v)} />
+            <EditableDescription value={localProject.description} onSave={v => handleUpdate("description", v)} />
+
+            {/* Status / Type / Priority — labeled */}
+            <div style={{ marginBottom: 12 }}>
+              <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Tags</p>
+              <CustomSelect<ProjectStatus>
+                label="Status"   value={localProject.status}
+                options={STATUS_OPTIONS} tagStyle={statusStyle}
+                onSave={v => handleUpdate("status", v)}
+              />
+              {localProject.type && (
+                <CustomSelect<ProjectType>
+                  label="Type"   value={localProject.type}
+                  options={TYPE_OPTIONS} tagStyle={typeStyle}
+                  onSave={v => handleUpdate("type", v)}
+                />
+              )}
+              <CustomSelect<ProjectPriority>
+                label="Priority" value={localProject.priority}
+                options={PRIORITY_OPTIONS} tagStyle={priorityStyle}
+                onSave={v => handleUpdate("priority", v)}
+              />
+            </div>
+
+            {/* Properties */}
+            <div>
+              <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Timeline</p>
+              <EditableField label="Start" display={fmt(localProject.start_date)} editDefault={localProject.start_date ?? ""} inputType="date" onSave={v => handleUpdate("start_date", v || null)} />
+              <EditableField label="Due"   display={fmt(localProject.due_date)}   editDefault={localProject.due_date   ?? ""} inputType="date" onSave={v => handleUpdate("due_date",   v || null)} alert={overdue} />
+            </div>
+
+            {!isClient ? (
+              <div style={{ marginTop: 12 }}>
+                <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Details</p>
+                <EditableField label="Price"      display={localProject.listing_price ? `$${localProject.listing_price.toLocaleString()}` : "—"} editDefault={localProject.listing_price?.toString() ?? ""} inputType="number" placeholder="0" onSave={v => handleUpdate("listing_price", v ? parseFloat(v) : null)} />
+                <EditableField label="Dimensions" display={localProject.dimensions ?? "—"} editDefault={localProject.dimensions ?? ""} placeholder='84" × 38"' onSave={v => handleUpdate("dimensions", v || null)} />
+                <EditableField label="Materials"  display={localProject.materials  ?? "—"} editDefault={localProject.materials  ?? ""} placeholder="White oak" onSave={v => handleUpdate("materials",  v || null)} />
+                <EditableField label="Weight"     display={localProject.weight     ?? "—"} editDefault={localProject.weight     ?? ""} placeholder="~180 lbs"  onSave={v => handleUpdate("weight",     v || null)} />
+              </div>
+            ) : (
+              <div style={{ marginTop: 12 }}>
+                <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Client</p>
+                <EditableField label="Name"  display={localProject.client_name ?? "—"} editDefault={localProject.client_name ?? ""} placeholder="Client name" onSave={v => handleUpdate("client_name", v || null)} />
+                <EditableField label="Rate"  display={localProject.rate ? `$${localProject.rate}/hr` : "—"} editDefault={localProject.rate?.toString() ?? ""} inputType="number" placeholder="150" onSave={v => handleUpdate("rate", v ? parseFloat(v) : null)} />
+                <EditableField label="Billed" display={`${localProject.billed_hours} hrs`} editDefault={localProject.billed_hours.toString()} inputType="number" onSave={v => handleUpdate("billed_hours", v ? parseFloat(v) : 0)} />
+                <EditableField label="Value" display={localProject.est_value ? `$${localProject.est_value.toLocaleString()}` : "—"} editDefault={localProject.est_value?.toString() ?? ""} inputType="number" placeholder="0" onSave={v => handleUpdate("est_value", v ? parseFloat(v) : null)} />
+              </div>
+            )}
+            {/* ── Finance cross-module ── */}
+            {financeData !== null && (financeData.hours > 0 || financeData.invoiceCount > 0) && (
+              <div style={{ marginTop: 12, borderTop: "0.5px solid var(--color-border)", paddingTop: 10 }}>
+                <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 6 }}>Finance</p>
+                {financeData.hours > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: "0.5px solid var(--color-border)" }}>
+                    <span style={{ fontSize: 11, color: "var(--color-grey)" }}>Time logged</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: "#6b6860" }}>{financeData.hours}h</span>
+                  </div>
+                )}
+                {localProject.type === "client_project" && financeData.billableAmount > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: "0.5px solid var(--color-border)" }}>
+                    <span style={{ fontSize: 11, color: "var(--color-grey)" }}>Billable</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: "#6b6860" }}>${financeData.billableAmount.toLocaleString()}</span>
+                  </div>
+                )}
+                {financeData.invoiceCount > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+                    <span style={{ fontSize: 11, color: "var(--color-grey)" }}>Invoiced</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: "#6b6860" }}>{financeData.invoiceCount} · ${financeData.invoiceTotal.toLocaleString()}</span>
+                  </div>
+                )}
+                <button
+                  onClick={() => window.location.href = "/finance"}
+                  style={{ marginTop: 6, fontSize: 10, color: "var(--color-sage)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}
+                  onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
+                  onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
+                >
+                  View in Finance →
+                </button>
+              </div>
+            )}
+
+            {/* ── Navigation — inline after details ── */}
+            <div style={{ marginTop: 16, borderTop: "0.5px solid var(--color-border)", paddingTop: 10 }}>
+              <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Workspace</p>
+              {NAV_ITEMS.map(item => {
+                const active = activeTab === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    onClick={() => setActiveTab(item.key)}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 8px",
+                      borderRadius: 7, border: "none", background: active ? "rgba(155,163,122,0.12)" : "transparent",
+                      cursor: "pointer", fontFamily: "inherit", transition: "background 0.1s ease", marginBottom: 1,
+                    }}
+                    onMouseEnter={e => { if (!active) e.currentTarget.style.background = "rgba(0,0,0,0.04)"; }}
+                    onMouseLeave={e => { if (!active) e.currentTarget.style.background = "transparent"; }}
+                  >
+                    <span style={{ color: active ? "#5a7040" : "var(--color-grey)" }}>{item.icon}</span>
+                    <span style={{ fontSize: 12, flex: 1, textAlign: "left", color: active ? "#5a7040" : "var(--color-grey)", fontWeight: active ? 500 : 400 }}>{item.label}</span>
+                    {item.count !== undefined && item.count > 0 && (
+                      <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>{item.count}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── Settings — fixed at bottom, expands upward ── */}
+          <div style={{ borderTop: "0.5px solid var(--color-border)", padding: "4px 8px 8px", flexShrink: 0 }}>
+            {/* Delete + future options appear above the Settings button */}
+            {settingsOpen && (
+              <div style={{ paddingBottom: 4 }}>
+                <button
+                  onClick={handleDelete}
+                  style={{
+                    width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px",
+                    borderRadius: 7, border: "none", background: "transparent",
+                    cursor: "pointer", fontFamily: "inherit", color: "var(--color-red-orange)",
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(220,62,13,0.07)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                >
+                  <Trash2 size={13} strokeWidth={1.75} />
+                  <span style={{ fontSize: 12 }}>Delete project</span>
+                </button>
+              </div>
+            )}
+            <button
+              onClick={() => setSettingsOpen(v => !v)}
+              style={{
+                width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px",
+                borderRadius: 7, border: "none", background: settingsOpen ? "var(--color-surface-raised)" : "transparent",
+                cursor: "pointer", fontFamily: "inherit",
+              }}
+              onMouseEnter={e => { if (!settingsOpen) e.currentTarget.style.background = "rgba(0,0,0,0.04)"; }}
+              onMouseLeave={e => { if (!settingsOpen) e.currentTarget.style.background = "transparent"; }}
+            >
+              <Settings size={13} strokeWidth={1.75} style={{ color: settingsOpen ? "var(--color-charcoal)" : "var(--color-grey)" }} />
+              <span style={{ fontSize: 12, color: settingsOpen ? "var(--color-charcoal)" : "var(--color-grey)", fontWeight: settingsOpen ? 500 : 400 }}>Settings</span>
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" style={{ marginLeft: "auto", color: "var(--color-grey)", transform: settingsOpen ? "rotate(-90deg)" : "rotate(90deg)", transition: "transform 0.15s ease" }}>
+                <path d="M2 1l4 3-4 3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* ── Right: main area ── */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
+          {/* Top bar */}
+          <div style={{
+            height: 40, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "0 14px", borderBottom: "0.5px solid var(--color-border)", background: "var(--color-off-white)",
+            borderRadius: maximized ? 0 : "0 12px 0 0",
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-charcoal)" }}>
+              {NAV_ITEMS.find(n => n.key === activeTab)?.label}
+            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className="px-4 py-[13px] text-[12px] transition-colors"
-                style={{
-                  color: activeTab === tab ? "var(--color-charcoal)" : "#6b6860",
-                  fontWeight: activeTab === tab ? 600 : 400,
-                  borderBottom: `2px solid ${activeTab === tab ? "var(--color-charcoal)" : "transparent"}`,
-                  marginBottom: "-0.5px",
-                  background: "transparent",
-                }}
+                onClick={() => setMaximized(v => !v)}
+                title={maximized ? "Restore" : "Maximize"}
+                style={{ width: 28, height: 28, borderRadius: 6, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-tertiary)" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--color-surface-sunken)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
               >
-                {tab}
-                {tab === "Notes" && notes.length > 0 && (
-                  <span className="ml-1.5 text-[9px] px-[5px] py-[1px] rounded-full" style={{ background: "var(--color-cream)", color: "var(--color-grey)" }}>
-                    {notes.length}
-                  </span>
-                )}
-                {tab === "Reminders" && reminders.filter((r) => !r.completed).length > 0 && (
-                  <span className="ml-1.5 text-[9px] px-[5px] py-[1px] rounded-full" style={{ background: "var(--color-cream)", color: "var(--color-grey)" }}>
-                    {reminders.filter((r) => !r.completed).length}
-                  </span>
-                )}
+                {maximized ? <Minimize2 size={13} strokeWidth={1.75} /> : <Maximize2 size={13} strokeWidth={1.75} />}
               </button>
-            ))}
+              <button
+                onClick={onClose}
+                title="Close"
+                style={{ width: 28, height: 28, borderRadius: 6, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-tertiary)" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--color-surface-sunken)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+              >
+                <X size={13} strokeWidth={2} />
+              </button>
+            </div>
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto px-8 py-7">
-            {activeTab === "Overview" && (
-              <OverviewTab
-                project={localProject}
-                tasks={tasks}
-                notes={notes}
-                reminders={reminders}
-                onToggle={handleToggleTask}
-                onAddNote={handleAddNote}
-                onToggleReminder={handleToggleReminder}
-              />
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            {activeTab === "canvas" && (
+              canvasHtml === undefined
+                ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "var(--color-grey)" }}>Loading…</div>
+                : <CanvasEditor key={localProject.id} projectId={localProject.id} initialHtml={canvasHtml} />
             )}
-            {activeTab === "Tasks" && (
-              <TasksTab project={localProject} tasks={tasks} onToggle={handleToggleTask} onAdd={handleAddTask} />
+            {activeTab === "tasks" && (
+              <ProjectTasksTab projectId={localProject.id} tasks={tasks} setTasks={setTasks} />
             )}
-            {activeTab === "Notes" && (
-              <ProjectNotesTab
-                projectId={localProject.id}
-                notes={notes}
-                onAdd={handleAddNote}
-                onDelete={handleDeleteNote}
-              />
+            {activeTab === "contacts" && (
+              <ContactsTab key={localProject.id} projectId={localProject.id} />
             )}
-            {activeTab === "Reminders" && (
-              <ProjectRemindersTab
-                projectId={localProject.id}
-                reminders={reminders}
-                onCreate={handleCreateReminder}
-                onToggle={handleToggleReminder}
-                onUpdate={handleUpdateReminder}
-                onDelete={handleDeleteReminder}
-              />
+            {activeTab === "notes" && (
+              <NotesTab projectId={localProject.id} notes={notes} setNotes={setNotes} />
             )}
-            {activeTab === "Files" && <PlaceholderTab name="Files" />}
+            {activeTab === "files" && (
+              <FilesTab key={localProject.id} projectId={localProject.id} />
+            )}
           </div>
+
+          {/* Ash strip — scrim mode only */}
+          {!maximized && <AshStrip project={localProject} activeTasks={tasks.filter(t => !t.completed).length} />}
         </div>
       </div>
     </>

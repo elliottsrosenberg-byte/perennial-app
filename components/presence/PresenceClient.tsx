@@ -1,7 +1,173 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
 import type { Opportunity } from "@/types/database";
+
+function openAsh(message: string) {
+  window.dispatchEvent(new CustomEvent("open-ash", { detail: { message } }));
+}
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+interface GA4Stats {
+  connected?: boolean;
+  sessions?: number;
+  active_users?: number;
+  bounce_rate?: number;
+  avg_session_sec?: number;
+  pageviews?: number;
+  property_name?: string;
+  property_id?: string;
+  top_pages?: { path: string; title: string; pageviews: number; users: number; avg_sec: number }[];
+  channels?: { channel: string; sessions: number; pct: number }[];
+  last_fetched?: string;
+  step?: string;
+}
+
+interface PropertyOption {
+  property: string;
+  displayName: string;
+  account: string;
+  propertyId: string;
+}
+
+// ─── Integration record ───────────────────────────────────────────────────────
+interface Integration {
+  id: string;
+  provider: string;
+  account_name: string | null;
+  metadata: Record<string, unknown>;
+  connected_at: string;
+  last_synced_at: string | null;
+}
+
+// ─── Connect integration modal ────────────────────────────────────────────────
+type ConnectProvider = "beehiiv" | "kit" | "mailchimp" | "substack";
+
+const PROVIDER_META: Record<ConnectProvider, { label: string; color: string; bg: string; placeholder: string; needsDomain?: boolean; isManual?: boolean }> = {
+  // plausible removed — replaced by GA4 (free, no API key needed)
+  beehiiv:   { label:"Beehiiv",    color:"#FF6B35", bg:"rgba(255,107,53,0.1)", placeholder:"Enter your Beehiiv API key" },
+  kit:       { label:"Kit",        color:"#FB6970", bg:"rgba(251,105,112,0.1)",placeholder:"Enter your Kit API key" },
+  mailchimp: { label:"Mailchimp",  color:"#FFE01B", bg:"rgba(255,224,27,0.12)",placeholder:"Enter your Mailchimp API key (key-dc##)" },
+  substack:  { label:"Substack",   color:"#FF6719", bg:"rgba(255,103,25,0.1)", placeholder:"", isManual:true },
+};
+
+function ConnectIntegrationModal({ provider, onClose, onConnected }: {
+  provider: ConnectProvider;
+  onClose: () => void;
+  onConnected: (integration: Integration) => void;
+}) {
+  const cfg = PROVIDER_META[provider];
+  const [apiKey,   setApiKey]   = useState("");
+  const [domain,   setDomain]   = useState("");
+  const [pubName,  setPubName]  = useState("");
+  const [subCount, setSubCount] = useState("");
+  const [openRate, setOpenRate] = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
+
+  async function handleConnect() {
+    setLoading(true); setError(null);
+    try {
+      const body: Record<string, unknown> = { provider, apiKey };
+      if (cfg.needsDomain) body.domain = domain;
+      if (cfg.isManual)    body.metadata = { publication_name: pubName, subscriber_count: parseInt(subCount) || null, open_rate: parseFloat(openRate) || null };
+
+      const res = await fetch("/api/integrations/connect", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      const data = await res.json() as { ok?: boolean; error?: string; integration?: Integration };
+      if (!res.ok || data.error) { setError(data.error ?? "Connection failed."); return; }
+      onConnected(data.integration!);
+      onClose();
+    } catch {
+      setError("Connection failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const inputCls = "w-full px-3 py-2 text-[12px] rounded-lg focus:outline-none";
+  const inputStyle = { background:"var(--color-warm-white)", border:"0.5px solid var(--color-border)", color:"var(--color-charcoal)", fontFamily:"inherit" };
+
+  return (
+    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position:"fixed", inset:0, background:"rgba(20,18,16,0.52)", backdropFilter:"blur(5px)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+      <div style={{ background:"var(--color-off-white)", borderRadius:12, boxShadow:"0 8px 40px rgba(0,0,0,0.18)", width:"100%", maxWidth:420, overflow:"hidden" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"16px 20px", borderBottom:"0.5px solid var(--color-border)" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:32, height:32, borderRadius:8, background:cfg.bg, display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <span style={{ fontSize:14, fontWeight:700, color:cfg.color }}>{cfg.label[0]}</span>
+            </div>
+            <div>
+              <div style={{ fontSize:14, fontWeight:700, color:"var(--color-charcoal)" }}>Connect {cfg.label}</div>
+              <div style={{ fontSize:11, color:"var(--color-grey)", marginTop:1 }}>
+                {cfg.isManual ? "Enter your stats manually" : "Paste your API key to connect"}
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:"var(--color-grey)" }}><IcX /></button>
+        </div>
+        <div style={{ padding:20, display:"flex", flexDirection:"column", gap:12 }}>
+          {cfg.isManual ? (
+            <>
+              <div>
+                <label style={{ display:"block", fontSize:11, fontWeight:500, color:"var(--color-charcoal)", marginBottom:4 }}>Publication name</label>
+                <input value={pubName} onChange={e => setPubName(e.target.value)} placeholder="e.g. Perennial Notes" autoFocus className={inputCls} style={inputStyle} />
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label style={{ display:"block", fontSize:11, fontWeight:500, color:"var(--color-charcoal)", marginBottom:4 }}>Subscriber count</label>
+                  <input value={subCount} onChange={e => setSubCount(e.target.value)} type="number" placeholder="312" className={inputCls} style={inputStyle} />
+                </div>
+                <div className="flex-1">
+                  <label style={{ display:"block", fontSize:11, fontWeight:500, color:"var(--color-charcoal)", marginBottom:4 }}>Open rate (%)</label>
+                  <input value={openRate} onChange={e => setOpenRate(e.target.value)} type="number" placeholder="44" className={inputCls} style={inputStyle} />
+                </div>
+              </div>
+              <p style={{ fontSize:11, color:"var(--color-grey)", lineHeight:1.5 }}>
+                Substack doesn&apos;t expose stats via API. Enter your numbers from your Substack dashboard. We&apos;ll add a reminder to update them monthly.
+              </p>
+            </>
+          ) : (
+            <>
+              {cfg.needsDomain && (
+                <div>
+                  <label style={{ display:"block", fontSize:11, fontWeight:500, color:"var(--color-charcoal)", marginBottom:4 }}>Your site domain *</label>
+                  <input value={domain} onChange={e => setDomain(e.target.value)} placeholder="yourdomain.com" autoFocus className={inputCls} style={inputStyle} />
+                  <p style={{ fontSize:10, color:"var(--color-grey)", marginTop:4 }}>The domain as added to your Plausible dashboard (without https://)</p>
+                </div>
+              )}
+              <div>
+                <label style={{ display:"block", fontSize:11, fontWeight:500, color:"var(--color-charcoal)", marginBottom:4 }}>API key *</label>
+                <input value={apiKey} onChange={e => setApiKey(e.target.value)} type="password"
+                  placeholder={cfg.placeholder} {...(!cfg.needsDomain ? { autoFocus: true } : {})}
+                  onKeyDown={e => { if (e.key === "Enter") handleConnect(); }}
+                  className={inputCls} style={inputStyle} />
+                <p style={{ fontSize:10, color:"var(--color-grey)", marginTop:4 }}>
+                  {provider === "beehiiv"    && "Find this in Beehiiv → Settings → API (already shown above)"}
+                  {provider === "beehiiv"    && "Find this in Beehiiv → Settings → API"}
+                  {provider === "kit"        && "Find this in Kit → Settings → Advanced → API Key"}
+                  {provider === "mailchimp"  && "Find this in Mailchimp → Account → Extras → API keys. Key format: xxxxxxxx-usXX"}
+                </p>
+              </div>
+            </>
+          )}
+          {error && <p style={{ fontSize:12, color:"var(--color-red-orange)" }}>{error}</p>}
+        </div>
+        <div style={{ display:"flex", gap:8, justifyContent:"flex-end", padding:"12px 20px", borderTop:"0.5px solid var(--color-border)" }}>
+          <button onClick={onClose} style={{ padding:"7px 16px", fontSize:12, borderRadius:7, border:"0.5px solid var(--color-border)", background:"transparent", color:"var(--color-grey)", cursor:"pointer", fontFamily:"inherit" }}
+            onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+            onMouseLeave={e => e.currentTarget.style.background = "transparent"}>Cancel</button>
+          <button onClick={handleConnect} disabled={loading || (!cfg.isManual && !apiKey.trim()) || (cfg.needsDomain && !domain.trim())}
+            style={{ padding:"7px 16px", fontSize:12, fontWeight:500, borderRadius:7, border:"none", background:"var(--color-sage)", color:"white", cursor:"pointer", fontFamily:"inherit", opacity: loading ? 0.6 : 1 }}>
+            {loading ? "Connecting…" : "Connect"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Accent palette (wireframe colours, not in design tokens) ─────────────────
 const C = {
@@ -107,14 +273,14 @@ function getWeekEvents(week: Date[], events: CalEvent[]): WeekEvent[] {
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 const cardStyle = { background: "var(--color-off-white)", boxShadow: "0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)" };
 const cardHeadStyle: React.CSSProperties = { padding: "10px 14px", borderBottom: "0.5px solid var(--color-border)", display: "flex", alignItems: "center", gap: 8 };
-const cardHeadTitle: React.CSSProperties = { fontSize: 12, fontWeight: 650, flex: 1, color: "var(--color-charcoal)" };
-const blueLink: React.CSSProperties = { fontSize: 11, color: C.blue, cursor: "pointer" };
+const cardHeadTitle: React.CSSProperties = { fontSize: 12, fontWeight: 700, flex: 1, color: "var(--color-charcoal)" };
+const blueLink: React.CSSProperties = { fontSize: 11, color: "var(--color-sage)", cursor: "pointer" };
 
 function card(cn = "") { return `rounded-xl overflow-hidden ${cn}`; }
 
-function StatCard({ label, value, sub, subUp = false, detail, helpText, askAsh, onClick, badge, badgeWarn }: {
+function StatCard({ label, value, sub, subUp = false, detail, helpText, askAsh, ashMessage, onClick, badge, badgeWarn }: {
   label: string; value: string; sub: string; subUp?: boolean; detail?: string;
-  helpText?: string; askAsh?: boolean; onClick?: () => void; badge?: string; badgeWarn?: boolean;
+  helpText?: string; askAsh?: boolean; ashMessage?: string; onClick?: () => void; badge?: string; badgeWarn?: boolean;
 }) {
   return (
     <div onClick={onClick} className="flex flex-col gap-1 rounded-xl p-4 flex-1 shrink-0" style={{ ...cardStyle, cursor: onClick ? "pointer" : "default" }}>
@@ -123,25 +289,23 @@ function StatCard({ label, value, sub, subUp = false, detail, helpText, askAsh, 
         {badge && <span className="rounded-full" style={{ fontSize: 9, padding: "1px 6px", fontWeight: 600, background: badgeWarn ? C.amberL : C.accentL, color: badgeWarn ? C.amber : C.accent }}>{badge}</span>}
         {helpText && <div title={helpText} className="flex items-center justify-center rounded-full shrink-0" style={{ width: 14, height: 14, background: "var(--color-cream)", border: "0.5px solid rgba(31,33,26,0.13)", color: "var(--color-grey)", fontSize: 9, fontWeight: 700, cursor: "help" }}>?</div>}
       </div>
-      <div style={{ fontSize: 24, fontWeight: 650, letterSpacing: "-0.03em", lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1.1 }}>{value}</div>
       <div style={{ fontSize: 11, color: subUp ? C.accent : "var(--color-grey)" }}>{sub}</div>
       {detail && <><hr style={{ border: "none", borderTop: "0.5px solid var(--color-border)", margin: "4px 0" }} /><div style={{ fontSize: 11, color: "var(--color-grey)" }}>{detail}</div></>}
-      {askAsh && <button className="text-left mt-1" style={{ fontSize: 10, color: C.accent, background: "none", border: "none", padding: 0, cursor: "pointer" }}>Ask Ash how to improve →</button>}
+      {askAsh && <button className="text-left mt-1" onClick={() => openAsh(ashMessage ?? `How can I improve my ${label.toLowerCase()}?`)} style={{ fontSize: 10, color: "var(--color-sage)", background: "none", border: "none", padding: 0, cursor: "pointer" }}>Ask Ash how to improve →</button>}
     </div>
   );
 }
 
 function AshCard({ text, buttonLabel = "Draft with Ash" }: { text: string; buttonLabel?: string }) {
   return (
-    <div className="rounded-xl p-4" style={{ background: C.accentL, border: `0.5px solid rgba(61,107,79,0.18)` }}>
+    <div className="rounded-xl p-4" style={{ background: "rgba(155,163,122,0.1)", border: "0.5px solid rgba(155,163,122,0.25)" }}>
       <div className="flex items-center gap-2 mb-2">
-        <div className="flex items-center justify-center rounded-full shrink-0" style={{ width: 22, height: 22, background: C.accent }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5"><path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/><path d="M12 12c-2-1.5-3-3-2-5"/><path d="M12 12c2-1.5 3-3 2-5"/></svg>
-        </div>
-        <span style={{ fontSize: 11, fontWeight: 600, color: C.accent }}>Ash</span>
+        <img src="/Ash-Logomak.svg" alt="" style={{ width: 18, height: 18, filter: "none", opacity: 0.8 }} />
+        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-sage)" }}>Ash</span>
       </div>
-      <p style={{ fontSize: 11, color: C.accent, lineHeight: 1.5, marginBottom: 10 }}>{text}</p>
-      <button className="rounded" style={{ background: C.accent, color: "white", border: "none", fontSize: 10, padding: "4px 10px", cursor: "pointer" }}>{buttonLabel}</button>
+      <p style={{ fontSize: 11, color: "#5a7040", lineHeight: 1.5, marginBottom: 10 }}>{text}</p>
+      <button onClick={() => openAsh(text)} className="rounded" style={{ background: "var(--color-sage)", color: "white", border: "none", fontSize: 10, padding: "4px 10px", cursor: "pointer", fontFamily: "inherit" }}>{buttonLabel}</button>
     </div>
   );
 }
@@ -171,11 +335,11 @@ const IcImgSm  = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="non
 function BtnGhost({ children, small }: { children: React.ReactNode; small?: boolean }) {
   return <button style={{ background:"transparent", border:"0.5px solid rgba(31,33,26,0.18)", borderRadius:6, padding:small?"3px 8px":"5px 11px", fontSize:small?10:11, color:"var(--color-grey)", cursor:"pointer", fontFamily:"inherit" }}>{children}</button>;
 }
-function BtnPrimary({ children, small }: { children: React.ReactNode; small?: boolean }) {
-  return <button style={{ background:"var(--color-charcoal)", color:"var(--color-off-white)", border:"none", borderRadius:6, padding:small?"3px 8px":"5px 11px", fontSize:small?10:11, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>{children}</button>;
+function BtnPrimary({ children, small, onClick }: { children: React.ReactNode; small?: boolean; onClick?: () => void }) {
+  return <button onClick={onClick} style={{ background:"var(--color-sage)", color:"white", border:"none", borderRadius:6, padding:small?"3px 8px":"5px 11px", fontSize:small?10:11, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>{children}</button>;
 }
-function BtnAccent({ children, small }: { children: React.ReactNode; small?: boolean }) {
-  return <button style={{ background:C.accent, color:"white", border:"none", borderRadius:6, padding:small?"3px 8px":"5px 11px", fontSize:small?10:11, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>{children}</button>;
+function BtnAccent({ children, small, onClick }: { children: React.ReactNode; small?: boolean; onClick?: () => void }) {
+  return <button onClick={onClick} style={{ background:"var(--color-sage)", color:"white", border:"none", borderRadius:6, padding:small?"3px 8px":"5px 11px", fontSize:small?10:11, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>{children}</button>;
 }
 
 function DateBlock({ month, day }: { month: string; day: string }) {
@@ -206,7 +370,14 @@ function StatusBadge({ status }: { status: string }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // OVERVIEW TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function OverviewTab({ onTabChange, opps }: { onTabChange: (t: Tab) => void; opps: Opportunity[] }) {
+function OverviewTab({ onTabChange, opps, instagram, plausible, newsletter, onConnect }: {
+  onTabChange: (t: Tab) => void;
+  opps: Opportunity[];
+  instagram: Integration | null;
+  plausible: Integration | null;
+  newsletter: Integration | null;
+  onConnect: (p: ConnectProvider) => void;
+}) {
   const nextOpp = opps.find(o => {
     const s = parseDate(o.start_date);
     return s && daysUntil(s) >= 0;
@@ -241,9 +412,44 @@ function OverviewTab({ onTabChange, opps }: { onTabChange: (t: Tab) => void; opp
 
       {/* Stat cards */}
       <div style={{ display:"flex", gap:12 }}>
-        <StatCard label="Website"       value="1,240" sub="↑ 18% vs March" subUp detail="Top referral: Sight Unseen feature" badge="Connected" helpText="How many times your site was loaded." askAsh onClick={() => onTabChange("website")} />
-        <StatCard label="Socials"       value="8,400" sub="↑ 940 followers this month" subUp detail="4.2% engagement · 6 posts in Apr" badge="Connected" helpText="Your follower count and engagement rate." askAsh onClick={() => onTabChange("socials")} />
-        <StatCard label="Newsletter"    value="47%"   sub="Open rate · last send Apr 9" subUp detail="312 subscribers · +14 this month" badge="Connected" helpText="What percentage of subscribers opened your most recent email." askAsh onClick={() => onTabChange("newsletter")} />
+        {/* Website stat — real data if Plausible connected */}
+        {plausible ? (
+          <StatCard label="Website" value={plausible.metadata.sessions ? String(plausible.metadata.sessions) : plausible.metadata.visitors_30d ? String(plausible.metadata.visitors_30d) : "—"} sub="Sessions · last 30 days" subUp detail={plausible.metadata.property_name as string ?? plausible.account_name ?? ""} badge="Connected" helpText="Sessions from Google Analytics." askAsh ashMessage="How can I drive more traffic to my website?" onClick={() => onTabChange("website")} />
+        ) : (
+          <div onClick={() => window.location.href = "/api/auth/google-analytics"} className="flex flex-col gap-1 rounded-xl p-4 flex-1 shrink-0 cursor-pointer" style={{ background:"var(--color-warm-white)", boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)" }}>
+            <span style={{ fontSize:10, color:"var(--color-grey)", fontWeight:600, letterSpacing:"0.06em", textTransform:"uppercase" }}>Website</span>
+            <div style={{ fontSize:22, fontWeight:700, color:"var(--color-grey)", opacity:0.3 }}>—</div>
+            <div style={{ fontSize:11, color:"var(--color-sage)", fontWeight:500 }}>Connect Google Analytics →</div>
+          </div>
+        )}
+        {/* Socials stat — real data if Instagram connected */}
+        {instagram ? (
+          <StatCard label="Socials" value={instagram.metadata.followers_count ? String(instagram.metadata.followers_count) : "—"} sub={instagram.metadata.engagement_rate ? `${instagram.metadata.engagement_rate}% engagement rate` : "Followers"} subUp detail={instagram.account_name ?? "@instagram"} badge="Connected" helpText="Your follower count and engagement rate." askAsh ashMessage="How can I grow my Instagram following as a designer?" onClick={() => onTabChange("socials")} />
+        ) : (
+          <div onClick={() => window.location.href = "/api/auth/instagram"} className="flex flex-col gap-1 rounded-xl p-4 flex-1 shrink-0 cursor-pointer" style={{ background:"var(--color-warm-white)", boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)" }}>
+            <span style={{ fontSize:10, color:"var(--color-grey)", fontWeight:600, letterSpacing:"0.06em", textTransform:"uppercase" }}>Socials</span>
+            <div style={{ fontSize:22, fontWeight:700, color:"var(--color-grey)", opacity:0.3 }}>—</div>
+            <div style={{ fontSize:11, color:"var(--color-sage)", fontWeight:500 }}>Connect Instagram →</div>
+          </div>
+        )}
+        {/* Newsletter stat — real data if any newsletter connected */}
+        {newsletter ? (
+          <StatCard label="Newsletter"
+            value={newsletter.metadata.open_rate ? `${newsletter.metadata.open_rate}%` : newsletter.metadata.subscriber_count ? String(newsletter.metadata.subscriber_count) : "—"}
+            sub={newsletter.metadata.open_rate ? "Open rate" : "Subscribers"}
+            subUp
+            detail={`${newsletter.metadata.subscriber_count ? `${newsletter.metadata.subscriber_count} subscribers · ` : ""}${newsletter.account_name ?? ""}`}
+            badge="Connected"
+            helpText="Newsletter open rate and subscriber count."
+            askAsh ashMessage="What topics should I write about to grow my newsletter as a designer?"
+            onClick={() => onTabChange("newsletter")} />
+        ) : (
+          <div onClick={() => onConnect("beehiiv")} className="flex flex-col gap-1 rounded-xl p-4 flex-1 shrink-0 cursor-pointer" style={{ background:"var(--color-warm-white)", boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)" }}>
+            <span style={{ fontSize:10, color:"var(--color-grey)", fontWeight:600, letterSpacing:"0.06em", textTransform:"uppercase" }}>Newsletter</span>
+            <div style={{ fontSize:22, fontWeight:700, color:"var(--color-grey)", opacity:0.3 }}>—</div>
+            <div style={{ fontSize:11, color:"var(--color-sage)", fontWeight:500 }}>Connect newsletter →</div>
+          </div>
+        )}
         <StatCard label="Opportunities" value={String(opps.length)} sub={nextOpp ? `Next: ${nextOpp.title.split(" ")[0]} · ${nextOpp.start_date?.slice(5).replace("-", "/")}` : "No upcoming"} detail="Perennial Feed" badge={deadlineSoon > 0 ? `${deadlineSoon} deadline soon` : undefined} badgeWarn helpText="Upcoming fairs, open calls, grants, and awards." askAsh onClick={() => onTabChange("opportunities")} />
       </div>
 
@@ -311,19 +517,170 @@ function OverviewTab({ onTabChange, opps }: { onTabChange: (t: Tab) => void; opp
 // ═══════════════════════════════════════════════════════════════════════════════
 // WEBSITE TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function WebsiteTab() {
-  const bars = [18,22,15,25,30,340,28,20,18,24,22,26,20,18,22,24,20,25,28,22,19];
-  const maxH = Math.max(...bars);
+function WebsiteTab({ integration, onConnect, onDisconnect }: {
+  integration: Integration | null;
+  onConnect: () => void;
+  onDisconnect: () => void;
+}) {
+  const [step, setStep]                     = useState<"idle"|"select_property"|"connected">("idle");
+  const [properties, setProperties]         = useState<PropertyOption[]>([]);
+  const [selectedPropId, setSelectedPropId] = useState("");
+  const [loadingProps, setLoadingProps]     = useState(false);
+  const [savingProp,   setSavingProp]       = useState(false);
+  const [stats, setStats]                   = useState<GA4Stats | null>(null);
+  const [loadingStats, setLoadingStats]     = useState(false);
+  const [propError, setPropError]           = useState<string | null>(null);
+
+  // Detect OAuth callback redirect
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("step") === "select-property") {
+      setStep("select_property");
+      // Clean URL
+      window.history.replaceState({}, "", window.location.pathname + "?tab=website");
+    }
+  }, []);
+
+  // Load properties list when in select_property step
+  useEffect(() => {
+    if (step !== "select_property") return;
+    setLoadingProps(true);
+    fetch("/api/integrations/ga4/properties")
+      .then(r => r.json())
+      .then((d: { properties?: PropertyOption[]; error?: string }) => {
+        if (d.error) { setPropError(d.error); }
+        else { setProperties(d.properties ?? []); if (d.properties?.[0]) setSelectedPropId(d.properties[0].propertyId); }
+        setLoadingProps(false);
+      })
+      .catch(() => { setPropError("Failed to load properties."); setLoadingProps(false); });
+  }, [step]);
+
+  // Load stats when fully connected
+  useEffect(() => {
+    const meta = integration?.metadata as Record<string, unknown> | undefined;
+    if (!integration || meta?.step === "select_property") {
+      if (meta?.step === "select_property") setStep("select_property");
+      return;
+    }
+    setStep("connected");
+    // Use cached stats if fresh (< 30 min)
+    const lastFetched = meta?.last_fetched as string | undefined;
+    if (lastFetched && Date.now() - new Date(lastFetched).getTime() < 30 * 60 * 1000) {
+      setStats(meta as GA4Stats);
+      return;
+    }
+    setLoadingStats(true);
+    fetch("/api/integrations/ga4/stats")
+      .then(r => r.json())
+      .then((d: GA4Stats & { step?: string }) => {
+        if (d.step === "select_property") { setStep("select_property"); return; }
+        if (d.connected) setStats(d);
+        setLoadingStats(false);
+      })
+      .catch(() => setLoadingStats(false));
+  }, [integration]);
+
+  async function saveProperty() {
+    if (!selectedPropId) return;
+    setSavingProp(true);
+    const prop = properties.find(p => p.propertyId === selectedPropId);
+    const res = await fetch("/api/integrations/ga4/properties", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ propertyId: selectedPropId, displayName: prop?.displayName ?? selectedPropId }),
+    });
+    if (res.ok) {
+      setStep("connected");
+      setLoadingStats(true);
+      fetch("/api/integrations/ga4/stats").then(r => r.json()).then((d: GA4Stats) => { if (d.connected) setStats(d); setLoadingStats(false); });
+    }
+    setSavingProp(false);
+  }
+
+  function fmtDuration(s: number) {
+    const m = Math.floor(s / 60); const sec = s % 60;
+    return m > 0 ? `${m}:${String(sec).padStart(2, "0")}` : `${sec}s`;
+  }
+
   return (
     <div className="flex-1 overflow-y-auto" style={{ display:"flex", flexDirection:"column" }}>
+
+      {/* ── Not connected ── */}
+      {!integration && step !== "select_property" && (
+        <div style={{ padding:"60px 24px", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16, flex:1 }}>
+          <div style={{ width:52, height:52, borderRadius:14, background:"rgba(66,133,244,0.1)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <svg width="26" height="26" viewBox="0 0 48 48" fill="none"><path d="M43.6 20H24v8.4h11.2C33.6 33.4 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l6-6C34.5 6.3 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c10 0 19-7.2 19-20 0-1.3-.1-2.7-.4-4z" fill="#4285F4"/><path d="M6.3 14.7l7 5.1C15.1 16.1 19.2 13 24 13c3 0 5.8 1.1 7.9 3l6-6C34.5 6.3 29.5 4 24 4 16.4 4 9.9 8.4 6.3 14.7z" fill="#34A853"/><path d="M24 44c5.4 0 10-1.8 13.4-4.8l-6.2-5.2C29.2 35.6 26.8 36.4 24 36.4c-5.2 0-9.6-3.5-11.2-8.3l-7 5.4C9.5 39.7 16.2 44 24 44z" fill="#FBBC05"/><path d="M43.6 20H24v8.4h11.2c-.8 2.3-2.2 4.2-4.2 5.5l6.2 5.2C40.9 35.6 44 30.3 44 24c0-1.3-.1-2.7-.4-4z" fill="#EA4335"/></svg>
+          </div>
+          <div style={{ textAlign:"center" }}>
+            <p style={{ fontSize:15, fontWeight:700, color:"var(--color-charcoal)", marginBottom:8 }}>Connect Google Analytics</p>
+            <p style={{ fontSize:12, color:"var(--color-grey)", lineHeight:1.7, maxWidth:380 }}>
+              See real visitor data from your site — sessions, active users, top pages, and where your traffic comes from. Google Analytics is free, and you almost certainly already have it installed.
+            </p>
+          </div>
+          <button onClick={onConnect}
+            style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 22px", fontSize:13, fontWeight:500, borderRadius:8, border:"0.5px solid rgba(0,0,0,0.18)", background:"white", color:"#3c4043", cursor:"pointer", fontFamily:"inherit", boxShadow:"0 1px 3px rgba(0,0,0,0.08)" }}
+            onMouseEnter={e => e.currentTarget.style.background = "#f8f9fa"}
+            onMouseLeave={e => e.currentTarget.style.background = "white"}>
+            <svg width="18" height="18" viewBox="0 0 48 48" fill="none"><path d="M43.6 20H24v8.4h11.2C33.6 33.4 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l6-6C34.5 6.3 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c10 0 19-7.2 19-20 0-1.3-.1-2.7-.4-4z" fill="#4285F4"/></svg>
+            Sign in with Google
+          </button>
+          <p style={{ fontSize:11, color:"var(--color-grey)" }}>
+            Don&apos;t have Analytics yet?{" "}
+            <a href="https://analytics.google.com" target="_blank" rel="noreferrer" style={{ color:"var(--color-sage)" }}>Set it up free →</a>
+          </p>
+        </div>
+      )}
+
+      {/* ── Property picker (after OAuth) ── */}
+      {step === "select_property" && (
+        <div style={{ padding:"60px 24px", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16, flex:1 }}>
+          <div style={{ width:52, height:52, borderRadius:14, background:"rgba(66,133,244,0.1)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <IcGlobe />
+          </div>
+          <div style={{ textAlign:"center" }}>
+            <p style={{ fontSize:15, fontWeight:700, color:"var(--color-charcoal)", marginBottom:6 }}>Which website?</p>
+            <p style={{ fontSize:12, color:"var(--color-grey)", lineHeight:1.6 }}>Pick the GA4 property you want to track in Perennial.</p>
+          </div>
+          {loadingProps ? (
+            <p style={{ fontSize:12, color:"var(--color-grey)" }}>Loading your properties…</p>
+          ) : propError ? (
+            <div style={{ textAlign:"center" }}>
+              <p style={{ fontSize:12, color:"var(--color-red-orange)", marginBottom:8 }}>{propError}</p>
+              <button onClick={onConnect} style={{ fontSize:12, color:"var(--color-sage)", background:"none", border:"none", cursor:"pointer" }}>Try connecting again →</button>
+            </div>
+          ) : properties.length === 0 ? (
+            <div style={{ textAlign:"center" }}>
+              <p style={{ fontSize:12, color:"var(--color-grey)", marginBottom:8 }}>No GA4 properties found. Make sure you&apos;ve set up Google Analytics 4 (not Universal Analytics).</p>
+              <a href="https://analytics.google.com" target="_blank" rel="noreferrer" style={{ fontSize:12, color:"var(--color-sage)" }}>Set up GA4 →</a>
+            </div>
+          ) : (
+            <div style={{ width:"100%", maxWidth:400, display:"flex", flexDirection:"column", gap:10 }}>
+              <select value={selectedPropId} onChange={e => setSelectedPropId(e.target.value)}
+                style={{ width:"100%", padding:"10px 14px", fontSize:13, borderRadius:8, border:"0.5px solid var(--color-border)", background:"var(--color-off-white)", color:"var(--color-charcoal)", fontFamily:"inherit", outline:"none" }}>
+                {properties.map(p => (
+                  <option key={p.propertyId} value={p.propertyId}>{p.displayName} ({p.account})</option>
+                ))}
+              </select>
+              <button onClick={saveProperty} disabled={savingProp || !selectedPropId}
+                style={{ padding:"10px 0", fontSize:13, fontWeight:500, borderRadius:8, border:"none", background:"var(--color-sage)", color:"white", cursor:"pointer", fontFamily:"inherit", opacity: savingProp ? 0.6 : 1 }}>
+                {savingProp ? "Connecting…" : "Connect this property"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Connected: real stats ── */}
+      {step === "connected" && (
+      <>
       <div style={{ background:"var(--color-off-white)", borderBottom:"0.5px solid var(--color-border)", padding:"10px 24px", display:"flex", alignItems:"center", gap:8, fontSize:12 }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, flex:1 }}>
-          <div style={{ width:6, height:6, borderRadius:"50%", background:C.accent }} />
-          <span style={{ fontWeight:600 }}>perennial.design</span>
-          <span style={{ color:"var(--color-grey)" }}>Squarespace</span>
+          <div style={{ width:6, height:6, borderRadius:"50%", background:"var(--color-sage)" }} />
+          <span style={{ fontWeight:600 }}>{(integration?.metadata?.property_name as string) ?? integration?.account_name ?? "Google Analytics"}</span>
+          <span style={{ color:"var(--color-grey)" }}>GA4</span>
         </div>
-        <span style={{ color:"var(--color-grey)" }}>Connected</span>
-        <span style={blueLink}>Manage ↗</span>
+        <span style={{ color:"var(--color-sage)", fontSize:11 }}>Connected</span>
+        <button onClick={onDisconnect} style={{ fontSize:11, color:"var(--color-grey)", background:"none", border:"none", cursor:"pointer" }}>Disconnect</button>
       </div>
       <div style={{ padding:"22px 24px", display:"flex", flexDirection:"column", gap:18, flex:1 }}>
         <div className="rounded-xl" style={{ border:"0.5px solid var(--color-border)", padding:"12px 16px", display:"flex", gap:12, ...cardStyle }}>
@@ -339,75 +696,84 @@ function WebsiteTab() {
           <span style={{ ...blueLink, whiteSpace:"nowrap", flexShrink:0, alignSelf:"flex-start" }}>Ask Ash →</span>
         </div>
         <div style={{ display:"flex", gap:12 }}>
-          <StatCard label="Visits"          value="1,240" sub="↑ 18% vs March" subUp detail="This month so far" helpText="How many times your site was loaded." askAsh />
-          <StatCard label="Unique visitors" value="840"   sub="↑ 12% vs March" subUp detail="Different people visiting" helpText="Unique browsers that landed on your site." askAsh />
-          <StatCard label="Avg session"     value="2:34"  sub="↓ 8% vs March"              detail="Time spent per visit" helpText="Longer sessions suggest people are exploring your work." askAsh />
-          <StatCard label="Bounce rate"     value="58%"   sub="vs 62% March" subUp          detail="Lower is generally better" helpText="Visitors who left after one page. Under 60% is solid for a portfolio site." askAsh />
+          {loadingStats ? (
+            [1,2,3,4].map(i => (
+              <div key={i} className="flex flex-col gap-1 rounded-xl p-4 flex-1" style={{ background:"var(--color-warm-white)", border:"0.5px solid var(--color-border)" }}>
+                <div style={{ height:10, width:"60%", background:"var(--color-cream)", borderRadius:3 }} />
+                <div style={{ height:24, width:"40%", background:"var(--color-cream)", borderRadius:3, marginTop:4 }} />
+              </div>
+            ))
+          ) : (
+            <>
+              <StatCard label="Sessions"    value={stats?.sessions ? stats.sessions.toLocaleString() : "—"} sub="Last 30 days" detail="Total visits to your site" helpText="A session is a visit to your site." askAsh ashMessage="How can I get more visitors to my design portfolio?" />
+              <StatCard label="Active users" value={stats?.active_users ? stats.active_users.toLocaleString() : "—"} sub="Last 30 days" detail="Unique people" helpText="Distinct people who visited." askAsh />
+              <StatCard label="Avg session"  value={stats?.avg_session_sec ? fmtDuration(stats.avg_session_sec) : "—"} sub="Time on site" detail="Longer = more engaged" helpText="Time spent per visit. 2+ min is strong for a portfolio." askAsh />
+              <StatCard label="Bounce rate"  value={stats?.bounce_rate ? `${stats.bounce_rate}%` : "—"} sub="Single-page visits" detail="Under 60% is solid" helpText="Visitors who left after one page." askAsh />
+            </>
+          )}
         </div>
         <div style={{ display:"flex", gap:16, flex:1, minHeight:0 }}>
           <div style={{ flex:1, display:"flex", flexDirection:"column", gap:12, minWidth:0 }}>
             <div className={card()} style={cardStyle}>
-              <div style={cardHeadStyle}><span style={cardHeadTitle}>Daily traffic · Apr 2026</span><span style={{ fontSize:10, color:"var(--color-grey)" }}>1,240 total</span></div>
-              <div style={{ padding:15, borderBottom:"0.5px solid var(--color-border)" }}>
-                <div style={{ display:"flex", gap:2, alignItems:"flex-end", height:80, marginBottom:4 }}>
-                  {bars.map((h,i) => <div key={i} style={{ flex:1, minWidth:0, background:h===maxH?C.blue:C.blueL, borderRadius:"4px 4px 0 0", height:`${(h/maxH)*100}%` }} />)}
-                </div>
-                <div style={{ fontSize:10, color:"var(--color-grey)", textAlign:"right" }}>Apr 7 spike: 340 visits (Sight Unseen feature)</div>
+              <div style={cardHeadStyle}>
+                <span style={cardHeadTitle}>Sessions · last 30 days</span>
+                {stats?.sessions && <span style={{ fontSize:10, color:"var(--color-grey)" }}>{stats.sessions.toLocaleString()} total</span>}
+              </div>
+              <div style={{ padding:"16px 15px", display:"flex", alignItems:"center", justifyContent:"center", height:96 }}>
+                {loadingStats
+                  ? <p style={{ fontSize:12, color:"var(--color-grey)" }}>Loading…</p>
+                  : stats?.sessions
+                    ? <p style={{ fontSize:24, fontWeight:700, color:"var(--color-charcoal)" }}>{stats.sessions.toLocaleString()} sessions</p>
+                    : <p style={{ fontSize:12, color:"var(--color-grey)" }}>Data loading…</p>}
               </div>
             </div>
             <div className={card()} style={cardStyle}>
-              <div style={cardHeadStyle}><span style={cardHeadTitle}>Top pages</span></div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 72px 72px 44px", gap:12, padding:"8px 15px", borderBottom:"0.5px solid var(--color-border)", fontSize:10, color:"var(--color-grey)", textTransform:"uppercase", letterSpacing:"0.04em", fontWeight:600 }}><span>Page</span><span>Views</span><span>Avg time</span><span></span></div>
-              {[
-                { name:"Home",         path:"/",                    views:"412", time:"1:48", change:"+22%", up:true,  spike:false },
-                { name:"Brass series", path:"/work/brass-series",   views:"318", time:"3:12", change:"Spike ↑", up:false, spike:true },
-                { name:"Walnut slab",  path:"/work/walnut-slab",    views:"201", time:"2:55", change:"+8%",  up:true,  spike:false },
-                { name:"Contact",      path:"/contact",              views:"138", time:"0:52", change:"",     up:false, spike:false },
-                { name:"About",        path:"/about",                views:"104", time:"2:10", change:"-3%",  up:false, spike:false },
-              ].map(p => (
-                <div key={p.path} style={{ display:"grid", gridTemplateColumns:"1fr 72px 72px 44px", gap:12, padding:"9px 15px", borderBottom:"0.5px solid var(--color-border)", cursor:"pointer", alignItems:"center" }}>
-                  <div><div style={{ fontSize:12, fontWeight:600 }}>{p.name}</div><div style={{ fontSize:10, color:"var(--color-grey)" }}>{p.path}</div></div>
-                  <span style={{ fontSize:12 }}>{p.views}</span>
-                  <span style={{ fontSize:11, color:"var(--color-grey)" }}>{p.time}</span>
-                  <span style={{ fontSize:11, textAlign:"right", color:p.spike?C.red:p.up?C.accent:"var(--color-grey)", fontWeight:p.spike?600:400 }}>{p.change}</span>
+              <div style={cardHeadStyle}><span style={cardHeadTitle}>Top pages · 30 days</span></div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 72px 72px", gap:12, padding:"8px 15px", borderBottom:"0.5px solid var(--color-border)", fontSize:10, color:"var(--color-grey)", textTransform:"uppercase", letterSpacing:"0.04em", fontWeight:600 }}>
+                <span>Page</span><span>Views</span><span>Avg time</span>
+              </div>
+              {(stats?.top_pages ?? []).length === 0 && !loadingStats ? (
+                <p style={{ padding:"16px 15px", fontSize:12, color:"var(--color-grey)" }}>No page data yet.</p>
+              ) : (stats?.top_pages ?? []).map(p => (
+                <div key={p.path} style={{ display:"grid", gridTemplateColumns:"1fr 72px 72px", gap:12, padding:"9px 15px", borderBottom:"0.5px solid var(--color-border)", cursor:"pointer", alignItems:"center" }}>
+                  <div>
+                    <div style={{ fontSize:12, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.title || p.path}</div>
+                    <div style={{ fontSize:10, color:"var(--color-grey)" }}>{p.path}</div>
+                  </div>
+                  <span style={{ fontSize:12 }}>{p.pageviews.toLocaleString()}</span>
+                  <span style={{ fontSize:11, color:"var(--color-grey)" }}>{fmtDuration(Math.round(p.avg_sec))}</span>
                 </div>
               ))}
             </div>
           </div>
           <div style={{ width:280, flexShrink:0, display:"flex", flexDirection:"column", gap:12 }}>
             <div className={card()} style={cardStyle}>
-              <div style={cardHeadStyle}><span style={cardHeadTitle}>Traffic sources</span></div>
-              {[{label:"Organic search",pct:42,color:C.blue},{label:"Social",pct:28,color:C.purple},{label:"Direct",pct:18,color:C.accent},{label:"Referral",pct:12,color:C.amber}].map(s => (
-                <div key={s.label} style={{ display:"grid", gridTemplateColumns:"88px 1fr 40px", gap:12, alignItems:"center", padding:"11px 15px", borderBottom:"0.5px solid var(--color-border)" }}>
-                  <span style={{ fontSize:11, fontWeight:600, color:"var(--color-grey)" }}>{s.label}</span>
-                  <div style={{ height:5, background:"var(--color-cream)", borderRadius:2, overflow:"hidden" }}><div style={{ height:"100%", borderRadius:2, background:s.color, width:`${s.pct}%` }} /></div>
-                  <span style={{ fontSize:12, fontWeight:600, textAlign:"right" }}>{s.pct}%</span>
-                </div>
-              ))}
+              <div style={cardHeadStyle}><span style={cardHeadTitle}>Traffic channels</span></div>
+              {(stats?.channels ?? []).length === 0 && !loadingStats ? (
+                <p style={{ padding:"16px 15px", fontSize:12, color:"var(--color-grey)" }}>No channel data yet.</p>
+              ) : (stats?.channels ?? []).map((ch, i) => {
+                const COLORS_CYCLE = [C.blue, C.purple, C.accent, C.amber, C.teal];
+                const color = COLORS_CYCLE[i % COLORS_CYCLE.length];
+                return (
+                  <div key={ch.channel} style={{ display:"grid", gridTemplateColumns:"1fr 1fr 40px", gap:12, alignItems:"center", padding:"11px 15px", borderBottom:"0.5px solid var(--color-border)" }}>
+                    <span style={{ fontSize:11, fontWeight:600, color:"var(--color-grey)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{ch.channel}</span>
+                    <div style={{ height:5, background:"var(--color-cream)", borderRadius:2, overflow:"hidden" }}>
+                      <div style={{ height:"100%", borderRadius:2, background:color, width:`${Math.min(100, ch.pct)}%` }} />
+                    </div>
+                    <span style={{ fontSize:12, fontWeight:600, textAlign:"right" }}>{ch.pct}%</span>
+                  </div>
+                );
+              })}
             </div>
-            <div className={card()} style={cardStyle}>
-              <div style={cardHeadStyle}><span style={cardHeadTitle}>Top referrers</span></div>
-              {[{domain:"sightunseen.com",count:"286",spike:true},{domain:"google.com",count:"118",spike:false},{domain:"instagram.com/l/",count:"84",spike:false},{domain:"newsletter",count:"42",spike:false}].map(r => (
-                <div key={r.domain} className="flex items-center gap-3" style={{ padding:"11px 15px", borderBottom:"0.5px solid var(--color-border)", cursor:"pointer" }}>
-                  <div style={{ width:8, height:8, borderRadius:"50%", background:"var(--color-cream)", flexShrink:0 }} />
-                  <span style={{ fontSize:11, flex:1 }}>{r.domain}</span>
-                  {r.spike && <span className="rounded-full" style={{ fontSize:9, fontWeight:600, textTransform:"uppercase", padding:"2px 7px", background:C.redL, color:C.red }}>Spike</span>}
-                  <span style={{ fontSize:11, color:"var(--color-grey)", flexShrink:0 }}>{r.count}</span>
-                </div>
-              ))}
-            </div>
-            <div className={card()} style={cardStyle}>
-              <div style={cardHeadStyle}><span style={cardHeadTitle}>Shop</span></div>
-              {[{label:"Revenue this month",value:"$1,280"},{label:"Orders",value:"4"},{label:"Avg order value",value:"$320"}].map(s => (
-                <div key={s.label} style={{ display:"grid", gridTemplateColumns:"1fr 60px", gap:12, padding:"11px 15px", borderBottom:"0.5px solid var(--color-border)", alignItems:"center" }}>
-                  <span style={{ fontSize:11, color:"var(--color-grey)" }}>{s.label}</span>
-                  <span style={{ fontSize:12, fontWeight:600, textAlign:"right" }}>{s.value}</span>
-                </div>
-              ))}
-            </div>
+            {stats?.last_fetched && (
+              <div style={{ padding:"10px 14px", borderRadius:8, background:"var(--color-cream)", fontSize:11, color:"var(--color-grey)" }}>
+                Last synced {new Date(stats.last_fetched).toLocaleDateString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}
+              </div>
+            )}
           </div>
         </div>
       </div>
+      </>)}
     </div>
   );
 }
@@ -415,37 +781,66 @@ function WebsiteTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // SOCIALS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function SocialsTab() {
+function SocialsTab({ instagram, onConnect, onDisconnect }: {
+  instagram: Integration | null;
+  onConnect: () => void;
+  onDisconnect: () => void;
+}) {
   return (
     <div className="flex-1 overflow-y-auto" style={{ display:"flex", flexDirection:"column" }}>
       <div style={{ display:"flex", gap:8, padding:"12px 24px", borderBottom:"0.5px solid var(--color-border)", flexWrap:"wrap", alignItems:"center", background:"var(--color-off-white)" }}>
-        <div className="flex items-center gap-2 rounded-full" style={{ padding:"7px 12px", border:`0.5px solid ${C.accent}`, background:C.accentL, cursor:"pointer" }}>
-          <div className="flex items-center justify-center rounded-md" style={{ width:18, height:18, background:C.purpleL }}><span style={{ color:C.purple }}><IcIG /></span></div>
-          <div><div style={{ fontSize:11, fontWeight:600 }}>@perennial.design</div><div style={{ fontSize:10, color:"var(--color-grey)" }}>4,820 followers</div></div>
-          <div style={{ width:6, height:6, borderRadius:"50%", background:C.accent }} />
-        </div>
-        {["TikTok","Facebook","LinkedIn","YouTube"].map(p => (
+        {instagram ? (
+          <div className="flex items-center gap-2 rounded-full" style={{ padding:"7px 12px", border:"0.5px solid rgba(155,163,122,0.4)", background:"rgba(155,163,122,0.08)", cursor:"pointer" }}>
+            <div className="flex items-center justify-center rounded-md" style={{ width:18, height:18, background:C.purpleL }}><span style={{ color:C.purple }}><IcIG /></span></div>
+            <div>
+              <div style={{ fontSize:11, fontWeight:600 }}>{instagram.account_name ?? "@instagram"}</div>
+              <div style={{ fontSize:10, color:"var(--color-grey)" }}>{instagram.metadata.followers_count ? `${instagram.metadata.followers_count.toLocaleString()} followers` : "Instagram"}</div>
+            </div>
+            <div style={{ width:6, height:6, borderRadius:"50%", background:"var(--color-sage)" }} />
+          </div>
+        ) : null}
+        {["TikTok","Pinterest","LinkedIn"].map(p => (
           <div key={p} className="flex items-center gap-2 rounded-full" style={{ padding:"7px 12px", border:"0.5px solid rgba(31,33,26,0.13)", background:"var(--color-cream)", cursor:"default", opacity:0.65 }}>
             <span style={{ fontSize:11, fontWeight:600, color:"var(--color-grey)" }}>{p}</span>
-            <span style={{ fontSize:10, color:"var(--color-grey)" }}>Not connected</span>
+            <span style={{ fontSize:10, color:"var(--color-grey)" }}>Coming soon</span>
           </div>
         ))}
-        <div className="flex items-center gap-1 rounded-full ml-auto" style={{ padding:"5px 10px", border:`0.5px dashed ${C.accent}`, color:C.accent, cursor:"pointer", fontSize:11 }}>+ Connect</div>
+        {!instagram ? (
+          <button onClick={onConnect} className="flex items-center gap-1 rounded-full" style={{ padding:"7px 14px", border:"0.5px dashed var(--color-sage)", color:"var(--color-sage)", cursor:"pointer", fontSize:11, background:"none", fontFamily:"inherit" }}>
+            <IcPlus /> Connect Instagram
+          </button>
+        ) : (
+          <button onClick={onDisconnect} className="ml-auto rounded-full" style={{ padding:"5px 10px", border:"0.5px solid var(--color-border)", color:"var(--color-grey)", cursor:"pointer", fontSize:10, background:"none", fontFamily:"inherit" }}>Disconnect</button>
+        )}
       </div>
-      <div style={{ display:"flex", gap:4, padding:"10px 24px", borderBottom:"0.5px solid var(--color-border)", background:"var(--color-off-white)" }}>
-        <div style={{ padding:"5px 12px", borderRadius:"10px 10px 0 0", border:`0.5px solid ${C.accent}`, borderBottom:`2px solid ${C.accent}`, fontSize:11, color:C.accent, fontWeight:500, cursor:"pointer" }}>Instagram</div>
-        {["TikTok","Facebook","LinkedIn","YouTube"].map(p => (
-          <div key={p} title="Connect to view" style={{ padding:"5px 12px", borderRadius:10, border:"0.5px solid rgba(31,33,26,0.1)", fontSize:11, color:"var(--color-grey)", cursor:"not-allowed", opacity:0.5 }}>{p}</div>
-        ))}
-      </div>
-      <div style={{ padding:"22px 24px", display:"flex", flexDirection:"column", gap:18, flex:1 }}>
-        <div style={{ display:"flex", gap:12 }}>
-          <StatCard label="Followers"  value="4,820" sub="↑ 940 this month" subUp detail="@perennial.design · Instagram" helpText="Total people following you." askAsh />
-          <StatCard label="Reach"      value="8,400" sub="Accounts reached · Apr" detail="↑ 22% vs March" helpText="How many accounts saw at least one of your posts." askAsh />
-          <StatCard label="Engagement" value="4.2%"  sub="Avg per post · Apr" subUp detail="Industry avg: 1.8%" helpText="Likes + comments as a percentage of reach." askAsh />
-          <StatCard label="Posts"      value="6"     sub="Published in Apr" detail="Next scheduled: Apr 18" helpText="How many times you published this month." askAsh />
+
+      {!instagram ? (
+        <div style={{ padding:"60px 24px", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16 }}>
+          <div className="flex items-center justify-center rounded-xl" style={{ width:48, height:48, background:C.purpleL }}><span style={{ color:C.purple }}><IcIG /></span></div>
+          <div style={{ textAlign:"center" }}>
+            <p style={{ fontSize:14, fontWeight:600, color:"var(--color-charcoal)", marginBottom:6 }}>Connect your Instagram</p>
+            <p style={{ fontSize:12, color:"var(--color-grey)", lineHeight:1.6, maxWidth:340 }}>See your follower count, engagement rate, and top posts — pulled directly from your business or creator account.</p>
+          </div>
+          <button onClick={onConnect} style={{ padding:"8px 20px", fontSize:12, fontWeight:500, borderRadius:8, border:"none", background:"var(--color-sage)", color:"white", cursor:"pointer", fontFamily:"inherit" }}>
+            Connect with Instagram
+          </button>
+          <p style={{ fontSize:11, color:"var(--color-grey)" }}>Requires a business or creator account</p>
         </div>
-        <div style={{ display:"flex", gap:16, flex:1, minHeight:0 }}>
+      ) : (
+
+      <div style={{ display:"flex", gap:4, padding:"10px 24px", borderBottom:"0.5px solid var(--color-border)", background:"var(--color-off-white)" }}>
+        <div style={{ padding:"5px 12px", borderRadius:"10px 10px 0 0", border:"0.5px solid rgba(155,163,122,0.4)", borderBottom:"2px solid var(--color-sage)", fontSize:11, color:"var(--color-sage)", fontWeight:500, cursor:"pointer" }}>Instagram</div>
+      </div>
+      )}
+      {instagram && (
+      <>
+      <div style={{ padding:"14px 24px", display:"flex", gap:12 }}>
+        <StatCard label="Followers"  value={instagram.metadata.followers_count ? String(instagram.metadata.followers_count) : "—"} sub={instagram.account_name ?? "Instagram"} detail="Total followers" helpText="Total people following you." askAsh ashMessage="How can I grow my Instagram following as a designer?" />
+        <StatCard label="Engagement" value={instagram.metadata.engagement_rate ? `${instagram.metadata.engagement_rate}%` : "—"} sub="Avg engagement rate" subUp={!!instagram.metadata.engagement_rate} detail="Industry avg: 1.8%" helpText="Likes + comments as % of followers." askAsh />
+        <StatCard label="Media"      value={instagram.metadata.media_count ? String(instagram.metadata.media_count) : "—"} sub="Total posts" helpText="Posts on your account." askAsh />
+        <StatCard label="Last synced" value={instagram.last_synced_at ? new Date(instagram.last_synced_at).toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "—"} sub="Stats refresh" detail="Pull latest from Instagram" />
+      </div>
+        <div style={{ display:"flex", gap:16, flex:1, minHeight:0, padding:"0 24px 24px" }}>
           <div style={{ flex:1, display:"flex", flexDirection:"column", gap:12, minWidth:0 }}>
             <div className={card()} style={cardStyle}>
               <div style={cardHeadStyle}><span style={cardHeadTitle}>Post queue</span></div>
@@ -524,7 +919,8 @@ function SocialsTab() {
             </div>
           </div>
         </div>
-      </div>
+      </>
+      )}
     </div>
   );
 }
@@ -532,25 +928,70 @@ function SocialsTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // NEWSLETTER TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function NewsletterTab() {
+function NewsletterTab({ integration, onConnect, onDisconnect }: {
+  integration: Integration | null;
+  onConnect: (p: ConnectProvider) => void;
+  onDisconnect: (p: string) => void;
+}) {
   return (
     <div className="flex-1 overflow-y-auto" style={{ display:"flex", flexDirection:"column" }}>
-      <div style={{ background:"var(--color-off-white)", borderBottom:"0.5px solid var(--color-border)", padding:"10px 24px", display:"flex", alignItems:"center", gap:8, fontSize:12 }}>
-        <div className="flex items-center justify-center rounded-md" style={{ width:18, height:18, background:C.amberL, color:C.amber }}><IcMail /></div>
-        <span style={{ fontWeight:600 }}>Perennial Notes</span>
-        <span style={{ color:"var(--color-grey)" }}>Substack</span>
-        <div className="flex items-center gap-2" style={{ marginLeft:"auto", color:C.accent, fontSize:11 }}>
-          <div style={{ width:6, height:6, borderRadius:"50%", background:C.accent }} />
-          <span>Connected</span>
+      {!integration ? (
+        /* ── No newsletter connected ── */
+        <div style={{ padding:"40px 24px", display:"flex", flexDirection:"column", gap:20, flex:1 }}>
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:12, padding:"32px 0 24px" }}>
+            <div className="flex items-center justify-center rounded-xl" style={{ width:48, height:48, background:C.amberL, color:C.amber }}><IcMail /></div>
+            <div style={{ textAlign:"center" }}>
+              <p style={{ fontSize:14, fontWeight:600, color:"var(--color-charcoal)", marginBottom:6 }}>Connect your newsletter</p>
+              <p style={{ fontSize:12, color:"var(--color-grey)", lineHeight:1.6, maxWidth:360 }}>See subscriber counts, open rates, and campaign performance — pulled directly from your newsletter platform.</p>
+            </div>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, maxWidth:400, margin:"0 auto", width:"100%" }}>
+            {(["beehiiv","kit","mailchimp","substack"] as ConnectProvider[]).map(p => (
+              <button key={p} onClick={() => onConnect(p)}
+                style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 14px", borderRadius:10, border:"0.5px solid var(--color-border)", background:"var(--color-off-white)", cursor:"pointer", fontFamily:"inherit", textAlign:"left" }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--color-sage)"}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"}>
+                <div style={{ width:28, height:28, borderRadius:7, background:PROVIDER_META[p].bg, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <span style={{ fontSize:13, fontWeight:700, color:PROVIDER_META[p].color }}>{PROVIDER_META[p].label[0]}</span>
+                </div>
+                <div>
+                  <div style={{ fontSize:12, fontWeight:600, color:"var(--color-charcoal)" }}>{PROVIDER_META[p].label}</div>
+                  <div style={{ fontSize:10, color:"var(--color-grey)" }}>{p === "substack" ? "Manual entry" : "API key"}</div>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
-        <span style={blueLink}>Open Substack ↗</span>
-      </div>
-      <div style={{ padding:"22px 24px", display:"flex", flexDirection:"column", gap:18, flex:1 }}>
+      ) : (
+        /* ── Newsletter connected ── */
+        <>
+        <div style={{ background:"var(--color-off-white)", borderBottom:"0.5px solid var(--color-border)", padding:"10px 24px", display:"flex", alignItems:"center", gap:8, fontSize:12 }}>
+          <div className="flex items-center justify-center rounded-md" style={{ width:18, height:18, background:C.amberL, color:C.amber }}><IcMail /></div>
+          <span style={{ fontWeight:600 }}>{integration.account_name ?? "Newsletter"}</span>
+          <span style={{ color:"var(--color-grey)", textTransform:"capitalize" }}>{integration.provider}</span>
+          <div className="flex items-center gap-2" style={{ marginLeft:"auto", color:"var(--color-sage)", fontSize:11 }}>
+            <div style={{ width:6, height:6, borderRadius:"50%", background:"var(--color-sage)" }} />
+            <span>Connected</span>
+          </div>
+          <button onClick={() => onDisconnect(integration.provider)} style={{ fontSize:11, color:"var(--color-grey)", background:"none", border:"none", cursor:"pointer" }}>Disconnect</button>
+        </div>
+        <div style={{ padding:"22px 24px", display:"flex", flexDirection:"column", gap:18, flex:1 }}>
         <div style={{ display:"flex", gap:12 }}>
-          <StatCard label="Subscribers"     value="312"  sub="↑ 14 this month" subUp detail="Total active subscribers" helpText="Your owned channel." askAsh />
-          <StatCard label="Avg open rate"   value="44%"  sub="Industry avg: 21%" subUp detail="Last send: 47%" helpText="Percentage who opened your email. Above 30% is strong." askAsh />
-          <StatCard label="Avg click rate"  value="3.0%" sub="Industry avg: 2.6%" subUp detail="Last send: 3.1%" helpText="Percentage who clicked a link inside the email." askAsh />
-          <StatCard label="Sends this year" value="8"    sub="Last sent Apr 9" detail="Approx every 2 weeks" helpText="How many newsletters you've sent." askAsh />
+          <StatCard label="Subscribers"
+            value={integration.metadata.subscriber_count ? String(integration.metadata.subscriber_count) : integration.metadata.total_subscribers ? String(integration.metadata.total_subscribers) : integration.metadata.subscribers ? String(integration.metadata.subscribers) : "—"}
+            sub="Active subscribers" subUp
+            detail="Your owned audience"
+            helpText="Total active subscribers on your list."
+            askAsh ashMessage="How can I grow my newsletter subscriber count as a designer?" />
+          <StatCard label="Open rate"
+            value={integration.metadata.open_rate ? `${integration.metadata.open_rate}%` : "—"}
+            sub="Industry avg: 21%"
+            subUp={!!integration.metadata.open_rate}
+            detail="Above 30% is strong"
+            helpText="What percentage open your emails."
+            askAsh />
+          <StatCard label="Platform"    value={String(PROVIDER_META[integration.provider as ConnectProvider]?.label ?? integration.provider)} sub={integration.account_name ?? ""} />
+          <StatCard label="Last synced" value={integration.last_synced_at ? new Date(integration.last_synced_at).toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "—"} sub="Stats last refreshed" />
         </div>
         <div style={{ display:"flex", gap:16, flex:1, minHeight:0 }}>
           <div style={{ flex:1, display:"flex", flexDirection:"column", gap:12, minWidth:0 }}>
@@ -612,7 +1053,9 @@ function NewsletterTab() {
             <AshCard text="Your 'gallery relationship' send had your highest open rate (52%). Want me to outline a follow-up piece on pitching collectors directly?" />
           </div>
         </div>
-      </div>
+        </div>
+        </>
+      )}
     </div>
   );
 }
@@ -811,10 +1254,26 @@ function OppRow({ opp, onClick, selected }: { opp: Opportunity; onClick: () => v
 }
 
 // ─── Opportunity detail panel ─────────────────────────────────────────────────
-function OppDetail({ opp, onClose, onDismiss }: { opp: Opportunity; onClose: () => void; onDismiss: (id: string) => void }) {
+function OppDetail({ opp, onClose, onDismiss, onStatusChange }: {
+  opp: Opportunity; onClose: () => void;
+  onDismiss: (id: string) => void;
+  onStatusChange: (id: string, status: string | null) => void;
+}) {
   const start = parseDate(opp.start_date);
   const end   = parseDate(opp.end_date);
   const { dark, light } = catColor(opp.category);
+
+  async function setStatus(s: string) {
+    const newStatus = opp.user_status === s ? null : s;
+    onStatusChange(opp.id, newStatus);
+    await createClient().from("opportunities").update({ user_status: newStatus }).eq("id", opp.id);
+  }
+
+  async function handleDismiss() {
+    await createClient().from("opportunities").update({ user_status: "hidden" }).eq("id", opp.id);
+    onDismiss(opp.id);
+    onClose();
+  }
 
   const dateStr = (() => {
     if (!start && !end) return "Dates TBD";
@@ -880,8 +1339,8 @@ function OppDetail({ opp, onClose, onDismiss }: { opp: Opportunity; onClose: () 
         <div style={{ marginBottom:16 }}>
           <div style={{ fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em", color:"var(--color-grey)", marginBottom:8 }}>Work on this</div>
           <div className="flex flex-col gap-2">
-            <button style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:8, border:"0.5px solid var(--color-border)", background:"var(--color-cream)", cursor:"pointer", fontSize:12, color:"var(--color-charcoal)", fontFamily:"inherit", textAlign:"left" }}>
-              <span style={{ color:C.accent, flexShrink:0 }}><IcFileSm /></span>
+            <button onClick={() => openAsh(`Help me draft an application for ${opp.title}. I need to write a compelling statement, proposal, or cover letter that showcases my work as a designer.`)} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:8, border:"0.5px solid var(--color-border)", background:"var(--color-cream)", cursor:"pointer", fontSize:12, color:"var(--color-charcoal)", fontFamily:"inherit", textAlign:"left" }}>
+              <span style={{ color:"var(--color-sage)", flexShrink:0 }}><IcFileSm /></span>
               <div>
                 <div style={{ fontWeight:500 }}>Draft application with Ash</div>
                 <div style={{ fontSize:10, color:"var(--color-grey)", marginTop:1 }}>Write a statement, proposal, or cover letter</div>
@@ -902,7 +1361,7 @@ function OppDetail({ opp, onClose, onDismiss }: { opp: Opportunity; onClose: () 
           <div style={{ fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em", color:"var(--color-grey)", marginBottom:8 }}>My status</div>
           <div className="flex flex-wrap gap-2">
             {(["saved","attending","exhibiting","applied"] as const).map(s => (
-              <button key={s} style={{ padding:"4px 10px", borderRadius:20, fontSize:11, cursor:"pointer", border:`0.5px solid ${opp.user_status===s?dark:"rgba(31,33,26,0.13)"}`, background:opp.user_status===s?light:"transparent", color:opp.user_status===s?dark:"var(--color-grey)", fontFamily:"inherit", textTransform:"capitalize" }}>{s}</button>
+              <button key={s} onClick={() => setStatus(s)} style={{ padding:"4px 10px", borderRadius:20, fontSize:11, cursor:"pointer", border:`0.5px solid ${opp.user_status===s?dark:"rgba(31,33,26,0.13)"}`, background:opp.user_status===s?light:"transparent", color:opp.user_status===s?dark:"var(--color-grey)", fontFamily:"inherit", textTransform:"capitalize" }}>{s}</button>
             ))}
           </div>
         </div>
@@ -911,7 +1370,7 @@ function OppDetail({ opp, onClose, onDismiss }: { opp: Opportunity; onClose: () 
       {/* Footer */}
       <div style={{ borderTop:"0.5px solid var(--color-border)", padding:"12px 16px" }}>
         <button
-          onClick={() => { onDismiss(opp.id); onClose(); }}
+          onClick={handleDismiss}
           style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:6, border:"0.5px solid rgba(31,33,26,0.13)", background:"transparent", color:"var(--color-grey)", fontSize:11, cursor:"pointer", fontFamily:"inherit" }}
         >
           <IcEyeOff /> Not interested — hide from feed
@@ -921,13 +1380,18 @@ function OppDetail({ opp, onClose, onDismiss }: { opp: Opportunity; onClose: () 
   );
 }
 
-function OpportunitiesTab({ opps }: { opps: Opportunity[] }) {
+function OpportunitiesTab({ opps: initialOpps }: { opps: Opportunity[] }) {
   const [filter, setFilter]       = useState<OppFilter>("all");
   const [view, setView]           = useState<OppView>("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [localOpps, setLocalOpps] = useState<Opportunity[]>(initialOpps);
 
-  const dismiss = (id: string) => setDismissed(prev => new Set([...prev, id]));
+  const opps = localOpps;
+  const dismiss = (id: string) => { setDismissed(prev => new Set([...prev, id])); setLocalOpps(prev => prev.filter(o => o.id !== id)); };
+  function handleStatusChange(id: string, status: string | null) {
+    setLocalOpps(prev => prev.map(o => o.id === id ? { ...o, user_status: status } : o));
+  }
 
   const FILTERS: { key: OppFilter; label: string }[] = [
     { key:"all",       label:"All" },
@@ -1006,12 +1470,31 @@ function OpportunitiesTab({ opps }: { opps: Opportunity[] }) {
                 {ongoing.map(o => <OppRow key={o.id} opp={o} onClick={() => setSelectedId(o.id === selectedId ? null : o.id)} selected={o.id === selectedId} />)}
               </div>
             )}
-            {filtered.length === 0 && (
+            {filtered.length === 0 && localOpps.length === 0 && (
+              <div style={{ padding: "40px 24px", textAlign: "center", maxWidth: 440, margin: "0 auto" }}>
+                <div style={{ fontSize: 32, marginBottom: 16 }}>🗓</div>
+                <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-charcoal)", fontFamily: "var(--font-display)", marginBottom: 8 }}>
+                  Opportunities feed is loading
+                </p>
+                <p style={{ fontSize: 12, lineHeight: 1.7, color: "var(--color-grey)", marginBottom: 20 }}>
+                  Perennial curates upcoming art fairs, open calls, grants, residencies, and awards for independent designers. The feed is populated by the Perennial team and updates regularly.
+                </p>
+                <button
+                  onClick={() => openAsh("What opportunities — art fairs, open calls, grants, residencies — should I be aware of as an independent designer right now?")}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 18px", fontSize: 12, fontWeight: 500, borderRadius: 8, background: "rgba(155,163,122,0.1)", color: "#5a7040", border: "0.5px solid rgba(155,163,122,0.3)", cursor: "pointer", fontFamily: "inherit" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(155,163,122,0.18)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "rgba(155,163,122,0.1)")}
+                >
+                  Ask Ash about opportunities →
+                </button>
+              </div>
+            )}
+            {filtered.length === 0 && localOpps.length > 0 && (
               <div className="flex-1 flex items-center justify-center" style={{ color:"var(--color-grey)", fontSize:13 }}>No opportunities match this filter.</div>
             )}
           </div>
           {selectedOpp && (
-            <OppDetail opp={selectedOpp} onClose={() => setSelectedId(null)} onDismiss={dismiss} />
+            <OppDetail opp={selectedOpp} onClose={() => setSelectedId(null)} onDismiss={dismiss} onStatusChange={handleStatusChange} />
           )}
         </div>
       )}
@@ -1043,6 +1526,8 @@ const TAB_ACTIONS: Record<Tab, React.ReactNode> = {
 
 export default function PresenceClient({ initialOpportunities }: { initialOpportunities: Opportunity[] }) {
   const [tab, setTab] = useState<Tab>("overview");
+  const [integrations, setIntegrations] = useState<Integration[]>([]);
+  const [connectModal, setConnectModal] = useState<ConnectProvider | null>(null);
 
   const now = new Date();
   const period = now.toLocaleString("en-US", { month:"short", year:"numeric" });
@@ -1051,6 +1536,32 @@ export default function PresenceClient({ initialOpportunities }: { initialOpport
     initialOpportunities.filter(o => oppSection(o) !== null),
     [initialOpportunities]
   );
+
+  // Load connected integrations on mount
+  useEffect(() => {
+    createClient()
+      .from("integrations")
+      .select("id, provider, account_name, metadata, connected_at, last_synced_at")
+      .then(({ data }) => setIntegrations((data ?? []) as Integration[]));
+  }, []);
+
+  function getInt(provider: string): Integration | null {
+    return integrations.find(i => i.provider === provider) ?? null;
+  }
+
+  function handleIntegrationConnected(integration: Integration) {
+    setIntegrations(prev => [...prev.filter(i => i.provider !== integration.provider), integration]);
+  }
+
+  async function disconnectIntegration(provider: string) {
+    await fetch(`/api/integrations/connect?provider=${provider}`, { method: "DELETE" });
+    setIntegrations(prev => prev.filter(i => i.provider !== provider));
+  }
+
+  const instagram  = getInt("instagram");
+  const plausible  = getInt("ga4");
+  const newsletter = (["beehiiv","kit","mailchimp","substack"] as const)
+    .map(p => getInt(p)).find(Boolean) ?? null;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -1061,17 +1572,52 @@ export default function PresenceClient({ initialOpportunities }: { initialOpport
         </div>
         <div className="flex items-stretch flex-1">
           {TABS.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)} style={{ padding:"0 18px", fontSize:12, color:tab===t.key?"var(--color-charcoal)":"var(--color-grey)", cursor:"pointer", borderBottom:tab===t.key?"1.5px solid var(--color-charcoal)":"1.5px solid transparent", borderRight:"0.5px solid rgba(31,33,26,0.07)", borderTop:"none", borderLeft:"none", background:"transparent", fontWeight:tab===t.key?600:400, whiteSpace:"nowrap", fontFamily:"inherit" }}>{t.label}</button>
+            <button key={t.key} onClick={() => setTab(t.key)} style={{ padding:"0 18px", fontSize:12, color:tab===t.key?"var(--color-charcoal)":"var(--color-grey)", cursor:"pointer", borderBottom:tab===t.key?"2px solid var(--color-sage)":"2px solid transparent", borderRight:"0.5px solid rgba(31,33,26,0.07)", borderTop:"none", borderLeft:"none", background:"transparent", fontWeight:tab===t.key?600:400, whiteSpace:"nowrap", fontFamily:"inherit" }}>{t.label}</button>
           ))}
         </div>
         <div className="flex items-center gap-2 shrink-0" style={{ padding:"0 16px" }}>{TAB_ACTIONS[tab]}</div>
       </header>
 
-      {tab === "overview"      && <OverviewTab onTabChange={setTab} opps={upcomingOpps} />}
-      {tab === "website"       && <WebsiteTab />}
-      {tab === "socials"       && <SocialsTab />}
-      {tab === "newsletter"    && <NewsletterTab />}
+      {tab === "overview"      && (
+        <OverviewTab
+          onTabChange={setTab}
+          opps={upcomingOpps}
+          instagram={instagram}
+          plausible={plausible}
+          newsletter={newsletter}
+          onConnect={setConnectModal}
+        />
+      )}
+      {tab === "website"       && (
+        <WebsiteTab
+          integration={plausible}
+          onConnect={() => window.location.href = "/api/auth/google-analytics"}
+          onDisconnect={() => disconnectIntegration("ga4")}
+        />
+      )}
+      {tab === "socials"       && (
+        <SocialsTab
+          instagram={instagram}
+          onConnect={() => window.location.href = "/api/auth/instagram"}
+          onDisconnect={() => disconnectIntegration("instagram")}
+        />
+      )}
+      {tab === "newsletter"    && (
+        <NewsletterTab
+          integration={newsletter}
+          onConnect={setConnectModal}
+          onDisconnect={(p) => disconnectIntegration(p)}
+        />
+      )}
       {tab === "opportunities" && <OpportunitiesTab opps={upcomingOpps} />}
+
+      {connectModal && (
+        <ConnectIntegrationModal
+          provider={connectModal}
+          onClose={() => setConnectModal(null)}
+          onConnected={handleIntegrationConnected}
+        />
+      )}
     </div>
   );
 }

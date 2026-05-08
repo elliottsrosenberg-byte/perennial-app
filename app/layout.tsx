@@ -20,6 +20,7 @@ const albertSans = Albert_Sans({
 export const metadata: Metadata = {
   title: "Perennial",
   description: "Tools for independent designers.",
+  icons: [],
 };
 
 export default function RootLayout({
@@ -29,6 +30,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${newsreader.variable} ${albertSans.variable} h-full`}>
+      <head>
+        <link rel="icon" href="/FavDark.svg" type="image/svg+xml" media="(prefers-color-scheme: light)" />
+        <link rel="icon" href="/FavLight.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)" />
+      </head>
       <body className="h-full antialiased">{children}</body>
     </html>
   );

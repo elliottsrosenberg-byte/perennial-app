@@ -373,6 +373,222 @@ export const searchNotesTool: AshToolDefinition = {
   handler: search_notes,
 };
 
+// ─── get_tasks ────────────────────────────────────────────────────────────────
+
+async function get_tasks(
+  input: { filter?: "overdue" | "today" | "upcoming" | "all"; project_id?: string; completed?: boolean },
+  { supabase, userId }: ToolContext
+): Promise<string> {
+  const today = new Date().toISOString().split("T")[0];
+  const twoWeeks = new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0];
+
+  let q = supabase
+    .from("tasks")
+    .select("id, title, completed, due_date, priority, notes, project:projects(title), contact:contacts(first_name, last_name)")
+    .eq("user_id", userId)
+    .eq("completed", input.completed ?? false);
+
+  if (input.project_id) q = q.eq("project_id", input.project_id);
+
+  const { data } = await q.order("due_date", { ascending: true, nullsFirst: false }).limit(30);
+  if (!data?.length) return "No tasks found.";
+
+  type TaskRow = typeof data[number];
+  let results: TaskRow[] = data;
+
+  if (input.filter === "overdue")  results = data.filter((t) => t.due_date && t.due_date < today);
+  if (input.filter === "today")    results = data.filter((t) => t.due_date === today);
+  if (input.filter === "upcoming") results = data.filter((t) => t.due_date && t.due_date > today && t.due_date <= twoWeeks);
+
+  if (!results.length) return `No ${input.filter ?? ""} tasks found.`;
+
+  return JSON.stringify(results.map((t) => ({
+    id:       t.id,
+    title:    t.title,
+    due_date: t.due_date,
+    priority: t.priority,
+    project:  (t.project as unknown as { title: string } | null)?.title,
+    contact:  t.contact ? `${(t.contact as unknown as { first_name: string; last_name: string }).first_name} ${(t.contact as unknown as { first_name: string; last_name: string }).last_name}` : null,
+  })));
+}
+
+export const getTasksTool: AshToolDefinition = {
+  name: "get_tasks",
+  description:
+    "Get the user's tasks, optionally filtered by time range or project. " +
+    "Use when the user asks about their to-do list, what's overdue, what's due today, " +
+    "or asks about tasks linked to a specific project.",
+  input_schema: {
+    type: "object",
+    properties: {
+      filter:     { type: "string", enum: ["overdue", "today", "upcoming", "all"], description: "Time-based filter" },
+      project_id: { type: "string", description: "Filter tasks by a specific project UUID" },
+      completed:  { type: "boolean", description: "Get completed tasks (default: false = active tasks)" },
+    },
+    required: [],
+  },
+  handler: get_tasks,
+};
+
+// ─── get_outreach_summary ─────────────────────────────────────────────────────
+
+async function get_outreach_summary(
+  input: { pipeline_id?: string },
+  { supabase, userId }: ToolContext
+): Promise<string> {
+  const [{ data: pipelines }, { data: targets }, { data: followUps }] = await Promise.all([
+    supabase
+      .from("outreach_pipelines")
+      .select("id, name, color")
+      .eq("user_id", userId),
+    supabase
+      .from("outreach_targets")
+      .select("id, name, stage_id, pipeline_id, last_touched_at, pipeline:outreach_pipelines(name), stage:pipeline_stages(name, meta_stage)")
+      .eq("user_id", userId)
+      .order("last_touched_at", { ascending: false })
+      .limit(20),
+    supabase
+      .from("contacts")
+      .select("id, first_name, last_name, last_contacted_at")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .lt("last_contacted_at", new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0])
+      .limit(10),
+  ]);
+
+  const staleCount = (followUps ?? []).length;
+
+  return JSON.stringify({
+    pipelines:    (pipelines ?? []).map((p) => ({ id: p.id, name: p.name })),
+    active_targets: (targets ?? []).length,
+    targets_sample: (targets ?? []).slice(0, 8).map((t) => ({
+      name:          t.name,
+      pipeline:      (t.pipeline as unknown as { name: string } | null)?.name,
+      stage:         (t.stage as unknown as { name: string; meta_stage: string } | null)?.name,
+      last_touched:  t.last_touched_at,
+    })),
+    stale_contacts_needing_followup: staleCount,
+  });
+}
+
+export const getOutreachSummaryTool: AshToolDefinition = {
+  name: "get_outreach_summary",
+  description:
+    "Get a summary of the user's outreach pipelines, active targets, and contacts needing follow-up. " +
+    "Use when the user asks about their sales pipeline, gallery outreach, follow-ups, or relationship management.",
+  input_schema: {
+    type: "object",
+    properties: {
+      pipeline_id: { type: "string", description: "Filter to a specific pipeline by UUID" },
+    },
+    required: [],
+  },
+  handler: get_outreach_summary,
+};
+
+// ─── get_upcoming_reminders ───────────────────────────────────────────────────
+
+async function get_upcoming_reminders(
+  input: { days?: number },
+  { supabase, userId }: ToolContext
+): Promise<string> {
+  const daysAhead = input.days ?? 14;
+  const cutoff = new Date(Date.now() + daysAhead * 86400000).toISOString().split("T")[0];
+  const today  = new Date().toISOString().split("T")[0];
+
+  const { data } = await supabase
+    .from("reminders")
+    .select("id, title, due_date, description, project:projects(title)")
+    .eq("user_id", userId)
+    .eq("completed", false)
+    .lte("due_date", cutoff)
+    .order("due_date", { ascending: true });
+
+  if (!data?.length) return `No upcoming reminders in the next ${daysAhead} days.`;
+
+  const overdue  = data.filter((r) => r.due_date && r.due_date < today);
+  const upcoming = data.filter((r) => r.due_date && r.due_date >= today);
+
+  return JSON.stringify({
+    overdue_count:   overdue.length,
+    upcoming_count:  upcoming.length,
+    reminders: data.map((r) => ({
+      id:       r.id,
+      title:    r.title,
+      due_date: r.due_date,
+      project:  (r.project as unknown as { title: string } | null)?.title,
+      overdue:  r.due_date ? r.due_date < today : false,
+    })),
+  });
+}
+
+export const getUpcomingRemindersTool: AshToolDefinition = {
+  name: "get_upcoming_reminders",
+  description:
+    "Get upcoming and overdue reminders from the user's calendar. " +
+    "Use when the user asks what's coming up, what they have on their calendar, " +
+    "or what reminders are overdue.",
+  input_schema: {
+    type: "object",
+    properties: {
+      days: { type: "number", description: "How many days ahead to look (default: 14)" },
+    },
+    required: [],
+  },
+  handler: get_upcoming_reminders,
+};
+
+// ─── get_opportunities ────────────────────────────────────────────────────────
+
+async function get_opportunities(
+  input: { category?: string; user_status?: string },
+  { supabase, userId }: ToolContext
+): Promise<string> {
+  const today = new Date().toISOString().split("T")[0];
+
+  let q = supabase
+    .from("opportunities")
+    .select("id, title, event_type, category, start_date, end_date, location, about, user_status, ash_note, website_url")
+    .or(`end_date.gte.${today},end_date.is.null,start_date.gte.${today}`)
+    .neq("user_status", "hidden");
+
+  if (input.category)    q = q.eq("category", input.category);
+  if (input.user_status) q = q.eq("user_status", input.user_status);
+
+  const { data } = await q.order("start_date", { ascending: true, nullsFirst: false }).limit(15);
+
+  if (!data?.length) return "No upcoming opportunities found.";
+
+  return JSON.stringify(data.map((o) => ({
+    id:          o.id,
+    title:       o.title,
+    category:    o.category,
+    event_type:  o.event_type,
+    start_date:  o.start_date,
+    end_date:    o.end_date,
+    location:    o.location,
+    user_status: o.user_status,
+    about:       o.about?.slice(0, 150),
+    website_url: o.website_url,
+  })));
+}
+
+export const getOpportunitiesTool: AshToolDefinition = {
+  name: "get_opportunities",
+  description:
+    "Get upcoming fairs, open calls, grants, residencies, and awards from the Presence module. " +
+    "Use when the user asks about upcoming opportunities, art fairs, open calls, or grant deadlines.",
+  input_schema: {
+    type: "object",
+    properties: {
+      category:    { type: "string", enum: ["fair", "openCall", "grant", "award", "residency"], description: "Filter by opportunity type" },
+      user_status: { type: "string", enum: ["saved", "attending", "exhibiting", "applied"],     description: "Filter by user's saved status" },
+    },
+    required: [],
+  },
+  handler: get_opportunities,
+};
+
 // ─── Export all read tools ─────────────────────────────────────────────────────
 
 export const READ_TOOLS: AshToolDefinition[] = [
@@ -382,4 +598,8 @@ export const READ_TOOLS: AshToolDefinition[] = [
   getContactDetailsTool,
   getFinanceSummaryTool,
   searchNotesTool,
+  getTasksTool,
+  getOutreachSummaryTool,
+  getUpcomingRemindersTool,
+  getOpportunitiesTool,
 ];

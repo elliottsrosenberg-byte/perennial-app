@@ -6,6 +6,10 @@ import TodayCard from "@/components/home/TodayCard";
 import FinanceCard from "@/components/home/FinanceCard";
 import ProjectsCard from "@/components/home/ProjectsCard";
 import ContactsCard from "@/components/home/ContactsCard";
+import TimerWidget from "@/components/finance/TimerWidget";
+import QuickTimerButton from "@/components/finance/QuickTimerButton";
+import WelcomeBanner from "@/components/home/WelcomeBanner";
+import type { ActiveTimer, Project } from "@/types/database";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,6 +42,8 @@ export default async function HomePage() {
     { data: rawExpenses },
     { data: rawProjects },
     { data: rawContacts },
+    { data: rawActiveTimer },
+    { data: rawTimerProjects },
   ] = await Promise.all([
     supabase
       .from("notes")
@@ -75,6 +81,14 @@ export default async function HomePage() {
       .or(`last_contacted_at.is.null,last_contacted_at.lt.${thirtyDaysAgo}`)
       .order("last_contacted_at", { ascending: true, nullsFirst: true })
       .limit(4),
+    supabase
+      .from("active_timers")
+      .select("*, project:projects(id, title, type, rate)")
+      .maybeSingle(),
+    supabase
+      .from("projects")
+      .select("id, title, rate")
+      .order("title", { ascending: true }),
   ]);
 
   // ── Finance calculations ───────────────────────────────────────────────────
@@ -119,13 +133,10 @@ export default async function HomePage() {
             >
               + New project
             </Link>
-            <Link
-              href="/finance"
-              className="px-[13px] py-[5px] text-[11px] font-medium rounded-md transition-colors inline-flex items-center leading-none"
-              style={{ background: "transparent", color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-            >
-              Log time
-            </Link>
+            <QuickTimerButton
+              initialTimer={(rawActiveTimer ?? null) as ActiveTimer | null}
+              projects={(rawTimerProjects ?? []) as Pick<Project, "id" | "title" | "rate">[]}
+            />
           </>
         }
       />
@@ -134,6 +145,9 @@ export default async function HomePage() {
         className="flex-1 overflow-y-auto p-5"
         style={{ background: "var(--color-warm-white)" }}
       >
+        {/* Welcome banner — only shows immediately after onboarding (client-side check) */}
+        <WelcomeBanner />
+
         <div
           className="grid gap-[14px]"
           style={{ gridTemplateColumns: "1fr 1fr 320px" }}
@@ -159,6 +173,11 @@ export default async function HomePage() {
           <ProjectsCard projects={(rawProjects ?? []) as HomeProject[]} />
 
           <ContactsCard contacts={(rawContacts ?? []) as unknown as HomeContact[]} />
+
+          <TimerWidget
+            initialTimer={(rawActiveTimer ?? null) as ActiveTimer | null}
+            projects={(rawTimerProjects ?? []) as Pick<Project, "id" | "title" | "rate">[]}
+          />
         </div>
       </div>
 

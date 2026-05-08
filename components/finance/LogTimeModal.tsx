@@ -119,7 +119,7 @@ export default function LogTimeModal({ projects, onClose, onCreated }: Props) {
           <button onClick={handleSubmit as unknown as React.MouseEventHandler}
             disabled={loading || totalMinutes < 1}
             className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50"
-            style={{ background: "var(--color-charcoal)" }}>
+            style={{ background: "var(--color-sage)" }}>
             {loading ? "Saving…" : "Log time"}
           </button>
         </div>

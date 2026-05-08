@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Expense, ExpenseCategory, Project } from "@/types/database";
-import { X } from "lucide-react";
+import { X, Paperclip } from "lucide-react";
 
 interface Props {
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
@@ -29,8 +29,35 @@ export default function AddExpenseModal({ projects, onClose, onCreated }: Props)
   const [amount, setAmount]           = useState("");
   const [date, setDate]               = useState(today);
   const [projectId, setProjectId]     = useState("");
+  const [receiptUrl, setReceiptUrl]   = useState<string | null>(null);
+  const [receiptName, setReceiptName] = useState<string | null>(null);
+  const [uploading, setUploading]     = useState(false);
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleReceiptUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const ext  = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+      const path = `${user.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const { error: upErr } = await supabase.storage.from("receipts").upload(path, file, { contentType: file.type });
+      if (upErr) throw upErr;
+      const { data: urlData } = supabase.storage.from("receipts").getPublicUrl(path);
+      setReceiptUrl(urlData.publicUrl);
+      setReceiptName(file.name);
+    } catch {
+      setError("Receipt upload failed.");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -49,6 +76,7 @@ export default function AddExpenseModal({ projects, onClose, onCreated }: Props)
         category,
         amount: amt,
         date,
+        receipt_url: receiptUrl,
       })
       .select("*, project:projects(id, title, type, rate)")
       .single();
@@ -106,6 +134,37 @@ export default function AddExpenseModal({ projects, onClose, onCreated }: Props)
               </select>
             </div>
           </div>
+
+          {/* Receipt upload */}
+          <div>
+            <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Receipt</label>
+            <input ref={fileInputRef} type="file" accept="image/*,.pdf" style={{ display: "none" }} onChange={handleReceiptUpload} />
+            {receiptUrl ? (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)" }}>
+                <Paperclip size={12} style={{ color: "var(--color-sage)", flexShrink: 0 }} />
+                <a href={receiptUrl} target="_blank" rel="noreferrer"
+                  className="flex-1 text-[12px] truncate"
+                  style={{ color: "var(--color-sage)", textDecoration: "none" }}>
+                  {receiptName}
+                </a>
+                <button type="button" onClick={() => { setReceiptUrl(null); setReceiptName(null); }}
+                  style={{ color: "var(--color-grey)", border: "none", background: "transparent", cursor: "pointer" }}>
+                  <X size={11} />
+                </button>
+              </div>
+            ) : (
+              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg transition-colors"
+                style={{ border: "0.5px dashed var(--color-border)", color: "var(--color-grey)", background: "transparent", cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                <Paperclip size={12} />
+                {uploading ? "Uploading…" : "Attach receipt"}
+              </button>
+            )}
+          </div>
+
           {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
         </form>
 
@@ -118,7 +177,7 @@ export default function AddExpenseModal({ projects, onClose, onCreated }: Props)
           <button onClick={handleSubmit as unknown as React.MouseEventHandler}
             disabled={loading || !description.trim() || !amount}
             className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50"
-            style={{ background: "var(--color-charcoal)" }}>
+            style={{ background: "var(--color-sage)" }}>
             {loading ? "Saving…" : "Add expense"}
           </button>
         </div>

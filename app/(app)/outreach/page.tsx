@@ -1,12 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import OutreachClient from "@/components/outreach/OutreachClient";
-import ComingSoonOverlay from "@/components/layout/ComingSoonOverlay";
-import type { OutreachPipeline, PipelineStage, OutreachTarget } from "@/types/database";
+import type { OutreachPipeline, PipelineStage, OutreachTarget, Contact } from "@/types/database";
 
 export default async function OutreachPage() {
   const supabase = await createClient();
 
-  const [{ data: pipelines }, { data: targets }] = await Promise.all([
+  const [{ data: pipelines }, { data: targets }, { data: contacts }] = await Promise.all([
     supabase
       .from("outreach_pipelines")
       .select("*, stages:pipeline_stages(*)")
@@ -15,6 +14,11 @@ export default async function OutreachPage() {
       .from("outreach_targets")
       .select("*, pipeline:outreach_pipelines(*), stage:pipeline_stages(*), contact:contacts(*, company:companies(*)), company:companies(*)")
       .order("last_touched_at", { ascending: false }),
+    supabase
+      .from("contacts")
+      .select("*, company:companies(*)")
+      .eq("archived", false)
+      .order("last_name", { ascending: true }),
   ]);
 
   // Sort stages by position within each pipeline
@@ -28,10 +32,7 @@ export default async function OutreachPage() {
       <OutreachClient
         initialPipelines={pipelinesWithSortedStages as (OutreachPipeline & { stages: PipelineStage[] })[]}
         initialTargets={(targets ?? []) as OutreachTarget[]}
-      />
-      <ComingSoonOverlay
-        module="Outreach"
-        description="Manage gallery, press, and client outreach with a customizable pipeline board and contact tracking."
+        initialContacts={(contacts ?? []) as Contact[]}
       />
     </div>
   );

@@ -4,6 +4,12 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Reminder } from "@/types/database";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import AshMark from "@/components/ui/AshMark";
+
+const ASH_GRADIENT = "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)";
+function openAshCal(message: string) {
+  window.dispatchEvent(new CustomEvent("open-ash", { detail: { message } }));
+}
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -375,19 +381,42 @@ function NewReminderModal({ projects, defaultDate, onClose, onCreate }: {
 
 // ── CalendarClient ─────────────────────────────────────────────────────────────
 
+interface GCalEvent {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+  description: string | null;
+  location: string | null;
+  htmlLink: string | null;
+  colorId: string | null;
+}
+
+// Google Calendar event colors (colorId → hex)
+const GCAL_COLORS: Record<string, string> = {
+  "1": "#7986CB", "2": "#33B679", "3": "#8E24AA", "4": "#E67C73",
+  "5": "#F6BF26", "6": "#F4511E", "7": "#039BE5", "8": "#616161",
+  "9": "#3F51B5", "10": "#0B8043", "11": "#D50000",
+};
+
 interface Props {
   initialReminders: Reminder[];
   initialProjects: { id: string; title: string; due_date: string | null; status: string }[];
+  gcalConnected?: boolean;
+  gcalAccountName?: string | null;
 }
 
 interface PopoverState { reminder: Reminder; x: number; y: number }
 
-export default function CalendarClient({ initialReminders, initialProjects }: Props) {
+export default function CalendarClient({ initialReminders, initialProjects, gcalConnected = false, gcalAccountName }: Props) {
   const [viewDate,        setViewDate]        = useState(new Date());
   const [reminders,       setReminders]       = useState(initialReminders);
   const [newReminderOpen, setNewReminderOpen] = useState(false);
   const [popover,         setPopover]         = useState<PopoverState | null>(null);
   const [nowY,            setNowY]            = useState<number | null>(null);
+  const [gcalEvents,      setGcalEvents]      = useState<GCalEvent[]>([]);
+  const [gcalLoading,     setGcalLoading]     = useState(false);
 
   const gridWrapRef  = useRef<HTMLDivElement>(null);
   const undoTimers   = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -416,6 +445,19 @@ export default function CalendarClient({ initialReminders, initialProjects }: Pr
     const y   = timeToY(now.getHours(), now.getMinutes());
     gridWrapRef.current?.scrollTo({ top: Math.max(0, y - 160) });
   }, []);
+
+  // ── Fetch Google Calendar events when week changes
+  useEffect(() => {
+    if (!gcalConnected) return;
+    const days  = getWeekDays(viewDate);
+    const start = days[0].toISOString().split("T")[0];
+    const end   = days[6].toISOString().split("T")[0];
+    setGcalLoading(true);
+    fetch(`/api/integrations/google-calendar/events?startDate=${start}&endDate=${end}`)
+      .then(r => r.json())
+      .then((d: { events?: GCalEvent[] }) => { setGcalEvents(d.events ?? []); setGcalLoading(false); })
+      .catch(() => setGcalLoading(false));
+  }, [viewDate, gcalConnected]);
 
   // ── Navigation
   function prevWeek() { setViewDate(d => { const n = new Date(d); n.setDate(n.getDate() - 7); return n; }); }
@@ -511,8 +553,23 @@ export default function CalendarClient({ initialReminders, initialProjects }: Pr
             )}
           </div>
 
-          {upcomingReminders.length === 0 && unscheduledReminders.length === 0 && (
-            <p className="px-3 pb-3 text-[11px]" style={{ color: "var(--color-grey)" }}>No reminders yet.</p>
+          {upcomingReminders.length === 0 && unscheduledReminders.length === 0 && reminders.length === 0 && (
+            <div style={{ padding: "12px 14px 16px" }}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 5 }}>No reminders yet</p>
+              <p style={{ fontSize: 11, lineHeight: 1.6, color: "var(--color-text-tertiary)", marginBottom: 12 }}>
+                Reminders keep you on top of deadlines, follow-ups, and anything time-sensitive. They also appear in your Home dashboard.
+              </p>
+              <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-grey)", marginBottom: 6 }}>Tips</p>
+              {["Set reminders with a due date to pin them to the calendar grid.", "Reminders linked to projects carry context — you'll see which project they belong to.", "Ash can create reminders for you — just ask it to \"remind me to follow up with X next Thursday\"."].map((tip, i) => (
+                <div key={i} style={{ display: "flex", gap: 7, marginBottom: 6, alignItems: "flex-start" }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, color: "var(--color-sage)", flexShrink: 0, marginTop: 2 }}>{i + 1}</span>
+                  <p style={{ fontSize: 10, lineHeight: 1.55, color: "#6b6860" }}>{tip}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {upcomingReminders.length === 0 && unscheduledReminders.length === 0 && reminders.length > 0 && (
+            <p className="px-3 pb-3 text-[11px]" style={{ color: "var(--color-grey)" }}>All caught up.</p>
           )}
 
           {upcomingReminders.map(r => {
@@ -594,11 +651,42 @@ export default function CalendarClient({ initialReminders, initialProjects }: Pr
             </>
           )}
 
-          {/* Google Calendar stub */}
-          <div className="mx-3 mt-5 mb-3 p-3 rounded-lg" style={{ background: "var(--color-cream)", border: "0.5px dashed var(--color-border)" }}>
-            <p className="text-[10px] font-medium mb-[3px]" style={{ color: "var(--color-charcoal)" }}>Connect Google Calendar</p>
-            <p className="text-[10px] leading-relaxed" style={{ color: "var(--color-grey)" }}>Sync your events from Gmail. Coming soon.</p>
-          </div>
+          {/* Google Calendar connection */}
+          {gcalConnected ? (
+            <div className="mx-3 mt-5 mb-3 p-3 rounded-lg" style={{ background: "rgba(155,163,122,0.1)", border: "0.5px solid rgba(155,163,122,0.25)" }}>
+              <div className="flex items-center gap-2 mb-1.5">
+                <div className="w-2 h-2 rounded-full shrink-0" style={{ background: "var(--color-sage)" }} />
+                <p className="text-[11px] font-medium" style={{ color: "var(--color-charcoal)" }}>Google Calendar</p>
+                {gcalLoading && <span className="text-[9px] ml-auto" style={{ color: "var(--color-grey)" }}>Syncing…</span>}
+              </div>
+              <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>
+                {gcalAccountName ?? "Connected"} · {gcalEvents.length} event{gcalEvents.length !== 1 ? "s" : ""} this week
+              </p>
+              <button
+                onClick={async () => { await fetch("/api/integrations/google-calendar/events", { method: "DELETE" }); window.location.reload(); }}
+                className="text-[10px] mt-2"
+                style={{ color: "var(--color-grey)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+              >Disconnect</button>
+            </div>
+          ) : (
+            <div className="mx-3 mt-5 mb-3">
+              <button
+                onClick={() => window.location.href = "/api/auth/google-calendar"}
+                className="w-full flex items-center gap-2 p-3 rounded-lg transition-colors text-left"
+                style={{ background: "var(--color-cream)", border: "0.5px solid var(--color-border)" }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = "var(--color-sage)"}
+                onMouseLeave={e => e.currentTarget.style.borderColor = "var(--color-border)"}
+              >
+                <svg width="14" height="14" viewBox="0 0 48 48" fill="none" style={{ flexShrink: 0 }}>
+                  <path d="M43.6 20H24v8.4h11.2C33.6 33.4 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l6-6C34.5 6.3 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c10 0 19-7.2 19-20 0-1.3-.1-2.7-.4-4z" fill="#4285F4"/>
+                </svg>
+                <div>
+                  <p className="text-[11px] font-medium" style={{ color: "var(--color-charcoal)" }}>Connect Google Calendar</p>
+                  <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>See your events alongside reminders</p>
+                </div>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Add reminder */}
@@ -663,6 +751,18 @@ export default function CalendarClient({ initialReminders, initialProjects }: Pr
               >{v}</button>
             ))}
           </div>
+
+          <button
+            onClick={() => openAshCal("What's coming up in my calendar this week? Any deadlines or reminders I should know about?")}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", fontSize: 11, fontWeight: 500, borderRadius: 6, background: "transparent", color: "var(--color-ash-dark)", border: "0.5px solid var(--color-border)", cursor: "pointer", fontFamily: "inherit", transition: "background 0.1s ease" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-ash-tint)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+          >
+            <div style={{ width: 16, height: 16, borderRadius: "50%", background: ASH_GRADIENT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <AshMark size={9} variant="on-dark" />
+            </div>
+            Ask Ash
+          </button>
 
           <button
             onClick={() => setNewReminderOpen(true)}
@@ -762,13 +862,24 @@ export default function CalendarClient({ initialReminders, initialProjects }: Pr
               All day
             </div>
             {weekDays.map((day, i) => {
-              const dayReminders = allDayReminders.filter(r => isSameDay(new Date(r.due_date!), day));
-              const dayProjects  = initialProjects.filter(p => p.due_date && isSameDay(new Date(p.due_date), day));
+              const dayReminders  = allDayReminders.filter(r => isSameDay(new Date(r.due_date!), day));
+              const dayProjects   = initialProjects.filter(p => p.due_date && isSameDay(new Date(p.due_date), day));
+              const dayGcalAllDay = gcalEvents.filter(e => e.allDay && isSameDay(new Date(e.start), day));
               return (
                 <div
                   key={i}
                   style={{ flex: 1, borderLeft: "0.5px solid var(--color-border)", padding: "3px 3px", display: "flex", flexDirection: "column", gap: "2px" }}
                 >
+                  {dayGcalAllDay.map(e => {
+                    const color = e.colorId ? GCAL_COLORS[e.colorId] : "#039BE5";
+                    return (
+                      <a key={e.id} href={e.htmlLink ?? "#"} target="_blank" rel="noreferrer"
+                        className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate"
+                        style={{ background: `${color}18`, color, border: `0.5px solid ${color}44`, textDecoration: "none" }}>
+                        {e.title}
+                      </a>
+                    );
+                  })}
                   {dayReminders.map(r => (
                     <div key={r.id} className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate"
                       style={{ background: "rgba(37,99,171,0.09)", color: "#2563ab", border: "0.5px solid rgba(37,99,171,0.18)" }}
@@ -848,6 +959,56 @@ export default function CalendarClient({ initialReminders, initialProjects }: Pr
                         <div style={{ height: "1.5px", background: "var(--color-orange)" }} />
                       </div>
                     )}
+
+                    {/* Google Calendar events */}
+                    {gcalEvents
+                      .filter(e => {
+                        if (e.allDay) return false;
+                        const start = new Date(e.start);
+                        return isSameDay(start, day);
+                      })
+                      .map((e, ei) => {
+                        const start = new Date(e.start);
+                        const end   = new Date(e.end);
+                        const y     = timeToY(start.getHours(), start.getMinutes());
+                        const endY  = timeToY(end.getHours(), end.getMinutes());
+                        const h     = Math.max(24, endY - y);
+                        const color = e.colorId ? GCAL_COLORS[e.colorId] : "#039BE5";
+                        if (y < 0 || y > GRID_HEIGHT) return null;
+                        return (
+                          <a
+                            key={e.id}
+                            href={e.htmlLink ?? "#"}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              position: "absolute",
+                              top:    `${y}px`,
+                              left:   "4px",
+                              right:  "4px",
+                              height: `${h}px`,
+                              borderRadius: "4px",
+                              borderLeft:   `2.5px solid ${color}`,
+                              background:   `${color}18`,
+                              padding:      "3px 6px",
+                              cursor:       "pointer",
+                              zIndex:       2 + ei,
+                              overflow:     "hidden",
+                              textDecoration: "none",
+                            }}
+                            title={`${e.title}${e.location ? ` · ${e.location}` : ""}`}
+                          >
+                            <p className="text-[11px] font-medium truncate" style={{ color, lineHeight: "1.25" }}>
+                              {e.title}
+                            </p>
+                            <p className="text-[9px]" style={{ color, opacity: 0.8 }}>
+                              {start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                              {e.location ? ` · ${e.location}` : ""}
+                            </p>
+                          </a>
+                        );
+                      })
+                    }
 
                     {/* Reminder events — click opens popover */}
                     {dayTimedReminders.map((r, ri) => {
