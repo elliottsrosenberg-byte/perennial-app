@@ -2426,31 +2426,45 @@ export default function DesignSystemPage() {
     <div style={{ display: "flex", height: "100vh", background: "var(--color-surface-app)", overflow: "hidden" }}>
       <LeftNav active={activeSection} theme={theme} onTheme={toggleTheme} />
 
-      <main ref={contentRef} style={{ flex: 1, overflowY: "auto" }}>
-        <ColorsSection />
-        <TypographySection />
-        <SpacingSection />
-        <ShadowsSection />
-        <IconsSection />
-        <ButtonsSection />
-        <BadgesSection />
-        <InputsSection />
-        <FilterTabsSection />
-        <CardsSection />
-        <TablesSection />
-        <ModalsSection />
-        <PanelsSection />
-        <EmptyStatesSection />
-        <StatusSection />
-        <LayoutsSection />
-        <AshSection />
+      <main ref={contentRef} style={{ flex: 1, overflowY: "auto", position: "relative" }}>
 
-        {/* Footer */}
-        <div style={{ padding: "40px 56px", textAlign: "center" }}>
-          <p style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
-            Perennial Design System · v0.1 · Internal use only · All tokens defined in{" "}
-            <code style={{ fontFamily: "monospace", fontSize: 10 }}>app/globals.css</code>
-          </p>
+        {/* Botanical decorations */}
+        <img src="/botanicals/Botanical Illustrations-3.png" aria-hidden="true" alt=""
+          style={{ position: "absolute", top: "-5%", right: "-10%", width: 700, height: "auto",
+            opacity: 0.06, mixBlendMode: "multiply", pointerEvents: "none", userSelect: "none", zIndex: 0 }} />
+        <img src="/botanicals/Botanical Illustrations-7.png" aria-hidden="true" alt=""
+          style={{ position: "absolute", top: "28%", left: "-8%", width: 560, height: "auto",
+            opacity: 0.055, mixBlendMode: "multiply", pointerEvents: "none", userSelect: "none", zIndex: 0 }} />
+        <img src="/botanicals/Botanical Illustrations-1.png" aria-hidden="true" alt=""
+          style={{ position: "absolute", top: "62%", right: "-6%", width: 620, height: "auto",
+            opacity: 0.06, mixBlendMode: "multiply", pointerEvents: "none", userSelect: "none", zIndex: 0 }} />
+
+        <div style={{ position: "relative", zIndex: 1 }}>
+          <ColorsSection />
+          <TypographySection />
+          <SpacingSection />
+          <ShadowsSection />
+          <IconsSection />
+          <ButtonsSection />
+          <BadgesSection />
+          <InputsSection />
+          <FilterTabsSection />
+          <CardsSection />
+          <TablesSection />
+          <ModalsSection />
+          <PanelsSection />
+          <EmptyStatesSection />
+          <StatusSection />
+          <LayoutsSection />
+          <AshSection />
+
+          {/* Footer */}
+          <div style={{ padding: "40px 56px", textAlign: "center" }}>
+            <p style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
+              Perennial Design System · v0.1 · Internal use only · All tokens defined in{" "}
+              <code style={{ fontFamily: "monospace", fontSize: 10 }}>app/globals.css</code>
+            </p>
+          </div>
         </div>
       </main>
     </div>

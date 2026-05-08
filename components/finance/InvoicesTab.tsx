@@ -3,12 +3,117 @@
 import { useState, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Invoice, InvoiceLineItem, TimeEntry, Project } from "@/types/database";
+import EmptyState from "@/components/ui/EmptyState";
+import { X, Download, Send } from "lucide-react";
 
 interface Props {
   invoices: Invoice[];
   timeEntries: TimeEntry[];
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
   onInvoiceUpdated: (inv: Invoice) => void;
+  onInvoiceSent: (invoiceId: string) => void;
+}
+
+// ── Send Invoice Modal ────────────────────────────────────────────────────────
+
+function SendInvoiceModal({ invoice, onClose, onSent }: {
+  invoice: Invoice;
+  onClose: () => void;
+  onSent: () => void;
+}) {
+  const clientEmail = (invoice.client_contact as { email?: string | null } | null)?.email ?? "";
+  const [to,      setTo]      = useState(clientEmail);
+  const [message, setMessage] = useState(`Hi,\n\nPlease find your invoice attached. Let me know if you have any questions.\n\nThank you for your business.`);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+  const [sent,    setSent]    = useState(false);
+
+  async function handleSend() {
+    if (!to.trim()) { setError("Enter a recipient email."); return; }
+    setLoading(true); setError(null);
+    const res = await fetch("/api/finance/send-invoice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invoiceId: invoice.id, to: to.trim(), message }),
+    });
+    const json = await res.json() as { ok?: boolean; error?: string };
+    if (!res.ok || json.error) {
+      setError(json.error ?? "Failed to send.");
+      setLoading(false);
+      return;
+    }
+    setSent(true);
+    setLoading(false);
+    setTimeout(() => { onSent(); onClose(); }, 1200);
+  }
+
+  const inputCls = "w-full px-3 py-2 text-[12px] rounded-lg focus:outline-none";
+  const inputStyle = { background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit" };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(31,33,26,0.5)" }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-md rounded-2xl overflow-hidden"
+        style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
+          <div>
+            <h2 className="text-[13px] font-semibold" style={{ color: "var(--color-charcoal)" }}>Send invoice</h2>
+            <p className="text-[11px] mt-0.5" style={{ color: "var(--color-grey)" }}>#{String(invoice.number).padStart(3, "0")} · {clientName(invoice)}</p>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg"
+            style={{ color: "var(--color-grey)" }}
+            onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+            onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+            <X size={14} />
+          </button>
+        </div>
+        {sent ? (
+          <div className="px-5 py-10 text-center">
+            <p className="text-[22px] mb-2">✓</p>
+            <p className="text-[13px] font-semibold" style={{ color: "var(--color-charcoal)" }}>Invoice sent!</p>
+            <p className="text-[12px] mt-1" style={{ color: "var(--color-grey)" }}>Delivered to {to}</p>
+          </div>
+        ) : (
+          <div className="px-5 py-4 space-y-4">
+            <div>
+              <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--color-charcoal)" }}>To *</label>
+              <input type="email" value={to} onChange={e => setTo(e.target.value)}
+                placeholder="client@email.com" className={inputCls} style={inputStyle} />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--color-charcoal)" }}>Message</label>
+              <textarea value={message} onChange={e => setMessage(e.target.value)} rows={5}
+                className={inputCls} style={{ ...inputStyle, resize: "none" }} />
+            </div>
+            {!process.env.NEXT_PUBLIC_APP_URL && (
+              <p className="text-[11px] px-3 py-2 rounded-lg" style={{ background: "rgba(184,134,11,0.08)", color: "#b8860b", border: "0.5px solid rgba(184,134,11,0.3)" }}>
+                Add RESEND_API_KEY to .env.local to enable email sending.
+              </p>
+            )}
+            {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
+          </div>
+        )}
+        {!sent && (
+          <div className="flex items-center justify-end gap-2 px-5 py-3" style={{ borderTop: "0.5px solid var(--color-border)" }}>
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 text-[12px] rounded-lg"
+              style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              Cancel
+            </button>
+            <button onClick={handleSend} disabled={loading || !to.trim()}
+              className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-medium rounded-lg text-white disabled:opacity-50"
+              style={{ background: "var(--color-sage)" }}>
+              <Send size={11} />
+              {loading ? "Sending…" : "Send invoice"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 type Filter = "all" | "overdue" | "sent" | "draft" | "paid";
@@ -43,7 +148,7 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }>
   overdue: { bg: "rgba(220,62,13,0.1)", color: "var(--color-red-orange)",  label: "Overdue" },
 };
 
-export default function InvoicesTab({ invoices, timeEntries, projects, onInvoiceUpdated }: Props) {
+export default function InvoicesTab({ invoices, timeEntries, projects, onInvoiceUpdated, onInvoiceSent }: Props) {
   const [filter, setFilter]                   = useState<Filter>("all");
   const [selectedId, setSelectedId]           = useState<string | null>(invoices[0]?.id ?? null);
   const [addingLine, setAddingLine]           = useState(false);
@@ -52,6 +157,10 @@ export default function InvoicesTab({ invoices, timeEntries, projects, onInvoice
   const [lineRate, setLineRate]               = useState("");
   const [savingLine, setSavingLine]           = useState(false);
   const [savingStatus, setSavingStatus]       = useState(false);
+  const [showSendModal, setShowSendModal]     = useState(false);
+  const [editingNotes, setEditingNotes]       = useState(false);
+  const [notesdraft, setNotesDraft]           = useState("");
+  const [savingNotes, setSavingNotes]         = useState(false);
 
   const selectedInvoice = invoices.find((i) => i.id === selectedId) ?? null;
 
@@ -134,6 +243,20 @@ export default function InvoicesTab({ invoices, timeEntries, projects, onInvoice
     }
   }
 
+  async function saveNotes() {
+    if (!selectedInvoice) return;
+    setSavingNotes(true);
+    const supabase = createClient();
+    const { data } = await supabase.from("invoices")
+      .update({ notes: notesdraft.trim() || null })
+      .eq("id", selectedInvoice.id)
+      .select("*, client_contact:contacts(id, first_name, last_name), client_company:companies(id, name), project:projects(id, title, rate), line_items:invoice_line_items(*)")
+      .single();
+    if (data) onInvoiceUpdated(data as Invoice);
+    setSavingNotes(false);
+    setEditingNotes(false);
+  }
+
   async function deleteLineItem(lineId: string) {
     if (!selectedInvoice) return;
     const supabase = createClient();
@@ -209,8 +332,23 @@ export default function InvoicesTab({ invoices, timeEntries, projects, onInvoice
               </div>
             );
           })}
-          {filteredInvoices.length === 0 && (
-            <p className="px-4 py-6 text-[12px] text-center" style={{ color: "var(--color-grey)" }}>No invoices.</p>
+          {filteredInvoices.length === 0 && invoices.length === 0 && (
+            <div style={{ padding: "12px 0" }}>
+              <EmptyState
+                icon="🧾"
+                heading="Create your first invoice"
+                body="Perennial invoices are linked to clients and projects. Log time and expenses first, then pull them into an invoice with one click."
+                ashPrompt="Walk me through how invoicing works in Perennial. How do I go from tracked time to a sent invoice?"
+                tips={[
+                  "Start by logging time against a project with a client rate — that time auto-populates into new invoices.",
+                  "Invoices move through Draft → Sent → Paid. Mark as paid when you receive payment.",
+                  "Ask Ash what's outstanding or overdue — it tracks all your invoice statuses.",
+                ]}
+              />
+            </div>
+          )}
+          {filteredInvoices.length === 0 && invoices.length > 0 && (
+            <p className="px-4 py-6 text-[12px] text-center" style={{ color: "var(--color-grey)" }}>No invoices match this filter.</p>
           )}
         </div>
 
@@ -254,10 +392,30 @@ export default function InvoicesTab({ invoices, timeEntries, projects, onInvoice
                 </span>
               );
             })()}
+            {/* Download PDF */}
+            <a href={`/finance/invoice/${selectedInvoice.id}/print`} target="_blank" rel="noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] rounded-lg transition-colors"
+              style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", textDecoration: "none" }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--color-cream)"}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
+              <Download size={12} />
+              PDF
+            </a>
+            {/* Send */}
+            <button onClick={() => setShowSendModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-lg transition-colors"
+              style={{ color: "var(--color-sage)", border: "0.5px solid rgba(155,163,122,0.5)", background: "rgba(155,163,122,0.08)" }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(155,163,122,0.15)"}
+              onMouseLeave={e => e.currentTarget.style.background = "rgba(155,163,122,0.08)"}>
+              <Send size={12} />
+              Send
+            </button>
             {selectedInvoice.status === "draft" && (
               <button onClick={() => updateStatus(selectedInvoice, "sent")} disabled={savingStatus}
-                className="px-3 py-1.5 text-[12px] font-medium rounded-lg text-white disabled:opacity-50"
-                style={{ background: "#2563ab" }}>
+                className="px-3 py-1.5 text-[12px] font-medium rounded-lg disabled:opacity-50"
+                style={{ color: "#2563ab", border: "0.5px solid #2563ab55", background: "rgba(37,99,171,0.07)" }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(37,99,171,0.13)"}
+                onMouseLeave={e => e.currentTarget.style.background = "rgba(37,99,171,0.07)"}>
                 {savingStatus ? "…" : "Mark as sent →"}
               </button>
             )}
@@ -361,7 +519,7 @@ export default function InvoicesTab({ invoices, timeEntries, projects, onInvoice
                         placeholder="Rate" className={`${inputCls} w-20`} style={inputStyle} type="number" min="0" />
                       <button onClick={addLineItem} disabled={savingLine || !lineDesc.trim()}
                         className="px-3 py-1.5 text-[12px] font-medium rounded-lg text-white disabled:opacity-50"
-                        style={{ background: "var(--color-charcoal)" }}>Add</button>
+                        style={{ background: "var(--color-sage)" }}>Add</button>
                       <button onClick={() => setAddingLine(false)}
                         className="px-2 py-1.5 text-[12px] rounded-lg"
                         style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}>✕</button>
@@ -398,13 +556,45 @@ export default function InvoicesTab({ invoices, timeEntries, projects, onInvoice
                   </div>
                 </div>
 
-                {/* Notes */}
-                {selectedInvoice.notes && (
-                  <div className="rounded-xl p-4" style={{ border: "0.5px solid var(--color-border)" }}>
-                    <p className="text-[11px] font-semibold mb-1.5" style={{ color: "var(--color-charcoal)" }}>Notes</p>
-                    <p className="text-[11px]" style={{ color: "var(--color-grey)", lineHeight: 1.5 }}>{selectedInvoice.notes}</p>
+                {/* Notes — editable */}
+                <div className="rounded-xl overflow-hidden" style={{ border: "0.5px solid var(--color-border)" }}>
+                  <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: editingNotes ? "0.5px solid var(--color-border)" : "none", background: "var(--color-off-white)" }}>
+                    <p className="text-[11px] font-semibold" style={{ color: "var(--color-charcoal)" }}>Notes</p>
+                    {!editingNotes && (
+                      <button onClick={() => { setNotesDraft(selectedInvoice.notes ?? ""); setEditingNotes(true); }}
+                        className="text-[11px]" style={{ color: "var(--color-grey)" }}
+                        onMouseEnter={e => e.currentTarget.style.color = "var(--color-charcoal)"}
+                        onMouseLeave={e => e.currentTarget.style.color = "var(--color-grey)"}>Edit</button>
+                    )}
                   </div>
-                )}
+                  {editingNotes ? (
+                    <div className="p-3 flex flex-col gap-2">
+                      <textarea value={notesdraft} onChange={e => setNotesDraft(e.target.value)} rows={4} autoFocus
+                        placeholder="Payment instructions, bank details, thank-you note…"
+                        className="w-full px-3 py-2 text-[12px] rounded-lg focus:outline-none resize-none"
+                        style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit" }} />
+                      <div className="flex gap-2 justify-end">
+                        <button onClick={() => setEditingNotes(false)}
+                          className="px-3 py-1 text-[11px] rounded-lg"
+                          style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
+                          onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>Cancel</button>
+                        <button onClick={saveNotes} disabled={savingNotes}
+                          className="px-3 py-1 text-[11px] font-medium rounded-lg text-white disabled:opacity-50"
+                          style={{ background: "var(--color-sage)" }}>
+                          {savingNotes ? "Saving…" : "Save"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="px-4 py-3" onClick={() => { setNotesDraft(selectedInvoice.notes ?? ""); setEditingNotes(true); }}
+                      style={{ cursor: "text", minHeight: 44 }}>
+                      {selectedInvoice.notes
+                        ? <p className="text-[11px]" style={{ color: "var(--color-grey)", lineHeight: 1.6 }}>{selectedInvoice.notes}</p>
+                        : <p className="text-[11px] italic" style={{ color: "var(--color-grey)" }}>Click to add payment instructions, bank details…</p>}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -413,6 +603,14 @@ export default function InvoicesTab({ invoices, timeEntries, projects, onInvoice
         <div className="flex-1 flex items-center justify-center ml-4">
           <p className="text-[13px]" style={{ color: "var(--color-grey)" }}>Select an invoice</p>
         </div>
+      )}
+
+      {showSendModal && selectedInvoice && (
+        <SendInvoiceModal
+          invoice={selectedInvoice}
+          onClose={() => setShowSendModal(false)}
+          onSent={() => onInvoiceSent(selectedInvoice.id)}
+        />
       )}
     </div>
   );

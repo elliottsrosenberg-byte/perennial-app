@@ -20,8 +20,9 @@ export async function buildAshContext(
     { data: staleContacts },
     { data: recentNotes },
     { data: upcomingReminders },
+    { data: openTasks },
+    { data: profile },
   ] = await Promise.all([
-    // Active projects
     supabase
       .from("projects")
       .select("id, title, status, due_date, priority")
@@ -30,21 +31,18 @@ export async function buildAshContext(
       .order("due_date", { ascending: true, nullsFirst: false })
       .limit(8),
 
-    // Sent invoices (outstanding + overdue)
     supabase
       .from("invoices")
       .select("id, number, due_at, line_items:invoice_line_items(amount)")
       .eq("user_id", userId)
       .eq("status", "sent"),
 
-    // Billable time this month
     supabase
       .from("time_entries")
       .select("duration_minutes, billable")
       .eq("user_id", userId)
       .gte("logged_at", monthStart),
 
-    // Contacts not reached in 30+ days
     supabase
       .from("contacts")
       .select("first_name, last_name, last_contacted_at, company:companies(name)")
@@ -54,7 +52,6 @@ export async function buildAshContext(
       .order("last_contacted_at", { ascending: true, nullsFirst: true })
       .limit(5),
 
-    // Recent notes
     supabase
       .from("notes")
       .select("title, content, updated_at")
@@ -62,7 +59,6 @@ export async function buildAshContext(
       .order("updated_at", { ascending: false })
       .limit(3),
 
-    // Upcoming reminders (next 90 days)
     supabase
       .from("reminders")
       .select("title, due_date")
@@ -72,9 +68,22 @@ export async function buildAshContext(
       .lte("due_date", ninetyDaysFromNow)
       .order("due_date", { ascending: true })
       .limit(5),
+
+    supabase
+      .from("tasks")
+      .select("id, title, due_date, priority, project:projects(title)")
+      .eq("user_id", userId)
+      .eq("completed", false)
+      .order("due_date", { ascending: true, nullsFirst: false })
+      .limit(8),
+
+    supabase
+      .from("profiles")
+      .select("display_name, studio_name, location, website, practice_types, work_types, selling_channels, price_range, years_in_practice, primary_challenges, perennial_goals, currency, hourly_rate")
+      .eq("user_id", userId)
+      .maybeSingle(),
   ]);
 
-  // Invoice calculations
   type RawInv = { id: string; number: number; due_at: string | null; line_items: { amount: number }[] };
   const invoices = (sentInvoices ?? []) as unknown as RawInv[];
   const invTotal = (inv: RawInv) => (inv.line_items ?? []).reduce((s, l) => s + Number(l.amount), 0);
@@ -87,34 +96,63 @@ export async function buildAshContext(
     .filter((i) => !i.due_at || i.due_at >= today)
     .map((i) => ({ number: i.number, total: invTotal(i), due_at: i.due_at }));
 
-  // Billable hours
   const billableMinutes = (timeEntries ?? [])
     .filter((t) => t.billable)
     .reduce((s, t) => s + t.duration_minutes, 0);
 
-  // Stale contacts — flatten the company join
   type RawContact = {
-    first_name: string;
-    last_name: string;
+    first_name: string; last_name: string;
     last_contacted_at: string | null;
     company: { name: string } | null;
   };
   const contacts = (staleContacts ?? []) as unknown as RawContact[];
 
+  type RawTask = {
+    id: string; title: string; due_date: string | null; priority: string | null;
+    project: { title: string } | null;
+  };
+  const tasks = (openTasks ?? []) as unknown as RawTask[];
+
+  type Prof = {
+    display_name?: string; studio_name?: string; location?: string;
+    practice_types?: string[]; work_types?: string[]; selling_channels?: string[];
+    price_range?: string; years_in_practice?: string;
+    primary_challenges?: string[]; perennial_goals?: string[];
+    currency?: string; hourly_rate?: number;
+  };
+  const prof = profile as Prof | null;
+
   return {
     module,
     userEmail,
-    projects: (projects ?? []) as AshContext["projects"],
+    studioName:         prof?.studio_name ?? null,
+    displayName:        prof?.display_name ?? null,
+    location:           prof?.location ?? null,
+    practiceTypes:      prof?.practice_types ?? [],
+    workTypes:          prof?.work_types ?? [],
+    sellingChannels:    prof?.selling_channels ?? [],
+    priceRange:         prof?.price_range ?? null,
+    yearsInPractice:    prof?.years_in_practice ?? null,
+    primaryChallenges:  prof?.primary_challenges ?? [],
+    perennialGoals:     prof?.perennial_goals ?? [],
+    currency:           prof?.currency ?? "USD",
+    hourlyRate:         prof?.hourly_rate ?? null,
+    projects:       (projects ?? []) as AshContext["projects"],
     outstandingInvoices,
     overdueInvoices,
-    recentNotes: (recentNotes ?? []) as AshContext["recentNotes"],
-    staleContacts: contacts.map((c) => ({
-      first_name: c.first_name,
-      last_name:  c.last_name,
+    recentNotes:    (recentNotes ?? []) as AshContext["recentNotes"],
+    staleContacts:  contacts.map((c) => ({
+      first_name: c.first_name, last_name: c.last_name,
       last_contacted_at: c.last_contacted_at,
       company_name: c.company?.name ?? null,
     })),
     upcomingReminders: (upcomingReminders ?? []) as AshContext["upcomingReminders"],
+    openTasks:      tasks.map((t) => ({
+      title:    t.title,
+      due_date: t.due_date,
+      priority: t.priority,
+      project:  (t.project as unknown as { title: string } | null)?.title ?? null,
+    })),
     billableHoursThisMonth: billableMinutes / 60,
   };
 }

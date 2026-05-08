@@ -2,18 +2,29 @@
 
 import { useState, useRef, KeyboardEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Contact, ContactStatus } from "@/types/database";
+import type { Contact, ContactStatus, LeadStage } from "@/types/database";
 import { X } from "lucide-react";
 
 interface Props {
-  onClose: () => void;
+  onClose:   () => void;
   onCreated: (contact: Contact) => void;
+  isLead?:   boolean;
 }
 
 const STATUS_OPTIONS: { value: ContactStatus; label: string }[] = [
-  { value: "lead",     label: "Lead"     },
-  { value: "active",   label: "Active"   },
-  { value: "inactive", label: "Inactive" },
+  { value: "active",        label: "Active"        },
+  { value: "inactive",      label: "Inactive"      },
+  { value: "former_client", label: "Former client" },
+];
+
+const LEAD_STAGE_OPTIONS: { value: LeadStage; label: string }[] = [
+  { value: "new",             label: "New"            },
+  { value: "reached_out",     label: "Reached out"    },
+  { value: "in_conversation", label: "In conversation" },
+  { value: "proposal_sent",   label: "Proposal sent"  },
+  { value: "qualified",       label: "Qualified"      },
+  { value: "nurturing",       label: "Nurturing"      },
+  { value: "lost",            label: "Lost"           },
 ];
 
 const PRESET_TAGS = ["Gallery", "Client", "Supplier", "Press", "Lead", "Event"];
@@ -26,7 +37,8 @@ const inputStyle = {
 };
 const labelCls = "block text-[11px] font-medium mb-1";
 
-export default function NewContactModal({ onClose, onCreated }: Props) {
+export default function NewContactModal({ onClose, onCreated, isLead = false }: Props) {
+  const [type,      setType]      = useState<"contact" | "lead">(isLead ? "lead" : "contact");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName]   = useState("");
   const [email, setEmail]         = useState("");
@@ -35,7 +47,8 @@ export default function NewContactModal({ onClose, onCreated }: Props) {
   const [title, setTitle]         = useState("");
   const [location, setLocation]   = useState("");
   const [website, setWebsite]     = useState("");
-  const [status, setStatus]       = useState<ContactStatus>("lead");
+  const [status,    setStatus]    = useState<ContactStatus>("active");
+  const [leadStage, setLeadStage] = useState<LeadStage>("new");
   const [tags, setTags]           = useState<string[]>([]);
   const [tagInput, setTagInput]   = useState("");
   const [loading, setLoading]     = useState(false);
@@ -94,17 +107,19 @@ export default function NewContactModal({ onClose, onCreated }: Props) {
     }
 
     const payload = {
-      user_id:    user.id,
-      first_name: firstName.trim(),
-      last_name:  lastName.trim(),
-      email:      email.trim()    || null,
-      phone:      phone.trim()    || null,
+      user_id:     user.id,
+      first_name:  firstName.trim(),
+      last_name:   lastName.trim(),
+      email:       email.trim()    || null,
+      phone:       phone.trim()    || null,
       company_id,
-      title:      title.trim()    || null,
-      location:   location.trim() || null,
-      website:    website.trim()  || null,
+      title:       title.trim()    || null,
+      location:    location.trim() || null,
+      website:     website.trim()  || null,
       tags,
-      status,
+      status:      type === "contact" ? status : "active",
+      is_lead:     type === "lead",
+      lead_stage:  type === "lead" ? leadStage : null,
     };
 
     const { data, error: dbError } = await supabase
@@ -137,20 +152,20 @@ export default function NewContactModal({ onClose, onCreated }: Props) {
         style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}
       >
         {/* Header */}
-        <div
-          className="flex items-center justify-between px-6 py-4"
-          style={{ borderBottom: "0.5px solid var(--color-border)" }}
-        >
-          <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>
-            New contact
-          </h2>
-          <button
-            onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
+        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
+          {/* Type toggle */}
+          <div style={{ display: "flex", gap: 2, background: "var(--color-cream)", borderRadius: 8, padding: 2 }}>
+            {(["contact", "lead"] as const).map(t => (
+              <button key={t} type="button" onClick={() => setType(t)}
+                style={{ padding: "4px 14px", borderRadius: 6, fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer", fontFamily: "inherit", background: type === t ? (t === "contact" ? "var(--color-sage)" : "#b8860b") : "transparent", color: type === t ? "white" : "#9a9690", transition: "all 0.1s ease" }}>
+                {t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
             style={{ color: "var(--color-grey)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-          >
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
             <X size={14} />
           </button>
         </div>
@@ -203,14 +218,26 @@ export default function NewContactModal({ onClose, onCreated }: Props) {
             </div>
           </div>
 
-          {/* Status + Location */}
+          {/* Status / Stage + Location */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls} style={{ color: "var(--color-charcoal)" }}>Status</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value as ContactStatus)}
-                className={inputCls} style={inputStyle}>
-                {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              {type === "contact" ? (
+                <>
+                  <label className={labelCls} style={{ color: "var(--color-charcoal)" }}>Status</label>
+                  <select value={status} onChange={(e) => setStatus(e.target.value as ContactStatus)}
+                    className={inputCls} style={inputStyle}>
+                    {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </>
+              ) : (
+                <>
+                  <label className={labelCls} style={{ color: "var(--color-charcoal)" }}>Lead stage</label>
+                  <select value={leadStage} onChange={(e) => setLeadStage(e.target.value as LeadStage)}
+                    className={inputCls} style={inputStyle}>
+                    {LEAD_STAGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </>
+              )}
             </div>
             <div>
               <label className={labelCls} style={{ color: "var(--color-charcoal)" }}>Location</label>

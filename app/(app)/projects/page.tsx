@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import Topbar from "@/components/layout/Topbar";
 import ProjectsClient from "@/components/projects/ProjectsClient";
 import type { Project } from "@/types/database";
 
@@ -13,7 +12,6 @@ export default async function ProjectsPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Topbar title="Projects" />
       <ProjectsClient initialProjects={(projects ?? []) as Project[]} />
     </div>
   );

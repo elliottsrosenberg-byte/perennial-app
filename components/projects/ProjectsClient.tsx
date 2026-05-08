@@ -1,24 +1,34 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
+import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
+import { createClient } from "@/lib/supabase/client";
 import type { Project, ProjectStatus } from "@/types/database";
 import ProjectCard from "./ProjectCard";
 import NewProjectModal from "./NewProjectModal";
 import ProjectDetailPanel from "./ProjectDetailPanel";
+import Topbar from "@/components/layout/Topbar";
+import FilterTabs from "@/components/ui/FilterTabs";
+import Button from "@/components/ui/Button";
+import EmptyState from "@/components/ui/EmptyState";
+
+// ─── Status config — ordered as user specified ─────────────────────────────────
 
 const STATUS_GROUPS: { key: ProjectStatus; label: string; color: string }[] = [
-  { key: "in_progress", label: "In Progress", color: "var(--color-sage)"        },
   { key: "planning",    label: "Planning",    color: "var(--color-grey)"        },
+  { key: "in_progress", label: "In Progress", color: "var(--color-sage)"        },
   { key: "on_hold",     label: "On Hold",     color: "var(--color-warm-yellow)" },
   { key: "complete",    label: "Complete",    color: "var(--color-green)"       },
+  { key: "cut",         label: "Cut",         color: "var(--color-red-orange)"  },
 ];
 
 const FILTER_TABS: { key: "all" | ProjectStatus; label: string }[] = [
   { key: "all",         label: "All"         },
-  { key: "in_progress", label: "In Progress" },
   { key: "planning",    label: "Planning"    },
+  { key: "in_progress", label: "In Progress" },
   { key: "on_hold",     label: "On Hold"     },
   { key: "complete",    label: "Complete"    },
+  { key: "cut",         label: "Cut"         },
 ];
 
 interface Props {
@@ -26,219 +36,220 @@ interface Props {
 }
 
 export default function ProjectsClient({ initialProjects }: Props) {
-  const [projects, setProjects] = useState<Project[]>(initialProjects);
-  const [filter, setFilter] = useState<"all" | ProjectStatus>("all");
-  const [showModal, setShowModal] = useState(false);
+  const [projects,        setProjects]        = useState<Project[]>(initialProjects);
+  const [filter,          setFilter]          = useState<"all" | ProjectStatus>("all");
+  const [showModal,       setShowModal]       = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
-  const settingsRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
-        setShowSettingsMenu(false);
-      }
-    }
-    if (showSettingsMenu) document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [showSettingsMenu]);
+  const [dragging,        setDragging]        = useState(false);
 
   const visible = filter === "all" ? projects : projects.filter((p) => p.status === filter);
+
+  // ── CRUD handlers ─────────────────────────────────────────────────────────────
 
   function handleCreated(project: Project) {
     setProjects((prev) => [project, ...prev]);
   }
 
+  function handleUpdated(project: Project) {
+    setProjects((prev) => prev.map((p) => (p.id === project.id ? project : p)));
+    if (selectedProject?.id === project.id) setSelectedProject(project);
+  }
+
+  function handleDeleted(id: string) {
+    setProjects((prev) => prev.filter((p) => p.id !== id));
+    if (selectedProject?.id === id) setSelectedProject(null);
+  }
+
+  // ── Drag and drop ─────────────────────────────────────────────────────────────
+
+  async function handleDragEnd(result: DropResult) {
+    setDragging(false);
+    const { destination, source, draggableId } = result;
+    if (!destination) return;
+    // Same group — no reordering (no position field in DB)
+    if (destination.droppableId === source.droppableId) return;
+
+    const newStatus = destination.droppableId as ProjectStatus;
+    setProjects((prev) =>
+      prev.map((p) => (p.id === draggableId ? { ...p, status: newStatus } : p))
+    );
+
+    const supabase = createClient();
+    await supabase
+      .from("projects")
+      .update({ status: newStatus, updated_at: new Date().toISOString() })
+      .eq("id", draggableId);
+  }
+
+  // ── Tab counts ────────────────────────────────────────────────────────────────
+
+  const tabsWithCount = FILTER_TABS.map((t) => ({
+    ...t,
+    count: t.key === "all" ? projects.length : projects.filter((p) => p.status === t.key).length,
+  }));
+
   return (
     <>
-      {/* Filter tabs */}
+      {/* ── Topbar with New project action ── */}
+      <Topbar
+        title="Projects"
+        actions={
+          <Button variant="primary" size="sm" onClick={() => setShowModal(true)}>
+            + New project
+          </Button>
+        }
+      />
+
+      {/* ── Filter tabs ── */}
       <div
-        className="flex items-center gap-0.5 px-6 py-[10px] shrink-0"
         style={{
-          borderBottom: "0.5px solid var(--color-border)",
-          background: "var(--color-off-white)",
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "10px 24px", borderBottom: "0.5px solid var(--color-border)",
+          background: "var(--color-surface-raised)", flexShrink: 0,
         }}
       >
-        <div className="flex-1 flex items-center gap-0.5">
-        {FILTER_TABS.map((tab) => {
-          const count = tab.key === "all"
-            ? projects.length
-            : projects.filter((p) => p.status === tab.key).length;
-          const active = filter === tab.key;
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setFilter(tab.key)}
-              className="px-[14px] py-[5px] rounded-full text-[12px] transition-colors"
-              style={{
-                background: active ? "var(--color-cream)" : "transparent",
-                color: active ? "var(--color-charcoal)" : "#6b6860",
-                fontWeight: active ? 500 : 400,
-                border: "none",
-              }}
-            >
-              {tab.label}
-              <span className="ml-1 text-[10px]" style={{ color: "var(--color-grey)" }}>
-                {count}
-              </span>
-            </button>
-          );
-        })}
-        </div>
-        {/* 3-dot settings menu */}
-        <div className="relative shrink-0 mr-2" ref={settingsRef}>
-          <button
-            onClick={() => setShowSettingsMenu((v) => !v)}
-            className="w-[30px] h-[30px] flex items-center justify-center rounded-lg transition-colors text-[16px] leading-none"
-            style={{
-              color: showSettingsMenu ? "var(--color-charcoal)" : "var(--color-grey)",
-              background: showSettingsMenu ? "var(--color-cream)" : "transparent",
-            }}
-            onMouseEnter={(e) => { if (!showSettingsMenu) e.currentTarget.style.background = "var(--color-cream)"; }}
-            onMouseLeave={(e) => { if (!showSettingsMenu) e.currentTarget.style.background = "transparent"; }}
-            title="Settings"
-          >
-            ···
-          </button>
-          {showSettingsMenu && (
-            <div
-              className="absolute right-0 mt-1 rounded-xl overflow-hidden z-30"
-              style={{
-                top: "100%",
-                minWidth: "180px",
-                background: "var(--color-off-white)",
-                border: "0.5px solid var(--color-border)",
-                boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
-              }}
-            >
-              {[
-                { label: "Sort by due date",    action: () => {} },
-                { label: "Sort by priority",    action: () => {} },
-                { label: "Sort by created",     action: () => {} },
-                null,
-                { label: "Manage project types", action: () => {} },
-                { label: "Display settings",     action: () => {} },
-              ].map((item, i) =>
-                item === null ? (
-                  <div key={i} style={{ height: "0.5px", background: "var(--color-border)", margin: "2px 0" }} />
-                ) : (
-                  <button
-                    key={item.label}
-                    onClick={() => { item.action(); setShowSettingsMenu(false); }}
-                    className="w-full text-left px-4 py-[9px] text-[12px] transition-colors"
-                    style={{ color: "#6b6860" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                  >
-                    {item.label}
-                  </button>
-                )
-              )}
-              <div className="px-4 py-[9px]">
-                <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>
-                  {/* TODO: implement sort/display/type management */}
-                  More options coming soon
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
+        <FilterTabs
+          tabs={tabsWithCount}
+          active={filter}
+          onSelect={(k) => setFilter(k as "all" | ProjectStatus)}
+          showCount
+        />
 
-        <button
-          onClick={() => setShowModal(true)}
-          className="px-[14px] py-[6px] text-[12px] font-medium rounded-lg text-white shrink-0 transition-opacity hover:opacity-90"
-          style={{ background: "var(--color-sage)" }}
-        >
-          + New project
-        </button>
+        <div style={{ flex: 1 }} />
+
+        <p style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
+          {visible.length} project{visible.length !== 1 ? "s" : ""}
+          {filter !== "all" ? ` · drag cards between sections to change status` : ""}
+        </p>
       </div>
 
-      {/* Grid area */}
+      {/* ── Card grid with drag and drop ── */}
       <div
-        className="flex-1 overflow-y-auto px-6 pb-20 pt-5"
-        style={{ background: "var(--color-warm-white)" }}
+        className="flex-1 overflow-y-auto"
+        style={{ background: "var(--color-surface-app)", padding: "24px 24px 80px" }}
       >
         {projects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-center">
-            <p className="text-[14px] font-medium mb-2" style={{ color: "var(--color-charcoal)" }}>
-              No projects yet
-            </p>
-            <p className="text-[12px] mb-4" style={{ color: "var(--color-grey)" }}>
-              Create your first project to get started.
-            </p>
-            <button
-              onClick={() => setShowModal(true)}
-              className="px-4 py-2 text-[13px] font-medium rounded-lg text-white"
-              style={{ background: "var(--color-sage)" }}
-            >
-              + New project
-            </button>
-          </div>
+          <EmptyState
+            icon="🗂"
+            heading="Add your first project"
+            body="Projects are the anchor of your studio. Every piece of work — commissions, editions, personal work — lives here, with its own tasks, time log, linked contacts, and value tracking."
+            action={{ label: "+ New project", onClick: () => setShowModal(true) }}
+            ashPrompt="I'm just getting started with Perennial. Can you help me set up my first project and explain how projects connect to the rest of the app?"
+            tips={[
+              "Create a project for each piece of work you're actively making, selling, or pitching — furniture, editions, client commissions, or collaborations.",
+              "Each project tracks its status (Planning → In Progress → Complete), tasks, time logged, linked contacts, and financial value.",
+              "Drag projects between status columns to update them instantly. Ash can tell you which projects need attention and help you plan what's next.",
+            ]}
+          />
         ) : (
-          STATUS_GROUPS.map(({ key, label, color }) => {
-            const group = visible.filter((p) => p.status === key);
-            if (group.length === 0) return null;
-            return (
-              <div key={key} className="mb-7">
-                {/* Section header */}
-                <div className="flex items-center gap-2 mb-3 mt-1">
-                  <div className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: color }} />
-                  <span
-                    className="text-[11px] font-semibold uppercase tracking-widest"
-                    style={{ color: "#6b6860" }}
-                  >
-                    {label}
-                  </span>
-                  <span className="text-[11px]" style={{ color: "var(--color-grey)" }}>
-                    {group.length}
-                  </span>
-                </div>
+          <DragDropContext
+            onDragStart={() => setDragging(true)}
+            onDragEnd={handleDragEnd}
+          >
+            {STATUS_GROUPS.map(({ key, label, color }) => {
+              const group = visible.filter((p) => p.status === key);
+              // In filtered view, only show the active status group
+              if (filter !== "all" && key !== filter) return null;
 
-                {/* Cards */}
-                <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-                  {group.map((project) => (
-                    <ProjectCard key={project.id} project={project} onClick={() => setSelectedProject(project)} />
-                  ))}
-                  {/* New project ghost card — only in first visible group */}
-                  {key === STATUS_GROUPS.find((g) => visible.some((p) => p.status === g.key))?.key && (
-                    <button
-                      onClick={() => setShowModal(true)}
-                      className="flex items-center justify-center rounded-xl text-[13px] transition-colors min-h-[100px]"
-                      style={{
-                        background: "transparent",
-                        border: "0.5px dashed var(--color-border)",
-                        color: "var(--color-grey)",
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = "var(--color-grey)";
-                        e.currentTarget.style.color = "#6b6860";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = "var(--color-border)";
-                        e.currentTarget.style.color = "var(--color-grey)";
-                      }}
-                    >
-                      + New project
-                    </button>
-                  )}
+              return (
+                <div key={key} style={{ marginBottom: 36 }}>
+                  {/* Section header */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-tertiary)" }}>
+                      {label}
+                    </span>
+                    <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>{group.length}</span>
+                  </div>
+
+                  {/* Horizontally-scrolling card row */}
+                  <Droppable droppableId={key} direction="horizontal">
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        className="ash-scroll"
+                        style={{
+                          display:    "flex",
+                          flexWrap:   "nowrap",
+                          gap:        12,
+                          height:     220,
+                          overflowX:  "auto",
+                          overflowY:  "hidden",
+                          paddingBottom: 4, // tiny breathing room for shadow
+                          borderRadius: 10,
+                          background: snapshot.isDraggingOver ? "rgba(155,163,122,0.06)" : "transparent",
+                          border:     snapshot.isDraggingOver ? "1px dashed var(--color-sage)" : "1px solid transparent",
+                          transition: "background 0.15s ease, border 0.15s ease",
+                        }}
+                      >
+                        {group.map((project, index) => (
+                          <Draggable key={project.id} draggableId={project.id} index={index}>
+                            {(provided, snapshot) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                style={{
+                                  ...provided.draggableProps.style,
+                                  flex:    "0 0 280px",
+                                  width:   280,
+                                  height:  216,
+                                  opacity: snapshot.isDragging ? 0.88 : 1,
+                                }}
+                              >
+                                <ProjectCard
+                                  project={project}
+                                  isDragging={snapshot.isDragging}
+                                  onClick={() => { if (!snapshot.isDragging) setSelectedProject(project); }}
+                                />
+                              </div>
+                            )}
+                          </Draggable>
+                        ))}
+
+                        {provided.placeholder}
+
+                        {/* Ghost "new project" tile — hidden while dragging */}
+                        {!dragging && (
+                          <button
+                            onClick={() => setShowModal(true)}
+                            style={{
+                              flex: "0 0 200px", width: 200, height: 216,
+                              borderRadius: 12, border: "1px dashed var(--color-border)",
+                              background: "transparent", cursor: "pointer",
+                              color: "var(--color-text-tertiary)", fontSize: 13,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              transition: "border-color 0.12s ease, color 0.12s ease",
+                              flexShrink: 0,
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--color-text-tertiary)"; e.currentTarget.style.color = "var(--color-text-secondary)"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}
+                          >
+                            + New project
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </Droppable>
                 </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </DragDropContext>
         )}
       </div>
 
+      {/* ── Modals ── */}
       {showModal && (
-        <NewProjectModal
-          onClose={() => setShowModal(false)}
-          onCreated={handleCreated}
-        />
+        <NewProjectModal onClose={() => setShowModal(false)} onCreated={handleCreated} />
       )}
 
       {selectedProject && (
         <ProjectDetailPanel
           project={selectedProject}
           onClose={() => setSelectedProject(null)}
+          onUpdated={handleUpdated}
+          onDeleted={handleDeleted}
         />
       )}
     </>

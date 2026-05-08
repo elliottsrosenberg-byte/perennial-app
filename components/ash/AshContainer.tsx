@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import AshPanel from "./AshPanel";
 import AshMark from "@/components/ui/AshMark";
@@ -10,15 +10,53 @@ function getModule(pathname: string): string {
   return pathname.split("/")[1] || "home";
 }
 
+interface ProjectCtxState {
+  title:    string;
+  status:   string;
+  priority: string;
+}
+
 export default function AshContainer() {
   const pathname = usePathname();
-  const [open,     setOpen]     = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [open,        setOpen]        = useState(false);
+  const [expanded,    setExpanded]    = useState(false);
+  const [convKey,     setConvKey]     = useState(0);
+  const [autoMessage, setAutoMessage] = useState<string | undefined>(undefined);
+  const [projectCtx,  setProjectCtx]  = useState<ProjectCtxState | undefined>(undefined);
+
   const module = getModule(pathname);
 
   const handleClose    = useCallback(() => { setOpen(false); setExpanded(false); }, []);
   const handleExpand   = useCallback(() => setExpanded(true),  []);
   const handleCollapse = useCallback(() => setExpanded(false), []);
+
+  // Listen for "open-ash" events (with optional auto-message and project context)
+  useEffect(() => {
+    function handler(e: Event) {
+      const detail = (e as CustomEvent<{ message?: string; project?: ProjectCtxState }>).detail ?? {};
+      if (detail.message) {
+        // New conversation keyed so AshPanel resets state and auto-sends
+        setConvKey(k => k + 1);
+        setAutoMessage(detail.message);
+      }
+      if (detail.project) setProjectCtx(detail.project);
+      setOpen(true);
+    }
+    window.addEventListener("open-ash", handler);
+    return () => window.removeEventListener("open-ash", handler);
+  }, []);
+
+  // Track which project is currently open so the floating button also gets context
+  useEffect(() => {
+    function setCtx(e: Event) { setProjectCtx((e as CustomEvent<ProjectCtxState>).detail); }
+    function clearCtx()        { setProjectCtx(undefined); setAutoMessage(undefined); }
+    window.addEventListener("set-project-context",   setCtx);
+    window.addEventListener("clear-project-context", clearCtx);
+    return () => {
+      window.removeEventListener("set-project-context",   setCtx);
+      window.removeEventListener("clear-project-context", clearCtx);
+    };
+  }, []);
 
   return (
     <>
@@ -27,6 +65,7 @@ export default function AshContainer() {
         onClick={() => setOpen(true)}
         title="Ask Ash"
         aria-label="Open Ash"
+        className="ash-fab"
         style={{
           position:       "fixed",
           bottom:         24,
@@ -66,12 +105,15 @@ export default function AshContainer() {
       </button>
 
       <AshPanel
+        key={convKey}
         open={open}
         expanded={expanded}
         onClose={handleClose}
         onExpand={handleExpand}
         onCollapse={handleCollapse}
         module={module}
+        autoMessage={autoMessage}
+        projectContext={projectCtx}
       />
     </>
   );

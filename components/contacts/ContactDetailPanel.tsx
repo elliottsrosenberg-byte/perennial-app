@@ -1,87 +1,73 @@
 "use client";
 
-import { useState, useEffect, useRef, KeyboardEvent } from "react";
+import { useState, useEffect, useRef, useCallback, KeyboardEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type {
-  Contact, ContactActivity, ContactActivityType,
-  ContactStatus, Project,
-} from "@/types/database";
-import { X } from "lucide-react";
-import { useRouter } from "next/navigation";
+import type { Contact, ContactActivity, ContactActivityType, ContactStatus, LeadStage, Project, Task, Note } from "@/types/database";
+import { X, Maximize2, Minimize2, FileText, CheckSquare, FolderOpen, Calendar, Settings, Trash2, Users, Link2 } from "lucide-react";
+import { useEditor, EditorContent } from "@tiptap/react";
+import { getRichExtensions, RichToolbar, InlineAshPopover } from "@/components/ui/RichEditor";
+import type { AshPromptState } from "@/components/ui/RichEditor";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const TAG_COLORS: Record<string, { bg: string; color: string }> = {
   gallery:  { bg: "rgba(37,99,171,0.10)",   color: "#2563ab" },
   client:   { bg: "rgba(61,107,79,0.10)",   color: "#3d6b4f" },
   supplier: { bg: "rgba(184,134,11,0.10)",  color: "#b8860b" },
   press:    { bg: "rgba(109,79,163,0.10)",  color: "#6d4fa3" },
-  lead:     { bg: "rgba(154,150,144,0.10)", color: "#6b6860" },
   event:    { bg: "rgba(20,140,140,0.10)",  color: "#148c8c" },
 };
-const FALLBACK_COLORS = [
-  { bg: "rgba(37,99,171,0.10)",  color: "#2563ab" },
-  { bg: "rgba(109,79,163,0.10)", color: "#6d4fa3" },
-  { bg: "rgba(20,140,140,0.10)", color: "#148c8c" },
-  { bg: "rgba(61,107,79,0.10)",  color: "#3d6b4f" },
-  { bg: "rgba(184,134,11,0.10)", color: "#b8860b" },
-];
 function tagStyle(tag: string) {
   const key = tag.toLowerCase().trim();
   if (TAG_COLORS[key]) return TAG_COLORS[key];
-  let h = 0;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) & 0xffffffff;
-  return FALLBACK_COLORS[Math.abs(h) % FALLBACK_COLORS.length];
+  let h = 0; for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) & 0xffffffff;
+  const FB = [{ bg: "rgba(37,99,171,0.10)", color: "#2563ab" }, { bg: "rgba(109,79,163,0.10)", color: "#6d4fa3" }, { bg: "rgba(20,140,140,0.10)", color: "#148c8c" }, { bg: "rgba(61,107,79,0.10)", color: "#3d6b4f" }, { bg: "rgba(184,134,11,0.10)", color: "#b8860b" }];
+  return FB[Math.abs(h) % FB.length];
 }
 
 const STATUS_CONFIG: Record<ContactStatus, { dot: string; label: string }> = {
-  active:   { dot: "var(--color-sage)",  label: "Active"   },
-  lead:     { dot: "#b8860b",           label: "Lead"     },
-  inactive: { dot: "var(--color-grey)", label: "Inactive" },
+  active:       { dot: "var(--color-sage)", label: "Active"        },
+  inactive:     { dot: "var(--color-grey)", label: "Inactive"      },
+  former_client:{ dot: "#6d4fa3",          label: "Former client" },
 };
+const STATUS_OPTIONS: ContactStatus[] = ["active", "inactive", "former_client"];
 
-const STATUS_OPTIONS: { value: ContactStatus; label: string }[] = [
-  { value: "active",   label: "Active"   },
-  { value: "lead",     label: "Lead"     },
-  { value: "inactive", label: "Inactive" },
-];
+const LEAD_STAGE_CONFIG: Record<LeadStage, { color: string; label: string }> = {
+  new:            { color: "#9a9690", label: "New"            },
+  reached_out:    { color: "#2563ab", label: "Reached out"    },
+  in_conversation:{ color: "#148c8c", label: "In conversation" },
+  proposal_sent:  { color: "#6d4fa3", label: "Proposal sent"  },
+  qualified:      { color: "#3d6b4f", label: "Qualified"      },
+  nurturing:      { color: "#b8860b", label: "Nurturing"      },
+  lost:           { color: "#dc3e0d", label: "Lost"           },
+};
+const LEAD_STAGE_OPTIONS: LeadStage[] = ["new", "reached_out", "in_conversation", "proposal_sent", "qualified", "nurturing", "lost"];
 
-const ACTIVITY_CONFIG: Record<ContactActivityType, { bg: string; color: string; icon: React.ReactNode; label: string }> = {
+const ACTIVITY_CONFIG: Record<ContactActivityType, { bg: string; color: string; label: string; icon: React.ReactNode }> = {
   email:   { bg: "rgba(37,99,171,0.10)",  color: "#2563ab", label: "Email",   icon: <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg> },
-  call:    { bg: "rgba(61,107,79,0.10)",  color: "#3d6b4f", label: "Call",    icon: <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 2a1 1 0 0 0-1 1v2c0 .38.22.72.55.89.4.2.6.64.45 1.06A8 8 0 0 0 13.05 12c.42.15.86-.05 1.06-.45.17-.33.45-.55.45-.55h2a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1h-2"/></svg> },
+  call:    { bg: "rgba(61,107,79,0.10)",  color: "#3d6b4f", label: "Call",    icon: <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14.3 11.5l-2.1-2.1a1 1 0 00-1.4 0l-1 1c-.9-.5-1.7-1.2-2.4-2l1-1a1 1 0 000-1.4L6.3 3.9a1 1 0 00-1.4 0L3.5 5.3C3 7.5 5 11 8.7 14.5l1.5-1.5a1 1 0 001.1-1.5z"/></svg> },
   note:    { bg: "rgba(184,134,11,0.10)", color: "#b8860b", label: "Note",    icon: <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 2h12v9H2z"/><path d="M5 6h6M5 9h4"/></svg> },
   meeting: { bg: "rgba(109,79,163,0.10)", color: "#6d4fa3", label: "Meeting", icon: <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 2v2M11 2v2M2 7h12"/></svg> },
 };
 
-const PRESET_TAGS = ["Gallery", "Client", "Supplier", "Press", "Lead", "Event"];
+const PRESET_TAGS = ["Gallery", "Client", "Supplier", "Press", "Event"];
 
-function initials(c: Contact) {
-  return (c.first_name[0] + c.last_name[0]).toUpperCase();
-}
-
+function initials(c: Contact) { return (c.first_name[0] + (c.last_name[0] ?? "")).toUpperCase(); }
 function fmtDate(iso: string) {
-  const d = new Date(iso);
-  const today = new Date();
-  const yest  = new Date(today); yest.setDate(today.getDate() - 1);
+  const d = new Date(iso), today = new Date(), yest = new Date(today); yest.setDate(today.getDate() - 1);
   if (d.toDateString() === today.toDateString()) return "Today";
-  if (d.toDateString() === yest.toDateString())  return "Yesterday";
+  if (d.toDateString() === yest.toDateString()) return "Yesterday";
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
-
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-}
-
+function fmtTime(iso: string) { return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }); }
 function lastContactedDisplay(date: string | null): { label: string; color: string } {
   if (!date) return { label: "Never contacted", color: "var(--color-grey)" };
   const days = Math.floor((Date.now() - new Date(date).getTime()) / 86400000);
-  if (days === 0) return { label: "Today",        color: "var(--color-sage)" };
-  if (days < 7)  return { label: `${days}d ago`,  color: "var(--color-sage)" };
-  if (days < 14) return { label: `${Math.floor(days / 7)}w ago`, color: "var(--color-charcoal)" };
-  if (days < 60) return { label: `${Math.floor(days / 7)}w ago`, color: "#b8860b" };
+  if (days === 0) return { label: "Today", color: "var(--color-sage)" };
+  if (days < 7)  return { label: `${days}d ago`, color: "var(--color-sage)" };
+  if (days < 60) return { label: `${Math.floor(days / 7)}w ago`, color: days < 14 ? "var(--color-charcoal)" : "#b8860b" };
   return { label: `${Math.floor(days / 30)}mo ago`, color: "var(--color-red-orange)" };
 }
-
 function groupByDate(activities: ContactActivity[]) {
   const result: { label: string; items: ContactActivity[] }[] = [];
   const map = new Map<string, ContactActivity[]>();
@@ -93,805 +79,1085 @@ function groupByDate(activities: ContactActivity[]) {
   return result;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Editable field (matches project panel style) ──────────────────────────────
 
-interface Props {
-  contact: Contact;
-  onClose: () => void;
-  onUpdated: (contact: Contact) => void;
-  onDeleted: (id: string) => void;
+function EditableField({ label, value, placeholder = "—", onSave }: {
+  label: string; value: string | null; placeholder?: string; onSave: (v: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft,   setDraft]   = useState(value ?? "");
+  useEffect(() => { setDraft(value ?? ""); }, [value]);
+
+  function commit() {
+    setEditing(false);
+    const v = draft.trim() || null;
+    if (v !== (value || null)) onSave(v);
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", padding: "4px 0", borderBottom: "0.5px solid var(--color-border)" }}>
+      <span style={{ fontSize: 11, color: "var(--color-grey)", width: 68, flexShrink: 0 }}>{label}</span>
+      {editing
+        ? <input value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); commit(); } if (e.key === "Escape") { setDraft(value ?? ""); setEditing(false); } }}
+            autoFocus style={{ flex: 1, fontSize: 12, background: "transparent", border: "none", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit", borderBottom: "1px solid var(--color-sage)" }} />
+        : <span onClick={() => setEditing(true)} style={{ flex: 1, fontSize: 12, color: value ? "#6b6860" : "var(--color-grey)", cursor: "text" }} title="Click to edit">
+            {value || placeholder}
+          </span>
+      }
+    </div>
+  );
 }
 
-export default function ContactDetailPanel({ contact: initialContact, onClose, onUpdated, onDeleted }: Props) {
-  const router = useRouter();
-  const supabase = createClient();
+// ── Picker dropdown ───────────────────────────────────────────────────────────
 
-  const [contact, setContact]           = useState(initialContact);
-  const [activities, setActivities]     = useState<ContactActivity[]>([]);
-  const [linkedProjects, setLinked]     = useState<Project[]>([]);
-  const [activeTab, setActiveTab]       = useState<"activity" | "notes">("activity");
-  const [actInput, setActInput]         = useState("");
-  const [actType, setActType]           = useState<ContactActivityType>("note");
-  const [loadingAct, setLoadingAct]     = useState(false);
+function PickerTag({ label, color, dot, onClick }: { label: string; color: string; dot: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 500, padding: "3px 8px", borderRadius: 9999, border: `0.5px solid ${color}55`, color, background: `${color}11`, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: dot, flexShrink: 0 }} />
+      {label}
+    </button>
+  );
+}
 
-  // ── Edit mode state ─────────────────────────────────────────────────────────
-  const [editing, setEditing]           = useState(false);
-  const [editFirst, setEditFirst]       = useState("");
-  const [editLast, setEditLast]         = useState("");
-  const [editEmail, setEditEmail]       = useState("");
-  const [editPhone, setEditPhone]       = useState("");
-  const [editCompany, setEditCompany]   = useState("");
-  const [editTitle, setEditTitle]       = useState("");
-  const [editBio, setEditBio]           = useState("");
-  const [editStatus, setEditStatus]     = useState<ContactStatus>("lead");
-  const [editTags, setEditTags]         = useState<string[]>([]);
-  const [editTagInput, setEditTagInput] = useState("");
-  const [editWebsite, setEditWebsite]   = useState("");
-  const [editLocation, setEditLocation] = useState("");
-  const [saving, setSaving]             = useState(false);
+// ── Canvas editor for contacts ────────────────────────────────────────────────
 
-  // ── Project linker state ────────────────────────────────────────────────────
-  const [showProjectPicker, setShowProjectPicker] = useState(false);
-  const [availableProjects, setAvailable]          = useState<Project[]>([]);
-  const [projectSearch, setProjectSearch]          = useState("");
-  const [linkingProject, setLinkingProject]        = useState(false);
-  const pickerRef = useRef<HTMLDivElement>(null);
-  const tagInputRef = useRef<HTMLInputElement>(null);
+function ContactCanvasEditor({ contactId, initialHtml }: { contactId: string; initialHtml: string | null }) {
+  const [saving,    setSaving]    = useState(false);
+  const [saved,     setSaved]     = useState(false);
+  const [ashPrompt, setAshPrompt] = useState<AshPromptState>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleAshTrigger = useCallback((pos: number, coords: { top: number; left: number; bottom: number }) => {
+    setAshPrompt({ pos, anchor: coords });
+  }, []);
+
+  const editor = useEditor({
+    immediatelyRender: false,
+    extensions: getRichExtensions({ placeholder: "Canvas — notes, plans, anything about this contact…", onAshTrigger: handleAshTrigger }),
+    content: initialHtml ?? "",
+    onUpdate({ editor }) { scheduleSave(editor.getHTML()); },
+    editorProps: { attributes: { style: "outline: none; min-height: 300px; font-size: 14px; line-height: 1.8; color: #6b6860;" } },
+  }, [contactId]);
 
   useEffect(() => {
-    fetchActivities();
-    fetchLinkedProjects();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contact.id]);
+    return () => {
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        const html = editor?.getHTML() ?? "";
+        createClient().from("contacts").update({ canvas_html: html || null }).eq("id", contactId);
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contactId]);
+
+  function scheduleSave(html: string) {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    setSaving(true); setSaved(false);
+    saveTimer.current = setTimeout(async () => {
+      await createClient().from("contacts").update({ canvas_html: html || null }).eq("id", contactId);
+      setSaving(false); setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }, 800);
+  }
+
+  async function handleAshSubmit(prompt: string) {
+    if (!editor || !ashPrompt) return;
+    const context = editor.getText().slice(0, 800);
+    const res = await fetch("/api/notes/ash-inline", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, noteContext: context }) });
+    const { text } = await res.json() as { text: string };
+    if (text) editor.chain().focus().setTextSelection(ashPrompt.pos).insertContent(text).run();
+    setAshPrompt(null);
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", position: "relative" }}>
+      <RichToolbar editor={editor} />
+      <div style={{ flex: 1, overflowY: "auto", background: "var(--color-off-white)" }}>
+        <div style={{ maxWidth: 760, padding: "36px 60px 80px" }}>
+          <EditorContent editor={editor} />
+        </div>
+      </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", padding: "5px 20px", borderTop: "0.5px solid var(--color-border)", background: "var(--color-off-white)", flexShrink: 0, fontSize: 10, color: "var(--color-text-tertiary)" }}>
+        {saving && "Saving…"}
+        {!saving && saved && <span style={{ color: "var(--color-sage)" }}>✓ Saved</span>}
+      </div>
+      {ashPrompt && <InlineAshPopover anchor={ashPrompt.anchor} onSubmit={handleAshSubmit} onClose={() => setAshPrompt(null)} />}
+    </div>
+  );
+}
+
+// ── Activity tab ──────────────────────────────────────────────────────────────
+
+function ActivityTab({ contactId, activities, setActivities, filterType, contact, onContactUpdated }: {
+  contactId: string; activities: ContactActivity[]; setActivities: React.Dispatch<React.SetStateAction<ContactActivity[]>>;
+  filterType?: "note"; contact: Contact; onContactUpdated: (c: Contact) => void;
+}) {
+  const [actInput,   setActInput]   = useState("");
+  const [actType,    setActType]    = useState<ContactActivityType>("note");
+  const [loadingAct, setLoadingAct] = useState(false);
+
+  const filtered = filterType ? activities.filter(a => a.type === filterType) : activities;
+  const grouped  = groupByDate(filtered);
+
+  async function logActivity() {
+    if (!actInput.trim()) return;
+    setLoadingAct(true);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser(); if (!user) { setLoadingAct(false); return; }
+    const now = new Date().toISOString();
+    const { data } = await supabase.from("contact_activities").insert({ user_id: user.id, contact_id: contactId, type: actType, content: actInput.trim(), occurred_at: now }).select("*").single();
+    if (data) {
+      setActivities(prev => [data as ContactActivity, ...prev]);
+      await supabase.from("contacts").update({ last_contacted_at: now }).eq("id", contactId);
+      onContactUpdated({ ...contact, last_contacted_at: now });
+    }
+    setActInput(""); setLoadingAct(false);
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "10px 18px", borderBottom: "0.5px solid var(--color-border)", flexShrink: 0 }}>
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.35"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+        <input id="act-input" type="text" value={actInput} onChange={e => setActInput(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); logActivity(); } }}
+          placeholder={`Log a ${actType}…`} style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 13, color: "var(--color-charcoal)", fontFamily: "inherit", marginLeft: 6 }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 1 }}>
+          {(["note", "call", "meeting"] as ContactActivityType[]).map(t => (
+            <button key={t} onClick={() => setActType(t)} style={{
+              fontSize: 10, padding: "2px 8px", borderRadius: 9999,
+              background: actType === t ? "var(--color-sage)" : "var(--color-cream)",
+              color: actType === t ? "white" : "#6b6860", border: "0.5px solid var(--color-border)", cursor: "pointer", fontFamily: "inherit",
+            }}>{t.charAt(0).toUpperCase() + t.slice(1)}</button>
+          ))}
+          <button onClick={logActivity} disabled={!actInput.trim() || loadingAct}
+            style={{ fontSize: 10, padding: "2px 8px", borderRadius: 9999, background: "var(--color-charcoal)", color: "white", border: "none", cursor: "pointer", fontFamily: "inherit", opacity: !actInput.trim() || loadingAct ? 0.4 : 1 }}>Log</button>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
+        {grouped.length === 0
+          ? <p style={{ fontSize: 12, textAlign: "center", padding: "32px 0", color: "var(--color-grey)" }}>No activity yet.</p>
+          : grouped.map(({ label, items }) => (
+            <div key={label}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", padding: "8px 0 6px", color: "var(--color-grey)" }}>{label}</div>
+              {items.map(act => {
+                const cfg = ACTIVITY_CONFIG[act.type];
+                return (
+                  <div key={act.id} style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                    <div style={{ width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: cfg.bg, color: cfg.color, border: "0.5px solid var(--color-border)" }}>{cfg.icon}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: "#6b6860" }}>{cfg.label}</span>
+                        <span style={{ fontSize: 10, marginLeft: "auto", color: "var(--color-grey)" }}>{fmtTime(act.occurred_at)}</span>
+                      </div>
+                      {act.content && <p style={{ fontSize: 12, lineHeight: 1.6, color: "#6b6860" }}>{act.content}</p>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  );
+}
+
+// ── Tasks tab ─────────────────────────────────────────────────────────────────
+
+function TasksTab({ contactId, tasks, setTasks }: {
+  contactId: string; tasks: Task[]; setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
+}) {
+  const [taskInput, setTaskInput] = useState("");
+  const openTasks = tasks.filter(t => !t.completed);
+  const doneTasks = tasks.filter(t => t.completed);
+
+  async function addTask() {
+    if (!taskInput.trim()) return;
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser(); if (!user) return;
+    const { data } = await supabase.from("tasks").insert({ user_id: user.id, contact_id: contactId, title: taskInput.trim(), completed: false }).select("*, project:projects(id,title)").single();
+    if (data) { setTasks(prev => [data as Task, ...prev]); setTaskInput(""); }
+  }
+
+  async function toggleTask(id: string, completed: boolean) {
+    await createClient().from("tasks").update({ completed }).eq("id", id);
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, completed } : t));
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 20px", borderBottom: "0.5px solid var(--color-border)", flexShrink: 0 }}>
+        <div style={{ width: 14, height: 14, borderRadius: 3, border: "1.5px dashed var(--color-border-strong)", flexShrink: 0 }} />
+        <input type="text" value={taskInput} onChange={e => setTaskInput(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addTask(); } }}
+          placeholder="New task…" style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 13, color: "var(--color-charcoal)", fontFamily: "inherit" }} />
+        {taskInput.trim() && <button onClick={addTask} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 6, background: "var(--color-sage)", color: "white", border: "none", cursor: "pointer" }}>Add</button>}
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px 20px" }}>
+        {tasks.length === 0
+          ? <p style={{ fontSize: 12, textAlign: "center", padding: "32px 0", color: "var(--color-grey)" }}>No tasks yet.</p>
+          : <>
+            {openTasks.map(task => (
+              <div key={task.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "0.5px solid var(--color-border)" }}>
+                <button onClick={() => toggleTask(task.id, true)}
+                  style={{ width: 16, height: 16, borderRadius: 4, border: "1.5px solid var(--color-border-strong)", background: "transparent", cursor: "pointer", flexShrink: 0 }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = "var(--color-sage)"}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = "var(--color-border-strong)"} />
+                <span style={{ flex: 1, fontSize: 13, color: "var(--color-charcoal)" }}>{task.title}</span>
+                {task.due_date && <span style={{ fontSize: 10, color: "var(--color-grey)" }}>{new Date(task.due_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>}
+              </div>
+            ))}
+            {doneTasks.length > 0 && (
+              <>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", padding: "14px 0 6px", color: "var(--color-grey)" }}>Done ({doneTasks.length})</div>
+                {doneTasks.map(task => (
+                  <div key={task.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "0.5px solid var(--color-border)", opacity: 0.5 }}>
+                    <button onClick={() => toggleTask(task.id, false)}
+                      style={{ width: 16, height: 16, borderRadius: 4, background: "var(--color-sage)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <svg width="9" height="7" viewBox="0 0 10 8" fill="none"><path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                    <span style={{ flex: 1, fontSize: 13, color: "var(--color-grey)", textDecoration: "line-through" }}>{task.title}</span>
+                  </div>
+                ))}
+              </>
+            )}
+          </>
+        }
+      </div>
+    </div>
+  );
+}
+
+// ── Notes tab ─────────────────────────────────────────────────────────────────
+
+function NotesTab({ contactId, notes, setNotes }: {
+  contactId: string; notes: Note[]; setNotes: React.Dispatch<React.SetStateAction<Note[]>>;
+}) {
+  async function createNote() {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser(); if (!user) return;
+    const { data } = await supabase.from("notes").insert({ user_id: user.id, contact_id: contactId }).select().single();
+    if (data) setNotes(prev => [data as Note, ...prev]);
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "8px 20px", borderBottom: "0.5px solid var(--color-border)", flexShrink: 0 }}>
+        <button onClick={createNote} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, background: "var(--color-sage)", color: "white", border: "none", cursor: "pointer" }}>+ New note</button>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px 20px" }}>
+        {notes.length === 0
+          ? <p style={{ fontSize: 12, textAlign: "center", padding: "32px 0", color: "var(--color-grey)" }}>No notes yet. Create one or link notes from the Notes module.</p>
+          : notes.map(note => (
+            <a key={note.id} href={`/notes?id=${note.id}`}
+              style={{ display: "block", padding: "12px 14px", marginBottom: 8, borderRadius: 10, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", textDecoration: "none", cursor: "pointer", transition: "border-color 0.1s ease" }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--color-border-strong)")}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--color-border)")}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 2 }}>{note.title || "Untitled"}</p>
+              {note.content && <p style={{ fontSize: 11, color: "var(--color-grey)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{note.content.replace(/<[^>]*>/g, " ").trim().slice(0, 100)}</p>}
+              <p style={{ fontSize: 10, color: "var(--color-grey)", marginTop: 4 }}>{new Date(note.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
+            </a>
+          ))
+        }
+      </div>
+    </div>
+  );
+}
+
+// ── ContactFile type ──────────────────────────────────────────────────────────
+
+interface ContactFile {
+  id: string; contact_id: string; user_id: string;
+  name: string; url: string; file_type: string | null; size_bytes: number | null; created_at: string;
+}
+
+// ── ContactFilesTab ───────────────────────────────────────────────────────────
+
+type FileAddMode = "upload" | "link" | null;
+
+function ContactFilesTab({ contactId }: { contactId: string }) {
+  const [files,     setFiles]     = useState<ContactFile[]>([]);
+  const [addMode,   setAddMode]   = useState<FileAddMode>(null);
+  const [newName,   setNewName]   = useState("");
+  const [newUrl,    setNewUrl]    = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [loading,   setLoading]   = useState(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    createClient().from("contact_files").select("*").eq("contact_id", contactId).order("created_at", { ascending: false })
+      .then(({ data }) => { if (data) setFiles(data as ContactFile[]); setLoading(false); });
+  }, [contactId]);
+
+  async function saveToDb(name: string, url: string, fileType: string | null, sizeBytes: number | null) {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase.from("contact_files")
+      .insert({ contact_id: contactId, user_id: user.id, name, url, file_type: fileType, size_bytes: sizeBytes })
+      .select().single();
+    if (data) setFiles(prev => [data as ContactFile, ...prev]);
+  }
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const supabase = createClient();
+      const ext  = file.name.split(".").pop()?.toLowerCase() ?? "";
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const path = `${user.id}/${contactId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const { error } = await supabase.storage.from("contact-files").upload(path, file, { contentType: file.type });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from("contact-files").getPublicUrl(path);
+      await saveToDb(file.name, urlData.publicUrl, ext, file.size);
+    } finally {
+      setUploading(false);
+      setAddMode(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function addLink() {
+    if (!newName.trim() || !newUrl.trim()) return;
+    const ext = newUrl.split(".").pop()?.toLowerCase().split("?")[0] ?? null;
+    await saveToDb(newName.trim(), newUrl.trim(), ext, null);
+    setNewName(""); setNewUrl(""); setAddMode(null);
+  }
+
+  async function deleteFile(id: string) {
+    await createClient().from("contact_files").delete().eq("id", id);
+    setFiles(prev => prev.filter(f => f.id !== id));
+  }
+
+  function fileIcon(type: string | null) {
+    if (!type) return <Link2 size={14} strokeWidth={1.5} style={{ color: "var(--color-grey)" }} />;
+    if (["jpg","jpeg","png","gif","webp","svg"].includes(type)) return <span style={{ fontSize: 14 }}>🖼</span>;
+    if (type === "pdf") return <span style={{ fontSize: 14 }}>📄</span>;
+    if (["doc","docx"].includes(type)) return <span style={{ fontSize: 14 }}>📝</span>;
+    return <FolderOpen size={14} strokeWidth={1.5} style={{ color: "var(--color-grey)" }} />;
+  }
+
+  function fmtSize(bytes: number | null) {
+    if (!bytes) return null;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", borderBottom: "0.5px solid var(--color-border)", flexShrink: 0 }}>
+        <input ref={fileInputRef} type="file" style={{ display: "none" }} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" onChange={handleFileUpload} />
+        <button onClick={() => { setAddMode(addMode === "upload" ? null : "upload"); fileInputRef.current?.click(); }} disabled={uploading}
+          style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 500, padding: "5px 10px", borderRadius: 6, border: "0.5px solid var(--color-border)", background: "transparent", cursor: "pointer", color: "var(--color-text-secondary)", fontFamily: "inherit", opacity: uploading ? 0.6 : 1 }}
+          onMouseEnter={e => e.currentTarget.style.background = "var(--color-surface-sunken)"}
+          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 2v10M4 6l4-4 4 4"/><path d="M2 14h12"/></svg>
+          {uploading ? "Uploading…" : "Upload file"}
+        </button>
+        <button onClick={() => setAddMode(m => m === "link" ? null : "link")}
+          style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 500, padding: "5px 10px", borderRadius: 6, border: "0.5px solid var(--color-border)", background: addMode === "link" ? "var(--color-surface-sunken)" : "transparent", cursor: "pointer", color: "var(--color-text-secondary)", fontFamily: "inherit" }}
+          onMouseEnter={e => { if (addMode !== "link") e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+          onMouseLeave={e => { if (addMode !== "link") e.currentTarget.style.background = "transparent"; }}>
+          <Link2 size={12} strokeWidth={2} />
+          Add link
+        </button>
+      </div>
+      {addMode === "link" && (
+        <div style={{ padding: "10px 16px", borderBottom: "0.5px solid var(--color-border)", display: "flex", flexDirection: "column", gap: 6, flexShrink: 0, background: "var(--color-surface-sunken)" }}>
+          <input autoFocus value={newName} onChange={e => setNewName(e.target.value)} placeholder="Name"
+            style={{ fontSize: 12, padding: "5px 9px", border: "0.5px solid var(--color-border)", borderRadius: 6, background: "var(--color-surface-raised)", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit" }} />
+          <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="URL — Google Drive, Dropbox, Figma…"
+            onKeyDown={e => { if (e.key === "Enter") addLink(); if (e.key === "Escape") { setAddMode(null); setNewName(""); setNewUrl(""); } }}
+            style={{ fontSize: 12, padding: "5px 9px", border: "0.5px solid var(--color-border)", borderRadius: 6, background: "var(--color-surface-raised)", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit" }} />
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={addLink} disabled={!newName.trim() || !newUrl.trim()}
+              style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, background: "var(--color-sage)", color: "white", border: "none", cursor: "pointer", fontFamily: "inherit", opacity: (!newName.trim() || !newUrl.trim()) ? 0.5 : 1 }}>Save</button>
+            <button onClick={() => { setAddMode(null); setNewName(""); setNewUrl(""); }}
+              style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, background: "transparent", color: "var(--color-grey)", border: "0.5px solid var(--color-border)", cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+          </div>
+        </div>
+      )}
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px 16px" }}>
+        {loading && <p style={{ fontSize: 12, color: "var(--color-grey)", textAlign: "center", padding: "32px 0" }}>Loading…</p>}
+        {!loading && files.length === 0 && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 160, gap: 6, color: "var(--color-grey)" }}>
+            <FolderOpen size={28} strokeWidth={1.25} style={{ opacity: 0.35 }} />
+            <p style={{ fontSize: 12 }}>No files yet</p>
+            <p style={{ fontSize: 11 }}>Upload portfolios, contracts, reference images</p>
+          </div>
+        )}
+        {files.map(f => (
+          <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 8, marginBottom: 4, border: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: "var(--color-cream)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{fileIcon(f.file_type)}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <a href={f.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 500, color: "var(--color-charcoal)", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}
+                onMouseEnter={e => e.currentTarget.style.color = "var(--color-sage)"}
+                onMouseLeave={e => e.currentTarget.style.color = "var(--color-charcoal)"}>{f.name}</a>
+              {f.size_bytes && <p style={{ fontSize: 10, color: "var(--color-grey)", marginTop: 1 }}>{fmtSize(f.size_bytes)}</p>}
+            </div>
+            <button onClick={() => deleteFile(f.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-grey)", padding: 0, flexShrink: 0 }}
+              onMouseEnter={e => e.currentTarget.style.color = "var(--color-red-orange)"}
+              onMouseLeave={e => e.currentTarget.style.color = "var(--color-grey)"}>
+              <X size={13} strokeWidth={1.75} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── ContactAshStrip ───────────────────────────────────────────────────────────
+
+function ContactAshStrip({ contact }: { contact: Contact }) {
+  const name = contact.first_name;
+  const isLead = contact.is_lead;
+
+  function generateContent(): { prompt: string; action: string; buttonLabel: string } {
+    if (isLead) {
+      const stage = contact.lead_stage ?? "new";
+      if (stage === "new") return {
+        prompt:      `${name} is a new lead. I can help you craft a strong opener.`,
+        action:      `Write a personalized first-touch message to ${name}. Keep it genuine and short — no fluff.`,
+        buttonLabel: "Draft opener",
+      };
+      if (stage === "reached_out") return {
+        prompt:      `You've reached out to ${name}. I can draft a follow-up if there's been no reply.`,
+        action:      `Draft a brief, non-pushy follow-up to ${name}. Reference the first message and give them a clear, easy next step.`,
+        buttonLabel: "Draft follow-up",
+      };
+      if (stage === "in_conversation") return {
+        prompt:      `You're in conversation with ${name}. Want help moving things forward?`,
+        action:      `Help me advance my conversation with ${name}. What's the best move to get to a clear yes or no?`,
+        buttonLabel: "Move forward",
+      };
+      return {
+        prompt:      `I can help you think through your next move with ${name}.`,
+        action:      `What's the best next step with ${name} as a lead? Give me a concrete action and the message to send.`,
+        buttonLabel: "Next step",
+      };
+    }
+    const days = contact.last_contacted_at
+      ? Math.floor((Date.now() - new Date(contact.last_contacted_at).getTime()) / 86400000)
+      : null;
+    if (days === null || days > 60) return {
+      prompt:      `It's been a while since you connected with ${name}. I can draft a check-in.`,
+      action:      `Draft a warm, genuine check-in message to ${name}. Keep it natural — no selling.`,
+      buttonLabel: "Draft check-in",
+    };
+    if (days > 30) return {
+      prompt:      `You last spoke with ${name} ${days} days ago. Good time for a follow-up?`,
+      action:      `Draft a follow-up to ${name} that picks up naturally from where you left off.`,
+      buttonLabel: "Draft follow-up",
+    };
+    return {
+      prompt:      `I can help you prepare for your next interaction with ${name}.`,
+      action:      `What should I know about ${name} before my next conversation? Give me key context and one thing to bring up.`,
+      buttonLabel: "Prep for chat",
+    };
+  }
+
+  const { prompt, action, buttonLabel } = generateContent();
+  const contactDetail = { name: `${contact.first_name} ${contact.last_name}`, is_lead: contact.is_lead };
+
+  function handleContextual() {
+    window.dispatchEvent(new CustomEvent("open-ash", { detail: { message: action, contact: contactDetail } }));
+  }
+  function handleOpenAsh() {
+    window.dispatchEvent(new CustomEvent("open-ash", { detail: { contact: contactDetail } }));
+  }
+
+  return (
+    <div style={{
+      flexShrink: 0, display: "flex", alignItems: "center", gap: 12,
+      padding: "0 18px", height: 56,
+      background: "linear-gradient(135deg, #7a9a55 0%, #5a7a38 45%, #3a5228 100%)",
+    }}>
+      <img src="/Ash-Logomak.svg" alt="" style={{ width: 16, height: 16, flexShrink: 0, filter: "brightness(0) invert(1)", opacity: 0.9, animation: "ash-shimmer 4s ease-in-out infinite" }} />
+      <span style={{ flex: 1, fontSize: 11, color: "rgba(255,255,255,0.88)", lineHeight: 1.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {prompt}
+      </span>
+      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+        <button onClick={handleContextual} style={{ fontSize: 11, fontWeight: 700, color: "white", background: "rgba(255,255,255,0.22)", border: "0.5px solid rgba(255,255,255,0.35)", borderRadius: 9999, padding: "4px 12px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", lineHeight: 1 }}
+          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.32)"}
+          onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.22)"}>
+          {buttonLabel} →
+        </button>
+        <button onClick={handleOpenAsh} style={{ fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,0.75)", background: "transparent", border: "0.5px solid rgba(255,255,255,0.25)", borderRadius: 9999, padding: "4px 12px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", lineHeight: 1 }}
+          onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; e.currentTarget.style.color = "white"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.75)"; }}>
+          Ask Ash
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
+
+interface Props {
+  contact:    Contact;
+  onClose:    () => void;
+  onUpdated:  (contact: Contact) => void;
+  onArchived: (id: string) => void;
+}
+
+type SectionTab = "canvas" | "activity" | "tasks" | "notes" | "files";
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+export default function ContactDetailPanel({ contact: initialContact, onClose, onUpdated, onArchived }: Props) {
+  const supabase = createClient();
+
+  const [contact,        setContact]        = useState(initialContact);
+  const [activities,     setActivities]     = useState<ContactActivity[]>([]);
+  const [linkedProjects, setLinkedProjects] = useState<Project[]>([]);
+  const [tasks,          setTasks]          = useState<Task[]>([]);
+  const [notes,          setNotes]          = useState<Note[]>([]);
+  const [canvasHtml,     setCanvasHtml]     = useState<string | null | undefined>(undefined);
+  const [activeTab,      setActiveTab]      = useState<SectionTab>("canvas");
+  const [maximized,      setMaximized]      = useState(false);
+  const [settingsOpen,   setSettingsOpen]   = useState(false);
+  const [invoiceData,    setInvoiceData]    = useState<{ count: number; total: number } | null>(null);
+
+  // Status/stage pickers
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [stageOpen,  setStageOpen]  = useState(false);
+  const statusRef    = useRef<HTMLDivElement>(null);
+  const stageRef     = useRef<HTMLDivElement>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  // Tags
+  const [editingTags, setEditingTags] = useState(false);
+  const [tagInput,    setTagInput]    = useState("");
+  const tagInputRef = useRef<HTMLInputElement>(null);
+
+  // Project picker
+  const [showProjectPicker, setShowProjectPicker] = useState(false);
+  const [availableProjects, setAvailableProjects]  = useState<Project[]>([]);
+  const [projectSearch,     setProjectSearch]      = useState("");
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  // ── Load data ───────────────────────────────────────────────────────────────
+
+  // Hide the floating Ash button in scrim mode; broadcast contact context for Ash
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("set-contact-context", {
+      detail: { name: `${initialContact.first_name} ${initialContact.last_name}`, is_lead: initialContact.is_lead },
+    }));
+    if (!maximized) {
+      const style = document.createElement("style");
+      style.id = "contact-panel-ash-hide";
+      style.textContent = ".ash-fab { opacity: 0 !important; pointer-events: none !important; }";
+      document.head.appendChild(style);
+    }
+    return () => {
+      document.getElementById("contact-panel-ash-hide")?.remove();
+    };
+  }, [maximized, initialContact.first_name, initialContact.last_name, initialContact.is_lead]);
+
+  // Clear contact context when panel unmounts
+  useEffect(() => {
+    return () => { window.dispatchEvent(new CustomEvent("clear-contact-context")); };
+  }, []);
+
+  useEffect(() => {
+    setContact(initialContact);
+    setActiveTab("canvas");
+    setSettingsOpen(false);
+    setCanvasHtml(undefined);
+
+    const s = createClient();
+    Promise.all([
+      s.from("contact_activities").select("*").eq("contact_id", initialContact.id).order("occurred_at", { ascending: false }),
+      s.from("project_contacts").select("project:projects(*)").eq("contact_id", initialContact.id),
+      s.from("tasks").select("*, project:projects(id,title)").eq("contact_id", initialContact.id).order("created_at", { ascending: false }),
+      s.from("notes").select("*").eq("contact_id", initialContact.id).order("updated_at", { ascending: false }),
+      s.from("contacts").select("canvas_html").eq("id", initialContact.id).single(),
+      s.from("invoices").select("id, line_items:invoice_line_items(amount)").eq("client_contact_id", initialContact.id),
+    ]).then(([{ data: a }, { data: pr }, { data: t }, { data: n }, { data: c }, { data: inv }]) => {
+      if (a)  setActivities(a as ContactActivity[]);
+      if (pr) setLinkedProjects(pr.map((r: { project: Project | Project[] }) => Array.isArray(r.project) ? r.project[0] : r.project).filter(Boolean) as Project[]);
+      if (t)  setTasks(t as Task[]);
+      if (n)  setNotes(n as Note[]);
+      setCanvasHtml(c?.canvas_html ?? null);
+      if (inv && inv.length > 0) {
+        type Inv = { id: string; line_items: { amount: number }[] };
+        const invs = inv as unknown as Inv[];
+        const total = invs.reduce((s, i) => s + i.line_items.reduce((ss, l) => ss + Number(l.amount), 0), 0);
+        setInvoiceData({ count: invs.length, total });
+      }
+    });
+  }, [initialContact.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     function onKey(e: globalThis.KeyboardEvent) {
       if (e.key === "Escape") {
         if (showProjectPicker) { setShowProjectPicker(false); return; }
-        if (editing) { setEditing(false); return; }
+        if (statusOpen)        { setStatusOpen(false); return; }
+        if (stageOpen)         { setStageOpen(false); return; }
         onClose();
       }
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, showProjectPicker, editing]);
+  }, [onClose, showProjectPicker, statusOpen, stageOpen]);
 
-  // Close project picker on outside click
   useEffect(() => {
     if (!showProjectPicker) return;
-    function handleClick(e: MouseEvent) {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node))
-        setShowProjectPicker(false);
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    function h(e: MouseEvent) { if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setShowProjectPicker(false); }
+    document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
   }, [showProjectPicker]);
 
-  async function fetchActivities() {
-    const { data } = await supabase
-      .from("contact_activities")
-      .select("*")
-      .eq("contact_id", contact.id)
-      .order("occurred_at", { ascending: false });
-    if (data) setActivities(data as ContactActivity[]);
+  useEffect(() => {
+    if (!statusOpen) return;
+    function h(e: MouseEvent) { if (statusRef.current && !statusRef.current.contains(e.target as Node)) setStatusOpen(false); }
+    document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
+  }, [statusOpen]);
+
+  useEffect(() => {
+    if (!stageOpen) return;
+    function h(e: MouseEvent) { if (stageRef.current && !stageRef.current.contains(e.target as Node)) setStageOpen(false); }
+    document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
+  }, [stageOpen]);
+
+  // ── Field save ──────────────────────────────────────────────────────────────
+
+  async function saveField(updates: Partial<Contact>) {
+    const { data } = await supabase.from("contacts").update(updates).eq("id", contact.id).select("*, company:companies(*)").single();
+    if (data) { const c = data as Contact; setContact(c); onUpdated(c); }
   }
 
-  async function fetchLinkedProjects() {
-    const { data } = await supabase
-      .from("project_contacts")
-      .select("project:projects(*)")
-      .eq("contact_id", contact.id);
-    if (data) {
-      const projects = data
-        .map((r: { project: Project | Project[] }) => Array.isArray(r.project) ? r.project[0] : r.project)
-        .filter(Boolean) as Project[];
-      setLinked(projects);
-    }
-  }
-
-  // ── Activity logging ────────────────────────────────────────────────────────
-
-  async function logActivity() {
-    if (!actInput.trim()) return;
-    setLoadingAct(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLoadingAct(false); return; }
-
-    const now = new Date().toISOString();
-    const { data } = await supabase
-      .from("contact_activities")
-      .insert({ user_id: user.id, contact_id: contact.id, type: actType, content: actInput.trim(), occurred_at: now })
-      .select("*")
-      .single();
-
-    if (data) {
-      setActivities((prev) => [data as ContactActivity, ...prev]);
-      await supabase.from("contacts").update({ last_contacted_at: now }).eq("id", contact.id);
-      const updated = { ...contact, last_contacted_at: now };
-      setContact(updated);
-      onUpdated(updated);
-    }
-    setActInput("");
-    setLoadingAct(false);
-  }
-
-  // ── Edit mode ───────────────────────────────────────────────────────────────
-
-  function startEdit() {
-    setEditFirst(contact.first_name);
-    setEditLast(contact.last_name);
-    setEditEmail(contact.email ?? "");
-    setEditPhone(contact.phone ?? "");
-    setEditCompany(contact.company?.name ?? "");
-    setEditTitle(contact.title ?? "");
-    setEditBio(contact.bio ?? "");
-    setEditStatus(contact.status);
-    setEditTags([...contact.tags]);
-    setEditTagInput("");
-    setEditWebsite(contact.website ?? "");
-    setEditLocation(contact.location ?? "");
-    setEditing(true);
-  }
-
-  function addEditTag(raw: string) {
-    const tag = raw.trim();
-    if (!tag || editTags.includes(tag)) { setEditTagInput(""); return; }
-    setEditTags((prev) => [...prev, tag]);
-    setEditTagInput("");
-  }
-
-  function onEditTagKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addEditTag(editTagInput); }
-    if (e.key === "Backspace" && editTagInput === "" && editTags.length > 0)
-      setEditTags((prev) => prev.slice(0, -1));
-  }
-
-  async function saveEdits() {
-    if (!editFirst.trim() || !editLast.trim()) return;
-    setSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setSaving(false); return; }
-
+  async function saveCompany(name: string | null) {
+    const { data: { user } } = await supabase.auth.getUser(); if (!user) return;
     let company_id = contact.company_id;
-
-    if (editCompany.trim() !== (contact.company?.name ?? "")) {
-      if (!editCompany.trim()) {
-        company_id = null;
-      } else {
-        const { data: existing } = await supabase
-          .from("companies").select("id").eq("user_id", user.id).ilike("name", editCompany.trim()).maybeSingle();
-        if (existing) {
-          company_id = existing.id;
-        } else {
-          const { data: created } = await supabase
-            .from("companies").insert({ user_id: user.id, name: editCompany.trim() }).select("id").single();
-          company_id = created?.id ?? null;
-        }
-      }
+    if (!name?.trim()) { company_id = null; }
+    else if (name.trim() !== (contact.company?.name ?? "")) {
+      const { data: ex } = await supabase.from("companies").select("id").eq("user_id", user.id).ilike("name", name.trim()).maybeSingle();
+      company_id = ex?.id ?? (await supabase.from("companies").insert({ user_id: user.id, name: name.trim() }).select("id").single()).data?.id ?? null;
     }
-
-    const { data } = await supabase
-      .from("contacts")
-      .update({
-        first_name: editFirst.trim(),
-        last_name:  editLast.trim(),
-        email:      editEmail.trim()    || null,
-        phone:      editPhone.trim()    || null,
-        company_id,
-        title:      editTitle.trim()    || null,
-        bio:        editBio.trim()      || null,
-        status:     editStatus,
-        tags:       editTags,
-        website:    editWebsite.trim()  || null,
-        location:   editLocation.trim() || null,
-      })
-      .eq("id", contact.id)
-      .select("*, company:companies(*)")
-      .single();
-
-    if (data) {
-      const updated = data as Contact;
-      setContact(updated);
-      onUpdated(updated);
-    }
-    setSaving(false);
-    setEditing(false);
+    const { data } = await supabase.from("contacts").update({ company_id }).eq("id", contact.id).select("*, company:companies(*)").single();
+    if (data) { setContact(data as Contact); onUpdated(data as Contact); }
   }
 
-  // ── Project linking ─────────────────────────────────────────────────────────
+  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+    const path = `${user.id}/avatars/${contact.id}.${ext}`;
+    const { error } = await supabase.storage.from("contact-files").upload(path, file, { contentType: file.type, upsert: true });
+    if (error) { console.error("Avatar upload error:", error); return; }
+    const { data: urlData } = supabase.storage.from("contact-files").getPublicUrl(path);
+    await saveField({ avatar_url: urlData.publicUrl + `?t=${Date.now()}` });
+    if (avatarInputRef.current) avatarInputRef.current.value = "";
+  }
+
+  // ── Tags ────────────────────────────────────────────────────────────────────
+
+  async function addTag(raw: string) {
+    const tag = raw.trim(); setTagInput("");
+    if (!tag || contact.tags.includes(tag)) return;
+    await saveField({ tags: [...contact.tags, tag] });
+  }
+  async function removeTag(tag: string) { await saveField({ tags: contact.tags.filter(t => t !== tag) }); }
+  function onTagKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(tagInput); }
+    if (e.key === "Backspace" && tagInput === "" && contact.tags.length > 0) removeTag(contact.tags[contact.tags.length - 1]);
+    if (e.key === "Escape") { setEditingTags(false); setTagInput(""); }
+  }
+
+  // ── Projects ────────────────────────────────────────────────────────────────
 
   async function openProjectPicker() {
     const { data } = await supabase.from("projects").select("*").order("title");
-    if (data) {
-      const linkedIds = new Set(linkedProjects.map((p) => p.id));
-      setAvailable((data as Project[]).filter((p) => !linkedIds.has(p.id)));
-    }
-    setProjectSearch("");
-    setShowProjectPicker(true);
+    if (data) { const linked = new Set(linkedProjects.map(p => p.id)); setAvailableProjects((data as Project[]).filter(p => !linked.has(p.id))); }
+    setProjectSearch(""); setShowProjectPicker(true);
   }
-
   async function linkProject(project: Project) {
-    setLinkingProject(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLinkingProject(false); return; }
-    await supabase.from("project_contacts").insert({
-      project_id: project.id, contact_id: contact.id, user_id: user.id,
-    });
-    setLinked((prev) => [...prev, project]);
-    setAvailable((prev) => prev.filter((p) => p.id !== project.id));
+    const { data: { user } } = await supabase.auth.getUser(); if (!user) return;
+    await supabase.from("project_contacts").insert({ project_id: project.id, contact_id: contact.id, user_id: user.id });
+    setLinkedProjects(prev => [...prev, project]);
+    setAvailableProjects(prev => prev.filter(p => p.id !== project.id));
     setShowProjectPicker(false);
-    setLinkingProject(false);
   }
-
   async function unlinkProject(projectId: string) {
-    await supabase.from("project_contacts")
-      .delete().eq("project_id", projectId).eq("contact_id", contact.id);
-    setLinked((prev) => prev.filter((p) => p.id !== projectId));
+    await supabase.from("project_contacts").delete().eq("project_id", projectId).eq("contact_id", contact.id);
+    setLinkedProjects(prev => prev.filter(p => p.id !== projectId));
   }
 
-  // ── Delete ──────────────────────────────────────────────────────────────────
+  // ── Archive / Convert ───────────────────────────────────────────────────────
 
-  async function handleDelete() {
-    if (!confirm(`Delete ${contact.first_name} ${contact.last_name}? This cannot be undone.`)) return;
-    await supabase.from("contacts").delete().eq("id", contact.id);
-    onDeleted(contact.id);
-    onClose();
+  async function handleArchive() {
+    if (!confirm(`Archive ${contact.first_name} ${contact.last_name}?`)) return;
+    await supabase.from("contacts").update({ archived: true }).eq("id", contact.id);
+    onArchived(contact.id); onClose();
   }
 
-  // ── Derived ─────────────────────────────────────────────────────────────────
+  async function convertToContact() {
+    if (!confirm(`Convert ${contact.first_name} ${contact.last_name} to a contact?`)) return;
+    const { data } = await supabase.from("contacts").update({ is_lead: false, status: "active", lead_stage: null }).eq("id", contact.id).select("*, company:companies(*)").single();
+    if (data) { setContact(data as Contact); onUpdated(data as Contact); }
+  }
 
-  const filteredActivities = activeTab === "notes"
-    ? activities.filter((a) => a.type === "note")
-    : activities;
-  const grouped     = groupByDate(filteredActivities);
-  const lastContact = lastContactedDisplay(contact.last_contacted_at);
-  const status      = STATUS_CONFIG[contact.status];
-  const pickerFiltered = availableProjects.filter((p) =>
-    p.title.toLowerCase().includes(projectSearch.toLowerCase())
-  );
+  // ── Ash ─────────────────────────────────────────────────────────────────────
+
+  function openAsh(message: string) { window.dispatchEvent(new CustomEvent("open-ash", { detail: { message } })); }
+
+  // ── Nav items ───────────────────────────────────────────────────────────────
+
+  const NAV_ITEMS: { key: SectionTab; label: string; icon: React.ReactNode; count?: number }[] = [
+    { key: "canvas",   label: "Canvas",   icon: <FileText    size={13} strokeWidth={1.75} /> },
+    { key: "activity", label: "Activity", icon: <Calendar    size={13} strokeWidth={1.75} />, count: activities.length },
+    { key: "tasks",    label: "Tasks",    icon: <CheckSquare size={13} strokeWidth={1.75} />, count: tasks.filter(t => !t.completed).length },
+    { key: "notes",    label: "Notes",    icon: <FileText    size={13} strokeWidth={1.75} />, count: notes.length },
+    { key: "files",    label: "Files",    icon: <FolderOpen  size={13} strokeWidth={1.75} /> },
+  ];
+
+  const lastC  = lastContactedDisplay(contact.last_contacted_at);
+  const status = contact.is_lead
+    ? { dot: LEAD_STAGE_CONFIG[contact.lead_stage ?? "new"]?.color ?? "#9a9690", label: LEAD_STAGE_CONFIG[contact.lead_stage ?? "new"]?.label ?? "New" }
+    : STATUS_CONFIG[contact.status];
+  const pickerFiltered = availableProjects.filter(p => p.title.toLowerCase().includes(projectSearch.toLowerCase()));
+
+  // ── Ash banner prompts ──────────────────────────────────────────────────────
+  const ASH_PROMPTS = contact.is_lead
+    ? [`What's a good opener to send ${contact.first_name}?`, `How should I qualify ${contact.first_name} as a lead?`, `Draft a follow-up for ${contact.first_name}.`]
+    : [`What should I know about ${contact.first_name}?`, `Draft a follow-up to ${contact.first_name}.`, `Summarize my history with ${contact.first_name}.`];
 
   return (
-    <div className="fixed inset-0 z-40 flex" style={{ left: "56px" }}>
+    <>
       {/* Scrim */}
-      <div
-        className="absolute inset-0"
-        style={{ background: "rgba(20,18,16,0.52)", backdropFilter: "blur(5px)" }}
-        onClick={() => { if (!editing) onClose(); }}
-      />
+      {!maximized && (
+        <div className="fixed inset-0 z-10 cursor-pointer"
+          style={{ background: "rgba(20,18,16,0.52)", backdropFilter: "blur(5px)", WebkitBackdropFilter: "blur(5px)" }}
+          onClick={onClose} />
+      )}
 
-      {/* Floating panel */}
-      <div
-        className="absolute flex flex-col overflow-hidden"
-        style={{
-          top: "48px", bottom: "48px", left: "48px", right: "48px",
-          background: "var(--color-off-white)",
-          border: "0.5px solid rgba(31,33,26,0.15)",
-          borderRadius: "12px",
-          boxShadow: "0 8px 40px rgba(0,0,0,0.22)",
-          zIndex: 1,
-        }}
-      >
-        {/* ── Panel header ── */}
-        <div style={{ borderBottom: "0.5px solid var(--color-border)", flexShrink: 0 }}>
-          {/* Action row */}
-          <div className="flex items-center justify-end gap-2 px-5 pt-3">
-            {!editing ? (
-              <>
-                <button
-                  onClick={() => { setActType("call"); setActiveTab("activity"); setTimeout(() => document.getElementById("act-input")?.focus(), 50); }}
-                  className="flex items-center gap-1.5 text-[11px] px-3 py-[5px] rounded-lg transition-colors"
-                  style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                >
-                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 2a1 1 0 0 0-1 1v2c0 .38.22.72.55.89.4.2.6.64.45 1.06A8 8 0 0 0 13.05 12c.42.15.86-.05 1.06-.45.17-.33.45-.55.45-.55h2a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1h-2"/></svg>
-                  Log call
-                </button>
-                <button
-                  onClick={() => { setActType("note"); setActiveTab("activity"); setTimeout(() => document.getElementById("act-input")?.focus(), 50); }}
-                  className="flex items-center gap-1.5 text-[11px] px-3 py-[5px] rounded-lg transition-colors"
-                  style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                >
-                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 2h12v9H2z"/><path d="M5 6h6M5 9h4"/></svg>
-                  Add note
-                </button>
-                <div style={{ width: "0.5px", height: "16px", background: "var(--color-border)" }} />
-                <button
-                  onClick={startEdit}
-                  className="flex items-center gap-1.5 text-[11px] px-3 py-[5px] rounded-lg transition-colors"
-                  style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                >
-                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg>
-                  Edit
-                </button>
-                <div style={{ width: "0.5px", height: "16px", background: "var(--color-border)" }} />
-                <button
-                  onClick={handleDelete}
-                  className="text-[11px] px-3 py-[5px] rounded-lg transition-colors"
-                  style={{ color: "var(--color-red-orange)", border: "0.5px solid var(--color-border)" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(220,62,13,0.06)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                >
-                  Delete
-                </button>
-              </>
-            ) : (
-              <>
-                <button onClick={() => setEditing(false)} className="text-[11px] px-3 py-[5px] rounded-lg"
-                  style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}>
-                  Cancel
-                </button>
-                <button
-                  onClick={saveEdits}
-                  disabled={saving || !editFirst.trim() || !editLast.trim()}
-                  className="text-[11px] px-3 py-[5px] rounded-lg font-medium text-white disabled:opacity-50"
-                  style={{ background: "var(--color-sage)" }}
-                >
-                  {saving ? "Saving…" : "Save changes"}
-                </button>
-              </>
-            )}
-            <button
-              onClick={onClose}
-              className="w-7 h-7 flex items-center justify-center rounded-lg ml-1 transition-colors"
-              style={{ color: "var(--color-grey)" }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            >
-              <X size={13} />
-            </button>
-          </div>
+      {/* Panel */}
+      <div className="fixed z-20 flex overflow-hidden" style={{
+        top:    maximized ? 0 : "52px",
+        bottom: maximized ? 0 : "32px",
+        left:   maximized ? 0 : "calc(56px + 32px)",
+        right:  maximized ? 0 : "32px",
+        background:   "var(--color-off-white)",
+        borderRadius: maximized ? 0 : 12,
+        boxShadow:    "0 8px 40px rgba(0,0,0,0.22)",
+        border:       "0.5px solid var(--color-border)",
+        transition:   "top 0.2s ease, bottom 0.2s ease, left 0.2s ease, right 0.2s ease, border-radius 0.2s ease",
+      }}>
 
-          {/* Identity row */}
-          <div className="flex items-center gap-3.5 px-5 py-3">
-            <div
-              className="w-12 h-12 rounded-full flex items-center justify-center text-[15px] font-semibold shrink-0"
-              style={{ background: "var(--color-cream)", border: "0.5px solid var(--color-border)", color: "#6b6860" }}
-            >
-              {editing ? (editFirst[0] ?? "?") + (editLast[0] ?? "?") : initials(contact)}
+        {/* ── Left sidebar (252px) ── */}
+        <div style={{
+          width: 252, flexShrink: 0, display: "flex", flexDirection: "column", overflow: "hidden",
+          borderRight: "0.5px solid var(--color-border)", background: "var(--color-warm-white)",
+          borderRadius: maximized ? 0 : "12px 0 0 12px",
+        }}>
+          {/* Scrollable top */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "18px 16px 12px" }}>
+
+            {/* Identity */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              <div style={{ position: "relative", flexShrink: 0 }}>
+                <div
+                  onClick={() => avatarInputRef.current?.click()}
+                  title="Upload photo"
+                  style={{ width: 40, height: 40, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 600, flexShrink: 0, background: contact.is_lead ? "rgba(184,134,11,0.12)" : "var(--color-cream)", border: "0.5px solid var(--color-border)", color: contact.is_lead ? "#b8860b" : "#6b6860", cursor: "pointer", overflow: "hidden" }}>
+                  {contact.avatar_url
+                    ? <img src={contact.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : initials(contact)}
+                </div>
+                <input ref={avatarInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleAvatarUpload} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "var(--color-charcoal)", lineHeight: 1.2, marginBottom: 2 }}>
+                  <EditableField label="" value={`${contact.first_name} ${contact.last_name}`} placeholder="Name" onSave={v => {
+                    const parts = (v ?? "").trim().split(" "); const first = parts[0] ?? ""; const last = parts.slice(1).join(" ") || first;
+                    if (first) saveField({ first_name: first, last_name: last });
+                  }} />
+                </div>
+                {contact.is_lead && <span style={{ fontSize: 10, fontWeight: 600, color: "#b8860b", background: "rgba(184,134,11,0.12)", border: "0.5px solid #b8860b55", padding: "1px 6px", borderRadius: 9999 }}>Lead</span>}
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              {editing ? (
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex gap-2">
-                    <input value={editFirst} onChange={(e) => setEditFirst(e.target.value)}
-                      placeholder="First name"
-                      className="flex-1 text-[16px] font-semibold bg-transparent border-b outline-none pb-0.5"
-                      style={{ color: "var(--color-charcoal)", borderColor: "var(--color-border)" }} />
-                    <input value={editLast} onChange={(e) => setEditLast(e.target.value)}
-                      placeholder="Last name"
-                      className="flex-1 text-[16px] font-semibold bg-transparent border-b outline-none pb-0.5"
-                      style={{ color: "var(--color-charcoal)", borderColor: "var(--color-border)" }} />
-                  </div>
-                  <div className="flex gap-2">
-                    <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
-                      placeholder="Title / Role"
-                      className="flex-1 text-[12px] bg-transparent border-b outline-none pb-0.5"
-                      style={{ color: "#6b6860", borderColor: "var(--color-border)" }} />
-                    <input value={editCompany} onChange={(e) => setEditCompany(e.target.value)}
-                      placeholder="Company"
-                      className="flex-1 text-[12px] bg-transparent border-b outline-none pb-0.5"
-                      style={{ color: "#6b6860", borderColor: "var(--color-border)" }} />
-                  </div>
+
+            {/* Status / Stage */}
+            <div style={{ marginBottom: 12 }}>
+              <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>
+                {contact.is_lead ? "Lead stage" : "Status"}
+              </p>
+
+              {contact.is_lead ? (
+                <div ref={stageRef} style={{ position: "relative" }}>
+                  <PickerTag label={status.label} color={status.dot} dot={status.dot} onClick={() => setStageOpen(v => !v)} />
+                  {stageOpen && (
+                    <div style={{ position: "absolute", left: 0, top: "calc(100% + 4px)", zIndex: 10, minWidth: 160, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 10, boxShadow: "0 4px 20px rgba(0,0,0,0.12)", overflow: "hidden" }}>
+                      {LEAD_STAGE_OPTIONS.map(s => (
+                        <button key={s} onClick={() => { saveField({ lead_stage: s }); setStageOpen(false); }}
+                          style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", fontSize: 12, color: LEAD_STAGE_CONFIG[s].color, fontWeight: contact.lead_stage === s ? 600 : 400, background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+                          onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: LEAD_STAGE_CONFIG[s].color, flexShrink: 0 }} />
+                          {LEAD_STAGE_CONFIG[s].label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : (
-                <>
-                  <div className="text-[17px] font-semibold mb-1" style={{ color: "var(--color-charcoal)" }}>
-                    {contact.first_name} {contact.last_name}
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {(contact.title || contact.company?.name) && (
-                      <span className="text-[12px]" style={{ color: "#6b6860" }}>
-                        {[contact.title, contact.company?.name].filter(Boolean).join(" · ")}
-                      </span>
-                    )}
-                    {contact.tags.length > 0 && (
-                      <>
-                        <span style={{ color: "rgba(31,33,26,0.25)", fontSize: "10px" }}>·</span>
-                        <div className="flex items-center gap-1">
-                          {contact.tags.map((tag) => {
-                            const s = tagStyle(tag);
-                            return <span key={tag} className="text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: s.bg, color: s.color }}>{tag}</span>;
-                          })}
-                        </div>
-                      </>
-                    )}
-                    <span style={{ color: "rgba(31,33,26,0.25)", fontSize: "10px" }}>·</span>
-                    <span className="flex items-center gap-1 text-[11px] font-medium" style={{ color: status.dot }}>
-                      <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: status.dot }} />
-                      {status.label}
-                    </span>
-                  </div>
-                </>
+                <div ref={statusRef} style={{ position: "relative" }}>
+                  <PickerTag label={status.label} color={status.dot} dot={status.dot} onClick={() => setStatusOpen(v => !v)} />
+                  {statusOpen && (
+                    <div style={{ position: "absolute", left: 0, top: "calc(100% + 4px)", zIndex: 10, minWidth: 140, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 10, boxShadow: "0 4px 20px rgba(0,0,0,0.12)", overflow: "hidden" }}>
+                      {STATUS_OPTIONS.map(s => (
+                        <button key={s} onClick={() => { saveField({ status: s }); setStatusOpen(false); }}
+                          style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", fontSize: 12, color: STATUS_CONFIG[s].dot, fontWeight: contact.status === s ? 600 : 400, background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+                          onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_CONFIG[s].dot, flexShrink: 0 }} />
+                          {STATUS_CONFIG[s].label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
-          </div>
 
-          {/* Quick facts bar (hidden in edit mode — use fields below instead) */}
-          {!editing && (
-            <div className="flex items-center px-5 overflow-x-auto" style={{ borderTop: "0.5px solid var(--color-border)" }}>
-              {[
-                contact.email   && { icon: <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg>, text: contact.email,   link: `mailto:${contact.email}` },
-                contact.phone   && { icon: <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 2a1 1 0 0 0-1 1v2c0 .38.22.72.55.89.4.2.6.64.45 1.06A8 8 0 0 0 13.05 12c.42.15.86-.05 1.06-.45.17-.33.45-.55.45-.55h2a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1h-2"/></svg>, text: contact.phone, link: `tel:${contact.phone}` },
-                contact.website && { icon: <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 2c-2 2-3 4-3 6s1 4 3 6"/><path d="M2 8h12"/></svg>, text: contact.website, link: `https://${contact.website.replace(/^https?:\/\//, "")}` },
-                { icon: <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 2v2M11 2v2M2 7h12"/></svg>, text: lastContact.label, color: lastContact.color },
-              ].filter(Boolean).map((fact, i, arr) => fact && (
-                <div key={i} className="flex items-center gap-1.5 py-2 mr-4 pr-4 shrink-0"
-                  style={{ borderRight: i < arr.length - 1 ? "0.5px solid var(--color-border)" : "none" }}>
-                  <span style={{ opacity: 0.4, color: "var(--color-charcoal)" }}>{fact.icon}</span>
-                  {fact.link ? (
-                    <a href={fact.link} className="text-[11px]" style={{ color: "#2563ab" }}
-                      target={fact.link.startsWith("http") ? "_blank" : undefined} rel="noreferrer">
-                      {fact.text}
-                    </a>
-                  ) : (
-                    <span className="text-[11px]" style={{ color: fact.color ?? "#6b6860" }}>{fact.text}</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* ── Panel body ── */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* Left column */}
-          <div className="flex-1 overflow-y-auto" style={{ padding: "18px 18px 18px 20px" }}>
-
-            {/* About card */}
-            <div className="rounded-xl overflow-hidden mb-4" style={{ border: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
-              <div className="flex items-center px-4 py-2.5" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-                <span className="text-[12px] font-semibold" style={{ color: "#6b6860" }}>About</span>
-              </div>
-              <div className="px-4 py-3 space-y-2.5">
-                {editing ? (
-                  <textarea
-                    value={editBio}
-                    onChange={(e) => setEditBio(e.target.value)}
-                    placeholder="Add a note about this contact — how you met, their interests, context…"
-                    rows={3}
-                    className="w-full text-[12px] leading-relaxed bg-transparent border rounded-lg px-3 py-2 outline-none resize-none"
-                    style={{ color: "var(--color-charcoal)", border: "0.5px solid var(--color-border)" }}
-                  />
-                ) : contact.bio ? (
-                  <p className="text-[12px] leading-relaxed" style={{ color: "#6b6860" }}>{contact.bio}</p>
-                ) : (
-                  <p className="text-[12px]" style={{ color: "var(--color-grey)" }}>
-                    No description yet.{" "}
-                    <button onClick={startEdit} className="underline" style={{ color: "#2563ab" }}>Add one</button>
-                  </p>
-                )}
-                {!editing && (
-                  <>
-                    {contact.company?.name && <FieldRow label="Company" value={contact.company.name} />}
-                    {contact.title         && <FieldRow label="Title"   value={contact.title}         />}
-                    {contact.location      && <FieldRow label="Location" value={contact.location}     />}
-                  </>
-                )}
+            {/* Properties */}
+            <div style={{ marginBottom: 14 }}>
+              <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Details</p>
+              <EditableField label="Email"    value={contact.email}   placeholder="—" onSave={v => saveField({ email: v })} />
+              <EditableField label="Phone"    value={contact.phone}   placeholder="—" onSave={v => saveField({ phone: v })} />
+              <EditableField label="Company"  value={contact.company?.name ?? null} placeholder="—" onSave={saveCompany} />
+              <EditableField label="Title"    value={contact.title}   placeholder="—" onSave={v => saveField({ title: v })} />
+              <EditableField label="Website"  value={contact.website} placeholder="—" onSave={v => saveField({ website: v })} />
+              <EditableField label="Location" value={contact.location} placeholder="—" onSave={v => saveField({ location: v })} />
+              <div style={{ display: "flex", alignItems: "center", padding: "4px 0" }}>
+                <span style={{ fontSize: 11, color: "var(--color-grey)", width: 68, flexShrink: 0 }}>Last seen</span>
+                <span style={{ fontSize: 12, color: lastC.color }}>{lastC.label}</span>
               </div>
             </div>
 
-            {/* Activity card */}
-            <div className="rounded-xl overflow-hidden" style={{ border: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
-              <div className="flex gap-0.5 px-4 pt-2" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-                {(["activity", "notes"] as const).map((tab) => (
-                  <button key={tab} onClick={() => setActiveTab(tab)}
-                    className="px-3 py-1.5 text-[11px] mb-[-0.5px]"
-                    style={{
-                      color: activeTab === tab ? "var(--color-charcoal)" : "var(--color-grey)",
-                      fontWeight: activeTab === tab ? 600 : 400,
-                      borderBottom: activeTab === tab ? "2px solid var(--color-sage)" : "2px solid transparent",
-                    }}>
-                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-2 px-4 py-2.5" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.35">
-                  <line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/>
-                </svg>
-                <input
-                  id="act-input" type="text" value={actInput}
-                  onChange={(e) => setActInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); logActivity(); } }}
-                  placeholder={`Log a ${actType}…`}
-                  className="flex-1 bg-transparent border-none outline-none text-[12px]"
-                  style={{ color: "var(--color-charcoal)" }}
-                />
-                <div className="flex items-center gap-1">
-                  {(["note", "call", "meeting"] as ContactActivityType[]).map((t) => (
-                    <button key={t} onClick={() => setActType(t)}
-                      className="text-[10px] px-2 py-0.5 rounded-full transition-colors"
-                      style={{
-                        background: actType === t ? "var(--color-sage)" : "var(--color-cream)",
-                        color: actType === t ? "white" : "#6b6860",
-                        border: "0.5px solid var(--color-border)",
-                      }}>
-                      {t.charAt(0).toUpperCase() + t.slice(1)}
-                    </button>
-                  ))}
-                  <button onClick={logActivity} disabled={!actInput.trim() || loadingAct}
-                    className="text-[10px] px-2 py-0.5 rounded-full transition-opacity disabled:opacity-40"
-                    style={{ background: "var(--color-charcoal)", color: "white" }}>
-                    Log
-                  </button>
-                </div>
-              </div>
-
-              <div className="px-4 py-3">
-                {grouped.length === 0 ? (
-                  <p className="text-[12px] py-4 text-center" style={{ color: "var(--color-grey)" }}>
-                    No {activeTab === "notes" ? "notes" : "activity"} yet.
-                  </p>
-                ) : grouped.map(({ label, items }) => (
-                  <div key={label}>
-                    <div className="text-[10px] font-semibold uppercase tracking-wider py-2" style={{ color: "var(--color-grey)" }}>{label}</div>
-                    {items.map((act) => {
-                      const cfg = ACTIVITY_CONFIG[act.type];
-                      return (
-                        <div key={act.id} className="flex gap-2.5 mb-3">
-                          <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
-                            style={{ background: cfg.bg, color: cfg.color, border: "0.5px solid var(--color-border)" }}>
-                            {cfg.icon}
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-baseline gap-1.5 mb-0.5">
-                              <span className="text-[11px] font-semibold" style={{ color: "#6b6860" }}>{cfg.label}</span>
-                              <span className="text-[10px] ml-auto" style={{ color: "var(--color-grey)" }}>{fmtTime(act.occurred_at)}</span>
-                            </div>
-                            {act.content && <p className="text-[12px] leading-relaxed" style={{ color: "#6b6860" }}>{act.content}</p>}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Right column */}
-          <div className="flex flex-col gap-3.5 overflow-y-auto shrink-0"
-            style={{ width: "248px", borderLeft: "0.5px solid var(--color-border)", padding: "18px" }}>
-
-            {/* Properties card */}
-            <div className="rounded-xl overflow-hidden" style={{ border: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
-              <div className="flex items-center gap-2 px-4 py-2.5" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-                <span className="text-[12px] font-semibold flex-1" style={{ color: "#6b6860" }}>Properties</span>
-                {!editing && (
-                  <button onClick={startEdit} className="text-[11px]" style={{ color: "#2563ab" }}>Edit</button>
-                )}
-              </div>
-              <div className="px-4 py-1">
-                {/* Status */}
-                <div className="flex items-center justify-between py-2" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-                  <span className="text-[11px]" style={{ color: "var(--color-grey)" }}>Status</span>
-                  {editing ? (
-                    <select value={editStatus} onChange={(e) => setEditStatus(e.target.value as ContactStatus)}
-                      className="text-[12px] bg-transparent border-none outline-none text-right" style={{ color: "var(--color-charcoal)" }}>
-                      {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  ) : (
-                    <span className="flex items-center gap-1.5 text-[12px] font-medium" style={{ color: STATUS_CONFIG[contact.status].dot }}>
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: STATUS_CONFIG[contact.status].dot }} />
-                      {STATUS_CONFIG[contact.status].label}
+            {/* Tags */}
+            <div style={{ marginBottom: 14 }}>
+              <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 6 }}>Tags</p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {contact.tags.map(tag => {
+                  const s = tagStyle(tag);
+                  return (
+                    <span key={tag} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 10, fontWeight: 500, padding: "2px 6px", borderRadius: 9999, background: s.bg, color: s.color }}>
+                      {tag}
+                      <button onClick={() => removeTag(tag)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "inherit", lineHeight: 1, padding: 0 }}><X size={8} /></button>
                     </span>
-                  )}
-                </div>
-
-                {/* Tags */}
-                <div className="flex items-start justify-between gap-2 py-2" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-                  <span className="text-[11px] shrink-0 mt-1" style={{ color: "var(--color-grey)" }}>Tags</span>
-                  {editing ? (
-                    <div className="flex flex-col items-end gap-1 flex-1">
-                      <div className="flex flex-wrap justify-end gap-1">
-                        {editTags.map((tag) => (
-                          <span key={tag} className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full"
-                            style={{ background: "var(--color-cream)", color: "#6b6860" }}>
-                            {tag}
-                            <button type="button" onClick={() => setEditTags((p) => p.filter((t) => t !== tag))}><X size={8} /></button>
-                          </span>
-                        ))}
-                      </div>
-                      <input ref={tagInputRef} type="text" value={editTagInput}
-                        onChange={(e) => setEditTagInput(e.target.value)}
-                        onKeyDown={onEditTagKeyDown}
-                        onBlur={() => { if (editTagInput.trim()) addEditTag(editTagInput); }}
-                        placeholder="Add tag…"
-                        className="text-[11px] bg-transparent border-none outline-none text-right w-full"
-                        style={{ color: "var(--color-charcoal)" }} />
-                      {editTagInput === "" && (
-                        <div className="flex flex-wrap justify-end gap-1 mt-0.5">
-                          {PRESET_TAGS.filter((t) => !editTags.includes(t)).slice(0, 4).map((t) => (
-                            <button key={t} type="button" onClick={() => addEditTag(t)}
-                              className="text-[9px] px-1.5 py-0.5 rounded-full"
-                              style={{ background: "var(--color-cream)", color: "#9a9690", border: "0.5px solid var(--color-border)" }}>
-                              + {t}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap justify-end gap-1">
-                      {contact.tags.length > 0 ? contact.tags.map((tag) => {
-                        const s = tagStyle(tag);
-                        return <span key={tag} className="text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: s.bg, color: s.color }}>{tag}</span>;
-                      }) : <span className="text-[12px]" style={{ color: "var(--color-grey)" }}>—</span>}
-                    </div>
-                  )}
-                </div>
-
-                {/* Email */}
-                <InlinePropRow label="Email" value={contact.email} editValue={editEmail} onEdit={setEditEmail} editing={editing} link="mailto" />
-                {/* Phone */}
-                <InlinePropRow label="Phone" value={contact.phone} editValue={editPhone} onEdit={setEditPhone} editing={editing} />
-                {/* Website */}
-                <InlinePropRow label="Website" value={contact.website} editValue={editWebsite} onEdit={setEditWebsite} editing={editing} link="url" />
-                {/* Location */}
-                <InlinePropRow label="Location" value={contact.location} editValue={editLocation} onEdit={setEditLocation} editing={editing} />
-                {/* Added */}
-                <div className="flex items-center justify-between py-2">
-                  <span className="text-[11px]" style={{ color: "var(--color-grey)" }}>Added</span>
-                  <span className="text-[12px]" style={{ color: "#6b6860" }}>
-                    {new Date(contact.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
-                  </span>
-                </div>
+                  );
+                })}
+                {editingTags
+                  ? <input ref={tagInputRef} type="text" value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={onTagKeyDown}
+                      onBlur={() => { if (tagInput.trim()) addTag(tagInput); setEditingTags(false); }}
+                      autoFocus placeholder="Add tag…" style={{ fontSize: 10, background: "transparent", border: "0.5px solid var(--color-sage)", borderRadius: 9999, outline: "none", padding: "2px 6px", color: "var(--color-charcoal)", fontFamily: "inherit" }} />
+                  : <button onClick={() => { setEditingTags(true); setTimeout(() => tagInputRef.current?.focus(), 0); }}
+                      style={{ fontSize: 10, color: "#2563ab", background: "transparent", border: "0.5px dashed var(--color-border)", borderRadius: 9999, padding: "2px 6px", cursor: "pointer", fontFamily: "inherit" }}>+ Tag</button>
+                }
               </div>
+              {editingTags && tagInput === "" && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+                  {PRESET_TAGS.filter(t => !contact.tags.includes(t)).map(t => (
+                    <button key={t} onClick={() => addTag(t)} style={{ fontSize: 9, padding: "2px 6px", borderRadius: 9999, background: "var(--color-cream)", color: "#9a9690", border: "0.5px solid var(--color-border)", cursor: "pointer", fontFamily: "inherit" }}>+ {t}</button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Linked projects */}
-            <div className="rounded-xl overflow-hidden" style={{ border: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
-              <div className="flex items-center gap-2 px-4 py-2.5" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-                <span className="text-[12px] font-semibold flex-1" style={{ color: "#6b6860" }}>Linked projects</span>
-                {linkedProjects.length > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full"
-                    style={{ background: "var(--color-cream)", color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}>
-                    {linkedProjects.length}
-                  </span>
-                )}
-                <div className="relative" ref={pickerRef}>
-                  <button onClick={openProjectPicker} className="text-[11px]" style={{ color: "#2563ab" }}>
-                    + Link
-                  </button>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
+                <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", flex: 1, margin: 0 }}>Projects</p>
+                <div ref={pickerRef} style={{ position: "relative" }}>
+                  <button onClick={openProjectPicker} style={{ fontSize: 10, color: "#2563ab", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit" }}>+ Link</button>
                   {showProjectPicker && (
-                    <div className="absolute right-0 mt-1 rounded-xl overflow-hidden z-20"
-                      style={{
-                        width: "220px", top: "100%",
-                        background: "var(--color-off-white)",
-                        border: "0.5px solid var(--color-border)",
-                        boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
-                      }}>
-                      <div className="px-3 py-2" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-                        <input
-                          type="text" value={projectSearch} onChange={(e) => setProjectSearch(e.target.value)}
-                          placeholder="Search projects…" autoFocus
-                          className="w-full text-[12px] bg-transparent border-none outline-none"
-                          style={{ color: "var(--color-charcoal)" }}
-                        />
+                    <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 10, width: 200, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 10, boxShadow: "0 4px 20px rgba(0,0,0,0.12)", overflow: "hidden" }}>
+                      <div style={{ padding: "6px 10px", borderBottom: "0.5px solid var(--color-border)" }}>
+                        <input type="text" value={projectSearch} onChange={e => setProjectSearch(e.target.value)} placeholder="Search…" autoFocus style={{ width: "100%", fontSize: 12, background: "transparent", border: "none", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit" }} />
                       </div>
-                      <div className="max-h-[200px] overflow-y-auto">
-                        {pickerFiltered.length === 0 ? (
-                          <p className="text-[12px] text-center py-4" style={{ color: "var(--color-grey)" }}>
-                            {availableProjects.length === 0 ? "All projects linked." : "No matches."}
-                          </p>
-                        ) : pickerFiltered.map((p) => (
-                          <button key={p.id} onClick={() => linkProject(p)} disabled={linkingProject}
-                            className="w-full text-left px-4 py-2.5 text-[12px] transition-colors"
-                            style={{ color: "var(--color-charcoal)", borderBottom: "0.5px solid var(--color-border)" }}
-                            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-                            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-                            <div className="font-medium">{p.title}</div>
-                            <div className="text-[10px] mt-0.5" style={{ color: "var(--color-grey)" }}>
-                              {p.status?.replace("_", " ")}
-                            </div>
-                          </button>
-                        ))}
+                      <div style={{ maxHeight: 180, overflowY: "auto" }}>
+                        {pickerFiltered.length === 0
+                          ? <p style={{ fontSize: 12, textAlign: "center", padding: "12px", color: "var(--color-grey)" }}>No matches</p>
+                          : pickerFiltered.map(p => (
+                            <button key={p.id} onClick={() => linkProject(p)}
+                              style={{ width: "100%", textAlign: "left", padding: "8px 12px", fontSize: 12, color: "var(--color-charcoal)", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", borderBottom: "0.5px solid var(--color-border)" }}
+                              onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+                              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                              <div style={{ fontWeight: 500 }}>{p.title}</div>
+                              <div style={{ fontSize: 10, color: "var(--color-grey)", marginTop: 1 }}>{p.status?.replace("_", " ")}</div>
+                            </button>
+                          ))
+                        }
                       </div>
                     </div>
                   )}
                 </div>
               </div>
-              <div className="px-4 py-1">
-                {linkedProjects.length === 0 ? (
-                  <p className="text-[11px] py-3 text-center" style={{ color: "var(--color-grey)" }}>No projects linked yet.</p>
-                ) : linkedProjects.map((p, i) => (
-                  <div key={p.id} className="group flex items-start gap-2 py-2.5"
-                    style={{ borderBottom: i < linkedProjects.length - 1 ? "0.5px solid var(--color-border)" : "none" }}>
-                    <button
-                      onClick={() => router.push("/projects")}
-                      className="flex-1 text-left"
-                      title="Opens Projects page — cross-module navigation coming soon"
-                    >
-                      <div className="text-[12px] font-medium" style={{ color: "var(--color-charcoal)" }}>{p.title}</div>
-                      <div className="text-[10px] mt-0.5" style={{ color: "var(--color-grey)" }}>{p.status?.replace("_", " ")}</div>
-                    </button>
-                    <button onClick={() => unlinkProject(p.id)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5"
-                      style={{ color: "var(--color-grey)" }} title="Unlink">
-                      <X size={11} />
-                    </button>
+              {linkedProjects.map((p, i) => (
+                <div key={p.id} className="group" style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", borderBottom: i < linkedProjects.length - 1 ? "0.5px solid var(--color-border)" : "none" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: "var(--color-charcoal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
+                    <div style={{ fontSize: 10, color: "var(--color-grey)" }}>{p.status?.replace("_", " ")}</div>
                   </div>
-                ))}
-              </div>
+                  <button onClick={() => unlinkProject(p.id)} style={{ opacity: 0, color: "var(--color-grey)", border: "none", background: "transparent", cursor: "pointer", flexShrink: 0 }}
+                    className="group-hover:opacity-100"><X size={11} /></button>
+                </div>
+              ))}
+              {linkedProjects.length === 0 && <p style={{ fontSize: 11, color: "var(--color-grey)" }}>—</p>}
             </div>
 
-            {/* Quick notes */}
-            <div className="rounded-xl overflow-hidden" style={{ border: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
-              <div className="flex items-center gap-2 px-4 py-2.5" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-                <span className="text-[12px] font-semibold flex-1" style={{ color: "#6b6860" }}>Notes</span>
-                <button onClick={() => { setActType("note"); setActiveTab("notes"); setTimeout(() => document.getElementById("act-input")?.focus(), 50); }}
-                  className="text-[11px]" style={{ color: "#2563ab" }}>+ Add</button>
+            {/* Finance cross-module */}
+            {invoiceData && invoiceData.count > 0 && (
+              <div style={{ marginTop: 14, borderTop: "0.5px solid var(--color-border)", paddingTop: 10 }}>
+                <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 6 }}>Finance</p>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: "0.5px solid var(--color-border)" }}>
+                  <span style={{ fontSize: 11, color: "var(--color-grey)" }}>Invoices</span>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: "#6b6860" }}>{invoiceData.count}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+                  <span style={{ fontSize: 11, color: "var(--color-grey)" }}>Total invoiced</span>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: "#6b6860" }}>${invoiceData.total.toLocaleString()}</span>
+                </div>
+                <button
+                  onClick={() => window.location.href = "/finance?tab=invoices"}
+                  style={{ marginTop: 6, fontSize: 10, color: "var(--color-sage)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}
+                  onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
+                  onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
+                >
+                  View invoices →
+                </button>
               </div>
-              <div className="px-4 py-1">
-                {activities.filter((a) => a.type === "note").length === 0 ? (
-                  <p className="text-[11px] py-3 text-center" style={{ color: "var(--color-grey)" }}>No notes yet.</p>
-                ) : activities.filter((a) => a.type === "note").slice(0, 3).map((note, i, arr) => (
-                  <div key={note.id} className="py-2.5"
-                    style={{ borderBottom: i < arr.length - 1 ? "0.5px solid var(--color-border)" : "none" }}>
-                    <p className="text-[12px] leading-relaxed mb-0.5" style={{ color: "#6b6860" }}>{note.content}</p>
-                    <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>
-                      {new Date(note.occurred_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                    </p>
-                  </div>
-                ))}
-              </div>
+            )}
+
+            {/* Navigation */}
+            <div style={{ marginTop: 16, borderTop: "0.5px solid var(--color-border)", paddingTop: 10 }}>
+              <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Workspace</p>
+              {NAV_ITEMS.map(item => {
+                const active = activeTab === item.key;
+                return (
+                  <button key={item.key} onClick={() => setActiveTab(item.key)} style={{
+                    width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 8px",
+                    borderRadius: 7, border: "none", background: active ? "var(--color-surface-raised)" : "transparent",
+                    cursor: "pointer", fontFamily: "inherit", marginBottom: 1,
+                  }}
+                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = "rgba(0,0,0,0.04)"; }}
+                  onMouseLeave={e => { if (!active) e.currentTarget.style.background = "transparent"; }}>
+                    <span style={{ color: active ? "#5a7040" : "var(--color-grey)" }}>{item.icon}</span>
+                    <span style={{ fontSize: 12, flex: 1, textAlign: "left", color: active ? "#5a7040" : "var(--color-grey)", fontWeight: active ? 500 : 400 }}>{item.label}</span>
+                    {item.count !== undefined && item.count > 0 && <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>{item.count}</span>}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Ash prompts */}
+            <div style={{ marginTop: 16, borderTop: "0.5px solid var(--color-border)", paddingTop: 10 }}>
+              <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Ask Ash</p>
+              {ASH_PROMPTS.map(prompt => (
+                <button key={prompt} onClick={() => openAsh(prompt)} style={{
+                  width: "100%", textAlign: "left", fontSize: 11, padding: "5px 8px", borderRadius: 7,
+                  background: "transparent", border: "none", cursor: "pointer", color: "#6b6860", fontFamily: "inherit",
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(155,163,122,0.08)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  {prompt}
+                </button>
+              ))}
             </div>
           </div>
+
+          {/* Settings (bottom) */}
+          <div style={{ borderTop: "0.5px solid var(--color-border)", padding: "4px 8px 8px", flexShrink: 0 }}>
+            {settingsOpen && (
+              <div style={{ paddingBottom: 4 }}>
+                {contact.is_lead && (
+                  <button onClick={convertToContact} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit", color: "#3d6b4f" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(61,107,79,0.07)"}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    <Users size={13} strokeWidth={1.75} />
+                    <span style={{ fontSize: 12 }}>Convert to contact</span>
+                  </button>
+                )}
+                <button onClick={handleArchive} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit", color: "#b8860b" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(184,134,11,0.07)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  <Trash2 size={13} strokeWidth={1.75} />
+                  <span style={{ fontSize: 12 }}>Archive {contact.is_lead ? "lead" : "contact"}</span>
+                </button>
+              </div>
+            )}
+            <button onClick={() => setSettingsOpen(v => !v)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 7, border: "none", background: settingsOpen ? "var(--color-surface-raised)" : "transparent", cursor: "pointer", fontFamily: "inherit" }}
+              onMouseEnter={e => { if (!settingsOpen) e.currentTarget.style.background = "rgba(0,0,0,0.04)"; }}
+              onMouseLeave={e => { if (!settingsOpen) e.currentTarget.style.background = "transparent"; }}>
+              <Settings size={13} strokeWidth={1.75} style={{ color: settingsOpen ? "var(--color-charcoal)" : "var(--color-grey)" }} />
+              <span style={{ fontSize: 12, color: settingsOpen ? "var(--color-charcoal)" : "var(--color-grey)", fontWeight: settingsOpen ? 500 : 400 }}>Settings</span>
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" style={{ marginLeft: "auto", color: "var(--color-grey)", transform: settingsOpen ? "rotate(-90deg)" : "rotate(90deg)", transition: "transform 0.15s ease" }}>
+                <path d="M2 1l4 3-4 3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* ── Right: main area ── */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          {/* Top bar */}
+          <div style={{
+            height: 40, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "0 14px", borderBottom: "0.5px solid var(--color-border)", background: "var(--color-off-white)",
+            borderRadius: maximized ? 0 : "0 12px 0 0",
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-charcoal)" }}>
+              {NAV_ITEMS.find(n => n.key === activeTab)?.label}
+            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <button onClick={() => setMaximized(v => !v)}
+                style={{ width: 28, height: 28, borderRadius: 6, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-tertiary)" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--color-surface-sunken)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                {maximized ? <Minimize2 size={13} strokeWidth={1.75} /> : <Maximize2 size={13} strokeWidth={1.75} />}
+              </button>
+              <button onClick={onClose}
+                style={{ width: 28, height: 28, borderRadius: 6, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-tertiary)" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--color-surface-sunken)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                <X size={13} strokeWidth={2} />
+              </button>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            {activeTab === "canvas" && (
+              canvasHtml === undefined
+                ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "var(--color-grey)" }}>Loading…</div>
+                : <ContactCanvasEditor key={contact.id} contactId={contact.id} initialHtml={canvasHtml} />
+            )}
+            {activeTab === "activity" && (
+              <ActivityTab contactId={contact.id} activities={activities} setActivities={setActivities} contact={contact}
+                onContactUpdated={c => { setContact(c); onUpdated(c); }} />
+            )}
+            {activeTab === "tasks" && (
+              <TasksTab contactId={contact.id} tasks={tasks} setTasks={setTasks} />
+            )}
+            {activeTab === "notes" && (
+              <NotesTab contactId={contact.id} notes={notes} setNotes={setNotes} />
+            )}
+            {activeTab === "files" && (
+              <ContactFilesTab key={contact.id} contactId={contact.id} />
+            )}
+          </div>
+          {!maximized && <ContactAshStrip contact={contact} />}
         </div>
       </div>
-    </div>
-  );
-}
-
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function FieldRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start gap-2.5 mb-2.5">
-      <div className="flex-1">
-        <div className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: "var(--color-grey)" }}>{label}</div>
-        <div className="text-[12px]" style={{ color: "#6b6860" }}>{value}</div>
-      </div>
-    </div>
-  );
-}
-
-function InlinePropRow({
-  label, value, editValue, onEdit, editing, link,
-}: {
-  label: string;
-  value: string | null;
-  editValue: string;
-  onEdit: (v: string) => void;
-  editing: boolean;
-  link?: "mailto" | "url";
-}) {
-  return (
-    <div className="flex items-center justify-between py-2" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-      <span className="text-[11px] shrink-0" style={{ color: "var(--color-grey)" }}>{label}</span>
-      {editing ? (
-        <input type="text" value={editValue} onChange={(e) => onEdit(e.target.value)}
-          className="text-[12px] bg-transparent border-none outline-none text-right max-w-[140px] ml-2"
-          style={{ color: "var(--color-charcoal)" }} />
-      ) : value ? (
-        link ? (
-          <a href={link === "mailto" ? `mailto:${value}` : `https://${value.replace(/^https?:\/\//, "")}`}
-            target={link === "url" ? "_blank" : undefined} rel="noreferrer"
-            className="text-[12px] ml-2 truncate max-w-[140px]" style={{ color: "#2563ab" }}>
-            {value}
-          </a>
-        ) : (
-          <span className="text-[12px] ml-2 truncate max-w-[140px]" style={{ color: "#6b6860" }}>{value}</span>
-        )
-      ) : (
-        <span className="text-[12px]" style={{ color: "var(--color-grey)" }}>—</span>
-      )}
-    </div>
+    </>
   );
 }

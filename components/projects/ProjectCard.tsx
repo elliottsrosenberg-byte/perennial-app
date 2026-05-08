@@ -37,6 +37,7 @@ const STATUS_ACCENT: Record<string, string> = {
   planning:    "var(--color-grey)",
   on_hold:     "var(--color-warm-yellow)",
   complete:    "var(--color-green)",
+  cut:         "var(--color-red-orange)",
 };
 
 const PRIORITY_STYLE: Record<string, { bg: string; color: string; label: string }> = {
@@ -87,11 +88,12 @@ function TypeSpecificProps({ project }: { project: Project }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface Props {
-  project: Project;
-  onClick?: () => void;
+  project:    Project;
+  onClick?:   () => void;
+  isDragging?: boolean;
 }
 
-export default function ProjectCard({ project, onClick }: Props) {
+export default function ProjectCard({ project, onClick, isDragging }: Props) {
   const tasks = project.tasks ?? [];
   const completedCount = tasks.filter((t) => t.completed).length;
   const totalCount = tasks.length;
@@ -100,8 +102,10 @@ export default function ProjectCard({ project, onClick }: Props) {
   const timeline = timelineProgress(project.start_date, project.due_date);
   const priority = PRIORITY_STYLE[project.priority] ?? PRIORITY_STYLE.medium;
   const typeStyle = project.type ? TYPE_STYLE[project.type] : null;
-  const accentColor = timeline?.overdue ? "var(--color-red-orange)" : STATUS_ACCENT[project.status];
+  // Accent bar always reflects status — overdue is communicated via due badge and bar
+  const accentColor = STATUS_ACCENT[project.status] ?? "var(--color-grey)";
   const isHold = project.status === "on_hold";
+  const isCut  = project.status === "cut";
 
   // Due badge
   let dueBadge: { label: string; bg: string; color: string } | null = null;
@@ -125,10 +129,11 @@ export default function ProjectCard({ project, onClick }: Props) {
       onClick={onClick}
       className="flex flex-col rounded-xl overflow-hidden cursor-pointer transition-all duration-150"
       style={{
+        height: "100%",
         background: "var(--color-off-white)",
         border: "0.5px solid var(--color-border)",
         boxShadow: "0 1px 4px rgba(0,0,0,0.07)",
-        opacity: isHold ? 0.75 : 1,
+        opacity: isDragging ? 0.88 : isHold || isCut ? 0.65 : 1,
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.boxShadow = "0 3px 10px rgba(0,0,0,0.1)";

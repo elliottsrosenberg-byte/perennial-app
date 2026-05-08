@@ -7,12 +7,35 @@ import OverviewTab from "./OverviewTab";
 import TimeTab from "./TimeTab";
 import ExpensesTab from "./ExpensesTab";
 import InvoicesTab from "./InvoicesTab";
+import BankingTab from "./BankingTab";
 import LogTimeModal from "./LogTimeModal";
 import AddExpenseModal from "./AddExpenseModal";
 import NewInvoiceModal from "./NewInvoiceModal";
 import { Plus } from "lucide-react";
+import Button from "@/components/ui/Button";
+import AshMark from "@/components/ui/AshMark";
 
-type Tab = "overview" | "time" | "expenses" | "invoices";
+const ASH_GRADIENT = "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)";
+function openAsh(message: string) {
+  window.dispatchEvent(new CustomEvent("open-ash", { detail: { message } }));
+}
+function AshBtn({ message }: { message: string }) {
+  return (
+    <button
+      onClick={() => openAsh(message)}
+      style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", fontSize: 11, fontWeight: 500, borderRadius: 6, background: "transparent", color: "var(--color-ash-dark)", border: "0.5px solid var(--color-border)", cursor: "pointer", fontFamily: "inherit", transition: "background 0.1s ease" }}
+      onMouseEnter={e => (e.currentTarget.style.background = "var(--color-ash-tint)")}
+      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+    >
+      <div style={{ width: 16, height: 16, borderRadius: "50%", background: ASH_GRADIENT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <AshMark size={9} variant="on-dark" />
+      </div>
+      Ask Ash
+    </button>
+  );
+}
+
+type Tab = "overview" | "time" | "expenses" | "invoices" | "banking";
 
 interface Props {
   initialTimeEntries: TimeEntry[];
@@ -63,7 +86,11 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
       .upsert({ user_id: user.id, project_id: projectId, description, started_at: new Date().toISOString() })
       .select("*, project:projects(id, title, type, rate)")
       .single();
-    if (data) setActiveTimer(data as ActiveTimer);
+    if (data) {
+      const t = data as ActiveTimer;
+      setActiveTimer(t);
+      window.dispatchEvent(new CustomEvent("perennial:timer-started", { detail: t }));
+    }
   }
 
   async function stopTimer() {
@@ -86,33 +113,48 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
       .single();
     await supabase.from("active_timers").delete().eq("user_id", user.id);
     setActiveTimer(null);
+    window.dispatchEvent(new CustomEvent("perennial:timer-stopped"));
     if (entry) setTimeEntries((prev) => [entry as TimeEntry, ...prev]);
+  }
+
+  async function deleteTimeEntry(id: string) {
+    await createClient().from("time_entries").delete().eq("id", id);
+    setTimeEntries(prev => prev.filter(e => e.id !== id));
+  }
+
+  async function deleteExpense(id: string) {
+    await createClient().from("expenses").delete().eq("id", id);
+    setExpenses(prev => prev.filter(e => e.id !== id));
+  }
+
+  function handleInvoiceSent(invoiceId: string) {
+    setInvoices(prev => prev.map(inv =>
+      inv.id === invoiceId ? { ...inv, status: "sent" as const } : inv
+    ));
   }
 
   const nextInvoiceNumber = (invoices.length === 0 ? 0 : Math.max(...invoices.map((i) => i.number))) + 1;
 
-  const btnGhost = "px-3 py-1.5 text-[12px] rounded-lg transition-colors";
-  const btnPrimary = "flex items-center gap-1 px-3 py-1.5 text-[12px] font-medium rounded-lg text-white";
-
   const tabActions: Record<Tab, React.ReactNode> = {
     overview: <>
-      <button className={btnGhost} style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-        onClick={() => setShowLogTime(true)}>Log time</button>
-      <button className={btnGhost} style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-        onClick={() => setShowAddExpense(true)}>Add expense</button>
-      <button className={btnPrimary} style={{ background: "var(--color-charcoal)" }}
-        onClick={() => setShowNewInvoice(true)}><Plus size={12} />New invoice</button>
+      <AshBtn message="How's my cash flow this month? What should I know about my financial health right now?" />
+      <Button variant="secondary" onClick={() => setShowLogTime(true)}>Log time</Button>
+      <Button variant="secondary" onClick={() => setShowAddExpense(true)}>Add expense</Button>
+      <Button onClick={() => setShowNewInvoice(true)}><Plus size={12} />New invoice</Button>
     </>,
-    time: <button className={btnPrimary} style={{ background: "var(--color-charcoal)" }}
-      onClick={() => setShowLogTime(true)}><Plus size={12} />Log time</button>,
-    expenses: <button className={btnPrimary} style={{ background: "var(--color-charcoal)" }}
-      onClick={() => setShowAddExpense(true)}><Plus size={12} />Add expense</button>,
-    invoices: <button className={btnPrimary} style={{ background: "var(--color-charcoal)" }}
-      onClick={() => setShowNewInvoice(true)}><Plus size={12} />New invoice</button>,
+    time:     <>
+      <AshBtn message="How many billable hours have I logged this month? Am I on track with my time goals?" />
+      <Button onClick={() => setShowLogTime(true)}><Plus size={12} />Log time</Button>
+    </>,
+    expenses: <>
+      <AshBtn message="What are my biggest expense categories this month? How can I reduce costs?" />
+      <Button onClick={() => setShowAddExpense(true)}><Plus size={12} />Add expense</Button>
+    </>,
+    invoices: <>
+      <AshBtn message="What invoices are outstanding or overdue? Help me draft a payment follow-up." />
+      <Button onClick={() => setShowNewInvoice(true)}><Plus size={12} />New invoice</Button>
+    </>,
+    banking:  <AshBtn message="What does my cash flow look like based on recent transactions?" />,
   };
 
   return (
@@ -126,13 +168,13 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
           <span className="text-[11px]" style={{ color: "var(--color-grey)" }}>{periodLabel}</span>
         </div>
         <div className="flex items-stretch">
-          {(["overview","time","expenses","invoices"] as Tab[]).map((tab) => (
+          {(["overview","time","expenses","invoices","banking"] as Tab[]).map((tab) => (
             <button key={tab} type="button" onClick={() => setActiveTab(tab)}
               className="px-5 text-[12px] capitalize"
               style={{
                 color: activeTab === tab ? "var(--color-charcoal)" : "var(--color-grey)",
                 fontWeight: activeTab === tab ? 600 : 400,
-                borderBottom: activeTab === tab ? "1.5px solid var(--color-charcoal)" : "1.5px solid transparent",
+                borderBottom: activeTab === tab ? "2px solid var(--color-sage)" : "2px solid transparent",
                 borderRight: "0.5px solid var(--color-border)",
               }}>
               {tab}
@@ -166,6 +208,7 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
             onStopTimer={stopTimer}
             onStartTimer={startTimer}
             onEntryCreated={(e) => setTimeEntries((prev) => [e, ...prev])}
+            onEntryDeleted={deleteTimeEntry}
           />
         )}
         {activeTab === "expenses" && (
@@ -173,6 +216,7 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
             expenses={expenses}
             projects={projects}
             onExpenseCreated={(e) => setExpenses((prev) => [e, ...prev])}
+            onExpenseDeleted={deleteExpense}
           />
         )}
         {activeTab === "invoices" && (
@@ -181,8 +225,10 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
             timeEntries={timeEntries}
             projects={projects}
             onInvoiceUpdated={(inv) => setInvoices((prev) => prev.map((i) => i.id === inv.id ? inv : i))}
+            onInvoiceSent={handleInvoiceSent}
           />
         )}
+        {activeTab === "banking" && <BankingTab />}
       </div>
 
       {showLogTime && (

@@ -31,6 +31,13 @@ const NAV_GROUPS = [
       { id: "roadmap-next",   label: "Next up"     },
     ],
   },
+  {
+    label: "Testing",
+    items: [
+      { id: "testing-projects", label: "Projects"   },
+      { id: "testing-ash",      label: "Ash"        },
+    ],
+  },
 ];
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
@@ -116,8 +123,51 @@ function Tag({ children }: { children: React.ReactNode }) {
 
 // ─── Tool row ─────────────────────────────────────────────────────────────────
 
-function ToolRow({ name, status, desc, inputs, note }: {
-  name: string; status: StatusState; desc: string;
+function ToolKind({ kind }: { kind: "read" | "write" }) {
+  return (
+    <span style={{
+      fontSize: 9, fontWeight: 600, padding: "2px 6px", borderRadius: 9999,
+      background: kind === "read" ? "rgba(37,99,171,0.10)" : "rgba(155,163,122,0.12)",
+      color: kind === "read" ? "var(--color-blue)" : "var(--color-ash-dark)",
+      textTransform: "uppercase", letterSpacing: "0.05em", flexShrink: 0,
+    }}>
+      {kind}
+    </span>
+  );
+}
+
+function ToolDivider({ label }: { label: string }) {
+  return (
+    <div style={{
+      fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.09em",
+      color: "var(--color-text-tertiary)", padding: "14px 24px 4px",
+      display: "flex", alignItems: "center", gap: 8,
+    }}>
+      <span>{label}</span>
+      <div style={{ flex: 1, height: "0.5px", background: "var(--color-border)" }} />
+    </div>
+  );
+}
+
+function PlannedChips({ tools }: { tools: string[] }) {
+  return (
+    <div style={{ padding: "10px 24px 6px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+      <span style={{ fontSize: 10, color: "var(--color-text-tertiary)", flexShrink: 0 }}>Planned:</span>
+      {tools.map((t) => (
+        <span key={t} style={{
+          fontSize: 10, fontFamily: "monospace", padding: "2px 7px", borderRadius: 4,
+          background: "var(--color-surface-sunken)", border: "0.5px solid var(--color-border)",
+          color: "var(--color-text-tertiary)",
+        }}>
+          {t}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ToolRow({ name, status, kind, desc, inputs, note }: {
+  name: string; status: StatusState; kind?: "read" | "write"; desc: string;
   inputs: { name: string; type: string; required?: boolean; note?: string }[];
   note?: string;
 }) {
@@ -137,6 +187,7 @@ function ToolRow({ name, status, desc, inputs, note }: {
         </span>
         <Tag>{name}</Tag>
         <Status state={status} />
+        {kind && <ToolKind kind={kind} />}
         <span style={{ flex: 1, fontSize: 12, color: "var(--color-text-secondary)", marginLeft: 4, textAlign: "left" }}>
           {desc}
         </span>
@@ -549,27 +600,22 @@ export default function DocsPage() {
 
         {/* ════════════════════════ ASH TOOLS ════════════════════════ */}
         <Section id="ash-tools" title="Ash — Tools"
-          subtitle="Tools let Ash take action and retrieve specific data mid-conversation. Click any tool to see its parameters. Add new tools in lib/ash/tools/read.ts or write.ts.">
+          subtitle="Organized by module. Read tools fire automatically when Claude needs more context. Write tools execute with a description of what Ash is doing. Stubs activate with one function body in lib/ash/tools/write.ts.">
 
-          <Sub title="Read tools — fully live">
+          {/* ── Cross-module ── */}
+          <Sub title="Cross-module — available from any page">
             <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginBottom: 12, fontStyle: "italic" }}>
-              Execute automatically when Claude needs more context. No approval required. Pure Supabase queries.
+              General search and summary tools. Read-only — no approval needed.
             </p>
-            <ToolRow name="search_projects" status="live"
+            <ToolRow name="search_projects" status="live" kind="read"
               desc="Search projects by title, keyword, status, or priority."
               inputs={[
-                { name: "query",    type: "string",  required: false, note: "Text to search in titles and descriptions" },
-                { name: "status",   type: "enum",    required: false, note: "in_progress | planning | on_hold | complete" },
-                { name: "priority", type: "enum",    required: false, note: "high | medium | low" },
+                { name: "query",    type: "string", required: false, note: "Text to search in titles and descriptions" },
+                { name: "status",   type: "enum",   required: false, note: "in_progress | planning | on_hold | complete" },
+                { name: "priority", type: "enum",   required: false, note: "high | medium | low" },
               ]}
             />
-            <ToolRow name="get_project_details" status="live"
-              desc="Full project: tasks, time logged, financial info, linked contacts."
-              inputs={[
-                { name: "project_id", type: "string", required: true, note: "UUID of the project" },
-              ]}
-            />
-            <ToolRow name="search_contacts" status="live"
+            <ToolRow name="search_contacts" status="live" kind="read"
               desc="Search contacts by name, company, title, or tag."
               inputs={[
                 { name: "query",  type: "string", required: false, note: "Name, email, company, or title" },
@@ -577,82 +623,73 @@ export default function DocsPage() {
                 { name: "status", type: "enum",   required: false, note: "active | lead | inactive" },
               ]}
             />
-            <ToolRow name="get_contact_details" status="live"
-              desc="Full contact: company, relationship status, activity feed (last 8 interactions)."
-              inputs={[
-                { name: "contact_id", type: "string", required: true, note: "UUID of the contact" },
-              ]}
-            />
-            <ToolRow name="get_finance_summary" status="live"
-              desc="Revenue snapshot: billable hours, invoice totals (outstanding/overdue/paid), expense breakdown."
-              inputs={[
-                { name: "period", type: "enum", required: false, note: "this_month | last_month | this_quarter | ytd" },
-              ]}
-            />
-            <ToolRow name="search_notes" status="live"
+            <ToolRow name="search_notes" status="live" kind="read"
               desc="Full-text search across all user notes by title or content."
               inputs={[
                 { name: "query", type: "string", required: true, note: "Text to find in note titles and content" },
               ]}
             />
-          </Sub>
-
-          <Sub title="Write tools — live">
-            <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginBottom: 12, fontStyle: "italic" }}>
-              These execute immediately. Ash will describe what it's doing before calling a write tool.
-            </p>
-            <ToolRow name="create_note" status="live"
-              desc="Create a note, optionally linked to a project."
+            <ToolRow name="get_finance_summary" status="live" kind="read"
+              desc="Revenue snapshot: billable hours, invoice totals (outstanding/overdue/paid), expense breakdown by category."
               inputs={[
-                { name: "content",    type: "string", required: true,  note: "Note body" },
-                { name: "title",      type: "string", required: false, note: "Optional title" },
-                { name: "project_id", type: "string", required: false, note: "Link to a project" },
-              ]}
-            />
-            <ToolRow name="create_reminder" status="live"
-              desc="Create a reminder with optional due date and project link."
-              inputs={[
-                { name: "title",       type: "string", required: true,  note: "What to be reminded about" },
-                { name: "due_date",    type: "string", required: false, note: "YYYY-MM-DD or ISO datetime" },
-                { name: "description", type: "string", required: false, note: "Additional detail" },
-                { name: "project_id",  type: "string", required: false, note: "Link to a project" },
+                { name: "period", type: "enum", required: false, note: "this_month | last_month | this_quarter | ytd" },
               ]}
             />
           </Sub>
 
-          <Sub title="Write tools — stubs (activate per module)">
-            <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginBottom: 12, fontStyle: "italic" }}>
-              Schema and infrastructure are defined. Each activates with one function body in write.ts. Comment in the file shows exactly where.
-            </p>
-            <ToolRow name="create_project" status="stub"
-              desc="Create a new project with type, priority, due date, description."
-              note="TODO (Projects module pass) — insert into projects table"
+          {/* ── Projects ── */}
+          <Sub title="Projects">
+            <ToolDivider label="Read" />
+            <ToolRow name="get_project_details" status="live" kind="read"
+              desc="Full project: all tasks, time logged, linked contacts, materials, and financial info."
               inputs={[
-                { name: "title",    type: "string", required: true  },
-                { name: "type",     type: "enum",   required: false, note: "furniture | sculpture | painting | client_project" },
-                { name: "priority", type: "enum",   required: false, note: "high | medium | low" },
-                { name: "due_date", type: "string", required: false },
+                { name: "project_id", type: "string", required: true, note: "UUID of the project" },
               ]}
             />
-            <ToolRow name="update_project_status" status="stub"
-              desc="Change a project's status."
-              note="TODO (Projects module pass)"
+            <ToolDivider label="Write" />
+            <ToolRow name="create_project" status="stub" kind="write"
+              desc="Create a new project with type, priority, due date, and description."
+              note="TODO — lib/ash/tools/write.ts: insert into projects table"
+              inputs={[
+                { name: "title",       type: "string", required: true  },
+                { name: "type",        type: "enum",   required: false, note: "furniture | sculpture | painting | client_project" },
+                { name: "priority",    type: "enum",   required: false, note: "high | medium | low" },
+                { name: "due_date",    type: "string", required: false },
+                { name: "description", type: "string", required: false },
+              ]}
+            />
+            <ToolRow name="update_project_status" status="stub" kind="write"
+              desc="Change a project's status (e.g. mark complete, put on hold)."
+              note="TODO — lib/ash/tools/write.ts"
               inputs={[
                 { name: "project_id", type: "string", required: true },
                 { name: "status",     type: "enum",   required: true, note: "in_progress | planning | on_hold | complete" },
               ]}
             />
-            <ToolRow name="add_task" status="stub"
+            <ToolRow name="add_task" status="stub" kind="write"
               desc="Add a task to a project."
-              note="TODO (Projects module pass)"
+              note="TODO — lib/ash/tools/write.ts"
               inputs={[
                 { name: "project_id", type: "string", required: true },
                 { name: "title",      type: "string", required: true },
               ]}
             />
-            <ToolRow name="create_contact" status="stub"
-              desc="Create a new contact with company, tags, status."
-              note="TODO (Contacts module pass) — may need companies table insert first"
+            <PlannedChips tools={["set_project_priority", "add_contact_to_project", "link_note_to_project"]} />
+          </Sub>
+
+          {/* ── Contacts ── */}
+          <Sub title="Contacts">
+            <ToolDivider label="Read" />
+            <ToolRow name="get_contact_details" status="live" kind="read"
+              desc="Full contact: company, relationship status, last contact date, bio, and recent activity feed (last 8 interactions)."
+              inputs={[
+                { name: "contact_id", type: "string", required: true, note: "UUID of the contact" },
+              ]}
+            />
+            <ToolDivider label="Write" />
+            <ToolRow name="create_contact" status="stub" kind="write"
+              desc="Create a new contact, optionally with company, tags, and status."
+              note="TODO — lib/ash/tools/write.ts: may need companies table insert first"
               inputs={[
                 { name: "first_name", type: "string",   required: true  },
                 { name: "last_name",  type: "string",   required: true  },
@@ -662,35 +699,75 @@ export default function DocsPage() {
                 { name: "status",     type: "enum",     required: false, note: "active | lead | inactive" },
               ]}
             />
-            <ToolRow name="log_contact_activity" status="stub"
-              desc="Log an email, call, meeting, or note against a contact."
-              note="TODO (Contacts module pass)"
+            <ToolRow name="log_contact_activity" status="stub" kind="write"
+              desc="Log an interaction against a contact: email, call, meeting, or note."
+              note="TODO — lib/ash/tools/write.ts"
               inputs={[
                 { name: "contact_id", type: "string", required: true },
                 { name: "type",       type: "enum",   required: true, note: "email | call | meeting | note" },
                 { name: "content",    type: "string", required: true },
               ]}
             />
-            <ToolRow name="log_time" status="stub"
-              desc="Log time worked against a project."
-              note="TODO (Finance module pass)"
-              inputs={[
-                { name: "duration_minutes", type: "number", required: true },
-                { name: "project_id",       type: "string", required: false },
-                { name: "description",      type: "string", required: false },
-                { name: "billable",         type: "boolean",required: false },
-              ]}
-            />
+            <PlannedChips tools={["update_contact_status", "merge_contacts", "update_last_contacted"]} />
           </Sub>
 
-          <Sub title="Planned tools (not yet defined)">
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {["create_invoice","mark_invoice_paid","create_expense","create_outreach_target","update_outreach_stage","add_contact_to_project","pin_note","set_project_priority"].map((t) => (
-                <span key={t} style={{ fontSize: 11, fontFamily: "monospace", padding: "3px 9px", borderRadius: 5, background: "var(--color-surface-sunken)", border: "0.5px solid var(--color-border)", color: "var(--color-text-tertiary)" }}>
-                  {t}
-                </span>
-              ))}
-            </div>
+          {/* ── Notes ── */}
+          <Sub title="Notes">
+            <ToolDivider label="Write" />
+            <ToolRow name="create_note" status="live" kind="write"
+              desc="Create a note for the user, optionally linked to a project."
+              inputs={[
+                { name: "content",    type: "string", required: true,  note: "Note body" },
+                { name: "title",      type: "string", required: false, note: "Optional title" },
+                { name: "project_id", type: "string", required: false, note: "Link to a project" },
+              ]}
+            />
+            <PlannedChips tools={["pin_note", "update_note", "search_notes_semantic"]} />
+          </Sub>
+
+          {/* ── Finance ── */}
+          <Sub title="Finance">
+            <ToolDivider label="Write" />
+            <ToolRow name="log_time" status="stub" kind="write"
+              desc="Log time worked on a project. Converted from hours/minutes to a time_entries record."
+              note="TODO — lib/ash/tools/write.ts"
+              inputs={[
+                { name: "duration_minutes", type: "number",  required: true  },
+                { name: "project_id",       type: "string",  required: false },
+                { name: "description",      type: "string",  required: false },
+                { name: "billable",         type: "boolean", required: false },
+              ]}
+            />
+            <PlannedChips tools={["create_invoice", "mark_invoice_paid", "create_expense", "update_invoice_status"]} />
+          </Sub>
+
+          {/* ── Calendar & Reminders ── */}
+          <Sub title="Calendar & Reminders">
+            <ToolDivider label="Write" />
+            <ToolRow name="create_reminder" status="live" kind="write"
+              desc="Create a reminder with an optional due date and project link."
+              inputs={[
+                { name: "title",       type: "string", required: true,  note: "What to be reminded about" },
+                { name: "due_date",    type: "string", required: false, note: "YYYY-MM-DD or ISO datetime" },
+                { name: "description", type: "string", required: false },
+                { name: "project_id",  type: "string", required: false },
+              ]}
+            />
+            <PlannedChips tools={["mark_reminder_complete", "create_calendar_event", "reschedule_reminder"]} />
+          </Sub>
+
+          {/* ── Coming soon modules ── */}
+          <Sub title="Coming soon modules — no tools yet">
+            {[
+              { module: "Outreach",  planned: ["create_outreach_target", "update_outreach_stage", "log_outreach_touch"] },
+              { module: "Presence",  planned: ["save_opportunity", "update_opportunity_status", "draft_newsletter_section"] },
+              { module: "Resources", planned: ["add_resource_link", "update_resource_status"] },
+            ].map((m) => (
+              <div key={m.module} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "0.5px solid var(--color-border)" }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-tertiary)", width: 96, flexShrink: 0 }}>{m.module}</span>
+                <PlannedChips tools={m.planned} />
+              </div>
+            ))}
           </Sub>
         </Section>
 
@@ -756,6 +833,146 @@ export default function DocsPage() {
               </Card>
             ))}
           </div>
+        </Section>
+
+        {/* ════════════════════════ TESTING — PROJECTS ════════════════════════ */}
+        <Section id="testing-projects" title="Testing — Projects"
+          subtitle="Run end-to-end in a logged-in session against live Supabase. Check off as you go. File lives at Test-Folder/functionality-tests.md.">
+
+          {[
+            {
+              group: "Creation",
+              tests: [
+                "Create with each type: Furniture, Sculpture, Painting, Client",
+                "Create with all fields — verify Supabase row matches exactly",
+                "Create with only title — verify defaults (status: planning, priority: medium)",
+                "DatePicker stores correct YYYY-MM-DD (not datetime)",
+                "Modal closes on backdrop click and Escape key",
+                "Cancel closes without creating",
+                "Cannot submit without title",
+              ],
+            },
+            {
+              group: "Grid & Status",
+              tests: [
+                "New project appears at top of correct status group",
+                "Status ordering: Planning → In Progress → On Hold → Complete → Cut",
+                "Cut section hidden in 'All' view when empty",
+                "Filter tabs show correct counts",
+                "Filtering by each tab shows only matching projects",
+              ],
+            },
+            {
+              group: "Drag and Drop",
+              tests: [
+                "Drag Planning → In Progress: status updates in Supabase",
+                "Drag to Cut: card appears at 65% opacity with red-orange bar",
+                "Drag to Complete: accent bar turns green",
+                "Drop zone appears with dashed border on hover",
+                "Empty group shows 'Drop a project here' hint",
+                "Optimistic update is immediate; write happens in background",
+              ],
+            },
+            {
+              group: "Detail Panel",
+              tests: [
+                "Opening card populates all fields from DB",
+                "Edit title inline — saves on blur",
+                "Edit description inline — saves on blur",
+                "Change status dropdown — DB updates",
+                "Change priority — card badge updates",
+                "Edit type — type-specific fields show/hide correctly",
+                "Edit due date — card deadline badge updates",
+              ],
+            },
+            {
+              group: "Tasks (Checklist)",
+              tests: [
+                "Tasks load from DB on panel open",
+                "Add a task — persists in Supabase",
+                "Check task complete — toggles in DB",
+                "Task progress bar on card reflects completion ratio",
+              ],
+            },
+            {
+              group: "Reminders",
+              tests: [
+                "Create reminder from Reminders tab — appears in DB",
+                "Reminder with due date shows in Today card on Home",
+                "Reminder appears in Calendar module",
+                "Toggle complete — updates DB",
+              ],
+            },
+            {
+              group: "Delete",
+              tests: [
+                "Delete shows confirmation dialog",
+                "Confirm: project removed from DB and grid, panel closes",
+                "Cancel: no change",
+              ],
+            },
+          ].map(({ group, tests }) => (
+            <Sub key={group} title={group}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                {tests.map((t) => (
+                  <div key={t} style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "7px 0", borderBottom: "0.5px solid var(--color-border)" }}>
+                    <div style={{
+                      width: 14, height: 14, borderRadius: 4, border: "1.5px solid var(--color-border)",
+                      flexShrink: 0, marginTop: 1,
+                    }} />
+                    <span style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>{t}</span>
+                  </div>
+                ))}
+              </div>
+            </Sub>
+          ))}
+        </Section>
+
+        {/* ════════════════════════ TESTING — ASH ════════════════════════ */}
+        <Section id="testing-ash" title="Testing — Ash">
+          <Sub title="Core behaviour">
+            {[
+              "Open panel — module-appropriate suggestions appear",
+              "Send message — response streams correctly",
+              "Panel auto-expands on first message",
+              "History dropdown shows past conversations",
+              "Load past conversation — messages restore",
+              "Markdown renders: bold, italic, lists, code blocks",
+              "Conversation persists in Supabase after session ends",
+            ].map((t) => (
+              <div key={t} style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "7px 0", borderBottom: "0.5px solid var(--color-border)" }}>
+                <div style={{ width: 14, height: 14, borderRadius: 4, border: "1.5px solid var(--color-border)", flexShrink: 0, marginTop: 1 }} />
+                <span style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>{t}</span>
+              </div>
+            ))}
+          </Sub>
+          <Sub title="Read tools">
+            {[
+              "search_projects — fires when asking about a named project",
+              "get_project_details — returns tasks and time data",
+              "search_contacts — returns matching contacts by name/company",
+              "get_contact_details — returns activity feed",
+              "get_finance_summary — returns correct period totals",
+              "search_notes — finds notes by content",
+              "Tool indicator shows while tool is running",
+            ].map((t) => (
+              <div key={t} style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "7px 0", borderBottom: "0.5px solid var(--color-border)" }}>
+                <div style={{ width: 14, height: 14, borderRadius: 4, border: "1.5px solid var(--color-border)", flexShrink: 0, marginTop: 1 }} />
+                <span style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>{t}</span>
+              </div>
+            ))}
+          </Sub>
+          <Sub title="Write tools (live)">
+            {[
+              "create_note — note appears in Notes module",
+              "create_reminder — reminder appears in Calendar and Today card",
+            ].map((t) => (
+              <div key={t} style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "7px 0", borderBottom: "0.5px solid var(--color-border)" }}>
+                <div style={{ width: 14, height: 14, borderRadius: 4, border: "1.5px solid var(--color-border)", flexShrink: 0, marginTop: 1 }} />
+                <span style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>{t}</span>
+              </div>
+            ))}
+          </Sub>
         </Section>
 
         {/* Footer */}

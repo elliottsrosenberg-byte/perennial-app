@@ -2,11 +2,13 @@
 
 import { useState, useMemo } from "react";
 import type { Expense, Project, ExpenseCategory } from "@/types/database";
+import EmptyState from "@/components/ui/EmptyState";
 
 interface Props {
   expenses: Expense[];
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
   onExpenseCreated: (e: Expense) => void;
+  onExpenseDeleted: (id: string) => void;
 }
 
 const CAT_CONFIG: Record<ExpenseCategory, { color: string; bg: string; label: string; initial: string }> = {
@@ -21,7 +23,7 @@ function fmtCurrency(n: number) {
   return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
-export default function ExpensesTab({ expenses, projects, onExpenseCreated }: Props) {
+export default function ExpensesTab({ expenses, projects, onExpenseCreated, onExpenseDeleted }: Props) {
   const [filterProject, setFilterProject] = useState("all");
   const [filterCat, setFilterCat]         = useState("all");
   const [filterPeriod, setFilterPeriod]   = useState("month");
@@ -104,19 +106,20 @@ export default function ExpensesTab({ expenses, projects, onExpenseCreated }: Pr
         <div className="flex-1 rounded-xl overflow-hidden" style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)" }}>
           {/* Column headers */}
           <div className="grid px-4 py-2 text-[9px] font-semibold uppercase tracking-wider"
-            style={{ gridTemplateColumns: "28px 1fr 120px 64px 16px 72px", gap: "0.625rem", background: "rgba(31,33,26,0.04)", borderBottom: "0.5px solid var(--color-border)", color: "var(--color-grey)" }}>
+            style={{ gridTemplateColumns: "28px 1fr 120px 64px 16px 72px 24px", gap: "0.625rem", background: "rgba(31,33,26,0.04)", borderBottom: "0.5px solid var(--color-border)", color: "var(--color-grey)" }}>
             <div />
             <div>Description</div>
             <div>Project</div>
             <div>Date</div>
             <div title="Receipt">R</div>
             <div className="text-right">Amount</div>
+            <div />
           </div>
           {filtered.map((e) => {
             const cfg = CAT_CONFIG[e.category];
             return (
-              <div key={e.id} className="grid items-center px-4 py-2.5"
-                style={{ gridTemplateColumns: "28px 1fr 120px 64px 16px 72px", gap: "0.625rem", borderBottom: "0.5px solid var(--color-border)" }}>
+              <div key={e.id} className="grid items-center px-4 py-2.5 group"
+                style={{ gridTemplateColumns: "28px 1fr 120px 64px 16px 72px 24px", gap: "0.625rem", borderBottom: "0.5px solid var(--color-border)" }}>
                 <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-semibold shrink-0"
                   style={{ background: cfg.bg, color: cfg.color }}>{cfg.initial}</div>
                 <div>
@@ -137,11 +140,33 @@ export default function ExpensesTab({ expenses, projects, onExpenseCreated }: Pr
                 <span className="text-[12px] font-semibold tabular-nums text-right" style={{ color: "var(--color-charcoal)" }}>
                   {fmtCurrency(Number(e.amount))}
                 </span>
+                <button
+                  onClick={() => { if (confirm("Delete this expense?")) onExpenseDeleted(e.id); }}
+                  className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded transition-opacity"
+                  style={{ color: "var(--color-grey)" }}
+                  onMouseEnter={ev => ev.currentTarget.style.color = "var(--color-red-orange)"}
+                  onMouseLeave={ev => ev.currentTarget.style.color = "var(--color-grey)"}
+                >
+                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3l10 10M13 3L3 13"/></svg>
+                </button>
               </div>
             );
           })}
-          {filtered.length === 0 && (
-            <p className="px-4 py-6 text-[12px] text-center" style={{ color: "var(--color-grey)" }}>No expenses found.</p>
+          {filtered.length === 0 && expenses.length === 0 && (
+            <EmptyState
+              icon="🧾"
+              heading="Log your studio expenses"
+              body="Track materials, travel, software, production costs, and other expenses by project. Expenses feed into your financial overview and can be included in client invoices."
+              ashPrompt="What expenses should I be tracking as a designer? How do expenses connect to invoicing in Perennial?"
+              tips={[
+                "Log expenses by category: materials, travel, production, software, or other.",
+                "Link an expense to a project to track per-project profitability.",
+                "Expenses can be pulled into invoices as line items when billing a client.",
+              ]}
+            />
+          )}
+          {filtered.length === 0 && expenses.length > 0 && (
+            <p className="px-4 py-6 text-[12px] text-center" style={{ color: "var(--color-grey)" }}>No expenses match this filter.</p>
           )}
         </div>
 

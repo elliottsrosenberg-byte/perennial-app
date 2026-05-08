@@ -1,5 +1,6 @@
 import Sidebar from "@/components/layout/Sidebar";
 import AshContainer from "@/components/ash/AshContainer";
+import OnboardingModal from "@/components/layout/OnboardingModal";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -9,6 +10,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
       <AshContainer />
+      <OnboardingModal />
     </div>
   );
 }

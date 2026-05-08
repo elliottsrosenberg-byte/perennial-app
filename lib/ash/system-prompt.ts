@@ -101,14 +101,27 @@ Teach through their actual data and situation. Abstract advice rarely sticks; ad
 // ─── Dynamic context (user-specific, not cached) ──────────────────────────────
 
 export interface AshContext {
-  module:           string;
-  userEmail:        string | null;
-  projects:         Array<{ id: string; title: string; status: string; due_date: string | null; priority: string }>;
+  module:              string;
+  userEmail:           string | null;
+  studioName:          string | null;
+  displayName:         string | null;
+  location:            string | null;
+  practiceTypes:       string[];
+  workTypes:           string[];
+  sellingChannels:     string[];
+  priceRange:          string | null;
+  yearsInPractice:     string | null;
+  primaryChallenges:   string[];
+  perennialGoals:      string[];
+  currency:            string;
+  hourlyRate:          number | null;
+  projects:            Array<{ id: string; title: string; status: string; due_date: string | null; priority: string }>;
   outstandingInvoices: Array<{ number: number; total: number; due_at: string | null }>;
-  overdueInvoices:  Array<{ number: number; total: number }>;
-  recentNotes:      Array<{ title: string | null; content: string | null; updated_at: string }>;
-  staleContacts:    Array<{ first_name: string; last_name: string; last_contacted_at: string | null; company_name: string | null }>;
-  upcomingReminders:Array<{ title: string; due_date: string | null }>;
+  overdueInvoices:     Array<{ number: number; total: number }>;
+  recentNotes:         Array<{ title: string | null; content: string | null; updated_at: string }>;
+  staleContacts:       Array<{ first_name: string; last_name: string; last_contacted_at: string | null; company_name: string | null }>;
+  upcomingReminders:   Array<{ title: string; due_date: string | null }>;
+  openTasks:           Array<{ title: string; due_date: string | null; priority: string | null; project: string | null }>;
   billableHoursThisMonth: number;
 }
 
@@ -117,7 +130,18 @@ export function buildDynamicContext(ctx: AshContext): string {
 
   lines.push(`## Current context\n`);
   lines.push(`**Module:** ${ctx.module}`);
-  if (ctx.userEmail) lines.push(`**User:** ${ctx.userEmail}`);
+  if (ctx.userEmail)    lines.push(`**User:** ${ctx.userEmail}`);
+  if (ctx.studioName)   lines.push(`**Studio:** ${ctx.studioName}`);
+  if (ctx.displayName)  lines.push(`**Name:** ${ctx.displayName}`);
+  if (ctx.location)     lines.push(`**Location:** ${ctx.location}`);
+  if (ctx.practiceTypes.length > 0)   lines.push(`**Practice types:** ${ctx.practiceTypes.join(", ")}`);
+  if (ctx.workTypes.length > 0)       lines.push(`**Work types:** ${ctx.workTypes.map(w => ({ editions: "Studio editions", bespoke: "Bespoke commissions", client_work: "Client-based design work", wholesale: "Wholesale/retail" }[w] ?? w)).join(", ")}`);
+  if (ctx.sellingChannels.length > 0) lines.push(`**Selling channels:** ${ctx.sellingChannels.map(c => ({ gallery: "Gallery representation", direct: "Direct to collectors", fairs: "Design fairs", trade: "Trade clients", ecommerce: "E-commerce", commissions: "Public/corporate commissions" }[c] ?? c)).join(", ")}`);
+  if (ctx.priceRange)   lines.push(`**Typical price point:** ${{ sub500: "Under $500", "500_2k": "$500–$2,000", "2k_10k": "$2,000–$10,000", "10k_50k": "$10,000–$50,000", over50k: "$50,000+" }[ctx.priceRange] ?? ctx.priceRange}`);
+  if (ctx.yearsInPractice) lines.push(`**Years in practice:** ${{ starting: "Just getting started (<1yr)", finding: "1–3 years", building: "3–7 years", established: "7+ years established" }[ctx.yearsInPractice] ?? ctx.yearsInPractice}`);
+  if (ctx.primaryChallenges.length > 0) lines.push(`**Current challenges:** ${ctx.primaryChallenges.join("; ")}`);
+  if (ctx.perennialGoals.length > 0)    lines.push(`**Goals from Perennial:** ${ctx.perennialGoals.map(g => ({ projects: "project tracking", invoicing: "professional invoicing", time: "time tracking & profitability", contacts: "relationship management", outreach: "gallery outreach", presence: "opportunities & visibility", ash: "AI-assisted decisions" }[g] ?? g)).join(", ")}`);
+  if (ctx.hourlyRate)   lines.push(`**Default hourly rate:** ${ctx.currency} ${ctx.hourlyRate}/hr`);
 
   // Projects
   if (ctx.projects.length > 0) {
@@ -168,6 +192,18 @@ export function buildDynamicContext(ctx: AshContext): string {
         ? new Date(r.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })
         : "no date";
       lines.push(`- ${r.title} · ${due}`);
+    }
+  }
+
+  // Open tasks
+  if (ctx.openTasks.length > 0) {
+    const overdueTasks = ctx.openTasks.filter((t) => t.due_date && t.due_date < new Date().toISOString().split("T")[0]);
+    lines.push(`\n**Open tasks (${ctx.openTasks.length} total${overdueTasks.length > 0 ? `, ${overdueTasks.length} overdue` : ""}):**`);
+    for (const t of ctx.openTasks.slice(0, 6)) {
+      const due = t.due_date ? ` · due ${t.due_date}` : "";
+      const proj = t.project ? ` · ${t.project}` : "";
+      const pri = t.priority && t.priority !== "medium" ? ` · ${t.priority}` : "";
+      lines.push(`- ${t.title}${due}${proj}${pri}`);
     }
   }
 
