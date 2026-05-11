@@ -354,6 +354,11 @@ export default function OnboardingClient({ userId }: { userId: string }) {
       urgent_needs:        data.urgentNeeds || null,
       perennial_goals:     data.goals,
       onboarding_complete: true,
+      // Reset the post-onboarding tour state so a fresh onboarding always
+      // triggers the dashboard walkthrough. (Real users only onboard once;
+      // this matters mostly for testing.)
+      tour_visited:        {},
+      tour_dismissed:      false,
       updated_at:          new Date().toISOString(),
     });
     localStorage.setItem("perennial-just-onboarded", "1");
@@ -371,8 +376,11 @@ export default function OnboardingClient({ userId }: { userId: string }) {
       tagline:             data.tagline || null,
       bio:                 data.bio || null,
       onboarding_complete: true,
+      tour_visited:        {},
+      tour_dismissed:      false,
       updated_at:          new Date().toISOString(),
     });
+    localStorage.setItem("perennial-just-onboarded", "1");
     router.push("/");
     router.refresh();
   }

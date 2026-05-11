@@ -173,31 +173,35 @@ export default function DashboardTour() {
 
   return (
     <>
-      {/* Soft dim — non-blocking so users can still see the page */}
-      <div
-        aria-hidden
-        style={{
-          position: "fixed", inset: 0,
-          background: "rgba(31,33,26,0.22)",
-          zIndex: 40, pointerEvents: "none",
-        }}
-      />
-
-      {/* Highlight ring on the anchored target */}
-      {highlight && (
+      {/* Backdrop. When a target is anchored, use a spotlight cutout via a
+          huge box-shadow on the highlight element so the target itself isn't
+          dimmed. When centered (no anchor), use a uniform soft dim. */}
+      {highlight ? (
         <div
           aria-hidden
           style={{
             position: "fixed",
-            top:  highlight.top,
-            left: highlight.left,
+            top:    highlight.top,
+            left:   highlight.left,
             width:  highlight.w,
             height: highlight.h,
             borderRadius: 16,
-            boxShadow: "0 0 0 2px var(--color-sage), 0 0 0 9999px rgba(31,33,26,0.0)",
+            // Sage ring on the target + a giant dim shadow extending outward.
+            // The element itself is transparent so the underlying card shows
+            // through at full brightness.
+            boxShadow: "0 0 0 2px var(--color-sage), 0 0 0 9999px rgba(31,33,26,0.32)",
             pointerEvents: "none",
-            zIndex: 41,
-            transition: "all 0.18s ease",
+            zIndex: 40,
+            transition: "top 0.18s ease, left 0.18s ease, width 0.18s ease, height 0.18s ease",
+          }}
+        />
+      ) : (
+        <div
+          aria-hidden
+          style={{
+            position: "fixed", inset: 0,
+            background: "rgba(31,33,26,0.32)",
+            zIndex: 40, pointerEvents: "none",
           }}
         />
       )}

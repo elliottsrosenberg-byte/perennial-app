@@ -63,7 +63,11 @@ export default function TourCallout() {
     };
   }, []);
 
-  const next = visited && !dismissed && !waitingAsh ? nextUnvisited(visited) : null;
+  // "home" is owned by DashboardTour (no sidebar anchor). If it's the next
+  // unvisited module, the sidebar callout stays hidden — the dashboard tour
+  // is in charge until the user opens Ash from its final step.
+  const rawNext = visited && !dismissed && !waitingAsh ? nextUnvisited(visited) : null;
+  const next = rawNext && rawNext.key !== "home" ? rawNext : null;
 
   const reposition = useCallback(() => {
     if (!next) { setPos(null); return; }
