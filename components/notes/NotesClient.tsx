@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Note } from "@/types/database";
 import { useEditor, EditorContent, Extension, NodeViewWrapper, NodeViewContent, ReactNodeViewRenderer } from "@tiptap/react";
@@ -1014,6 +1015,18 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
       setSelectedNoteId((data as Note).id);
     }
   }
+
+  // Auto-create a new note when arriving with ?new=1 (e.g. from the home banner).
+  // Strip the query after firing so refresh doesn't keep spawning notes.
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      createNote();
+      router.replace("/notes");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, router]);
 
   function handleNoteUpdate(id: string, fields: Partial<Note>) {
     setNotes(prev => prev.map(n => n.id === id ? { ...n, ...fields, updated_at: new Date().toISOString() } : n));

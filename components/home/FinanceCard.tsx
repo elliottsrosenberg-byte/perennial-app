@@ -103,11 +103,6 @@ export default function FinanceCard({
         </div>
       ))}
 
-      <div className="px-[14px] pt-2.5 pb-2.5" style={{ borderTop: "0.5px solid var(--color-border)" }}>
-        <Link href="/finance" className="text-[11px] hover:underline" style={{ color: "#2563ab" }}>
-          → Create invoice
-        </Link>
-      </div>
     </div>
   );
 }
