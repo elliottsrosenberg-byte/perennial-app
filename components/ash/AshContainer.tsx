@@ -26,7 +26,16 @@ export default function AshContainer() {
 
   const module = getModule(pathname);
 
-  const handleClose    = useCallback(() => { setOpen(false); setExpanded(false); }, []);
+  const handleClose = useCallback(() => {
+    setOpen(false);
+    setExpanded(false);
+    // If this Ash session was opened by the post-onboarding dashboard tour,
+    // clearing the waiting flag here lets the sidebar TourCallout begin.
+    if (typeof window !== "undefined" && sessionStorage.getItem("perennial-tour-waiting-ash") === "1") {
+      sessionStorage.removeItem("perennial-tour-waiting-ash");
+      window.dispatchEvent(new Event("tour-ash-closed"));
+    }
+  }, []);
   const handleExpand   = useCallback(() => setExpanded(true),  []);
   const handleCollapse = useCallback(() => setExpanded(false), []);
 

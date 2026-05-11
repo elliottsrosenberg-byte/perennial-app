@@ -10,15 +10,21 @@ import { useRouter } from "next/navigation";
 import { X as XIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { TOUR_MODULES, nextUnvisited, type TourVisited } from "@/lib/tour";
+import { TOUR_WAITING_KEY } from "@/components/tour/DashboardTour";
 
 interface Pos { top: number; left: number }
 
 export default function TourCallout() {
   const router = useRouter();
-  const [visited,   setVisited]   = useState<TourVisited | null>(null);
-  const [dismissed, setDismissed] = useState<boolean | null>(null);
-  const [pos,       setPos]       = useState<Pos | null>(null);
-  const [hidden,    setHidden]    = useState(false);
+  const [visited,    setVisited]    = useState<TourVisited | null>(null);
+  const [dismissed,  setDismissed]  = useState<boolean | null>(null);
+  const [pos,        setPos]        = useState<Pos | null>(null);
+  const [hidden,     setHidden]     = useState(false);
+  // Suppressed while the user is in the post-onboarding Ash conversation
+  // (DashboardTour final step → Ash open → user hasn't closed Ash yet).
+  const [waitingAsh, setWaitingAsh] = useState<boolean>(() =>
+    typeof window !== "undefined" && sessionStorage.getItem(TOUR_WAITING_KEY) === "1"
+  );
 
   // Initial load
   useEffect(() => {
@@ -42,16 +48,22 @@ export default function TourCallout() {
       const detail = (e as CustomEvent<{ visited: TourVisited }>).detail;
       if (detail?.visited) setVisited(detail.visited);
     }
-    function onDismiss() { setDismissed(true); }
-    window.addEventListener("tour-visited",   onVisit);
-    window.addEventListener("tour-dismissed", onDismiss);
+    function onDismiss()       { setDismissed(true); }
+    function onWaitingAsh()    { setWaitingAsh(true); }
+    function onAshClosed()     { setWaitingAsh(false); }
+    window.addEventListener("tour-visited",     onVisit);
+    window.addEventListener("tour-dismissed",   onDismiss);
+    window.addEventListener("tour-waiting-ash", onWaitingAsh);
+    window.addEventListener("tour-ash-closed",  onAshClosed);
     return () => {
-      window.removeEventListener("tour-visited",   onVisit);
-      window.removeEventListener("tour-dismissed", onDismiss);
+      window.removeEventListener("tour-visited",     onVisit);
+      window.removeEventListener("tour-dismissed",   onDismiss);
+      window.removeEventListener("tour-waiting-ash", onWaitingAsh);
+      window.removeEventListener("tour-ash-closed",  onAshClosed);
     };
   }, []);
 
-  const next = visited && !dismissed ? nextUnvisited(visited) : null;
+  const next = visited && !dismissed && !waitingAsh ? nextUnvisited(visited) : null;
 
   const reposition = useCallback(() => {
     if (!next) { setPos(null); return; }
