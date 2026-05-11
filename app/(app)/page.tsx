@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import Topbar from "@/components/layout/Topbar";
 import NotesCard from "@/components/home/NotesCard";
@@ -28,6 +29,19 @@ function invoiceTotal(inv: RawInvoice) {
 
 export default async function HomePage() {
   const supabase   = await createClient();
+
+  // Force onboarding before the dashboard renders. The proxy guarantees a user
+  // session here, so we only need to check completion.
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("onboarding_complete")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!profile?.onboarding_complete) redirect("/onboarding");
+  }
+
   const now        = new Date();
   const today      = now.toISOString().split("T")[0];
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
