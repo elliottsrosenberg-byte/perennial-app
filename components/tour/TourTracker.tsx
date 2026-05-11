@@ -23,6 +23,11 @@ export default function TourTracker() {
       MODULE_BY_PATH[pathname] ??
       Object.entries(MODULE_BY_PATH).find(([href]) => pathname.startsWith(href + "/"))?.[1];
     if (!matchKey) return;
+    // "home" is owned by the DashboardTour — it gets marked visited only on
+    // tour completion (or skip), not just by landing on /. Auto-marking it
+    // here would race with DashboardTour init and let the sidebar Projects
+    // callout render alongside the dashboard walkthrough.
+    if (matchKey === "home") return;
     if (seenInSession.current.has(matchKey)) return;
     seenInSession.current.add(matchKey);
 
