@@ -4,13 +4,11 @@ import Link from "next/link";
 import Topbar from "@/components/layout/Topbar";
 import NotesCard from "@/components/home/NotesCard";
 import TodayCard from "@/components/home/TodayCard";
+import CalendarCard, { type CalendarItem } from "@/components/home/CalendarCard";
 import FinanceCard from "@/components/home/FinanceCard";
 import ProjectsCard from "@/components/home/ProjectsCard";
 import ContactsCard from "@/components/home/ContactsCard";
-import TimerWidget from "@/components/finance/TimerWidget";
-import QuickTimerButton from "@/components/finance/QuickTimerButton";
 import WelcomeBanner from "@/components/home/WelcomeBanner";
-import type { ActiveTimer, Project } from "@/types/database";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,8 +54,6 @@ export default async function HomePage() {
     { data: rawExpenses },
     { data: rawProjects },
     { data: rawContacts },
-    { data: rawActiveTimer },
-    { data: rawTimerProjects },
   ] = await Promise.all([
     supabase
       .from("notes")
@@ -95,14 +91,6 @@ export default async function HomePage() {
       .or(`last_contacted_at.is.null,last_contacted_at.lt.${thirtyDaysAgo}`)
       .order("last_contacted_at", { ascending: true, nullsFirst: true })
       .limit(4),
-    supabase
-      .from("active_timers")
-      .select("*, project:projects(id, title, type, rate)")
-      .maybeSingle(),
-    supabase
-      .from("projects")
-      .select("id, title, rate")
-      .order("title", { ascending: true }),
   ]);
 
   // ── Finance calculations ───────────────────────────────────────────────────
@@ -126,8 +114,20 @@ export default async function HomePage() {
 
   const expensesTotal = (rawExpenses ?? []).reduce((s, e) => s + Number((e as { amount: number }).amount), 0);
 
+  // Build the Calendar card feed: project deadlines + reminders, future-first
+  const projectsTyped = (rawProjects ?? []) as HomeProject[];
+  const remindersTyped = (rawReminders ?? []) as HomeReminder[];
+  const calendarItems: CalendarItem[] = [
+    ...projectsTyped
+      .filter((p) => p.due_date)
+      .map((p) => ({ id: p.id, title: p.title, date: p.due_date as string, kind: "deadline" as const })),
+    ...remindersTyped
+      .filter((r) => r.due_date)
+      .map((r) => ({ id: r.id, title: r.title, date: r.due_date as string, kind: "reminder" as const })),
+  ];
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       <Topbar
         title="Home"
         greeting
@@ -147,32 +147,37 @@ export default async function HomePage() {
             >
               + New project
             </Link>
-            <QuickTimerButton
-              initialTimer={(rawActiveTimer ?? null) as ActiveTimer | null}
-              projects={(rawTimerProjects ?? []) as Pick<Project, "id" | "title" | "rate">[]}
-            />
           </>
         }
       />
 
       <div
-        className="flex-1 overflow-y-auto p-5"
+        className="flex-1 min-h-0 flex flex-col gap-[14px] p-5"
         style={{ background: "var(--color-warm-white)" }}
       >
-        {/* Welcome banner — only shows immediately after onboarding (client-side check) */}
-        <WelcomeBanner />
+        {/* Row 1 — Ash insights / welcome banner */}
+        <div className="flex-shrink-0">
+          <WelcomeBanner />
+        </div>
 
+        {/* Row 2 — Notes / Reminders / Calendar */}
         <div
-          className="grid gap-[14px]"
-          style={{ gridTemplateColumns: "1fr 1fr 320px" }}
+          className="flex-1 min-h-0 grid gap-[14px]"
+          style={{ gridTemplateColumns: "1fr 1fr 1fr" }}
         >
           <NotesCard notes={(rawNotes ?? []) as HomeNote[]} />
-
           <TodayCard
-            reminders={(rawReminders ?? []) as HomeReminder[]}
+            reminders={remindersTyped}
             overdueInvoices={overdueInvoices}
           />
+          <CalendarCard items={calendarItems} />
+        </div>
 
+        {/* Row 3 — Finance / Projects / Contacts */}
+        <div
+          className="flex-1 min-h-0 grid gap-[14px]"
+          style={{ gridTemplateColumns: "1fr 1fr 1fr" }}
+        >
           <FinanceCard
             billableHours={billableMinutes / 60}
             billableAmount={billableAmount}
@@ -183,15 +188,8 @@ export default async function HomePage() {
             overdueInvoiceNumber={overdueInvoices[0]?.number ?? null}
             expensesTotal={expensesTotal}
           />
-
-          <ProjectsCard projects={(rawProjects ?? []) as HomeProject[]} />
-
+          <ProjectsCard projects={projectsTyped} />
           <ContactsCard contacts={(rawContacts ?? []) as unknown as HomeContact[]} />
-
-          <TimerWidget
-            initialTimer={(rawActiveTimer ?? null) as ActiveTimer | null}
-            projects={(rawTimerProjects ?? []) as Pick<Project, "id" | "title" | "rate">[]}
-          />
         </div>
       </div>
 
