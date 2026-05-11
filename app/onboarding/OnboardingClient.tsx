@@ -911,7 +911,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                   onMouseLeave={e => (e.currentTarget.style.opacity = saving ? "0.7" : "1")}
                 >
                   <AshMark size={14} variant="on-dark" />
-                  {saving ? "Saving…" : "Open Ash & get started"}
+                  {saving ? "Saving…" : "Get started"}
                 </button>
               </div>
             </div>
