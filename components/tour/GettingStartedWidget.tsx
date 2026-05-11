@@ -1,22 +1,21 @@
 "use client";
 
-// Sidebar widget that sits above Settings and shows getting-started progress.
-// Collapses to a tiny one-line bar; expands on click to a checklist of all
-// modules with visit checkmarks. Hides entirely when fully visited or the
-// user has dismissed the tour.
+// Sidebar widget above Settings. Always-visible richer card showing
+// progress + the next module the user should explore. No click-to-expand.
+// Collapses to a thin progress pill when the sidebar is collapsed.
+// Hides entirely when fully visited or the user has dismissed the tour.
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Check, X as XIcon } from "lucide-react";
+import { X as XIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { TOUR_MODULES, type TourVisited, progress } from "@/lib/tour";
+import { type TourVisited, progress, nextUnvisited } from "@/lib/tour";
 
 interface Props { expanded: boolean }
 
 export default function GettingStartedWidget({ expanded }: Props) {
   const [visited,   setVisited]   = useState<TourVisited | null>(null);
   const [dismissed, setDismissed] = useState<boolean | null>(null);
-  const [open,      setOpen]      = useState(false);
 
   // Initial load
   useEffect(() => {
@@ -44,9 +43,10 @@ export default function GettingStartedWidget({ expanded }: Props) {
     return () => window.removeEventListener("tour-visited", onVisit);
   }, []);
 
-  async function dismiss() {
+  async function dismiss(e?: React.MouseEvent) {
+    e?.preventDefault();
+    e?.stopPropagation();
     setDismissed(true);
-    setOpen(false);
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -59,15 +59,16 @@ export default function GettingStartedWidget({ expanded }: Props) {
   const { done, total } = progress(visited);
   if (done >= total) return null;
 
-  const pct = Math.round((done / total) * 100);
+  const pct  = Math.round((done / total) * 100);
+  const next = nextUnvisited(visited);
 
-  // Collapsed sidebar — show a thin pill only
+  // Collapsed sidebar — show only a thin pill (with tooltip on hover)
   if (!expanded) {
     return (
       <div style={{ padding: "6px 7px" }}>
         <div
           aria-label={`Getting started: ${done} of ${total} modules visited`}
-          title={`Getting started: ${done}/${total}`}
+          title={`Getting started · ${done}/${total}${next ? ` · next: ${next.label}` : ""}`}
           style={{
             height: 4, borderRadius: 4, width: "100%",
             background: "var(--sidebar-divider)", overflow: "hidden",
@@ -81,98 +82,89 @@ export default function GettingStartedWidget({ expanded }: Props) {
 
   return (
     <div style={{ padding: "6px 7px 8px" }}>
-      <button
-        onClick={() => setOpen((v) => !v)}
+      <div
         style={{
-          display: "flex", flexDirection: "column", gap: 6,
-          width: "100%", padding: "8px 10px",
+          display: "flex", flexDirection: "column", gap: 10,
+          width: "100%", padding: "10px 11px",
           background: "var(--sidebar-hover-bg)",
           border: "0.5px solid var(--sidebar-divider)",
-          borderRadius: 8, cursor: "pointer",
+          borderRadius: 8,
           fontFamily: "inherit", textAlign: "left",
         }}
       >
+        {/* Header: title + count + dismiss */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--sidebar-text-hover)" }}>Getting started</span>
-          <span style={{ fontSize: 10, color: "var(--sidebar-soon-text)" }}>{done}/{total}</span>
-        </div>
-        <div style={{ height: 4, borderRadius: 4, width: "100%", background: "var(--sidebar-divider)", overflow: "hidden" }}>
-          <div style={{ width: `${pct}%`, height: "100%", background: "var(--color-sage)", transition: "width 0.3s ease" }} />
-        </div>
-      </button>
-
-      {open && (
-        <div
-          style={{
-            marginTop: 8, padding: "10px 6px 6px",
-            background: "var(--sidebar-active-bg)",
-            border: "0.5px solid var(--sidebar-divider)",
-            borderRadius: 8,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "0 8px 10px", gap: 8 }}>
-            <div>
-              <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--sidebar-soon-text)", marginBottom: 4 }}>
-                Your first week
-              </p>
-              <p style={{ fontSize: 10, color: "var(--sidebar-soon-text)", lineHeight: 1.5 }}>
-                Visit each module to see what it does. Ash learns from where you spend time.
-              </p>
-            </div>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--sidebar-text-hover)" }}>
+            Getting started
+          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 10, color: "var(--sidebar-soon-text)" }}>{done}/{total}</span>
             <button
-              onClick={(e) => { e.stopPropagation(); dismiss(); }}
+              onClick={dismiss}
               aria-label="Skip tour"
               title="Skip tour"
               style={{
                 background: "none", border: "none", padding: 2, cursor: "pointer",
                 color: "var(--sidebar-soon-text)", display: "flex", alignItems: "center",
-                flexShrink: 0,
+                borderRadius: 4,
               }}
             >
               <XIcon size={11} />
             </button>
           </div>
-          {TOUR_MODULES.map((m) => {
-            const done = Boolean(visited[m.key]);
-            return (
-              <Link
-                key={m.key}
-                href={m.href}
-                style={{
-                  display: "flex", alignItems: "flex-start", gap: 8,
-                  padding: "7px 8px", borderRadius: 6,
-                  fontFamily: "inherit", textDecoration: "none",
-                }}
-              >
-                <div
-                  style={{
-                    width: 14, height: 14, borderRadius: "50%", flexShrink: 0, marginTop: 1,
-                    background: done ? "var(--color-sage)" : "transparent",
-                    border: done ? "none" : "1px solid var(--sidebar-divider)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}
-                >
-                  {done && <Check size={9} strokeWidth={3} color="white" />}
-                </div>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <p style={{
-                    fontSize: 11, fontWeight: 500, lineHeight: 1.3,
-                    color: done ? "var(--sidebar-soon-text)" : "var(--sidebar-text-hover)",
-                    textDecoration: done ? "line-through" : "none",
-                  }}>
-                    {m.label}
-                  </p>
-                  {!done && (
-                    <p style={{ fontSize: 10, color: "var(--sidebar-soon-text)", lineHeight: 1.4, marginTop: 2 }}>
-                      {m.blurb}
-                    </p>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
         </div>
-      )}
+
+        {/* Progress bar */}
+        <div style={{ height: 4, borderRadius: 4, width: "100%", background: "var(--sidebar-divider)", overflow: "hidden" }}>
+          <div style={{ width: `${pct}%`, height: "100%", background: "var(--color-sage)", transition: "width 0.3s ease" }} />
+        </div>
+
+        {/* Up next — the actionable bit */}
+        {next && next.key !== "home" && (
+          <Link
+            href={next.href}
+            style={{
+              display: "flex", flexDirection: "column", gap: 3,
+              textDecoration: "none", fontFamily: "inherit",
+              padding: "6px 8px", margin: "-2px -2px 0",
+              borderRadius: 6,
+              background: "var(--sidebar-active-bg)",
+            }}
+          >
+            <span style={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--sidebar-soon-text)" }}>
+              Up next
+            </span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--sidebar-text-active)", lineHeight: 1.2 }}>
+              {next.label} →
+            </span>
+            <span style={{ fontSize: 10, color: "var(--sidebar-soon-text)", lineHeight: 1.4 }}>
+              {next.blurb}
+            </span>
+          </Link>
+        )}
+
+        {/* Special case: home not yet done — refer to the on-screen tour */}
+        {next && next.key === "home" && (
+          <div
+            style={{
+              display: "flex", flexDirection: "column", gap: 3,
+              padding: "6px 8px", margin: "-2px -2px 0",
+              borderRadius: 6,
+              background: "var(--sidebar-active-bg)",
+            }}
+          >
+            <span style={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--sidebar-soon-text)" }}>
+              Up next
+            </span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--sidebar-text-active)", lineHeight: 1.2 }}>
+              Dashboard tour
+            </span>
+            <span style={{ fontSize: 10, color: "var(--sidebar-soon-text)", lineHeight: 1.4 }}>
+              Walk through the home dashboard to begin.
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
