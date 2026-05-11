@@ -38,7 +38,7 @@ export default function ContactsCard({ contacts }: { contacts: HomeContact[] }) 
         style={{ borderBottom: "0.5px solid var(--color-border)" }}
       >
         <span className="text-[12px] font-semibold flex-1" style={{ color: "var(--color-charcoal)" }}>
-          Needs attention
+          Contacts
         </span>
         {contacts.length > 0 && (
           <span
@@ -100,15 +100,6 @@ export default function ContactsCard({ contacts }: { contacts: HomeContact[] }) 
         })
       )}
 
-      <Link
-        href="/contacts"
-        className="flex items-center px-[14px] py-[9px] text-[11px] w-full transition-colors"
-        style={{ borderTop: "0.5px solid var(--color-border)", color: "var(--color-grey)", background: "transparent" }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-      >
-        <span className="mr-1.5">+</span> Add contact
-      </Link>
     </div>
   );
 }

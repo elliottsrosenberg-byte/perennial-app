@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import Topbar from "@/components/layout/Topbar";
 import NotesCard from "@/components/home/NotesCard";
-import TodayCard from "@/components/home/TodayCard";
+import TasksCard, { type HomeTask } from "@/components/home/TasksCard";
 import FinanceCard from "@/components/home/FinanceCard";
 import ProjectsCard from "@/components/home/ProjectsCard";
 import ContactsCard from "@/components/home/ContactsCard";
@@ -14,7 +14,6 @@ import type { ActiveTimer, Project } from "@/types/database";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type HomeNote    = { id: string; title: string | null; content: string | null; updated_at: string };
-type HomeReminder = { id: string; title: string; due_date: string | null };
 type RawInvoice  = { id: string; number: number; due_at: string | null; line_items: { amount: number }[] };
 type HomeTimeEntry = { duration_minutes: number; billable: boolean; project: { rate: number | null } | null };
 type HomeProject = { id: string; title: string; status: string; due_date: string | null; priority: string };
@@ -44,12 +43,11 @@ export default async function HomePage() {
   const now        = new Date();
   const today      = now.toISOString().split("T")[0];
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000).toISOString().split("T")[0];
 
   const [
     { data: rawNotes },
-    { data: rawReminders },
+    { data: rawTasks },
     { data: rawSentInvoices },
     { data: rawTimeEntries },
     { data: rawExpenses },
@@ -64,11 +62,11 @@ export default async function HomePage() {
       .order("updated_at", { ascending: false })
       .limit(5),
     supabase
-      .from("reminders")
-      .select("id, title, due_date")
+      .from("tasks")
+      .select("id, title, due_date, priority, completed, project:projects(id, title)")
       .eq("completed", false)
-      .lte("due_date", endOfToday)
-      .order("due_date", { ascending: true }),
+      .order("due_date", { ascending: true, nullsFirst: false })
+      .limit(8),
     supabase
       .from("invoices")
       .select("id, number, due_at, line_items:invoice_line_items(amount)")
@@ -126,7 +124,7 @@ export default async function HomePage() {
   const expensesTotal = (rawExpenses ?? []).reduce((s, e) => s + Number((e as { amount: number }).amount), 0);
 
   const projectsTyped = (rawProjects ?? []) as HomeProject[];
-  const remindersTyped = (rawReminders ?? []) as HomeReminder[];
+  const tasksTyped    = (rawTasks ?? []) as unknown as HomeTask[];
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -136,14 +134,14 @@ export default async function HomePage() {
         actions={
           <>
             <Link
-              href="/notes"
+              href="/notes?new=1"
               className="px-[13px] py-[5px] text-[11px] font-medium rounded-md text-white transition-opacity hover:opacity-90 inline-flex items-center leading-none"
               style={{ background: "var(--color-sage)" }}
             >
               + Quick note
             </Link>
             <Link
-              href="/projects"
+              href="/projects?new=1"
               className="px-[13px] py-[5px] text-[11px] font-medium rounded-md transition-colors inline-flex items-center leading-none"
               style={{ background: "transparent", color: "#6b6860", border: "0.5px solid var(--color-border)" }}
             >
@@ -170,10 +168,7 @@ export default async function HomePage() {
           style={{ gridTemplateColumns: "1fr 1fr 1fr", gridTemplateRows: "1fr 1fr" }}
         >
           <NotesCard notes={(rawNotes ?? []) as HomeNote[]} />
-          <TodayCard
-            reminders={remindersTyped}
-            overdueInvoices={overdueInvoices}
-          />
+          <TasksCard initialTasks={tasksTyped} />
           <FinanceCard
             billableHours={billableMinutes / 60}
             billableAmount={billableAmount}

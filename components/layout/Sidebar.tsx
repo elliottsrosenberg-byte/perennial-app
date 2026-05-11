@@ -104,8 +104,9 @@ export default function Sidebar() {
 
   const [expanded,    setExpanded]    = useState(true);
   const [theme,       setTheme]       = useState<"light" | "dark">("light");
-  const [userEmail,   setUserEmail]   = useState<string | null>(null);
-  const [studioName,  setStudioName]  = useState<string | null>(null);
+  const [userEmail,    setUserEmail]    = useState<string | null>(null);
+  const [profileName,  setProfileName]  = useState<string | null>(null);
+  const [studioName,   setStudioName]   = useState<string | null>(null);
   const [appMenuOpen, setAppMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [tooltip,     setTooltip]     = useState<TooltipState | null>(null);
@@ -126,10 +127,11 @@ export default function Sidebar() {
       setUserEmail(data.user.email ?? null);
       const { data: prof } = await supabase
         .from("profiles")
-        .select("studio_name")
+        .select("studio_name, display_name")
         .eq("user_id", data.user.id)
         .maybeSingle();
-      if (prof?.studio_name) setStudioName(prof.studio_name);
+      if (prof?.studio_name)  setStudioName(prof.studio_name);
+      if (prof?.display_name) setProfileName(prof.display_name);
     });
   }, []);
 
@@ -186,10 +188,9 @@ export default function Sidebar() {
   }
   const hideTip = () => setTooltip(null);
 
-  const userInitial = userEmail ? userEmail[0].toUpperCase() : "—";
-  const displayName = userEmail
-    ? userEmail.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-    : "Loading…";
+  const displayName = profileName
+    ?? (userEmail ? userEmail.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Loading…");
+  const userInitial = (profileName?.[0] ?? userEmail?.[0] ?? "—").toUpperCase();
 
   const PROFILE_MENU: MenuContent[] = [
     { label: "Edit profile",     icon: UserCog, href: "/settings" },

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import { createClient } from "@/lib/supabase/client";
 import type { Project, ProjectStatus } from "@/types/database";
@@ -41,6 +42,17 @@ export default function ProjectsClient({ initialProjects }: Props) {
   const [showModal,       setShowModal]       = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [dragging,        setDragging]        = useState(false);
+
+  // Auto-open the New Project modal when arriving with ?new=1 (e.g. from
+  // the home banner). Strip the query once consumed so refreshes don't re-trigger.
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      setShowModal(true);
+      router.replace("/projects");
+    }
+  }, [searchParams, router]);
 
   const visible = filter === "all" ? projects : projects.filter((p) => p.status === filter);
 
