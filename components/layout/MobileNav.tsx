@@ -107,15 +107,15 @@ export default function MobileNav() {
         />
       )}
 
-      {/* Drawer */}
+      {/* Drawer — matches desktop sidebar tokens so the visual language is identical */}
       <aside
         aria-hidden={!open}
         style={{
           position: "fixed",
           top: 0, bottom: 0, left: 0,
           width: 280, maxWidth: "85vw",
-          background: "var(--color-charcoal)",
-          color: "var(--color-warm-white)",
+          background: "var(--color-sidebar-bg)",
+          color: "var(--sidebar-text)",
           zIndex: 100,
           transform: open ? "translateX(0)" : "translateX(-100%)",
           transition: "transform 0.22s ease",
@@ -128,15 +128,15 @@ export default function MobileNav() {
           style={{
             display: "flex", alignItems: "center", justifyContent: "space-between",
             padding: "16px 16px",
-            borderBottom: "0.5px solid rgba(245,241,233,0.1)",
+            borderBottom: "0.5px solid var(--sidebar-divider)",
           }}
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(245,241,233,0.96)" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--sidebar-text-active)" }}>
               {profileName ?? "Loading…"}
             </span>
             {studioName && (
-              <span style={{ fontSize: 11, color: "rgba(245,241,233,0.55)" }}>
+              <span style={{ fontSize: 11, color: "var(--sidebar-soon-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {studioName}
               </span>
             )}
@@ -146,8 +146,8 @@ export default function MobileNav() {
             aria-label="Close navigation"
             style={{
               background: "none", border: "none", padding: 6, cursor: "pointer",
-              color: "rgba(245,241,233,0.7)", display: "flex", alignItems: "center", justifyContent: "center",
-              borderRadius: 6,
+              color: "var(--sidebar-text-hover)", display: "flex", alignItems: "center", justifyContent: "center",
+              borderRadius: 6, flexShrink: 0,
             }}
           >
             <XIcon size={18} />
@@ -168,8 +168,8 @@ export default function MobileNav() {
                   borderRadius: 8,
                   fontSize: 13, fontWeight: 500,
                   fontFamily: "inherit", textDecoration: "none",
-                  background: active ? "rgba(245,241,233,0.08)" : "transparent",
-                  color: active ? "rgba(245,241,233,0.96)" : "rgba(245,241,233,0.7)",
+                  background: active ? "var(--sidebar-active-bg)" : "transparent",
+                  color: active ? "var(--sidebar-text-active)" : "var(--sidebar-text)",
                 }}
               >
                 <Icon size={17} strokeWidth={1.75} />
@@ -180,14 +180,14 @@ export default function MobileNav() {
         </nav>
 
         {/* Footer */}
-        <div style={{ padding: "10px", borderTop: "0.5px solid rgba(245,241,233,0.1)", display: "flex", flexDirection: "column", gap: 2 }}>
+        <div style={{ padding: "10px", borderTop: "0.5px solid var(--sidebar-divider)", display: "flex", flexDirection: "column", gap: 2 }}>
           <Link
             href="/settings"
             style={{
               display: "flex", alignItems: "center", gap: 12,
               padding: "10px 12px", borderRadius: 8,
               fontSize: 13, fontFamily: "inherit", textDecoration: "none",
-              color: "rgba(245,241,233,0.7)",
+              color: "var(--sidebar-text)",
             }}
           >
             <Settings size={17} strokeWidth={1.75} />
@@ -199,7 +199,7 @@ export default function MobileNav() {
               display: "flex", alignItems: "center", gap: 12,
               padding: "10px 12px", borderRadius: 8,
               fontSize: 13, fontFamily: "inherit", border: "none", cursor: "pointer",
-              background: "transparent", color: "rgba(245,241,233,0.7)",
+              background: "transparent", color: "var(--sidebar-text)",
               width: "100%", textAlign: "left",
             }}
           >

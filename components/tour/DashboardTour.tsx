@@ -6,17 +6,16 @@
 // tour by navigating to /projects.
 
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { X as XIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { type TourVisited } from "@/lib/tour";
 
 interface Step {
-  id:       string;
-  title:    string;
-  body:     string;
-  anchor:   string | null;
-  finalCta?: { label: string; href: string };
+  id:        string;
+  title:     string;
+  body:      string;
+  anchor:    string | null;
+  finalCta?: { label: string };
 }
 
 const STEPS: Step[] = [
@@ -40,17 +39,21 @@ const STEPS: Step[] = [
   },
   {
     id:       "ash",
-    title:    "Meet Ash & navigate",
-    body:     "Ash (bottom-right) is your AI partner with full studio context. The sidebar takes you deeper into each module. Ready? Let's start with Projects.",
+    title:    "Meet Ash",
+    body:     "Ash is your AI partner with full studio context — bottom-right of every page. Open it now and Ash will get to know you. We'll show you the rest of the modules after.",
     anchor:   ".ash-fab",
-    finalCta: { label: "Open Projects →", href: "/projects" },
+    finalCta: { label: "Open Ash →" },
   },
 ];
+
+// Session flag: set when the tour's final step opens Ash, so the sidebar
+// TourCallout stays hidden until Ash is closed. The AshContainer's close
+// handler clears this and fires a "tour-ash-closed" event.
+export const TOUR_WAITING_KEY = "perennial-tour-waiting-ash";
 
 const W = 320;
 
 export default function DashboardTour() {
-  const router = useRouter();
   const [stepIdx, setStepIdx] = useState(0);
   const [active,  setActive]  = useState<boolean | null>(null);
   const [pos,     setPos]     = useState<{ top: number; left: number } | null>(null);
@@ -131,10 +134,22 @@ export default function DashboardTour() {
     window.dispatchEvent(new CustomEvent("tour-visited", { detail: { visited: next } }));
   }
 
-  async function finish(navigateTo?: string) {
+  async function finishAndOpenAsh() {
+    // Mark the dashboard portion of the tour complete so the GettingStarted
+    // widget reflects it. Then hand off to Ash with the onboarding prompt —
+    // and set the waiting flag so the sidebar TourCallout stays hidden until
+    // the user closes Ash.
     await markHomeVisited();
     setActive(false);
-    if (navigateTo) router.push(navigateTo);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(TOUR_WAITING_KEY, "1");
+      window.dispatchEvent(new Event("tour-waiting-ash"));
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("open-ash", {
+          detail: { message: "I just finished onboarding." },
+        }));
+      }, 250);
+    }
   }
 
   async function skip() {
@@ -243,7 +258,7 @@ export default function DashboardTour() {
           </button>
           <button
             onClick={() => {
-              if (isLast) finish(step.finalCta?.href);
+              if (isLast) finishAndOpenAsh();
               else        setStepIdx((i) => i + 1);
             }}
             style={{

@@ -37,8 +37,7 @@ export default function WelcomeBanner() {
 
   useEffect(() => {
     if (!localStorage.getItem("perennial-just-onboarded")) return;
-    // Clear the flag immediately so a refresh or remount doesn't refire Ash.
-    // The banner stays visible via state, dismissed via state.
+    // Clear the flag immediately so a refresh or remount doesn't reshow.
     localStorage.removeItem("perennial-just-onboarded");
 
     const supabase = createClient();
@@ -55,15 +54,8 @@ export default function WelcomeBanner() {
         setChallenges(prof.primary_challenges ?? []);
       }
       setVisible(true);
-
-      // Auto-open Ash. Ash has the full profile via its system context, so
-      // the user message stays minimal. Conversational posture lives in
-      // Ash's system prompt.
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent("open-ash", {
-          detail: { message: "I just finished onboarding." },
-        }));
-      }, 700);
+      // Note: Ash is NOT auto-opened here. The DashboardTour handles that
+      // as its final step so the user sees the walkthrough first.
     });
   }, []);
 
