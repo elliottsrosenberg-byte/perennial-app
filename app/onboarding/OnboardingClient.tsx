@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { Layers, Users, Receipt, Send } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import AshMark from "@/components/ui/AshMark";
 
@@ -97,14 +98,14 @@ function Chip({
         padding: sub ? "10px 14px" : "7px 14px",
         borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
         transition: "all 0.1s ease", textAlign: "left",
-        background: selected ? "var(--color-charcoal)" : "var(--color-off-white)",
+        background: selected ? "var(--color-sage)" : "var(--color-off-white)",
         color:      selected ? "var(--color-warm-white)" : "#6b6860",
-        border:     `0.5px solid ${selected ? "var(--color-charcoal)" : "var(--color-border)"}`,
+        border:     `0.5px solid ${selected ? "var(--color-sage)" : "var(--color-border)"}`,
         display: "flex", flexDirection: "column", gap: 2,
       }}
     >
       <span style={{ fontSize: 12, fontWeight: 500 }}>{children}</span>
-      {sub && <span style={{ fontSize: 10, opacity: selected ? 0.7 : 0.8 }}>{sub}</span>}
+      {sub && <span style={{ fontSize: 10, opacity: selected ? 0.8 : 0.8 }}>{sub}</span>}
     </button>
   );
 }
@@ -119,19 +120,66 @@ function SingleChip({
         padding: sub ? "10px 14px" : "7px 14px",
         borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
         transition: "all 0.1s ease", textAlign: "left",
-        background: selected ? "var(--color-charcoal)" : "var(--color-off-white)",
+        background: selected ? "var(--color-sage)" : "var(--color-off-white)",
         color:      selected ? "var(--color-warm-white)" : "#6b6860",
-        border:     `0.5px solid ${selected ? "var(--color-charcoal)" : "var(--color-border)"}`,
+        border:     `0.5px solid ${selected ? "var(--color-sage)" : "var(--color-border)"}`,
         display: "flex", flexDirection: "column", gap: 2,
         position: "relative",
       }}
     >
       {selected && (
-        <span style={{ position: "absolute", top: 8, right: 10, fontSize: 10, opacity: 0.7 }}>✓</span>
+        <span style={{ position: "absolute", top: 8, right: 10, fontSize: 10, opacity: 0.8 }}>✓</span>
       )}
       <span style={{ fontSize: 12, fontWeight: 500 }}>{children}</span>
-      {sub && <span style={{ fontSize: 10, opacity: selected ? 0.7 : 0.8 }}>{sub}</span>}
+      {sub && <span style={{ fontSize: 10, opacity: selected ? 0.8 : 0.8 }}>{sub}</span>}
     </button>
+  );
+}
+
+function OtherInput({
+  values, knownIds, onAdd, placeholder = "Add your own",
+}: { values: string[]; knownIds: string[]; onAdd: (v: string) => void; placeholder?: string }) {
+  const [val, setVal] = useState("");
+  function submit() {
+    const v = val.trim();
+    if (!v) return;
+    if (knownIds.includes(v) || values.includes(v)) { setVal(""); return; }
+    onAdd(v);
+    setVal("");
+  }
+  const ready = val.trim().length > 0;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+      <span style={{ fontSize: 11, color: "var(--color-grey)", flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>Other</span>
+      <input
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); submit(); } }}
+        placeholder={placeholder}
+        style={{
+          flex: 1, padding: "7px 11px", fontSize: 12,
+          background: "var(--color-off-white)",
+          border: "0.5px solid var(--color-border)", borderRadius: 9,
+          color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none",
+        }}
+        onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
+        onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
+      />
+      <button
+        type="button"
+        onClick={submit}
+        disabled={!ready}
+        style={{
+          fontSize: 11, fontWeight: 600,
+          background: ready ? "var(--color-sage)" : "var(--color-cream)",
+          color: ready ? "var(--color-warm-white)" : "var(--color-grey)",
+          border: "none", borderRadius: 8, padding: "7px 14px",
+          cursor: ready ? "pointer" : "not-allowed", fontFamily: "inherit",
+        }}
+      >
+        Add
+      </button>
+    </div>
   );
 }
 
@@ -318,30 +366,56 @@ export default function OnboardingClient({ userId }: { userId: string }) {
               boxShadow: "var(--shadow-card)",
               overflow: "hidden",
             }}>
-              <div style={{ background: ASH_GRADIENT, padding: "40px 40px 32px", textAlign: "center" }}>
-                <div style={{ width: 56, height: 56, borderRadius: "50%", background: "rgba(255,255,255,0.18)", margin: "0 auto 16px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <AshMark size={30} variant="on-dark" animate />
+              {/* Hero — charcoal panel with botanical, matches login */}
+              <div style={{ position: "relative", background: "#1f211a", padding: "44px 40px 40px", textAlign: "center", overflow: "hidden" }}>
+                <img
+                  src="/botanicals/Botanical Illustrations.png"
+                  aria-hidden="true"
+                  alt=""
+                  style={{
+                    position: "absolute", bottom: "-30%", right: "-20%",
+                    width: 460, height: "auto", opacity: 0.5,
+                    pointerEvents: "none", userSelect: "none",
+                  }}
+                />
+                <div style={{ position: "relative", zIndex: 1 }}>
+                  <Image
+                    src="/Logotype.svg" alt="Perennial"
+                    width={140} height={32}
+                    style={{ height: "auto", opacity: 0.95, margin: "0 auto 20px", display: "block" }}
+                  />
+                  <h1 style={{
+                    fontFamily: "var(--font-newsreader)",
+                    fontSize: 30, fontWeight: 400, lineHeight: 1.15,
+                    color: "#f5f1e9", letterSpacing: "-0.01em",
+                    marginBottom: 10,
+                  }}>
+                    Welcome to Perennial.
+                  </h1>
+                  <p style={{ fontSize: 13, color: "rgba(245,241,233,0.65)", lineHeight: 1.6, maxWidth: 380, margin: "0 auto" }}>
+                    Studio management for independent designers and makers.
+                  </p>
                 </div>
-                <h1 style={{ fontSize: 28, fontWeight: 700, color: "white", fontFamily: "var(--font-display)", marginBottom: 8, letterSpacing: "-0.02em" }}>
-                  Welcome to Perennial.
-                </h1>
-                <p style={{ fontSize: 13, color: "rgba(255,255,255,0.78)", lineHeight: 1.65, maxWidth: 380, margin: "0 auto" }}>
-                  Studio management for independent designers. Built around the way you actually work — not around spreadsheets.
-                </p>
               </div>
 
               <div style={{ padding: "28px 40px 0" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   {[
-                    { icon: "🗂", label: "Projects",  body: "Every piece of work you're making, selling, or pitching — tracked with tasks, timelines, linked contacts, and value." },
-                    { icon: "👥", label: "Contacts",  body: "Galleries, collectors, press, clients, fabricators. Know who you know and when you last connected." },
-                    { icon: "💰", label: "Finance",   body: "Time tracking, expenses, and invoicing in one place. Understand what you're earning and what you're owed." },
-                    { icon: "📬", label: "Outreach",  body: "Pipeline management for gallery submissions, press pitches, fair applications, and client pursuits." },
-                    { icon: "✦",  label: "Ash",       body: "Your AI business partner — Ash has full context on your studio and can answer questions, create records, and help you think.", ash: true },
-                  ].map(({ icon, label, body, ash }) => (
+                    { Icon: Layers,  label: "Projects", body: "Every piece of work you're making, selling, or pitching — tracked with tasks, timelines, linked contacts, and value." },
+                    { Icon: Users,   label: "Contacts", body: "Galleries, collectors, press, clients, fabricators. Know who you know and when you last connected." },
+                    { Icon: Receipt, label: "Finance",  body: "Time tracking, expenses, and invoicing in one place. Understand what you're earning and what you're owed." },
+                    { Icon: Send,    label: "Outreach", body: "Pipeline management for gallery submissions, press pitches, fair applications, and client pursuits." },
+                    { Icon: null,    label: "Ash",      body: "Your AI business partner — Ash has full context on your studio and can answer questions, create records, and help you think.", ash: true },
+                  ].map(({ Icon, label, body, ash }) => (
                     <div key={label} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-                      <div style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, background: ash ? "rgba(155,163,122,0.12)" : "var(--color-off-white)", border: `0.5px solid ${ash ? "rgba(155,163,122,0.25)" : "var(--color-border)"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
-                        {ash ? <AshMark size={19} variant="on-light" /> : icon}
+                      <div style={{
+                        width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+                        background: ash ? "rgba(155,163,122,0.12)" : "var(--color-cream)",
+                        border: `0.5px solid ${ash ? "rgba(155,163,122,0.25)" : "var(--color-border)"}`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        color: ash ? "var(--color-sage)" : "var(--color-charcoal)",
+                      }}>
+                        {ash ? <AshMark size={19} variant="on-light" /> : Icon && <Icon size={17} strokeWidth={1.5} />}
                       </div>
                       <div>
                         <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 2 }}>{label}</p>
@@ -355,8 +429,8 @@ export default function OnboardingClient({ userId }: { userId: string }) {
               <div style={{ padding: "24px 40px 32px", display: "flex", justifyContent: "flex-end" }}>
                 <button
                   onClick={() => setStep(2)}
-                  style={{ padding: "10px 28px", fontSize: 13, fontWeight: 600, background: "var(--color-charcoal)", color: "var(--color-warm-white)", border: "none", borderRadius: 10, cursor: "pointer", fontFamily: "inherit" }}
-                  onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+                  style={{ padding: "11px 26px", fontSize: 13, fontWeight: 600, background: "var(--color-sage)", color: "var(--color-warm-white)", border: "none", borderRadius: 10, cursor: "pointer", fontFamily: "inherit", transition: "opacity 0.15s ease" }}
+                  onMouseEnter={e => (e.currentTarget.style.opacity = "0.88")}
                   onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
                 >
                   Set up my studio →
@@ -406,7 +480,17 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                         {opt}
                       </Chip>
                     ))}
+                    {data.practiceTypes.filter(v => !PRACTICE_OPTIONS.includes(v)).map(v => (
+                      <Chip key={v} selected onClick={() => toggle("practiceTypes", v)}>
+                        {v}
+                      </Chip>
+                    ))}
                   </div>
+                  <OtherInput
+                    values={data.practiceTypes}
+                    knownIds={PRACTICE_OPTIONS}
+                    onAdd={v => set("practiceTypes", [...data.practiceTypes, v])}
+                  />
                 </div>
               </div>
 
@@ -428,7 +512,17 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                     {opt.label}
                   </Chip>
                 ))}
+                {data.workTypes.filter(v => !WORK_TYPE_OPTIONS.some(o => o.id === v)).map(v => (
+                  <Chip key={v} selected onClick={() => toggle("workTypes", v)}>
+                    {v}
+                  </Chip>
+                ))}
               </div>
+              <OtherInput
+                values={data.workTypes}
+                knownIds={WORK_TYPE_OPTIONS.map(o => o.id)}
+                onAdd={v => set("workTypes", [...data.workTypes, v])}
+              />
 
               <StepFooter onBack={() => setStep(2)} onSkip={() => setStep(4)} onNext={() => setStep(4)} />
             </div>
@@ -442,12 +536,24 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                 Select all that apply. Ash uses this to give you relevant outreach and pricing advice.
               </p>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {CHANNEL_OPTIONS.map(opt => (
                   <Chip key={opt.id} selected={data.sellingChannels.includes(opt.id)} onClick={() => toggle("sellingChannels", opt.id)} sub={opt.sub}>
                     {opt.label}
                   </Chip>
                 ))}
+                {data.sellingChannels.filter(v => !CHANNEL_OPTIONS.some(o => o.id === v)).map(v => (
+                  <Chip key={v} selected onClick={() => toggle("sellingChannels", v)}>
+                    {v}
+                  </Chip>
+                ))}
+              </div>
+              <div style={{ marginBottom: 20 }}>
+                <OtherInput
+                  values={data.sellingChannels}
+                  knownIds={CHANNEL_OPTIONS.map(o => o.id)}
+                  onAdd={v => set("sellingChannels", [...data.sellingChannels, v])}
+                />
               </div>
 
               <div>
@@ -499,7 +605,20 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                       {opt}
                     </Chip>
                   ))}
+                  {data.challenges.filter(v => !CHALLENGE_OPTIONS.includes(v)).map(v => (
+                    <Chip key={v} selected onClick={() => toggle("challenges", v)}>
+                      {v}
+                    </Chip>
+                  ))}
                 </div>
+                <OtherInput
+                  values={data.challenges}
+                  knownIds={CHALLENGE_OPTIONS}
+                  onAdd={v => {
+                    if (data.challenges.length >= 3) return;
+                    set("challenges", [...data.challenges, v]);
+                  }}
+                />
               </div>
 
               <StepFooter onBack={() => setStep(4)} onSkip={() => setStep(6)} onNext={() => setStep(6)} />
@@ -514,7 +633,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                 Select your priorities. Ash will start here with you.
               </p>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
                 {GOAL_OPTIONS.map(opt => {
                   const sel = data.goals.includes(opt.id);
                   return (
@@ -524,21 +643,45 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                       style={{
                         display: "flex", alignItems: "center", gap: 14, padding: "12px 14px",
                         borderRadius: 10, cursor: "pointer", fontFamily: "inherit", textAlign: "left",
-                        background: sel ? "var(--color-charcoal)" : "var(--color-off-white)",
-                        border: `0.5px solid ${sel ? "var(--color-charcoal)" : "var(--color-border)"}`,
+                        background: sel ? "var(--color-sage)" : "var(--color-off-white)",
+                        border: `0.5px solid ${sel ? "var(--color-sage)" : "var(--color-border)"}`,
                         transition: "all 0.1s ease",
                       }}
                     >
-                      <div style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0, background: sel ? "rgba(255,255,255,0.12)" : "var(--color-cream)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0, background: sel ? "rgba(255,255,255,0.2)" : "var(--color-cream)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>
                         {opt.icon === "✦" ? <AshMark size={16} variant={sel ? "on-dark" : "on-light"} /> : opt.icon}
                       </div>
                       <span style={{ fontSize: 12, fontWeight: 500, color: sel ? "var(--color-warm-white)" : "#6b6860" }}>
                         {opt.label}
                       </span>
-                      {sel && <span style={{ marginLeft: "auto", fontSize: 12, color: "rgba(255,255,255,0.6)" }}>✓</span>}
+                      {sel && <span style={{ marginLeft: "auto", fontSize: 12, color: "rgba(255,255,255,0.8)" }}>✓</span>}
                     </button>
                   );
                 })}
+                {data.goals.filter(v => !GOAL_OPTIONS.some(o => o.id === v)).map(v => (
+                  <button
+                    key={v}
+                    onClick={() => toggle("goals", v)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 14, padding: "12px 14px",
+                      borderRadius: 10, cursor: "pointer", fontFamily: "inherit", textAlign: "left",
+                      background: "var(--color-sage)",
+                      border: "0.5px solid var(--color-sage)",
+                    }}
+                  >
+                    <div style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }} />
+                    <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-warm-white)" }}>{v}</span>
+                    <span style={{ marginLeft: "auto", fontSize: 12, color: "rgba(255,255,255,0.8)" }}>✓</span>
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ marginBottom: 24 }}>
+                <OtherInput
+                  values={data.goals}
+                  knownIds={GOAL_OPTIONS.map(o => o.id)}
+                  onAdd={v => set("goals", [...data.goals, v])}
+                />
               </div>
 
               <div style={{ padding: "14px 16px", borderRadius: 12, background: "rgba(155,163,122,0.08)", border: "0.5px solid rgba(155,163,122,0.22)", marginBottom: 20 }}>
@@ -617,7 +760,7 @@ function StepFooter({
           disabled={nextDisabled}
           style={{
             padding: "9px 22px", fontSize: 12, fontWeight: 600,
-            background: nextDisabled ? "var(--color-cream)" : "var(--color-charcoal)",
+            background: nextDisabled ? "var(--color-cream)" : "var(--color-sage)",
             color: nextDisabled ? "var(--color-grey)" : "var(--color-warm-white)",
             border: "none", borderRadius: 9,
             cursor: nextDisabled ? "not-allowed" : "pointer", fontFamily: "inherit",
