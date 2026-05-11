@@ -10,7 +10,7 @@ import AshMark from "@/components/ui/AshMark";
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 const ASH_GRADIENT = "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)";
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 7;
 
 const PRACTICE_OPTIONS = [
   "Furniture", "Objects & lighting", "Ceramics & glass", "Textiles",
@@ -25,12 +25,13 @@ const WORK_TYPE_OPTIONS = [
 ];
 
 const CHANNEL_OPTIONS = [
-  { id: "gallery",    label: "Gallery representation", sub: "Consignment or representation deals" },
-  { id: "direct",     label: "Direct to collectors",   sub: "Studio sales, Instagram, newsletter, word of mouth" },
-  { id: "fairs",      label: "Design fairs",           sub: "ICFF, Sight Unseen, PAD, Design Miami, etc." },
-  { id: "trade",      label: "Trade clients",          sub: "Interior designers, hospitality, developers" },
-  { id: "ecommerce",  label: "E-commerce",             sub: "Own website, 1stDibs, etc." },
-  { id: "commissions",label: "Public / corporate commissions", sub: "Institutional or architectural projects" },
+  { id: "gallery",     label: "Gallery representation", sub: "Consignment or representation deals" },
+  { id: "direct",      label: "Direct to collectors",   sub: "Studio sales, Instagram, newsletter, word of mouth" },
+  { id: "fairs",       label: "Design fairs",           sub: "ICFF, Sight Unseen, PAD, Design Miami, etc." },
+  { id: "trade",       label: "Trade clients",          sub: "Interior designers, hospitality, developers" },
+  { id: "ecommerce",   label: "E-commerce",             sub: "Own website, 1stDibs, etc." },
+  { id: "commissions", label: "Public / corporate commissions", sub: "Institutional or architectural projects" },
+  { id: "not_selling", label: "I don't really sell yet", sub: "Focused on developing my practice — Ash will lean into learning-oriented guidance" },
 ];
 
 const PRICE_OPTIONS = [
@@ -71,12 +72,16 @@ const GOAL_OPTIONS = [
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type Step = 1 | 2 | 3 | 4 | 5 | 6;
+type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 interface OnboardingData {
+  displayName:     string;
+  role:            string;
   studioName:      string;
   city:            string;
   website:         string;
+  tagline:         string;
+  bio:             string;
   practiceTypes:   string[];
   workTypes:       string[];
   sellingChannels: string[];
@@ -242,7 +247,8 @@ export default function OnboardingClient({ userId }: { userId: string }) {
   const [saving, setSaving] = useState(false);
 
   const [data, setData] = useState<OnboardingData>({
-    studioName: "", city: "", website: "",
+    displayName: "", role: "",
+    studioName: "", city: "", website: "", tagline: "", bio: "",
     practiceTypes: [], workTypes: [], sellingChannels: [],
     priceRange: "", yearsInPractice: "", challenges: [], goals: [],
   });
@@ -269,7 +275,10 @@ export default function OnboardingClient({ userId }: { userId: string }) {
     const supabase = createClient();
     await supabase.from("profiles").upsert({
       user_id:             userId,
+      display_name:        data.displayName || null,
       studio_name:         data.studioName || null,
+      tagline:             data.tagline || null,
+      bio:                 data.bio || null,
       location:            data.city || null,
       website:             data.website || null,
       practice_types:      data.practiceTypes,
@@ -292,7 +301,10 @@ export default function OnboardingClient({ userId }: { userId: string }) {
     const supabase = createClient();
     await supabase.from("profiles").upsert({
       user_id:             userId,
+      display_name:        data.displayName || null,
       studio_name:         data.studioName || null,
+      tagline:             data.tagline || null,
+      bio:                 data.bio || null,
       onboarding_complete: true,
       updated_at:          new Date().toISOString(),
     });
@@ -300,7 +312,8 @@ export default function OnboardingClient({ userId }: { userId: string }) {
     router.refresh();
   }
 
-  const canAdvance1 = data.studioName.trim().length > 0;
+  const canAdvance2 = data.displayName.trim().length > 0;
+  const canAdvance3 = data.studioName.trim().length > 0;
 
   return (
     <div
@@ -433,14 +446,51 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                   onMouseEnter={e => (e.currentTarget.style.opacity = "0.88")}
                   onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
                 >
-                  Set up my studio →
+                  Let&apos;s get started →
                 </button>
               </div>
             </div>
           )}
 
-          {/* ── Step 2: Studio identity ─────────────────────────────────────── */}
+          {/* ── Step 2: About you ────────────────────────────────────────────── */}
           {step === 2 && (
+            <div style={panelStyle}>
+              <h2 style={titleStyle}>About you</h2>
+              <p style={subtitleStyle}>
+                Ash addresses you by name and adjusts its tone based on your role.
+              </p>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div>
+                  <FieldLabel>Your name *</FieldLabel>
+                  <input
+                    ref={firstInputRef as React.RefObject<HTMLInputElement>}
+                    type="text"
+                    value={data.displayName}
+                    onChange={e => set("displayName", e.target.value)}
+                    placeholder="e.g. Elliott Rosenberg"
+                    onKeyDown={e => { if (e.key === "Enter" && canAdvance2) setStep(3); }}
+                    style={{ width: "100%", padding: "9px 13px", fontSize: 13, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 9, color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
+                    onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
+                    onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Your role</FieldLabel>
+                  <TextInput
+                    value={data.role}
+                    onChange={v => set("role", v)}
+                    placeholder="e.g. Designer, Founder, Studio principal"
+                  />
+                </div>
+              </div>
+
+              <StepFooter onBack={() => setStep(1)} onSkip={() => setStep(3)} onNext={() => setStep(3)} nextDisabled={!canAdvance2} />
+            </div>
+          )}
+
+          {/* ── Step 3: Studio identity ─────────────────────────────────────── */}
+          {step === 3 && (
             <div style={panelStyle}>
               <h2 style={titleStyle}>Your studio</h2>
               <p style={subtitleStyle}>
@@ -451,12 +501,11 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                 <div>
                   <FieldLabel>Studio or practice name *</FieldLabel>
                   <input
-                    ref={firstInputRef as React.RefObject<HTMLInputElement>}
                     type="text"
                     value={data.studioName}
                     onChange={e => set("studioName", e.target.value)}
                     placeholder="e.g. Atelier Rosenberg"
-                    onKeyDown={e => { if (e.key === "Enter" && canAdvance1) setStep(3); }}
+                    onKeyDown={e => { if (e.key === "Enter" && canAdvance3) setStep(4); }}
                     style={{ width: "100%", padding: "9px 13px", fontSize: 13, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 9, color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
                     onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
                     onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
@@ -471,6 +520,32 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                     <FieldLabel>Website</FieldLabel>
                     <TextInput value={data.website} onChange={v => set("website", v)} placeholder="https://" type="url" />
                   </div>
+                </div>
+                <div>
+                  <FieldLabel>Studio tagline</FieldLabel>
+                  <TextInput
+                    value={data.tagline}
+                    onChange={v => set("tagline", v)}
+                    placeholder="A one-line description of your work"
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Studio bio / statement</FieldLabel>
+                  <textarea
+                    value={data.bio}
+                    onChange={e => set("bio", e.target.value)}
+                    placeholder="Paste your artist statement, studio bio, or a longer description of your practice. Ash will use this to write about your work, draft pitches, and stay on-voice."
+                    rows={5}
+                    style={{
+                      width: "100%", padding: "10px 13px", fontSize: 13,
+                      background: "var(--color-off-white)",
+                      border: "0.5px solid var(--color-border)", borderRadius: 9,
+                      color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none",
+                      boxSizing: "border-box", resize: "vertical", lineHeight: 1.55,
+                    }}
+                    onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
+                    onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
+                  />
                 </div>
                 <div>
                   <FieldLabel>What do you make?</FieldLabel>
@@ -494,12 +569,12 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                 </div>
               </div>
 
-              <StepFooter onBack={() => setStep(1)} onSkip={() => setStep(3)} onNext={() => setStep(3)} nextDisabled={!canAdvance1} />
+              <StepFooter onBack={() => setStep(2)} onSkip={() => setStep(4)} onNext={() => setStep(4)} nextDisabled={!canAdvance3} />
             </div>
           )}
 
-          {/* ── Step 3: How you work ─────────────────────────────────────────── */}
-          {step === 3 && (
+          {/* ── Step 4: How you work ─────────────────────────────────────────── */}
+          {step === 4 && (
             <div style={panelStyle}>
               <h2 style={titleStyle}>How you work</h2>
               <p style={subtitleStyle}>
@@ -524,12 +599,12 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                 onAdd={v => set("workTypes", [...data.workTypes, v])}
               />
 
-              <StepFooter onBack={() => setStep(2)} onSkip={() => setStep(4)} onNext={() => setStep(4)} />
+              <StepFooter onBack={() => setStep(3)} onSkip={() => setStep(5)} onNext={() => setStep(5)} />
             </div>
           )}
 
-          {/* ── Step 4: How you sell ─────────────────────────────────────────── */}
-          {step === 4 && (
+          {/* ── Step 5: How you sell ─────────────────────────────────────────── */}
+          {step === 5 && (
             <div style={panelStyle}>
               <h2 style={titleStyle}>How you sell</h2>
               <p style={subtitleStyle}>
@@ -567,12 +642,12 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                 </div>
               </div>
 
-              <StepFooter onBack={() => setStep(3)} onSkip={() => setStep(5)} onNext={() => setStep(5)} />
+              <StepFooter onBack={() => setStep(4)} onSkip={() => setStep(6)} onNext={() => setStep(6)} />
             </div>
           )}
 
-          {/* ── Step 5: Where you are ────────────────────────────────────────── */}
-          {step === 5 && (
+          {/* ── Step 6: Where you are ────────────────────────────────────────── */}
+          {step === 6 && (
             <div style={panelStyle}>
               <h2 style={titleStyle}>Where you are</h2>
               <p style={subtitleStyle}>
@@ -621,12 +696,12 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                 />
               </div>
 
-              <StepFooter onBack={() => setStep(4)} onSkip={() => setStep(6)} onNext={() => setStep(6)} />
+              <StepFooter onBack={() => setStep(5)} onSkip={() => setStep(7)} onNext={() => setStep(7)} />
             </div>
           )}
 
-          {/* ── Step 6: Goals + Ash ──────────────────────────────────────────── */}
-          {step === 6 && (
+          {/* ── Step 7: Goals + Ash ──────────────────────────────────────────── */}
+          {step === 7 && (
             <div style={panelStyle}>
               <h2 style={titleStyle}>What do you want from Perennial?</h2>
               <p style={subtitleStyle}>
@@ -697,7 +772,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
               </div>
 
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 8, borderTop: "0.5px solid var(--color-border)", marginTop: 16 }}>
-                <button onClick={() => setStep(5)} style={backLinkStyle}>← Back</button>
+                <button onClick={() => setStep(6)} style={backLinkStyle}>← Back</button>
                 <button
                   onClick={handleFinish}
                   disabled={saving}
