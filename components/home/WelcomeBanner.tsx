@@ -42,7 +42,7 @@ export default function WelcomeBanner() {
       if (!data.user) return;
       const { data: prof } = await supabase
         .from("profiles")
-        .select("studio_name, perennial_goals, primary_challenges")
+        .select("display_name, studio_name, tagline, bio, perennial_goals, primary_challenges, business_issues, urgent_needs, practice_types, selling_channels, years_in_practice")
         .eq("user_id", data.user.id)
         .maybeSingle();
       if (prof) {
@@ -51,6 +51,28 @@ export default function WelcomeBanner() {
         setChallenges(prof.primary_challenges ?? []);
       }
       setVisible(true);
+
+      // Auto-open Ash with a prompt grounded in everything the user just shared.
+      // Guarded against double-firing during React Strict Mode dev re-mounts.
+      if (prof && typeof window !== "undefined" && !sessionStorage.getItem("perennial-ash-opened-onboarding")) {
+        sessionStorage.setItem("perennial-ash-opened-onboarding", "1");
+        const parts: string[] = [];
+        if (prof.display_name)     parts.push(`My name is ${prof.display_name}.`);
+        if (prof.studio_name)      parts.push(`My studio is ${prof.studio_name}${prof.tagline ? ` — ${prof.tagline}` : ""}.`);
+        if (prof.bio)              parts.push(`Studio bio: ${prof.bio}`);
+        if ((prof.practice_types ?? []).length > 0)   parts.push(`I work in: ${(prof.practice_types as string[]).join(", ")}.`);
+        if (prof.years_in_practice) parts.push(`I'm at this stage: ${prof.years_in_practice}.`);
+        if ((prof.selling_channels ?? []).length > 0) parts.push(`I sell through: ${(prof.selling_channels as string[]).join(", ")}.`);
+        if ((prof.primary_challenges ?? []).length > 0) parts.push(`Biggest challenges: ${(prof.primary_challenges as string[]).join("; ")}.`);
+        if (prof.business_issues)  parts.push(`What's broken right now: ${prof.business_issues}`);
+        if (prof.urgent_needs)     parts.push(`Urgent on my plate: ${prof.urgent_needs}`);
+        if ((prof.perennial_goals ?? []).length > 0) parts.push(`My goals with Perennial: ${(prof.perennial_goals as string[]).join(", ")}.`);
+        parts.push("I just finished onboarding. Read what I shared and respond as my studio's business partner — what should I focus on first this week, what should I set up in Perennial, and what's the single most useful thing I can do today? Be specific to my situation, not generic.");
+        const msg = parts.join(" ");
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent("open-ash", { detail: { message: msg } }));
+        }, 700);
+      }
     });
   }, []);
 
