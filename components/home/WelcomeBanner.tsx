@@ -67,7 +67,7 @@ export default function WelcomeBanner() {
         if (prof.business_issues)  parts.push(`What's broken right now: ${prof.business_issues}`);
         if (prof.urgent_needs)     parts.push(`Urgent on my plate: ${prof.urgent_needs}`);
         if ((prof.perennial_goals ?? []).length > 0) parts.push(`My goals with Perennial: ${(prof.perennial_goals as string[]).join(", ")}.`);
-        parts.push("I just finished onboarding. Read what I shared and respond as my studio's business partner — what should I focus on first this week, what should I set up in Perennial, and what's the single most useful thing I can do today? Be specific to my situation, not generic.");
+        parts.push("I've just completed onboarding. Take a look at what I shared and start a conversation with me — ask me about what's missing, what you'd want to know more about, or anything that stood out. Don't dump a plan on me yet; I'd rather we get to know each other first.");
         const msg = parts.join(" ");
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent("open-ash", { detail: { message: msg } }));

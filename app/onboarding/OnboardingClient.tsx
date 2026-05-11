@@ -85,7 +85,6 @@ interface StagedFile {
 
 interface OnboardingData {
   displayName:     string;
-  role:            string;
   studioName:      string;
   city:            string;
   website:         string;
@@ -258,7 +257,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
   const [saving, setSaving] = useState(false);
 
   const [data, setData] = useState<OnboardingData>({
-    displayName: "", role: "",
+    displayName: "",
     studioName: "", city: "", website: "", tagline: "", bio: "",
     practiceTypes: [], workTypes: [], sellingChannels: [],
     priceRange: "", yearsInPractice: "", challenges: [],
@@ -523,7 +522,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
             <div style={panelStyle}>
               <h2 style={titleStyle}>About you</h2>
               <p style={subtitleStyle}>
-                Ash addresses you by name and adjusts its tone based on your role.
+                Ash addresses you by name. You can add more about yourself in Settings later.
               </p>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -539,14 +538,6 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                     style={{ width: "100%", padding: "9px 13px", fontSize: 13, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 9, color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
                     onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
                     onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
-                  />
-                </div>
-                <div>
-                  <FieldLabel>Your role</FieldLabel>
-                  <TextInput
-                    value={data.role}
-                    onChange={v => set("role", v)}
-                    placeholder="e.g. Designer, Founder, Studio principal"
                   />
                 </div>
               </div>
