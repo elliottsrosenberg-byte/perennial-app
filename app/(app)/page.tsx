@@ -7,6 +7,7 @@ import TasksCard, { type HomeTask } from "@/components/home/TasksCard";
 import FinanceCard from "@/components/home/FinanceCard";
 import ProjectsCard from "@/components/home/ProjectsCard";
 import ContactsCard from "@/components/home/ContactsCard";
+import CalendarCard, { type CalendarItem } from "@/components/home/CalendarCard";
 import QuickTimerButton from "@/components/finance/QuickTimerButton";
 import WelcomeBanner from "@/components/home/WelcomeBanner";
 import type { ActiveTimer, Project } from "@/types/database";
@@ -126,6 +127,15 @@ export default async function HomePage() {
   const projectsTyped = (rawProjects ?? []) as HomeProject[];
   const tasksTyped    = (rawTasks ?? []) as unknown as HomeTask[];
 
+  const calendarItems: CalendarItem[] = [
+    ...projectsTyped
+      .filter((p) => p.due_date)
+      .map((p) => ({ id: p.id, title: p.title, date: p.due_date as string, kind: "deadline" as const })),
+    ...tasksTyped
+      .filter((t) => t.due_date)
+      .map((t) => ({ id: t.id, title: t.title, date: t.due_date as string, kind: "task" as const })),
+  ];
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <Topbar
@@ -181,6 +191,7 @@ export default async function HomePage() {
           />
           <ProjectsCard projects={projectsTyped} />
           <ContactsCard contacts={(rawContacts ?? []) as unknown as HomeContact[]} />
+          <CalendarCard items={calendarItems} />
         </div>
       </div>
 

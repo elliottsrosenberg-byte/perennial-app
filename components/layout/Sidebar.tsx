@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import SidebarTimerBadge from "./SidebarTimerBadge";
+import GettingStartedWidget from "@/components/tour/GettingStartedWidget";
 import { useState, useEffect, useRef } from "react";
 import type React from "react";
 import {
@@ -290,9 +291,12 @@ export default function Sidebar() {
                       </Link>
                     );
                   }
+                  // Strip leading slash for the tour key ("/projects" → "projects")
+                  const tourKey = href.startsWith("/") ? href.slice(1) : href;
                   return (
                     <Link
                       key={href} href={href}
+                      data-tour-key={tourKey}
                       style={{ ...itemBase, background: active ? C.activeBg : "transparent", color: active ? C.activeText : C.dimText }}
                       onMouseEnter={(e) => {
                         tip(e, label);
@@ -315,6 +319,9 @@ export default function Sidebar() {
 
         {/* ── Timer badge (shows only when running) ── */}
         <SidebarTimerBadge expanded={expanded} />
+
+        {/* ── Getting started tour progress (shown until dismissed or done) ── */}
+        <GettingStartedWidget expanded={expanded} />
 
         {/* ── Bottom utilities ── */}
         <div style={{ padding: "6px 7px 6px", borderTop: `0.5px solid ${C.divider}`, display: "flex", flexDirection: "column", gap: 1 }}>
