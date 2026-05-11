@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -80,6 +80,30 @@ export default function ResetPasswordPage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(true);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tokenHash = params.get("token_hash");
+    const type = params.get("type");
+
+    // If we got here via the new token_hash email flow, exchange it for a session.
+    // If not (e.g. legacy /auth/callback path), assume a session already exists.
+    if (tokenHash && type === "recovery") {
+      const supabase = createClient();
+      supabase.auth
+        .verifyOtp({ token_hash: tokenHash, type: "recovery" })
+        .then(({ error }) => {
+          if (error) {
+            setVerifyError("This reset link is invalid or has expired. Please request a new one.");
+          }
+          setVerifying(false);
+        });
+    } else {
+      setVerifying(false);
+    }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -122,6 +146,25 @@ export default function ResetPasswordPage() {
             boxShadow: "0 8px 40px rgba(31,33,26,0.10), 0 1px 4px rgba(31,33,26,0.06)",
             padding: "40px 44px",
           }}>
+            {verifying ? (
+              <p style={{ fontSize: 13, color: "var(--color-grey)", textAlign: "center", padding: "20px 0" }}>
+                Verifying reset link…
+              </p>
+            ) : verifyError ? (
+              <div style={{ textAlign: "center" }}>
+                <h2 style={{ fontFamily: "var(--font-newsreader)", fontSize: 22, fontWeight: 700,
+                  color: "var(--color-charcoal)", marginBottom: 10, letterSpacing: "-0.01em" }}>
+                  Link expired
+                </h2>
+                <p style={{ fontSize: 13, color: "var(--color-grey)", lineHeight: 1.6, marginBottom: 24 }}>
+                  {verifyError}
+                </p>
+                <Link href="/forgot-password" style={{ fontSize: 13, color: "var(--color-sage)", textDecoration: "none", fontWeight: 500 }}>
+                  Request a new link
+                </Link>
+              </div>
+            ) : (
+            <>
             <h1 style={{ fontFamily: "var(--font-newsreader)", fontSize: 26, fontWeight: 700,
               color: "var(--color-charcoal)", marginBottom: 6, letterSpacing: "-0.01em" }}>
               New password
@@ -190,6 +233,8 @@ export default function ResetPasswordPage() {
                 {loading ? "Updating…" : "Set new password"}
               </button>
             </form>
+            </>
+            )}
           </div>
         </div>
       </div>
