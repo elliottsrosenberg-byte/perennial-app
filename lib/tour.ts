@@ -9,6 +9,7 @@ export interface TourModule {
 }
 
 export const TOUR_MODULES: TourModule[] = [
+  { key: "home",      label: "Home dashboard", href: "/",      blurb: "A quick tour of your daily lens — what each card shows and how to use it." },
   { key: "projects",  label: "Projects",  href: "/projects",  blurb: "Track every piece of work — editions, commissions, client jobs." },
   { key: "contacts",  label: "Contacts",  href: "/contacts",  blurb: "Galleries, collectors, press, fabricators. Your relationship graph." },
   { key: "outreach",  label: "Outreach",  href: "/outreach",  blurb: "Pipeline for gallery submissions, press pitches, fair applications." },

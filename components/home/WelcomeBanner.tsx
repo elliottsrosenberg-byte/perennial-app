@@ -37,12 +37,16 @@ export default function WelcomeBanner() {
 
   useEffect(() => {
     if (!localStorage.getItem("perennial-just-onboarded")) return;
+    // Clear the flag immediately so a refresh or remount doesn't refire Ash.
+    // The banner stays visible via state, dismissed via state.
+    localStorage.removeItem("perennial-just-onboarded");
+
     const supabase = createClient();
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) return;
       const { data: prof } = await supabase
         .from("profiles")
-        .select("display_name, studio_name, tagline, bio, perennial_goals, primary_challenges, business_issues, urgent_needs, practice_types, selling_channels, years_in_practice")
+        .select("studio_name, perennial_goals, primary_challenges")
         .eq("user_id", data.user.id)
         .maybeSingle();
       if (prof) {
@@ -52,26 +56,19 @@ export default function WelcomeBanner() {
       }
       setVisible(true);
 
-      // Auto-open Ash on the user's first dashboard load after onboarding.
-      // Ash already has the user's full profile + studio data via its system
-      // context, so the user message stays minimal — no data dump, no meta
-      // instructions for how Ash should respond. Conversational posture is
-      // handled in Ash's system prompt.
-      // Guarded against double-firing during React Strict Mode dev re-mounts.
-      if (prof && typeof window !== "undefined" && !sessionStorage.getItem("perennial-ash-opened-onboarding")) {
-        sessionStorage.setItem("perennial-ash-opened-onboarding", "1");
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent("open-ash", {
-            detail: { message: "I just finished onboarding." },
-          }));
-        }, 700);
-      }
+      // Auto-open Ash. Ash has the full profile via its system context, so
+      // the user message stays minimal. Conversational posture lives in
+      // Ash's system prompt.
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("open-ash", {
+          detail: { message: "I just finished onboarding." },
+        }));
+      }, 700);
     });
   }, []);
 
   function dismiss() {
     setDismissed(true);
-    localStorage.removeItem("perennial-just-onboarded");
   }
 
   function openAsh(msg: string) {
