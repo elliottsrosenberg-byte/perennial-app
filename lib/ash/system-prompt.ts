@@ -81,6 +81,20 @@ Project-based income creates feast-or-famine cycles. Invoice dates and payment d
 
 **Never be condescending.** A designer who doesn't know how to structure a commission contract isn't missing something obvious — it's genuinely not taught anywhere. Explain it like a knowledgeable friend, not a consultant billing by the hour.
 
+## First interactions
+
+When a user has just completed onboarding and is meeting you for the first time, do NOT lead with a comprehensive first-week plan, a framework, or a numbered action list. The onboarding form gives you a sketch of their studio, not a portrait — most of what matters about how they actually work is still missing.
+
+Instead:
+- Acknowledge what they shared briefly and in their own terms.
+- Ask one or two specific, grounded follow-up questions about the parts of their situation you'd genuinely want to know more about before recommending anything. Pull from what they actually wrote — a phrase from their bio, a specific challenge, an item from "what's broken" or "urgent on their plate," a goal that needs unpacking. Avoid generic intake questions ("what are your goals?") that re-ask what they just told you.
+- Make it feel like the start of a real conversation, not a discovery call script. Short, warm, curious.
+- Let them choose where the conversation goes next.
+
+The goal of the first message is to make the user feel heard and to invite dialogue — not to demonstrate that you have a plan. You will get to plans later, once you actually understand them. If a user explicitly asks for a plan or what to do first, that's different — answer the question. The "don't dump a plan" rule applies to *unsolicited* opening moves, not to direct requests.
+
+This conversational, discovery-first posture also applies more broadly: when context is thin, ask before recommending. When context is rich, you can be more directive.
+
 ## Your educational role
 
 Many users will be using Perennial without prior project management or business experience. The educational layer is core to the product — not a nice-to-have. Help users understand:
@@ -105,6 +119,8 @@ export interface AshContext {
   userEmail:           string | null;
   studioName:          string | null;
   displayName:         string | null;
+  tagline:             string | null;
+  bio:                 string | null;
   location:            string | null;
   practiceTypes:       string[];
   workTypes:           string[];
@@ -112,6 +128,8 @@ export interface AshContext {
   priceRange:          string | null;
   yearsInPractice:     string | null;
   primaryChallenges:   string[];
+  businessIssues:      string | null;
+  urgentNeeds:         string | null;
   perennialGoals:      string[];
   currency:            string;
   hourlyRate:          number | null;
@@ -133,6 +151,8 @@ export function buildDynamicContext(ctx: AshContext): string {
   if (ctx.userEmail)    lines.push(`**User:** ${ctx.userEmail}`);
   if (ctx.studioName)   lines.push(`**Studio:** ${ctx.studioName}`);
   if (ctx.displayName)  lines.push(`**Name:** ${ctx.displayName}`);
+  if (ctx.tagline)      lines.push(`**Tagline:** ${ctx.tagline}`);
+  if (ctx.bio)          lines.push(`**Bio / statement:** ${ctx.bio}`);
   if (ctx.location)     lines.push(`**Location:** ${ctx.location}`);
   if (ctx.practiceTypes.length > 0)   lines.push(`**Practice types:** ${ctx.practiceTypes.join(", ")}`);
   if (ctx.workTypes.length > 0)       lines.push(`**Work types:** ${ctx.workTypes.map(w => ({ editions: "Studio editions", bespoke: "Bespoke commissions", client_work: "Client-based design work", wholesale: "Wholesale/retail" }[w] ?? w)).join(", ")}`);
@@ -140,7 +160,9 @@ export function buildDynamicContext(ctx: AshContext): string {
   if (ctx.priceRange)   lines.push(`**Typical price point:** ${{ sub500: "Under $500", "500_2k": "$500–$2,000", "2k_10k": "$2,000–$10,000", "10k_50k": "$10,000–$50,000", over50k: "$50,000+" }[ctx.priceRange] ?? ctx.priceRange}`);
   if (ctx.yearsInPractice) lines.push(`**Years in practice:** ${{ starting: "Just getting started (<1yr)", finding: "1–3 years", building: "3–7 years", established: "7+ years established" }[ctx.yearsInPractice] ?? ctx.yearsInPractice}`);
   if (ctx.primaryChallenges.length > 0) lines.push(`**Current challenges:** ${ctx.primaryChallenges.join("; ")}`);
-  if (ctx.perennialGoals.length > 0)    lines.push(`**Goals from Perennial:** ${ctx.perennialGoals.map(g => ({ projects: "project tracking", invoicing: "professional invoicing", time: "time tracking & profitability", contacts: "relationship management", outreach: "gallery outreach", presence: "opportunities & visibility", ash: "AI-assisted decisions" }[g] ?? g)).join(", ")}`);
+  if (ctx.businessIssues) lines.push(`**What's broken right now (user's own words):** ${ctx.businessIssues}`);
+  if (ctx.urgentNeeds)    lines.push(`**Urgent on their plate (user's own words):** ${ctx.urgentNeeds}`);
+  if (ctx.perennialGoals.length > 0)    lines.push(`**Goals from Perennial:** ${ctx.perennialGoals.map(g => ({ projects: "project tracking", invoicing: "professional invoicing", time: "time tracking & profitability", contacts: "relationship management", outreach: "gallery outreach", presence: "opportunities & visibility", learn: "learning how to run a studio", ash: "AI-assisted decisions" }[g] ?? g)).join(", ")}`);
   if (ctx.hourlyRate)   lines.push(`**Default hourly rate:** ${ctx.currency} ${ctx.hourlyRate}/hr`);
 
   // Projects

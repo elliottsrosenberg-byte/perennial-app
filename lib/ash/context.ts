@@ -79,7 +79,7 @@ export async function buildAshContext(
 
     supabase
       .from("profiles")
-      .select("display_name, studio_name, location, website, practice_types, work_types, selling_channels, price_range, years_in_practice, primary_challenges, perennial_goals, currency, hourly_rate")
+      .select("display_name, studio_name, tagline, bio, location, website, practice_types, work_types, selling_channels, price_range, years_in_practice, primary_challenges, business_issues, urgent_needs, perennial_goals, currency, hourly_rate")
       .eq("user_id", userId)
       .maybeSingle(),
   ]);
@@ -114,10 +114,13 @@ export async function buildAshContext(
   const tasks = (openTasks ?? []) as unknown as RawTask[];
 
   type Prof = {
-    display_name?: string; studio_name?: string; location?: string;
+    display_name?: string; studio_name?: string; tagline?: string; bio?: string;
+    location?: string;
     practice_types?: string[]; work_types?: string[]; selling_channels?: string[];
     price_range?: string; years_in_practice?: string;
-    primary_challenges?: string[]; perennial_goals?: string[];
+    primary_challenges?: string[];
+    business_issues?: string; urgent_needs?: string;
+    perennial_goals?: string[];
     currency?: string; hourly_rate?: number;
   };
   const prof = profile as Prof | null;
@@ -127,6 +130,8 @@ export async function buildAshContext(
     userEmail,
     studioName:         prof?.studio_name ?? null,
     displayName:        prof?.display_name ?? null,
+    tagline:            prof?.tagline ?? null,
+    bio:                prof?.bio ?? null,
     location:           prof?.location ?? null,
     practiceTypes:      prof?.practice_types ?? [],
     workTypes:          prof?.work_types ?? [],
@@ -134,6 +139,8 @@ export async function buildAshContext(
     priceRange:         prof?.price_range ?? null,
     yearsInPractice:    prof?.years_in_practice ?? null,
     primaryChallenges:  prof?.primary_challenges ?? [],
+    businessIssues:     prof?.business_issues ?? null,
+    urgentNeeds:        prof?.urgent_needs ?? null,
     perennialGoals:     prof?.perennial_goals ?? [],
     currency:           prof?.currency ?? "USD",
     hourlyRate:         prof?.hourly_rate ?? null,
