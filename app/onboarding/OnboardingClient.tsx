@@ -3,14 +3,15 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Layers, Users, Receipt, Send } from "lucide-react";
+import { Layers, Users, Receipt, Send, Clock, Globe, BookOpen, UploadCloud, X as XIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import AshMark from "@/components/ui/AshMark";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 const ASH_GRADIENT = "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)";
-const TOTAL_STEPS = 7;
+const TOTAL_STEPS = 8;
 
 const PRACTICE_OPTIONS = [
   "Furniture", "Objects & lighting", "Ceramics & glass", "Textiles",
@@ -60,19 +61,27 @@ const CHALLENGE_OPTIONS = [
   "Managing client expectations",
 ];
 
-const GOAL_OPTIONS = [
-  { id: "projects",  label: "Track projects and deadlines",          icon: "🗂" },
-  { id: "invoicing", label: "Send professional invoices",            icon: "🧾" },
-  { id: "time",      label: "Log time and understand profitability", icon: "⏱" },
-  { id: "contacts",  label: "Build and maintain relationships",      icon: "👥" },
-  { id: "outreach",  label: "Stay on top of gallery outreach",       icon: "📬" },
-  { id: "presence",  label: "Track opportunities and visibility",    icon: "🌐" },
-  { id: "ash",       label: "Use AI to think through decisions",     icon: "✦" },
+const GOAL_OPTIONS: { id: string; label: string; Icon: LucideIcon | null }[] = [
+  { id: "projects",  label: "Track projects and deadlines",          Icon: Layers   },
+  { id: "invoicing", label: "Send professional invoices",            Icon: Receipt  },
+  { id: "time",      label: "Log time and understand profitability", Icon: Clock    },
+  { id: "contacts",  label: "Build and maintain relationships",      Icon: Users    },
+  { id: "outreach",  label: "Stay on top of gallery outreach",       Icon: Send     },
+  { id: "presence",  label: "Track opportunities and visibility",    Icon: Globe    },
+  { id: "learn",     label: "Learn how to run my studio",            Icon: BookOpen },
+  { id: "ash",       label: "Use AI to think through decisions",     Icon: null     },
 ];
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+
+interface StagedFile {
+  id:          string;
+  file:        File;
+  name:        string;
+  description: string;
+}
 
 interface OnboardingData {
   displayName:     string;
@@ -88,6 +97,8 @@ interface OnboardingData {
   priceRange:      string;
   yearsInPractice: string;
   challenges:      string[];
+  businessIssues:  string;
+  urgentNeeds:     string;
   goals:           string[];
 }
 
@@ -250,8 +261,30 @@ export default function OnboardingClient({ userId }: { userId: string }) {
     displayName: "", role: "",
     studioName: "", city: "", website: "", tagline: "", bio: "",
     practiceTypes: [], workTypes: [], sellingChannels: [],
-    priceRange: "", yearsInPractice: "", challenges: [], goals: [],
+    priceRange: "", yearsInPractice: "", challenges: [],
+    businessIssues: "", urgentNeeds: "",
+    goals: [],
   });
+
+  const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  function addFiles(incoming: File[]) {
+    setUploadError(null);
+    const next: StagedFile[] = incoming.map(file => ({
+      id:          `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      file,
+      name:        file.name.replace(/\.[^.]+$/, ""),
+      description: "",
+    }));
+    setStagedFiles(prev => [...prev, ...next]);
+  }
+  function updateStagedFile(id: string, patch: Partial<StagedFile>) {
+    setStagedFiles(prev => prev.map(f => f.id === id ? { ...f, ...patch } : f));
+  }
+  function removeStagedFile(id: string) {
+    setStagedFiles(prev => prev.filter(f => f.id !== id));
+  }
 
   const firstInputRef = useRef<HTMLInputElement>(null);
 
@@ -272,7 +305,38 @@ export default function OnboardingClient({ userId }: { userId: string }) {
 
   async function handleFinish() {
     setSaving(true);
+    setUploadError(null);
     const supabase = createClient();
+
+    // Upload staged files to Supabase Storage and create one Resource row each.
+    // Skipped silently if nothing was staged — keeps the no-files path fast.
+    if (stagedFiles.length > 0) {
+      try {
+        for (const f of stagedFiles) {
+          const safeName = f.file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+          const path     = `${userId}/${f.id}-${safeName}`;
+          const { error: upErr } = await supabase.storage
+            .from("resources")
+            .upload(path, f.file, { cacheControl: "3600", upsert: false });
+          if (upErr) throw upErr;
+          const { data: urlData } = supabase.storage.from("resources").getPublicUrl(path);
+          await supabase.from("resources").insert({
+            user_id:      userId,
+            category:     "brand",
+            item_type:    "file",
+            status:       "complete",
+            name:         f.name.trim() || f.file.name,
+            meta:         f.description.trim() || "",
+            file_urls:    [urlData.publicUrl],
+            preview_type: "file",
+          });
+        }
+      } catch (err) {
+        setUploadError(err instanceof Error ? err.message : "Couldn't upload one or more files. Onboarding will continue.");
+        // Don't block onboarding completion on a partial upload failure.
+      }
+    }
+
     await supabase.from("profiles").upsert({
       user_id:             userId,
       display_name:        data.displayName || null,
@@ -287,6 +351,8 @@ export default function OnboardingClient({ userId }: { userId: string }) {
       price_range:         data.priceRange || null,
       years_in_practice:   data.yearsInPractice || null,
       primary_challenges:  data.challenges,
+      business_issues:     data.businessIssues || null,
+      urgent_needs:        data.urgentNeeds || null,
       perennial_goals:     data.goals,
       onboarding_complete: true,
       updated_at:          new Date().toISOString(),
@@ -696,6 +762,44 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                 />
               </div>
 
+              <div style={{ marginTop: 20 }}>
+                <FieldLabel>What&apos;s broken in your business right now?</FieldLabel>
+                <textarea
+                  value={data.businessIssues}
+                  onChange={e => set("businessIssues", e.target.value)}
+                  placeholder="Recurring problems, things that frustrate you, blockers in your workflow. Be candid — Ash will use this to suggest where to start."
+                  rows={3}
+                  style={{
+                    width: "100%", padding: "10px 13px", fontSize: 13,
+                    background: "var(--color-off-white)",
+                    border: "0.5px solid var(--color-border)", borderRadius: 9,
+                    color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none",
+                    boxSizing: "border-box", resize: "vertical", lineHeight: 1.55,
+                  }}
+                  onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
+                  onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
+                />
+              </div>
+
+              <div style={{ marginTop: 16 }}>
+                <FieldLabel>Anything urgent on your plate?</FieldLabel>
+                <textarea
+                  value={data.urgentNeeds}
+                  onChange={e => set("urgentNeeds", e.target.value)}
+                  placeholder="Pending invoices, deadlines this week, a pitch you owe someone, a contract you need to send. Things you'd like off your plate first."
+                  rows={3}
+                  style={{
+                    width: "100%", padding: "10px 13px", fontSize: 13,
+                    background: "var(--color-off-white)",
+                    border: "0.5px solid var(--color-border)", borderRadius: 9,
+                    color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none",
+                    boxSizing: "border-box", resize: "vertical", lineHeight: 1.55,
+                  }}
+                  onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
+                  onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
+                />
+              </div>
+
               <StepFooter onBack={() => setStep(5)} onSkip={() => setStep(7)} onNext={() => setStep(7)} />
             </div>
           )}
@@ -711,6 +815,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
                 {GOAL_OPTIONS.map(opt => {
                   const sel = data.goals.includes(opt.id);
+                  const Icon = opt.Icon;
                   return (
                     <button
                       key={opt.id}
@@ -723,8 +828,16 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                         transition: "all 0.1s ease",
                       }}
                     >
-                      <div style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0, background: sel ? "rgba(255,255,255,0.2)" : "var(--color-cream)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>
-                        {opt.icon === "✦" ? <AshMark size={16} variant={sel ? "on-dark" : "on-light"} /> : opt.icon}
+                      <div style={{
+                        width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                        background: sel ? "rgba(255,255,255,0.2)" : "var(--color-cream)",
+                        border: sel ? "none" : "0.5px solid var(--color-border)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        color: sel ? "var(--color-warm-white)" : "var(--color-charcoal)",
+                      }}>
+                        {Icon === null
+                          ? <AshMark size={16} variant={sel ? "on-dark" : "on-light"} />
+                          : <Icon size={15} strokeWidth={1.5} />}
                       </div>
                       <span style={{ fontSize: 12, fontWeight: 500, color: sel ? "var(--color-warm-white)" : "#6b6860" }}>
                         {opt.label}
@@ -759,7 +872,27 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                 />
               </div>
 
-              <div style={{ padding: "14px 16px", borderRadius: 12, background: "rgba(155,163,122,0.08)", border: "0.5px solid rgba(155,163,122,0.22)", marginBottom: 20 }}>
+              <StepFooter onBack={() => setStep(6)} onSkip={() => setStep(8)} onNext={() => setStep(8)} />
+            </div>
+          )}
+
+          {/* ── Step 8: Studio resources upload ──────────────────────────────── */}
+          {step === 8 && (
+            <div style={panelStyle}>
+              <h2 style={titleStyle}>Bring in your studio materials</h2>
+              <p style={subtitleStyle}>
+                Drop in artist statements, bios, press, lookbooks, contracts — anything that defines your studio. Ash reads these to stay on-voice and reference your work. They land in <strong style={{ color: "var(--color-charcoal)", fontWeight: 600 }}>Resources</strong> so you can find them later.
+              </p>
+
+              <FileDropzone
+                files={stagedFiles}
+                onAdd={addFiles}
+                onUpdate={updateStagedFile}
+                onRemove={removeStagedFile}
+                uploadError={uploadError}
+              />
+
+              <div style={{ padding: "14px 16px", borderRadius: 12, background: "rgba(155,163,122,0.08)", border: "0.5px solid rgba(155,163,122,0.22)", marginTop: 20, marginBottom: 20 }}>
                 <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
                   <div style={{ width: 24, height: 24, borderRadius: "50%", background: ASH_GRADIENT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <AshMark size={13} variant="on-dark" animate />
@@ -767,12 +900,12 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                   <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-charcoal)" }}>Ash is ready</p>
                 </div>
                 <p style={{ fontSize: 11, color: "#6b6860", lineHeight: 1.6 }}>
-                  When you finish, Ash will open with a personalized plan based on everything you&apos;ve shared — your practice type, selling channels, challenges, and goals. It can create your first project, add contacts, or walk you through any part of the app.
+                  When you finish, Ash will open with a personalized response based on everything you&apos;ve shared — your practice, goals, challenges, and any documents you uploaded. It will walk you through where to start.
                 </p>
               </div>
 
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 8, borderTop: "0.5px solid var(--color-border)", marginTop: 16 }}>
-                <button onClick={() => setStep(6)} style={backLinkStyle}>← Back</button>
+                <button onClick={() => setStep(7)} style={backLinkStyle}>← Back</button>
                 <button
                   onClick={handleFinish}
                   disabled={saving}
@@ -796,6 +929,130 @@ export default function OnboardingClient({ userId }: { userId: string }) {
         </div>
       </main>
     </div>
+  );
+}
+
+// ─── File dropzone ────────────────────────────────────────────────────────────
+
+function FileDropzone({
+  files, onAdd, onUpdate, onRemove, uploadError,
+}: {
+  files:       StagedFile[];
+  onAdd:       (fs: File[]) => void;
+  onUpdate:    (id: string, patch: Partial<StagedFile>) => void;
+  onRemove:    (id: string) => void;
+  uploadError: string | null;
+}) {
+  const [hover, setHover] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setHover(false);
+    if (!e.dataTransfer.files?.length) return;
+    onAdd(Array.from(e.dataTransfer.files));
+  }
+
+  return (
+    <>
+      <div
+        onDragOver={e => { e.preventDefault(); setHover(true); }}
+        onDragLeave={() => setHover(false)}
+        onDrop={handleDrop}
+        onClick={() => inputRef.current?.click()}
+        style={{
+          padding: "28px 24px",
+          borderRadius: 12,
+          border: `1px dashed ${hover ? "var(--color-sage)" : "var(--color-border)"}`,
+          background: hover ? "rgba(155,163,122,0.06)" : "var(--color-off-white)",
+          textAlign: "center", cursor: "pointer",
+          transition: "all 0.12s ease",
+        }}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          style={{ display: "none" }}
+          onChange={e => {
+            if (e.target.files?.length) onAdd(Array.from(e.target.files));
+            e.target.value = "";
+          }}
+        />
+        <UploadCloud size={22} strokeWidth={1.5} style={{ color: "var(--color-grey)", margin: "0 auto 8px", display: "block" }} />
+        <p style={{ fontSize: 13, fontWeight: 500, color: "var(--color-charcoal)", marginBottom: 2 }}>
+          Drag files here or click to browse
+        </p>
+        <p style={{ fontSize: 11, color: "var(--color-grey)" }}>
+          PDFs, images, docs — anything that describes your studio
+        </p>
+      </div>
+
+      {uploadError && (
+        <p style={{ fontSize: 12, color: "var(--color-red-orange)", marginTop: 10 }}>
+          {uploadError}
+        </p>
+      )}
+
+      {files.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+          {files.map(f => (
+            <div key={f.id} style={{
+              padding: 12, borderRadius: 10,
+              background: "var(--color-off-white)",
+              border: "0.5px solid var(--color-border)",
+            }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+                <input
+                  type="text"
+                  value={f.name}
+                  onChange={e => onUpdate(f.id, { name: e.target.value })}
+                  placeholder="Title for this file"
+                  style={{
+                    flex: 1, padding: "6px 10px", fontSize: 13, fontWeight: 500,
+                    background: "var(--color-warm-white)",
+                    border: "0.5px solid var(--color-border)", borderRadius: 7,
+                    color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none",
+                  }}
+                  onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
+                  onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
+                />
+                <button
+                  type="button"
+                  onClick={() => onRemove(f.id)}
+                  aria-label="Remove file"
+                  style={{
+                    background: "none", border: "none", padding: 6, cursor: "pointer",
+                    color: "var(--color-grey)", borderRadius: 6, flexShrink: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}
+                >
+                  <XIcon size={14} />
+                </button>
+              </div>
+              <textarea
+                value={f.description}
+                onChange={e => onUpdate(f.id, { description: e.target.value })}
+                placeholder="What is this? (e.g. 'Studio bio used for gallery submissions, last updated 2026')"
+                rows={2}
+                style={{
+                  width: "100%", padding: "8px 10px", fontSize: 12,
+                  background: "var(--color-warm-white)",
+                  border: "0.5px solid var(--color-border)", borderRadius: 7,
+                  color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none",
+                  boxSizing: "border-box", resize: "vertical", lineHeight: 1.5,
+                }}
+                onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
+                onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
+              />
+              <p style={{ fontSize: 10, color: "var(--color-grey)", marginTop: 6 }}>
+                {f.file.name} · {(f.file.size / 1024).toFixed(0)} KB
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
