@@ -204,8 +204,9 @@ export default function Sidebar() {
   return (
     <>
       <aside
+        className="hidden md:flex"
         style={{
-          display: "flex", flexDirection: "column", height: "100%", flexShrink: 0,
+          flexDirection: "column", height: "100%", flexShrink: 0,
           width:       expanded ? 200 : 52,
           background:  "var(--color-sidebar-bg)",
           borderRight: `0.5px solid ${C.divider}`,

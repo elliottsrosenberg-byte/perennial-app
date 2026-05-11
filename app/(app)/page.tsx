@@ -8,6 +8,7 @@ import FinanceCard from "@/components/home/FinanceCard";
 import ProjectsCard from "@/components/home/ProjectsCard";
 import ContactsCard from "@/components/home/ContactsCard";
 import CalendarCard, { type CalendarItem } from "@/components/home/CalendarCard";
+import DashboardTour from "@/components/tour/DashboardTour";
 import QuickTimerButton from "@/components/finance/QuickTimerButton";
 import WelcomeBanner from "@/components/home/WelcomeBanner";
 import type { ActiveTimer, Project } from "@/types/database";
@@ -166,33 +167,43 @@ export default async function HomePage() {
       />
 
       <div
-        className="flex-1 min-h-0 flex flex-col gap-[14px] p-5"
+        className="flex-1 min-h-0 flex flex-col gap-[14px] p-5 overflow-y-auto md:overflow-hidden"
         style={{ background: "var(--color-warm-white)" }}
       >
         <div className="flex-shrink-0">
           <WelcomeBanner />
         </div>
 
-        <div
-          className="flex-1 min-h-0 grid gap-[14px]"
-          style={{ gridTemplateColumns: "1fr 1fr 1fr", gridTemplateRows: "1fr 1fr" }}
-        >
-          <NotesCard notes={(rawNotes ?? []) as HomeNote[]} />
-          <TasksCard initialTasks={tasksTyped} />
-          <FinanceCard
-            billableHours={billableMinutes / 60}
-            billableAmount={billableAmount}
-            outstandingTotal={outstandingTotal}
-            outstandingCount={sentInvoices.length}
-            overdueTotal={overdueTotal}
-            overdueCount={overdueInvoices.length}
-            overdueInvoiceNumber={overdueInvoices[0]?.number ?? null}
-            expensesTotal={expensesTotal}
-          />
-          <ProjectsCard projects={projectsTyped} />
-          <ContactsCard contacts={(rawContacts ?? []) as unknown as HomeContact[]} />
-          <CalendarCard items={calendarItems} />
+        <div className="flex-1 min-h-0 flex flex-col gap-[14px]">
+          <div
+            data-tour-step="dashboard.capture"
+            className="grid gap-[14px] md:flex-1 md:min-h-0"
+            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}
+          >
+            <NotesCard notes={(rawNotes ?? []) as HomeNote[]} />
+            <TasksCard initialTasks={tasksTyped} />
+            <CalendarCard items={calendarItems} />
+          </div>
+          <div
+            data-tour-step="dashboard.snapshots"
+            className="grid gap-[14px] md:flex-1 md:min-h-0"
+            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}
+          >
+            <FinanceCard
+              billableHours={billableMinutes / 60}
+              billableAmount={billableAmount}
+              outstandingTotal={outstandingTotal}
+              outstandingCount={sentInvoices.length}
+              overdueTotal={overdueTotal}
+              overdueCount={overdueInvoices.length}
+              overdueInvoiceNumber={overdueInvoices[0]?.number ?? null}
+              expensesTotal={expensesTotal}
+            />
+            <ProjectsCard projects={projectsTyped} />
+            <ContactsCard contacts={(rawContacts ?? []) as unknown as HomeContact[]} />
+          </div>
         </div>
+        <DashboardTour />
       </div>
 
     </div>

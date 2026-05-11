@@ -104,23 +104,29 @@ export default function GettingStartedWidget({ expanded }: Props) {
       {open && (
         <div
           style={{
-            marginTop: 8, padding: "8px 4px 4px",
+            marginTop: 8, padding: "10px 6px 6px",
             background: "var(--sidebar-active-bg)",
             border: "0.5px solid var(--sidebar-divider)",
             borderRadius: 8,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 8px 6px" }}>
-            <span style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--sidebar-soon-text)" }}>
-              Visit each module
-            </span>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "0 8px 10px", gap: 8 }}>
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--sidebar-soon-text)", marginBottom: 4 }}>
+                Your first week
+              </p>
+              <p style={{ fontSize: 10, color: "var(--sidebar-soon-text)", lineHeight: 1.5 }}>
+                Visit each module to see what it does. Ash learns from where you spend time.
+              </p>
+            </div>
             <button
               onClick={(e) => { e.stopPropagation(); dismiss(); }}
-              aria-label="Dismiss tour"
-              title="Dismiss tour"
+              aria-label="Skip tour"
+              title="Skip tour"
               style={{
                 background: "none", border: "none", padding: 2, cursor: "pointer",
                 color: "var(--sidebar-soon-text)", display: "flex", alignItems: "center",
+                flexShrink: 0,
               }}
             >
               <XIcon size={11} />
@@ -133,16 +139,14 @@ export default function GettingStartedWidget({ expanded }: Props) {
                 key={m.key}
                 href={m.href}
                 style={{
-                  display: "flex", alignItems: "center", gap: 8,
-                  padding: "5px 8px", borderRadius: 6,
-                  fontSize: 11, fontFamily: "inherit",
-                  color: done ? "var(--sidebar-soon-text)" : "var(--sidebar-text-hover)",
-                  textDecoration: "none",
+                  display: "flex", alignItems: "flex-start", gap: 8,
+                  padding: "7px 8px", borderRadius: 6,
+                  fontFamily: "inherit", textDecoration: "none",
                 }}
               >
                 <div
                   style={{
-                    width: 14, height: 14, borderRadius: "50%", flexShrink: 0,
+                    width: 14, height: 14, borderRadius: "50%", flexShrink: 0, marginTop: 1,
                     background: done ? "var(--color-sage)" : "transparent",
                     border: done ? "none" : "1px solid var(--sidebar-divider)",
                     display: "flex", alignItems: "center", justifyContent: "center",
@@ -150,7 +154,20 @@ export default function GettingStartedWidget({ expanded }: Props) {
                 >
                   {done && <Check size={9} strokeWidth={3} color="white" />}
                 </div>
-                <span style={{ textDecoration: done ? "line-through" : "none" }}>{m.label}</span>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <p style={{
+                    fontSize: 11, fontWeight: 500, lineHeight: 1.3,
+                    color: done ? "var(--sidebar-soon-text)" : "var(--sidebar-text-hover)",
+                    textDecoration: done ? "line-through" : "none",
+                  }}>
+                    {m.label}
+                  </p>
+                  {!done && (
+                    <p style={{ fontSize: 10, color: "var(--sidebar-soon-text)", lineHeight: 1.4, marginTop: 2 }}>
+                      {m.blurb}
+                    </p>
+                  )}
+                </div>
               </Link>
             );
           })}
