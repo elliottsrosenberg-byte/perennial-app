@@ -9,8 +9,11 @@ import DatePicker from "@/components/ui/DatePicker";
 import Button from "@/components/ui/Button";
 
 interface Props {
-  onClose:   () => void;
-  onCreated: (project: Project) => void;
+  onClose:        () => void;
+  onCreated:      (project: Project) => void;
+  /** Optional preset status — used when the user clicks "+ New project"
+   *  inside a specific status column. */
+  initialStatus?: ProjectStatus;
 }
 
 const TYPE_OPTIONS    = [
@@ -75,10 +78,10 @@ function TextInput({ value, onChange, placeholder, type = "text" }: {
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
 
-export default function NewProjectModal({ onClose, onCreated }: Props) {
+export default function NewProjectModal({ onClose, onCreated, initialStatus }: Props) {
   const [title,        setTitle]        = useState("");
   const [type,         setType]         = useState<ProjectType>("furniture");
-  const [status,       setStatus]       = useState<ProjectStatus>("planning");
+  const [status,       setStatus]       = useState<ProjectStatus>(initialStatus ?? "planning");
   const [priority,     setPriority]     = useState<ProjectPriority>("medium");
   const [startDate,    setStartDate]    = useState<Date | null>(null);
   const [dueDate,      setDueDate]      = useState<Date | null>(null);
