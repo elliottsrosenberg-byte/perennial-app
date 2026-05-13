@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Project, Task, Note, Contact, ProjectType, ProjectStatus, ProjectPriority } from "@/types/database";
 import { Maximize2, Minimize2, X, Settings, FileText, CheckSquare, FolderOpen, Trash2, Pencil, Plus, Link2, ExternalLink, Users, Mail, Phone } from "lucide-react";
-import DatePicker from "@/components/ui/DatePicker";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { getRichExtensions, RichToolbar, InlineAshPopover } from "@/components/ui/RichEditor";
 import type { AshPromptState } from "@/components/ui/RichEditor";
@@ -160,6 +160,166 @@ function CustomSelect<T extends string>({
   );
 }
 
+// ── DatePillField ─────────────────────────────────────────────────────────────
+// Compact inline date control used in the project property rows. Always visible
+// (even when empty) so users see a "Pick a date" affordance without first
+// clicking an em-dash.
+
+function DatePillField({
+  value, onChange, onClear, alert = false,
+}: {
+  value: Date | null;
+  onChange: (d: Date) => void;
+  onClear?: () => void;
+  alert?: boolean;
+}) {
+  const [open, setOpen]       = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const yr = (value ?? new Date()).getFullYear();
+  const mo = (value ?? new Date()).getMonth();
+  const [view, setView] = useState({ yr, mo });
+  useEffect(() => { setView({ yr, mo }); }, [yr, mo]);
+
+  const today        = new Date();
+  const daysInMonth  = new Date(view.yr, view.mo + 1, 0).getDate();
+  const firstDow     = new Date(view.yr, view.mo, 1).getDay();
+  const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const DOW    = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+  const cells  = [...Array(firstDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+
+  const isSel = (d: number) =>
+    !!value && value.getDate() === d && value.getMonth() === view.mo && value.getFullYear() === view.yr;
+  const isTo  = (d: number) =>
+    today.getDate() === d && today.getMonth() === view.mo && today.getFullYear() === view.yr;
+
+  const label = value
+    ? value.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : "Pick a date";
+
+  const filled = !!value;
+
+  return (
+    <div
+      ref={wrapRef}
+      style={{ position: "relative", display: "flex", alignItems: "center", gap: 4 }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 5,
+          padding: "2px 9px", borderRadius: 999,
+          fontSize: 10, fontWeight: 500,
+          fontFamily: "inherit",
+          background: filled
+            ? (alert ? "rgba(220,62,13,0.10)" : "var(--color-surface-sunken)")
+            : "transparent",
+          color: alert
+            ? "var(--color-red-orange)"
+            : filled
+              ? "#6b6860"
+              : "var(--color-grey)",
+          border: `0.5px ${filled ? "solid" : "dashed"} ${alert ? "rgba(220,62,13,0.35)" : "var(--color-border-strong)"}`,
+          cursor: "pointer",
+          transition: "background 0.1s ease, border-color 0.1s ease",
+        }}
+        onMouseEnter={e => {
+          if (!filled) e.currentTarget.style.borderColor = "var(--color-sage)";
+          if (!filled) e.currentTarget.style.color = "var(--color-text-secondary)";
+        }}
+        onMouseLeave={e => {
+          if (!filled) e.currentTarget.style.borderColor = "var(--color-border-strong)";
+          if (!filled) e.currentTarget.style.color = "var(--color-grey)";
+        }}
+      >
+        <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
+          <rect x="2" y="3" width="12" height="11" rx="2"/><path d="M5 1v2M11 1v2M2 7h12"/>
+        </svg>
+        {label}
+      </button>
+
+      {filled && hovered && onClear && (
+        <button
+          onClick={onClear}
+          aria-label="Clear date"
+          title="Clear"
+          style={{
+            background: "transparent", border: "none", padding: 0,
+            color: "var(--color-grey)", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          <X size={10} strokeWidth={2} />
+        </button>
+      )}
+
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 60,
+          width: 232,
+          background: "var(--color-surface-raised)",
+          border: "0.5px solid var(--color-border)",
+          borderRadius: 12,
+          boxShadow: "var(--shadow-md)",
+          padding: 12,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <button
+              onClick={() => setView(v => ({ yr: v.mo === 0 ? v.yr - 1 : v.yr, mo: v.mo === 0 ? 11 : v.mo - 1 }))}
+              style={{ width: 24, height: 24, borderRadius: 6, border: "0.5px solid var(--color-border)", background: "transparent", cursor: "pointer", color: "var(--color-text-secondary)", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}
+            >‹</button>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-primary)" }}>
+              {MONTHS[view.mo]} {view.yr}
+            </span>
+            <button
+              onClick={() => setView(v => ({ yr: v.mo === 11 ? v.yr + 1 : v.yr, mo: v.mo === 11 ? 0 : v.mo + 1 }))}
+              style={{ width: 24, height: 24, borderRadius: 6, border: "0.5px solid var(--color-border)", background: "transparent", cursor: "pointer", color: "var(--color-text-secondary)", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}
+            >›</button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", marginBottom: 4 }}>
+            {DOW.map(d => (
+              <div key={d} style={{ textAlign: "center", fontSize: 9, fontWeight: 600, color: "var(--color-text-tertiary)", padding: "2px 0", textTransform: "uppercase", letterSpacing: "0.05em" }}>{d}</div>
+            ))}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
+            {cells.map((day, i) =>
+              day === null ? <div key={`e${i}`} /> : (
+                <button
+                  key={day}
+                  onClick={() => { onChange(new Date(view.yr, view.mo, day)); setOpen(false); }}
+                  style={{
+                    width: "100%", aspectRatio: "1", borderRadius: 6, border: "none",
+                    fontSize: 10, cursor: "pointer", fontFamily: "inherit",
+                    fontWeight:  isSel(day) ? 600 : 400,
+                    background:  isSel(day) ? "var(--color-sage)" : "transparent",
+                    color:       isSel(day) ? "white" : isTo(day) ? "var(--color-sage)" : "var(--color-text-primary)",
+                    outline:     isTo(day) && !isSel(day) ? "1.5px solid var(--color-sage)" : "none",
+                    outlineOffset: -1,
+                    transition:  "background 0.08s ease",
+                  }}
+                  onMouseEnter={e => { if (!isSel(day)) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+                  onMouseLeave={e => { if (!isSel(day)) e.currentTarget.style.background = "transparent"; }}
+                >{day}</button>
+              )
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── EditableField ─────────────────────────────────────────────────────────────
 
 function EditableField({ label, display, editDefault, inputType = "text", placeholder, onSave, alert = false }: {
@@ -178,6 +338,26 @@ function EditableField({ label, display, editDefault, inputType = "text", placeh
   function commit(raw?: string) { onSave((raw ?? draft).trim()); setEditing(false); }
   function cancel() { setDraft(editDefault); setEditing(false); }
 
+  // ── Date input renders as an always-visible "Pick a date" pill so users
+  // don't have to click an em-dash to discover they can set a date.
+  if (inputType === "date") {
+    const hasValue = !!editDefault;
+    return (
+      <div
+        className="flex justify-between items-center py-[5px]"
+        style={{ borderBottom: "0.5px solid var(--color-border)" }}
+      >
+        <span className="text-[11px] shrink-0 mr-3" style={{ color: "var(--color-grey)" }}>{label}</span>
+        <DatePillField
+          value={editDefault ? new Date(editDefault + "T12:00:00") : null}
+          onChange={d => onSave(toISODate(d))}
+          onClear={hasValue ? () => onSave("") : undefined}
+          alert={alert}
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       className="flex justify-between items-center py-[5px]"
@@ -187,15 +367,7 @@ function EditableField({ label, display, editDefault, inputType = "text", placeh
     >
       <span className="text-[11px] shrink-0 mr-3" style={{ color: "var(--color-grey)" }}>{label}</span>
 
-      {inputType === "date" && editing ? (
-        <div>
-          <DatePicker
-            value={editDefault ? new Date(editDefault + "T12:00:00") : null}
-            onChange={d => commit(toISODate(d))}
-            placeholder="Pick a date…"
-          />
-        </div>
-      ) : editing ? (
+      {editing ? (
         <input
           ref={inputRef} type={inputType} value={draft}
           onChange={e => setDraft(e.target.value)}
@@ -1422,6 +1594,7 @@ export default function ProjectDetailPanel({ project: initialProject, onClose, o
   const [maximized,      setMaximized]      = useState(false);
   const [settingsOpen,   setSettingsOpen]   = useState(false);
   const [financeData,    setFinanceData]    = useState<{ hours: number; billableAmount: number; invoiceCount: number; invoiceTotal: number } | null>(null);
+  const [confirmDelete,  setConfirmDelete]  = useState(false);
 
   // Hide the floating Ash button in scrim mode; broadcast project context for Ash
   useEffect(() => {
@@ -1489,8 +1662,8 @@ export default function ProjectDetailPanel({ project: initialProject, onClose, o
     await createClient().from("projects").update({ [field]: value }).eq("id", localProject.id);
   }
 
-  async function handleDelete() {
-    if (!confirm(`Delete "${localProject.title}"? This cannot be undone.`)) return;
+  async function performDelete() {
+    setConfirmDelete(false);
     await createClient().from("projects").delete().eq("id", localProject.id);
     onDeleted?.(localProject.id);
     onClose();
@@ -1549,7 +1722,7 @@ export default function ProjectDetailPanel({ project: initialProject, onClose, o
             <EditableDescription value={localProject.description} onSave={v => handleUpdate("description", v)} />
 
             {/* Status / Type / Priority — labeled */}
-            <div style={{ marginBottom: 12 }}>
+            <div data-tour-target="projects.detail-properties" style={{ marginBottom: 12 }}>
               <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Tags</p>
               <CustomSelect<ProjectStatus>
                 label="Status"   value={localProject.status}
@@ -1628,7 +1801,7 @@ export default function ProjectDetailPanel({ project: initialProject, onClose, o
             )}
 
             {/* ── Navigation — inline after details ── */}
-            <div style={{ marginTop: 16, borderTop: "0.5px solid var(--color-border)", paddingTop: 10 }}>
+            <div data-tour-target="projects.detail-workspace" style={{ marginTop: 16, borderTop: "0.5px solid var(--color-border)", paddingTop: 10 }}>
               <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Workspace</p>
               {NAV_ITEMS.map(item => {
                 const active = activeTab === item.key;
@@ -1661,7 +1834,7 @@ export default function ProjectDetailPanel({ project: initialProject, onClose, o
             {settingsOpen && (
               <div style={{ paddingBottom: 4 }}>
                 <button
-                  onClick={handleDelete}
+                  onClick={() => setConfirmDelete(true)}
                   style={{
                     width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px",
                     borderRadius: 7, border: "none", background: "transparent",
@@ -1753,6 +1926,17 @@ export default function ProjectDetailPanel({ project: initialProject, onClose, o
           {!maximized && <AshStrip project={localProject} activeTasks={tasks.filter(t => !t.completed).length} />}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete project?"
+        body={`"${localProject.title}" and everything inside it — tasks, notes, files, time logs — will be permanently removed. This can't be undone.`}
+        confirmLabel="Delete project"
+        cancelLabel="Cancel"
+        tone="danger"
+        onConfirm={performDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </>
   );
 }

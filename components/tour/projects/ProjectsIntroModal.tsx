@@ -25,19 +25,19 @@ const SLIDES: Slide[] = [
     Anim:  CardMaterialize,
   },
   {
-    title: "A new project takes 30 seconds.",
-    body:  "Give it a title and a type. Add status, due date, price, materials, dimensions, or a client when you're ready. Nothing is required upfront — fill in what you know.",
-    Anim:  FormFill,
+    title: "Organize the way you think.",
+    body:  "Columns are status — Planning, In progress, On hold, Complete, Cut. Drag any project card between columns to update its status. Filter to a single column when you want focus.",
+    Anim:  DragColumns,
   },
   {
     title: "Open a project to do the work.",
-    body:  "Clicking a card slides open a detail panel with tasks, time logs, notes, linked contacts, files, and a live finance section. The project is where the work actually happens — without leaving the page.",
+    body:  "Click a card and a detail panel slides in over your list — your project on top of context. Need more space? Expand to full screen. Click out to come back to your board.",
     Anim:  ScrimOpen,
   },
   {
-    title: "Organize the way you think.",
-    body:  "Columns are status: Planning → In progress → On hold → Complete. Drag a card between columns to update its status, or drag within a column to reorder.",
-    Anim:  DragColumns,
+    title: "Everything for the project, in one place.",
+    body:  "Inside each project: a writing canvas, a task list, linked contacts, notes, and files. No tab-hopping — your whole project lives here, with Ash a click away if you want a partner.",
+    Anim:  FormFill,
   },
 ];
 

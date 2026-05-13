@@ -1,17 +1,19 @@
 "use client";
 
 // Tier 2: progressive tooltips that run after the user clicks "Get started"
-// on the intro modal. Each tooltip waits for a real user action before
-// advancing — no Next buttons. Final step offers an Ash handoff with a
-// project-context-aware prompt.
+// on the intro modal. Uses the same spotlight-ring visual treatment as the
+// home DashboardTour: sage ring on the target with a soft dark dim around it.
 //
-// Triggers (window events fired from ProjectsClient):
-//   projects:modal-opened  → modal-open detected; advance step 1 → 2
-//   projects:created       → a new project was created; advance step 2 → 3
-//   projects:detail-opened → user clicked a card; advance step 3 → 4
+// Some steps advance only after the user takes a real action (action steps —
+// no Next button). The remaining steps are guided callouts that move the user
+// through the inside of a project; those have a Next button.
 //
-// Persistence: profiles.tour_visited.projects_tour set when the tour ends
-// (completed or skipped). Won't fire again once set.
+// Triggers (window events fired from ProjectsClient / ProjectDetailPanel):
+//   projects:modal-opened  → step 0 → 1
+//   projects:created       → step 1 → 2
+//   projects:detail-opened → step 2 → 3
+//
+// Persistence: profiles.tour_visited.projects_tour set when the tour ends.
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { X as XIcon } from "lucide-react";
@@ -19,65 +21,84 @@ import { createClient } from "@/lib/supabase/client";
 import AshMark from "@/components/ui/AshMark";
 import { type TourVisited } from "@/lib/tour";
 
+type AdvanceMode = "click-new" | "create" | "open-card" | "next";
+
 interface Step {
-  id:        string;
-  anchor:    string;            // CSS selector
-  side:      "right" | "bottom" | "top" | "left";
-  title:     string;
-  body:      string;
-  hint?:     string;            // small italicized hint about how it advances
-  finalCta?: { label: string; action: "ash-draft-tasks" | "done" };
+  id:          string;
+  anchor:      string;          // CSS selector — required
+  title:       string;
+  body:        string;
+  hint?:       string;          // italicised hint about how it advances
+  advance:     AdvanceMode;     // action-driven or Next button
+  spotlight?:  boolean;         // ring + dim. default true
+  finalCta?:   { label: string; action: "ash-draft-tasks" };
 }
 
-const W = 280;
+const W = 300;
 
 const STEPS: Step[] = [
   {
-    id:     "new-button",
-    anchor: '[data-tour-target="projects.new-button"]',
-    side:   "bottom",
-    title:  "Create your first project",
-    body:   "Click here to open the New Project form. You can edit any field later.",
-    hint:   "Waiting for you to click +New project…",
+    id:      "new-button",
+    anchor:  '[data-tour-target="projects.new-button"]',
+    title:   "Create your first project",
+    body:    "Projects are the anchor of your studio. Start one to see how Perennial puts your work in motion.",
+    hint:    "Waiting for you to click + New project…",
+    advance: "click-new",
   },
   {
-    id:     "in-modal",
-    anchor: '[data-tour-target="projects.new-modal"]',
-    side:   "left",
-    title:  "Title and type are enough",
-    body:   "Anything you don't know yet you can fill in later — or ask Ash to draft pricing, materials, or scope for you.",
-    hint:   "Waiting for the project to be created…",
+    id:      "in-modal",
+    anchor:  '[data-tour-target="projects.new-modal"]',
+    title:   "Title and type are enough",
+    body:    "Everything else — status, due date, materials, price, client — you can fill in later. Or ask Ash to draft it.",
+    hint:    "Waiting for the project to be created…",
+    advance: "create",
+    spotlight: false,
   },
   {
-    id:     "first-card",
-    anchor: '[data-tour-target="projects.first-card"]',
-    side:   "right",
-    title:  "Open your project",
-    body:   "Click your project card to slide open its detail panel. That's where you add tasks, log time, link contacts, and track finance.",
-    hint:   "Waiting for you to open the project…",
+    id:      "first-card",
+    anchor:  '[data-tour-target="projects.first-card"]',
+    title:   "Open your project",
+    body:    "Click your project card to slide its detail panel open.",
+    hint:    "Waiting for you to open it…",
+    advance: "open-card",
+  },
+  {
+    id:      "properties",
+    anchor:  '[data-tour-target="projects.detail-properties"]',
+    title:   "Edit anything inline",
+    body:    "Status, type, priority, and timeline are all click-to-edit. Set a due date and the card surfaces overdue automatically — no extra fiddling.",
+    advance: "next",
+  },
+  {
+    id:      "workspace",
+    anchor:  '[data-tour-target="projects.detail-workspace"]',
+    title:   "Your project's workspace",
+    body:    "Canvas is for free-form writing. Tasks, Contacts, Notes, and Files live alongside — everything you need for this project, no tab-hopping.",
+    advance: "next",
   },
   {
     id:       "ash-handoff",
     anchor:   '[data-tour-target="projects.detail-panel"]',
-    side:     "left",
     title:    "Let Ash get this started",
     body:     "Ash knows this project and has a working sense of how successful design studios actually price, scope, and ship work like it. Hit the button — Ash will draft starter tasks straight into your project and brief you on what to focus on first.",
+    advance:  "next",
+    spotlight: false,
     finalCta: { label: "Draft starter tasks", action: "ash-draft-tasks" },
   },
 ];
 
-interface Pos { top: number; left: number; arrowOffset: number; placement: Step["side"]; }
+interface Highlight { top: number; left: number; w: number; h: number; }
+interface CalloutPos { top: number; left: number; }
 
 export default function ProjectsTooltipTour() {
   const [active,   setActive]   = useState(false);
   const [stepIdx,  setStepIdx]  = useState(0);
-  const [pos,      setPos]      = useState<Pos | null>(null);
+  const [highlight, setHighlight] = useState<Highlight | null>(null);
+  const [pos,      setPos]      = useState<CalloutPos | null>(null);
   const [hidden,   setHidden]   = useState(false);
   const projectRef = useRef<{ id: string; title: string; type: string | null } | null>(null);
 
-  // Init: only start if profile says we haven't done the tour AND a session
-  // event fires to start it. We don't auto-start on mount — the intro modal
-  // dispatches "projects-tooltips-start" when the user clicks Get started.
+  // Init: only start if not yet done AND a session event fires from the intro modal.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -104,19 +125,23 @@ export default function ProjectsTooltipTour() {
     };
   }, []);
 
-  // Event-driven advance
+  // Event-driven advance for action steps
   useEffect(() => {
     if (!active || hidden) return;
 
-    function onModalOpen() { if (stepIdx === 0) setStepIdx(1); }
+    function onModalOpen() {
+      if (STEPS[stepIdx]?.advance === "click-new") setStepIdx((i) => i + 1);
+    }
     function onCreated(e: Event) {
       const detail = (e as CustomEvent<{ id?: string; title?: string; type?: string | null }>).detail;
       if (detail?.id && detail.title) {
         projectRef.current = { id: detail.id, title: detail.title, type: detail.type ?? null };
       }
-      if (stepIdx === 1) setStepIdx(2);
+      if (STEPS[stepIdx]?.advance === "create") setStepIdx((i) => i + 1);
     }
-    function onDetailOpen() { if (stepIdx === 2) setStepIdx(3); }
+    function onDetailOpen() {
+      if (STEPS[stepIdx]?.advance === "open-card") setStepIdx((i) => i + 1);
+    }
 
     window.addEventListener("projects:modal-opened",  onModalOpen);
     window.addEventListener("projects:created",       onCreated);
@@ -128,45 +153,45 @@ export default function ProjectsTooltipTour() {
     };
   }, [active, hidden, stepIdx]);
 
+  // Position the spotlight + callout
   const reposition = useCallback(() => {
-    if (!active || hidden) { setPos(null); return; }
+    if (!active || hidden) { setHighlight(null); setPos(null); return; }
     const step = STEPS[stepIdx];
     const el = document.querySelector<HTMLElement>(step.anchor);
-    if (!el) { setPos(null); return; }
-    const r = el.getBoundingClientRect();
+    if (!el) { setHighlight(null); setPos(null); return; }
 
-    let top = 0, left = 0;
-    const gap = 14;
-    const H = 200; // rough estimate
-    switch (step.side) {
-      case "right":
-        top  = r.top + r.height / 2 - H / 2;
-        left = r.right + gap;
-        break;
-      case "left":
-        top  = r.top + r.height / 2 - H / 2;
-        left = r.left - W - gap;
-        break;
-      case "bottom":
-        top  = r.bottom + gap;
-        left = r.left + r.width / 2 - W / 2;
-        break;
-      case "top":
-        top  = r.top - H - gap;
-        left = r.left + r.width / 2 - W / 2;
-        break;
+    const r = el.getBoundingClientRect();
+    const useSpotlight = step.spotlight !== false;
+    if (useSpotlight) {
+      setHighlight({ top: r.top - 4, left: r.left - 4, w: r.width + 8, h: r.height + 8 });
+    } else {
+      setHighlight(null);
     }
-    // Clamp to viewport
-    top  = Math.max(20, Math.min(window.innerHeight - 60, top));
-    left = Math.max(20, Math.min(window.innerWidth  - W - 20, left));
-    setPos({ top, left, arrowOffset: 0, placement: step.side });
+
+    // Decide where to place the callout based on available space around the target
+    const gap = 14;
+    const H   = 200; // approximate callout height
+    const vw  = window.innerWidth;
+    const vh  = window.innerHeight;
+
+    // Prefer bottom-right; flip to left or top if there's not enough room
+    let top  = r.bottom + gap;
+    let left = r.left;
+    if (top + H + 20 > vh)   top  = Math.max(20, r.top - H - gap);
+    if (left + W + 20 > vw)  left = Math.max(20, r.right - W);
+    // If the anchor is wide (modal), center the callout to its left edge but
+    // keep it onscreen.
+    left = Math.max(20, Math.min(vw - W - 20, left));
+    top  = Math.max(20, Math.min(vh - 60, top));
+
+    setPos({ top, left });
   }, [active, hidden, stepIdx]);
 
   useEffect(() => {
     reposition();
     const onResize = () => reposition();
     window.addEventListener("resize", onResize);
-    const interval = window.setInterval(reposition, 400);
+    const interval = window.setInterval(reposition, 350);
     return () => {
       window.removeEventListener("resize", onResize);
       window.clearInterval(interval);
@@ -193,12 +218,13 @@ export default function ProjectsTooltipTour() {
     markDone();
   }
 
+  function nextStep() {
+    if (stepIdx >= STEPS.length - 1) { dismiss(); return; }
+    setStepIdx((i) => i + 1);
+  }
+
   function draftStarterTasks() {
     const proj = projectRef.current;
-    // Build a structured prompt that asks Ash to actually call its add_task
-    // tool for each task — not just describe them. The brief at the end
-    // signals expert, design-industry-grounded insight rather than generic
-    // chatbot advice.
     const projLine = proj
       ? `The project I just created:\n- Title: "${proj.title}"\n- Type: ${proj.type ?? "unspecified"}\n- Project ID (use this for add_task): ${proj.id}`
       : "The project I just created (use the most recently created project as context):";
@@ -220,106 +246,132 @@ export default function ProjectsTooltipTour() {
   if (!active || hidden || !pos) return null;
   const step   = STEPS[stepIdx];
   const isLast = stepIdx === STEPS.length - 1;
-
-  // Arrow position styling per placement
-  const arrowStyle: React.CSSProperties = (() => {
-    const base: React.CSSProperties = {
-      position: "absolute",
-      width: 12, height: 12,
-      background: "#1f211a",
-    };
-    switch (step.side) {
-      case "right":  return { ...base, left:  -6, top: "50%",  transform: "translateY(-50%) rotate(45deg)" };
-      case "left":   return { ...base, right: -6, top: "50%",  transform: "translateY(-50%) rotate(45deg)" };
-      case "bottom": return { ...base, top:   -6, left: "50%", transform: "translateX(-50%) rotate(45deg)" };
-      case "top":    return { ...base, bottom:-6, left: "50%", transform: "translateX(-50%) rotate(45deg)" };
-    }
-  })();
+  const isActionStep = step.advance !== "next";
 
   return (
-    <div
-      role="dialog"
-      aria-label={`Projects tour step ${stepIdx + 1}: ${step.title}`}
-      style={{
-        position: "fixed",
-        top:  pos.top,
-        left: pos.left,
-        width: W,
-        zIndex: 60,
-        // Hardcoded so the callout stays dark in both themes.
-        background: "#1f211a",
-        color: "#f5f1e9",
-        borderRadius: 12,
-        boxShadow: "0 16px 40px rgba(31,33,26,0.36), 0 2px 6px rgba(31,33,26,0.2)",
-        padding: "13px 15px",
-        fontFamily: "inherit",
-      }}
-    >
-      <div aria-hidden style={arrowStyle} />
-
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-        <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(245,241,233,0.5)" }}>
-          Projects tour · {stepIdx + 1} of {STEPS.length}
-        </span>
-        <button
-          onClick={dismiss}
-          aria-label="Skip tour"
-          title="Skip tour"
+    <>
+      {/* Spotlight ring + dim. Same visual language as DashboardTour so the
+          two tours feel like one continuous experience. */}
+      {highlight && (
+        <div
+          aria-hidden
           style={{
-            background: "none", border: "none", padding: 4, cursor: "pointer",
-            color: "rgba(245,241,233,0.55)", display: "flex", alignItems: "center", justifyContent: "center",
-            borderRadius: 4,
+            position: "fixed",
+            top:    highlight.top,
+            left:   highlight.left,
+            width:  highlight.w,
+            height: highlight.h,
+            borderRadius: 14,
+            boxShadow: "0 0 0 2px var(--color-sage), 0 0 0 9999px rgba(0,0,0,0.42)",
+            pointerEvents: "none",
+            zIndex: 55,
+            transition: "top 0.18s ease, left 0.18s ease, width 0.18s ease, height 0.18s ease",
           }}
-        >
-          <XIcon size={13} />
-        </button>
-      </div>
+        />
+      )}
 
-      <h3 style={{ fontSize: 13, fontWeight: 600, color: "rgba(245,241,233,0.96)", marginBottom: 5 }}>
-        {step.title}
-      </h3>
-      <p style={{ fontSize: 11, color: "rgba(245,241,233,0.72)", lineHeight: 1.55, marginBottom: step.hint || step.finalCta ? 10 : 0 }}>
-        {step.body}
-      </p>
+      {/* Callout */}
+      <div
+        role="dialog"
+        aria-label={`Projects tour step ${stepIdx + 1}: ${step.title}`}
+        style={{
+          position: "fixed",
+          top:  pos.top,
+          left: pos.left,
+          width: W,
+          zIndex: 60,
+          background: "#1f211a",
+          color: "#f5f1e9",
+          borderRadius: 12,
+          boxShadow: "0 16px 40px rgba(0,0,0,0.36), 0 2px 6px rgba(0,0,0,0.20)",
+          padding: "13px 15px",
+          fontFamily: "inherit",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+          <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(245,241,233,0.5)" }}>
+            Projects tour · {stepIdx + 1} of {STEPS.length}
+          </span>
+          <button
+            onClick={dismiss}
+            aria-label="Skip tour"
+            title="Skip tour"
+            style={{
+              background: "none", border: "none", padding: 4, cursor: "pointer",
+              color: "rgba(245,241,233,0.55)", display: "flex", alignItems: "center", justifyContent: "center",
+              borderRadius: 4,
+            }}
+          >
+            <XIcon size={13} />
+          </button>
+        </div>
 
-      {step.hint && (
-        <p style={{ fontSize: 10, color: "rgba(245,241,233,0.42)", lineHeight: 1.4, fontStyle: "italic" }}>
-          {step.hint}
+        <h3 style={{ fontSize: 13, fontWeight: 600, color: "rgba(245,241,233,0.96)", marginBottom: 5 }}>
+          {step.title}
+        </h3>
+        <p style={{
+          fontSize: 11.5,
+          color: "rgba(245,241,233,0.78)",
+          lineHeight: 1.55,
+          marginBottom: step.hint || step.finalCta || !isActionStep ? 10 : 0,
+        }}>
+          {step.body}
         </p>
-      )}
 
-      {isLast && step.finalCta?.action === "ash-draft-tasks" && (
-        <button
-          onClick={draftStarterTasks}
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-            width: "100%", padding: "8px 12px",
-            background: "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)",
-            color: "white",
-            border: "none", borderRadius: 8, cursor: "pointer",
-            fontFamily: "inherit", fontSize: 11, fontWeight: 600,
-            marginTop: 4,
-          }}
-        >
-          <AshMark size={12} variant="on-dark" />
-          {step.finalCta.label}
-        </button>
-      )}
+        {step.hint && (
+          <p style={{ fontSize: 10, color: "rgba(245,241,233,0.42)", lineHeight: 1.4, fontStyle: "italic" }}>
+            {step.hint}
+          </p>
+        )}
 
-      {isLast && (
-        <button
-          onClick={dismiss}
-          style={{
-            display: "block", width: "100%",
-            marginTop: 8,
-            fontSize: 11, color: "rgba(245,241,233,0.55)",
-            background: "none", border: "none", padding: "4px 0",
-            cursor: "pointer", fontFamily: "inherit",
-          }}
-        >
-          I&apos;ll explore on my own
-        </button>
-      )}
-    </div>
+        {/* Action footer: Next button on non-action steps. Final step shows
+            the Ash CTA + "I'll explore on my own" dismiss. */}
+        {isLast && step.finalCta?.action === "ash-draft-tasks" ? (
+          <>
+            <button
+              onClick={draftStarterTasks}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                width: "100%", padding: "8px 12px",
+                background: "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)",
+                color: "white",
+                border: "none", borderRadius: 8, cursor: "pointer",
+                fontFamily: "inherit", fontSize: 11, fontWeight: 600,
+                marginTop: 4,
+              }}
+            >
+              <AshMark size={12} variant="on-dark" />
+              {step.finalCta.label}
+            </button>
+            <button
+              onClick={dismiss}
+              style={{
+                display: "block", width: "100%",
+                marginTop: 8,
+                fontSize: 11, color: "rgba(245,241,233,0.55)",
+                background: "none", border: "none", padding: "4px 0",
+                cursor: "pointer", fontFamily: "inherit",
+              }}
+            >
+              I&apos;ll explore on my own
+            </button>
+          </>
+        ) : !isActionStep ? (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
+            <button
+              onClick={nextStep}
+              style={{
+                padding: "6px 14px", fontSize: 11, fontWeight: 600,
+                background: "var(--color-sage)", color: "#f9faf4",
+                border: "none", borderRadius: 7, cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              Next →
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </>
   );
 }
