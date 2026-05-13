@@ -152,6 +152,31 @@ export default function DashboardTour() {
     }
   }
 
+  // If the user opens Ash directly via the floating button (rather than the
+  // tooltip's "Open Ash" CTA), still mark the home tour complete and set the
+  // waiting flag so the sidebar callout stays hidden until Ash closes.
+  // We do NOT auto-send the onboarding prompt here — the user took their own
+  // path, so they get a blank conversation.
+  async function finishOnDirectAshOpen() {
+    await markHomeVisited();
+    setActive(false);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(TOUR_WAITING_KEY, "1");
+      window.dispatchEvent(new Event("tour-waiting-ash"));
+    }
+  }
+
+  useEffect(() => {
+    if (!active) return;
+    if (stepIdx !== STEPS.length - 1) return;
+    const fab = document.querySelector<HTMLElement>(".ash-fab");
+    if (!fab) return;
+    const onClick = () => { finishOnDirectAshOpen(); };
+    fab.addEventListener("click", onClick);
+    return () => fab.removeEventListener("click", onClick);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, stepIdx]);
+
   async function skip() {
     // Skip the entire tour, including sidebar callouts.
     const supabase = createClient();
