@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Topbar from "@/components/layout/Topbar";
 import { createClient } from "@/lib/supabase/client";
 
@@ -28,6 +29,7 @@ interface Profile {
   notif_overdue:        boolean;
   notif_weekly:         boolean;
   notif_monthly:        boolean;
+  tour_dismissed:       boolean;
 }
 
 interface IntegrationRow {
@@ -45,6 +47,7 @@ const DEFAULT_PROFILE: Profile = {
   invoice_prefix: "INV-", payment_terms: "Net 30",
   notif_email_enabled: true, notif_deadlines: true, notif_invoice_due: true,
   notif_overdue: true, notif_weekly: false, notif_monthly: false,
+  tour_dismissed: false,
 };
 
 const PRACTICE_OPTIONS = [
@@ -208,6 +211,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
   const [saved,   setSaved]   = useState(false);
+  const router = useRouter();
   const [userId,  setUserId]  = useState<string | null>(null);
   const [email,   setEmail]   = useState<string>("");
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
@@ -249,6 +253,7 @@ export default function SettingsPage() {
           notif_overdue:       prof.notif_overdue ?? true,
           notif_weekly:        prof.notif_weekly ?? false,
           notif_monthly:       prof.notif_monthly ?? false,
+          tour_dismissed:      prof.tour_dismissed ?? false,
         });
       }
       if (intgs) setIntegrations(intgs as IntegrationRow[]);
@@ -294,6 +299,7 @@ export default function SettingsPage() {
         notif_overdue:        profile.notif_overdue,
         notif_weekly:         profile.notif_weekly,
         notif_monthly:        profile.notif_monthly,
+        tour_dismissed:       profile.tour_dismissed,
         updated_at:           new Date().toISOString(),
       });
 
@@ -680,6 +686,66 @@ export default function SettingsPage() {
                       />
                     </div>
                   </div>
+                </div>
+
+                <Divider />
+                <GroupTitle>Help & tips</GroupTitle>
+
+                <div
+                  className="flex items-center justify-between p-4 rounded-xl mb-3"
+                  style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}
+                >
+                  <div>
+                    <p className="text-[12px] font-medium" style={{ color: "var(--color-charcoal)" }}>
+                      Show in-app tips & guides
+                    </p>
+                    <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>
+                      Welcome tour, module intros, and contextual tooltips. Turn off to keep the app quiet.
+                    </p>
+                  </div>
+                  <ToggleSwitch
+                    checked={!profile.tour_dismissed}
+                    onChange={() => set("tour_dismissed", !profile.tour_dismissed)}
+                  />
+                </div>
+
+                <div
+                  className="flex items-center justify-between p-4 rounded-xl"
+                  style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}
+                >
+                  <div>
+                    <p className="text-[12px] font-medium" style={{ color: "var(--color-charcoal)" }}>
+                      Restart welcome tour
+                    </p>
+                    <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>
+                      Resets your progress so the dashboard tour and module intros fire again from the top.
+                    </p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!userId) return;
+                      const supabase = createClient();
+                      await supabase
+                        .from("profiles")
+                        .update({ tour_visited: {}, tour_dismissed: false })
+                        .eq("user_id", userId);
+                      // Reflect in local state so the toggle above also flips on
+                      set("tour_dismissed", false);
+                      window.dispatchEvent(new CustomEvent("tour-visited", { detail: { visited: {} } }));
+                      // Send them to the dashboard so the tour fires immediately
+                      router.push("/");
+                      router.refresh();
+                    }}
+                    className="px-[14px] py-[7px] text-[11px] font-medium rounded-md transition-colors"
+                    style={{
+                      background: "transparent", color: "var(--color-charcoal)",
+                      border: "0.5px solid var(--color-border)", cursor: "pointer", fontFamily: "inherit",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-cream)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                  >
+                    Restart
+                  </button>
                 </div>
 
                 <SaveBar saving={saving} saved={saved} onSave={handleSave} />

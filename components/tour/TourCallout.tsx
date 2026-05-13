@@ -64,16 +64,21 @@ export default function TourCallout() {
     };
   }, []);
 
-  // "home" is owned by DashboardTour (no sidebar anchor). If it's the next
-  // unvisited module, the sidebar callout stays hidden — the dashboard tour
-  // is in charge until the user opens Ash from its final step.
-  // Also hide if the user is already on the target page — the in-module
-  // walkthrough is in charge there.
+  // The floating sidebar callout fires ONLY for projects — the single
+  // hand-off from the dashboard tour into the first module. After projects
+  // is visited the user is free to explore at their own pace; the Getting
+  // Started widget keeps offering an "Up next" link without popping up.
+  // Other gates:
+  //   - "home" is owned by DashboardTour (no sidebar anchor)
+  //   - skip the callout entirely while the user is already on the target
   const rawNext = visited && !dismissed && !waitingAsh ? nextUnvisited(visited) : null;
   const onTargetPage =
     rawNext != null && pathname != null &&
     (pathname === rawNext.href || (rawNext.href !== "/" && pathname.startsWith(rawNext.href + "/")));
-  const next = rawNext && rawNext.key !== "home" && !onTargetPage ? rawNext : null;
+  const next =
+    rawNext && rawNext.key === "projects" && !onTargetPage
+      ? rawNext
+      : null;
 
   const reposition = useCallback(() => {
     if (!next) { setPos(null); return; }
