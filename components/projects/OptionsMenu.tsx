@@ -74,7 +74,7 @@ export default function OptionsMenu({ onClose }: { onClose: () => void }) {
         borderBottom: "0.5px solid var(--color-border)",
       }}>
         <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)" }}>
-          Customise project options
+          Customize project options
         </p>
         <button
           type="button"
@@ -324,13 +324,13 @@ function OptionRow({
             zIndex: 10,
             background: "var(--color-surface-raised)",
             border: "0.5px solid var(--color-border)",
-            borderRadius: 8,
+            borderRadius: 10,
             boxShadow: "var(--shadow-md)",
-            padding: 6,
+            padding: 8,
             display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: 4,
-            width: 116,
+            gridTemplateColumns: "repeat(6, 1fr)",
+            gap: 5,
+            width: 168,
           }}>
             {OPTION_PALETTE.map((p) => (
               <button
@@ -338,8 +338,9 @@ function OptionRow({
                 type="button"
                 onClick={() => { onRecolour(p.value); setPaletteOpen(false); }}
                 title={p.name}
+                aria-label={p.name}
                 style={{
-                  width: 22, height: 22, borderRadius: 99,
+                  width: 20, height: 20, borderRadius: 99,
                   background: p.value,
                   border: option.color === p.value ? "1.5px solid var(--color-text-primary)" : "0.5px solid rgba(0,0,0,0.10)",
                   cursor: "pointer", padding: 0,

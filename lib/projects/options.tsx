@@ -50,16 +50,31 @@ export const DEFAULT_PROJECT_OPTIONS: ProjectOptions = {
 };
 
 // ── Palette for the colour picker ────────────────────────────────────────────
+// Two rows of warm + cool tones plus the brand neutrals. Order is left-to-right,
+// top-to-bottom so the swatch grid reads naturally.
 
 export const OPTION_PALETTE: { name: string; value: string }[] = [
-  { name: "Sage",    value: "var(--color-sage)"        },
-  { name: "Grey",    value: "var(--color-grey)"        },
-  { name: "Yellow",  value: "var(--color-warm-yellow)" },
-  { name: "Green",   value: "var(--color-green)"       },
-  { name: "Orange",  value: "var(--color-red-orange)"  },
-  { name: "Gold",    value: "#b8860b"                  },
-  { name: "Purple",  value: "#6d4fa3"                  },
-  { name: "Blue",    value: "#2563ab"                  },
+  // Row 1 — brand + warm tones
+  { name: "Sage",       value: "var(--color-sage)"        },
+  { name: "Olive",      value: "#6b7a3a"                  },
+  { name: "Forest",     value: "#3d6b4f"                  },
+  { name: "Green",      value: "var(--color-green)"       },
+  { name: "Yellow",     value: "var(--color-warm-yellow)" },
+  { name: "Gold",       value: "#b8860b"                  },
+  // Row 2 — warm to cool
+  { name: "Amber",      value: "#d97706"                  },
+  { name: "Orange",     value: "var(--color-red-orange)"  },
+  { name: "Rust",       value: "#a13a1f"                  },
+  { name: "Rose",       value: "#c93a6a"                  },
+  { name: "Magenta",    value: "#a1308a"                  },
+  { name: "Purple",     value: "#6d4fa3"                  },
+  // Row 3 — cool + neutrals
+  { name: "Indigo",     value: "#4a4fa3"                  },
+  { name: "Blue",       value: "#2563ab"                  },
+  { name: "Sky",        value: "#3b8fc4"                  },
+  { name: "Teal",       value: "#2a8a8a"                  },
+  { name: "Slate",      value: "#5a6470"                  },
+  { name: "Grey",       value: "var(--color-grey)"        },
 ];
 
 // ── Context ──────────────────────────────────────────────────────────────────

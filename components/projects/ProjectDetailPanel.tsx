@@ -450,7 +450,15 @@ function CanvasEditor({
   const [saving,    setSaving]    = useState(false);
   const [saved,     setSaved]     = useState(false);
   const [ashPrompt, setAshPrompt] = useState<AshPromptState>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mirror of the latest HTML the editor produced, kept in a ref so the
+  // unmount cleanup doesn't have to read from a possibly torn-down editor.
+  // Seeded with initialHtml so a "no edits" tab toggle preserves the input.
+  const latestHtml   = useRef<string>(initialHtml ?? "");
+  // Always-fresh onSaved reference so cleanup uses the latest parent
+  // callback (the prop is recreated on each parent render).
+  const onSavedRef   = useRef(onSaved);
+  onSavedRef.current = onSaved;
 
   const handleAshTrigger = useCallback(
     (pos: number, coords: { top: number; left: number; bottom: number }) => {
@@ -464,23 +472,28 @@ function CanvasEditor({
     extensions: getRichExtensions({ placeholder: "Start writing…", onAshTrigger: handleAshTrigger }),
     content: initialHtml ?? "",
     onUpdate({ editor }) {
-      scheduleSave(editor.getHTML());
+      const html = editor.getHTML();
+      latestHtml.current = html;
+      scheduleSave(html);
     },
     editorProps: {
       attributes: { style: "outline: none; min-height: 300px; font-size: 14px; line-height: 1.8; color: #6b6860;" },
     },
   }, [projectId]);
 
-  // Flush pending save on unmount — and lift the final HTML up to the parent
-  // so the next remount (e.g. switching back to the Canvas tab) loads the
-  // freshest content instead of the stale snapshot from the initial fetch.
+  // On unmount: flush any pending save with the ref-tracked HTML (the editor
+  // may already be torn down by Tiptap's own cleanup at this point, so
+  // reading editor.getHTML() can return empty and clobber the parent's
+  // canvasHtml state — that's exactly what was making the canvas blank out
+  // on a tab toggle. Using the ref keeps the last known content stable.
   useEffect(() => {
     return () => {
       if (saveTimer.current) {
         clearTimeout(saveTimer.current);
-        const html = editor?.getHTML() ?? "";
+        saveTimer.current = null;
+        const html = latestHtml.current;
         createClient().from("projects").update({ canvas_html: html || null }).eq("id", projectId);
-        onSaved(html || null);
+        onSavedRef.current(html || null);
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -491,7 +504,8 @@ function CanvasEditor({
     setSaving(true); setSaved(false);
     saveTimer.current = setTimeout(async () => {
       await createClient().from("projects").update({ canvas_html: html || null }).eq("id", projectId);
-      onSaved(html || null);
+      onSavedRef.current(html || null);
+      saveTimer.current = null;
       setSaving(false); setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     }, 800);
