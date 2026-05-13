@@ -165,6 +165,23 @@ export default function GettingStartedWidget({ expanded }: Props) {
             </span>
           </div>
         )}
+
+        {/* Explicit off-switch — also reachable from Settings → Preferences */}
+        <button
+          onClick={dismiss}
+          style={{
+            fontSize: 10, fontWeight: 500,
+            color: "rgba(255,255,255,0.7)",
+            background: "none", border: "none",
+            padding: "2px 0",
+            textDecoration: "underline",
+            textDecorationColor: "rgba(255,255,255,0.3)",
+            cursor: "pointer", fontFamily: "inherit",
+            textAlign: "left", width: "fit-content",
+          }}
+        >
+          Turn off all tips
+        </button>
       </div>
     </div>
   );
