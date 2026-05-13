@@ -12,6 +12,7 @@ import Topbar from "@/components/layout/Topbar";
 import FilterTabs from "@/components/ui/FilterTabs";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
+import { FolderOpen } from "lucide-react";
 import ProjectsIntroModal from "@/components/tour/projects/ProjectsIntroModal";
 import ProjectsTooltipTour from "@/components/tour/projects/ProjectsTooltipTour";
 
@@ -165,7 +166,7 @@ export default function ProjectsClient({ initialProjects }: Props) {
       >
         {projects.length === 0 ? (
           <EmptyState
-            icon="🗂"
+            icon={<FolderOpen size={24} strokeWidth={1.5} color="var(--color-sage)" />}
             heading="Add your first project"
             body="Projects are the anchor of your studio. Every piece of work — commissions, editions, personal work — lives here, with its own tasks, time log, linked contacts, and value tracking."
             action={{ label: "+ New project", onClick: () => setShowModal(true) }}

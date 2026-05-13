@@ -187,9 +187,9 @@ export default function DashboardTour() {
             height: highlight.h,
             borderRadius: 16,
             // Sage ring on the target + a giant dim shadow extending outward.
-            // The element itself is transparent so the underlying card shows
-            // through at full brightness.
-            boxShadow: "0 0 0 2px var(--color-sage), 0 0 0 9999px rgba(31,33,26,0.32)",
+            // Hardcoded near-black so the spotlight works in light AND dark
+            // mode (charcoal-based dim barely shows over a dark background).
+            boxShadow: "0 0 0 2px var(--color-sage), 0 0 0 9999px rgba(0,0,0,0.55)",
             pointerEvents: "none",
             zIndex: 40,
             transition: "top 0.18s ease, left 0.18s ease, width 0.18s ease, height 0.18s ease",
@@ -200,7 +200,7 @@ export default function DashboardTour() {
           aria-hidden
           style={{
             position: "fixed", inset: 0,
-            background: "rgba(31,33,26,0.32)",
+            background: "rgba(0,0,0,0.55)",
             zIndex: 40, pointerEvents: "none",
           }}
         />
