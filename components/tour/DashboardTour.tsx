@@ -216,8 +216,10 @@ export default function DashboardTour() {
           left: pos?.left ?? "50%",
           transform: pos ? "none" : "translate(-50%, -50%)",
           width: W, zIndex: 50,
-          background: "var(--color-charcoal)",
-          color: "var(--color-warm-white)",
+          // Hardcoded so the callout stays dark in both light and dark mode
+          // (var(--color-charcoal) flips to a light cream in dark mode).
+          background: "#1f211a",
+          color: "#f5f1e9",
           borderRadius: 12,
           boxShadow: "0 16px 48px rgba(31,33,26,0.4)",
           padding: "14px 16px",
@@ -268,7 +270,7 @@ export default function DashboardTour() {
             style={{
               padding: "7px 14px",
               fontSize: 11, fontWeight: 600,
-              background: "var(--color-sage)", color: "var(--color-warm-white)",
+              background: "var(--color-sage)", color: "#f9faf4",
               border: "none", borderRadius: 8, cursor: "pointer",
               fontFamily: "inherit",
             }}

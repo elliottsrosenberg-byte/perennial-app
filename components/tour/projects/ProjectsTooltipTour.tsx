@@ -26,7 +26,7 @@ interface Step {
   title:     string;
   body:      string;
   hint?:     string;            // small italicized hint about how it advances
-  finalCta?: { label: string; action: "ash" | "done" };
+  finalCta?: { label: string; action: "ash-draft-tasks" | "done" };
 }
 
 const W = 280;
@@ -60,9 +60,9 @@ const STEPS: Step[] = [
     id:       "ash-handoff",
     anchor:   '[data-tour-target="projects.detail-panel"]',
     side:     "left",
-    title:    "Ash can help with this project",
-    body:     "Stuck on pricing, materials, scope, or contract terms? Ash has full context on your studio — it can suggest a price range, draft a scope of work, or recommend contacts to reach out to. Try it on this project.",
-    finalCta: { label: "Ask Ash about this project", action: "ash" },
+    title:    "Let Ash get this started",
+    body:     "Ash knows this project and has a working sense of how successful design studios actually price, scope, and ship work like it. Hit the button — Ash will draft starter tasks straight into your project and brief you on what to focus on first.",
+    finalCta: { label: "Draft starter tasks", action: "ash-draft-tasks" },
   },
 ];
 
@@ -73,7 +73,7 @@ export default function ProjectsTooltipTour() {
   const [stepIdx,  setStepIdx]  = useState(0);
   const [pos,      setPos]      = useState<Pos | null>(null);
   const [hidden,   setHidden]   = useState(false);
-  const projectTitleRef = useRef<string | null>(null);
+  const projectRef = useRef<{ id: string; title: string; type: string | null } | null>(null);
 
   // Init: only start if profile says we haven't done the tour AND a session
   // event fires to start it. We don't auto-start on mount — the intro modal
@@ -110,8 +110,10 @@ export default function ProjectsTooltipTour() {
 
     function onModalOpen() { if (stepIdx === 0) setStepIdx(1); }
     function onCreated(e: Event) {
-      const detail = (e as CustomEvent<{ title?: string }>).detail;
-      projectTitleRef.current = detail?.title ?? null;
+      const detail = (e as CustomEvent<{ id?: string; title?: string; type?: string | null }>).detail;
+      if (detail?.id && detail.title) {
+        projectRef.current = { id: detail.id, title: detail.title, type: detail.type ?? null };
+      }
       if (stepIdx === 1) setStepIdx(2);
     }
     function onDetailOpen() { if (stepIdx === 2) setStepIdx(3); }
@@ -191,11 +193,26 @@ export default function ProjectsTooltipTour() {
     markDone();
   }
 
-  function askAsh() {
-    const title = projectTitleRef.current ?? "this project";
-    const prompt = `I just created my first project in Perennial${
-      projectTitleRef.current ? ` — "${projectTitleRef.current}"` : ""
-    }. Walk me through what to think about first. Some specifics that would help: what's a reasonable price range for this kind of work in my practice, what fields on the project should I fill in next, and is there anyone in my contacts I should be reaching out to about it?`;
+  function draftStarterTasks() {
+    const proj = projectRef.current;
+    // Build a structured prompt that asks Ash to actually call its add_task
+    // tool for each task — not just describe them. The brief at the end
+    // signals expert, design-industry-grounded insight rather than generic
+    // chatbot advice.
+    const projLine = proj
+      ? `The project I just created:\n- Title: "${proj.title}"\n- Type: ${proj.type ?? "unspecified"}\n- Project ID (use this for add_task): ${proj.id}`
+      : "The project I just created (use the most recently created project as context):";
+
+    const prompt = [
+      "I just created my first project in Perennial and I want to see what you can do.",
+      projLine,
+      "",
+      "Please do the following, in order:",
+      "1. Draft 3–5 starter tasks that any project like this typically needs at this stage. Lean on what successful design studios actually do — sourcing, contracts, photography, deposit invoicing, fabrication milestones, install logistics, etc. Tailor them to my practice if you have context on it.",
+      "2. Call add_task for each one with project_id set to the ID above. Use medium priority unless something is genuinely urgent.",
+      "3. Once the tasks are added, give me a short briefing (3–5 sentences) on what to focus on first for a project like this — pricing benchmarks, common pitfalls, timeline expectations. Grounded in what real studios do, not generic advice.",
+    ].join("\n");
+
     window.dispatchEvent(new CustomEvent("open-ash", { detail: { message: prompt } }));
     dismiss();
   }
@@ -209,7 +226,7 @@ export default function ProjectsTooltipTour() {
     const base: React.CSSProperties = {
       position: "absolute",
       width: 12, height: 12,
-      background: "var(--color-charcoal)",
+      background: "#1f211a",
     };
     switch (step.side) {
       case "right":  return { ...base, left:  -6, top: "50%",  transform: "translateY(-50%) rotate(45deg)" };
@@ -229,8 +246,9 @@ export default function ProjectsTooltipTour() {
         left: pos.left,
         width: W,
         zIndex: 60,
-        background: "var(--color-charcoal)",
-        color: "var(--color-warm-white)",
+        // Hardcoded so the callout stays dark in both themes.
+        background: "#1f211a",
+        color: "#f5f1e9",
         borderRadius: 12,
         boxShadow: "0 16px 40px rgba(31,33,26,0.36), 0 2px 6px rgba(31,33,26,0.2)",
         padding: "13px 15px",
@@ -270,9 +288,9 @@ export default function ProjectsTooltipTour() {
         </p>
       )}
 
-      {isLast && step.finalCta?.action === "ash" && (
+      {isLast && step.finalCta?.action === "ash-draft-tasks" && (
         <button
-          onClick={askAsh}
+          onClick={draftStarterTasks}
           style={{
             display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
             width: "100%", padding: "8px 12px",
