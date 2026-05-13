@@ -63,7 +63,9 @@ export default function ProjectsClient({ initialProjects }: Props) {
   function handleCreated(project: Project) {
     setProjects((prev) => [project, ...prev]);
     if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("projects:created", { detail: { title: project.title, id: project.id } }));
+      window.dispatchEvent(new CustomEvent("projects:created", {
+        detail: { id: project.id, title: project.title, type: project.type ?? null },
+      }));
     }
   }
 

@@ -94,18 +94,18 @@ export default function GettingStartedWidget({ expanded }: Props) {
       >
         {/* Header: title + count + dismiss */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--sidebar-text-hover)" }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.95)" }}>
             Getting started
           </span>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 10, color: "var(--sidebar-soon-text)" }}>{done}/{total}</span>
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.7)" }}>{done}/{total}</span>
             <button
               onClick={dismiss}
               aria-label="Skip tour"
               title="Skip tour"
               style={{
                 background: "none", border: "none", padding: 2, cursor: "pointer",
-                color: "var(--sidebar-soon-text)", display: "flex", alignItems: "center",
+                color: "rgba(255,255,255,0.7)", display: "flex", alignItems: "center",
                 borderRadius: 4,
               }}
             >
@@ -114,30 +114,31 @@ export default function GettingStartedWidget({ expanded }: Props) {
           </div>
         </div>
 
-        {/* Progress bar */}
-        <div style={{ height: 4, borderRadius: 4, width: "100%", background: "var(--sidebar-divider)", overflow: "hidden" }}>
-          <div style={{ width: `${pct}%`, height: "100%", background: "var(--color-sage)", transition: "width 0.3s ease" }} />
+        {/* Progress bar — darker track + warm fill for readability on sage */}
+        <div style={{ height: 4, borderRadius: 4, width: "100%", background: "rgba(0,0,0,0.18)", overflow: "hidden" }}>
+          <div style={{ width: `${pct}%`, height: "100%", background: "rgba(255,255,255,0.95)", transition: "width 0.3s ease" }} />
         </div>
 
-        {/* Up next — the actionable bit */}
+        {/* Up next — the actionable bit. Hardcoded high-opacity whites for
+            readable contrast on the sage sidebar background. */}
         {next && next.key !== "home" && (
           <Link
             href={next.href}
             style={{
               display: "flex", flexDirection: "column", gap: 3,
               textDecoration: "none", fontFamily: "inherit",
-              padding: "6px 8px", margin: "-2px -2px 0",
+              padding: "8px 10px", margin: "-2px -2px 0",
               borderRadius: 6,
-              background: "var(--sidebar-active-bg)",
+              background: "rgba(255,255,255,0.18)",
             }}
           >
-            <span style={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--sidebar-soon-text)" }}>
+            <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(255,255,255,0.7)" }}>
               Up next
             </span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--sidebar-text-active)", lineHeight: 1.2 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.98)", lineHeight: 1.2 }}>
               {next.label} →
             </span>
-            <span style={{ fontSize: 10, color: "var(--sidebar-soon-text)", lineHeight: 1.4 }}>
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.82)", lineHeight: 1.45 }}>
               {next.blurb}
             </span>
           </Link>
@@ -148,18 +149,18 @@ export default function GettingStartedWidget({ expanded }: Props) {
           <div
             style={{
               display: "flex", flexDirection: "column", gap: 3,
-              padding: "6px 8px", margin: "-2px -2px 0",
+              padding: "8px 10px", margin: "-2px -2px 0",
               borderRadius: 6,
-              background: "var(--sidebar-active-bg)",
+              background: "rgba(255,255,255,0.18)",
             }}
           >
-            <span style={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--sidebar-soon-text)" }}>
+            <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(255,255,255,0.7)" }}>
               Up next
             </span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--sidebar-text-active)", lineHeight: 1.2 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.98)", lineHeight: 1.2 }}>
               Dashboard tour
             </span>
-            <span style={{ fontSize: 10, color: "var(--sidebar-soon-text)", lineHeight: 1.4 }}>
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.82)", lineHeight: 1.45 }}>
               Walk through the home dashboard to begin.
             </span>
           </div>

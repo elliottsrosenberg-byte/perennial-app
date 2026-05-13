@@ -119,8 +119,8 @@ export default function TourCallout() {
         transform: "translateY(-50%)",
         zIndex: 50,
         width: 250,
-        background: "var(--color-charcoal)",
-        color: "var(--color-warm-white)",
+        background: "#1f211a",
+        color: "#f5f1e9",
         borderRadius: 12,
         boxShadow: "0 12px 32px rgba(31,33,26,0.28), 0 2px 6px rgba(31,33,26,0.18)",
         padding: "12px 14px",
@@ -135,7 +135,7 @@ export default function TourCallout() {
           left: -6,
           top: "50%", transform: "translateY(-50%) rotate(45deg)",
           width: 12, height: 12,
-          background: "var(--color-charcoal)",
+          background: "#1f211a",
         }}
       />
 
