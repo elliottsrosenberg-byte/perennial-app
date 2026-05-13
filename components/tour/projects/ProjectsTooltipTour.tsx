@@ -87,8 +87,32 @@ const STEPS: Step[] = [
   },
 ];
 
-interface Highlight { top: number; left: number; w: number; h: number; }
+interface Highlight { top: number; left: number; w: number; h: number; radius: number; }
 interface CalloutPos { top: number; left: number; }
+
+// Read the target's computed border-radius so the spotlight ring matches its
+// shape (a pill button stays a pill; a card stays a card). Pads by the same
+// offset the ring expands by, keeping the curve concentric with the target.
+// If the anchor is a wrapper span with no radius of its own (a common pattern
+// for adding a data-tour-target without forking the inner component), fall
+// through to the first child whose own radius is non-zero.
+function ringRadiusFor(el: HTMLElement, pad: number): number {
+  function readRadius(node: HTMLElement): number {
+    const parts = window.getComputedStyle(node)
+      .borderRadius.split(/\s+/)
+      .map((p) => parseFloat(p) || 0);
+    return Math.max(0, ...parts);
+  }
+  let raw = readRadius(el);
+  if (raw === 0) {
+    const child = el.querySelector<HTMLElement>("button, a, [data-radius-source]");
+    if (child) raw = readRadius(child);
+  }
+  const r = el.getBoundingClientRect();
+  const isPill = raw >= Math.min(r.width, r.height) / 2 - 0.5;
+  if (isPill) return Math.min(r.width, r.height) / 2 + pad;
+  return raw + pad;
+}
 
 export default function ProjectsTooltipTour() {
   const [active,   setActive]   = useState(false);
@@ -163,7 +187,14 @@ export default function ProjectsTooltipTour() {
     const r = el.getBoundingClientRect();
     const useSpotlight = step.spotlight !== false;
     if (useSpotlight) {
-      setHighlight({ top: r.top - 4, left: r.left - 4, w: r.width + 8, h: r.height + 8 });
+      const pad = 4;
+      setHighlight({
+        top:    r.top - pad,
+        left:   r.left - pad,
+        w:      r.width + pad * 2,
+        h:      r.height + pad * 2,
+        radius: ringRadiusFor(el, pad),
+      });
     } else {
       setHighlight(null);
     }
@@ -261,7 +292,7 @@ export default function ProjectsTooltipTour() {
             left:   highlight.left,
             width:  highlight.w,
             height: highlight.h,
-            borderRadius: 14,
+            borderRadius: highlight.radius,
             boxShadow: "0 0 0 2px var(--color-sage), 0 0 0 9999px rgba(0,0,0,0.42)",
             pointerEvents: "none",
             zIndex: 55,

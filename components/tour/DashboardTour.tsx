@@ -53,11 +53,33 @@ export const TOUR_WAITING_KEY = "perennial-tour-waiting-ash";
 
 const W = 320;
 
+// Read the target's computed border-radius so the spotlight ring matches its
+// shape (a pill button stays a pill; a card stays a card). Pads by the same
+// offset the ring expands by, keeping the curve concentric with the target.
+// Falls through to a child button/anchor when the anchor is a wrapper.
+function ringRadiusFor(el: HTMLElement, pad: number): number {
+  function readRadius(node: HTMLElement): number {
+    const parts = window.getComputedStyle(node)
+      .borderRadius.split(/\s+/)
+      .map((p) => parseFloat(p) || 0);
+    return Math.max(0, ...parts);
+  }
+  let raw = readRadius(el);
+  if (raw === 0) {
+    const child = el.querySelector<HTMLElement>("button, a, [data-radius-source]");
+    if (child) raw = readRadius(child);
+  }
+  const r = el.getBoundingClientRect();
+  const isPill = raw >= Math.min(r.width, r.height) / 2 - 0.5;
+  if (isPill) return Math.min(r.width, r.height) / 2 + pad;
+  return raw + pad;
+}
+
 export default function DashboardTour() {
   const [stepIdx, setStepIdx] = useState(0);
   const [active,  setActive]  = useState<boolean | null>(null);
   const [pos,     setPos]     = useState<{ top: number; left: number } | null>(null);
-  const [highlight, setHighlight] = useState<{ top: number; left: number; w: number; h: number } | null>(null);
+  const [highlight, setHighlight] = useState<{ top: number; left: number; w: number; h: number; radius: number } | null>(null);
 
   // Init: check whether the dashboard tour should run.
   useEffect(() => {
@@ -95,7 +117,14 @@ export default function DashboardTour() {
       return;
     }
     const r = el.getBoundingClientRect();
-    setHighlight({ top: r.top - 4, left: r.left - 4, w: r.width + 8, h: r.height + 8 });
+    const pad = 4;
+    setHighlight({
+      top:    r.top - pad,
+      left:   r.left - pad,
+      w:      r.width + pad * 2,
+      h:      r.height + pad * 2,
+      radius: ringRadiusFor(el, pad),
+    });
 
     // Default: place callout below the target, centered horizontally
     let top  = r.bottom + 14;
@@ -210,7 +239,7 @@ export default function DashboardTour() {
             left:   highlight.left,
             width:  highlight.w,
             height: highlight.h,
-            borderRadius: 16,
+            borderRadius: highlight.radius,
             // Sage ring on the target + a giant dim shadow extending outward.
             // Hardcoded near-black so the spotlight works in light AND dark
             // mode (charcoal-based dim barely shows over a dark background).

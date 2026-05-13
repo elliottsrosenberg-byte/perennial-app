@@ -31,12 +31,12 @@ const SLIDES: Slide[] = [
   },
   {
     title: "Open a project to do the work.",
-    body:  "Click a card and a detail panel slides in over your list — your project on top of context. Need more space? Expand to full screen. Click out to come back to your board.",
+    body:  "Click a card and the project opens as a scrim view — your project in focus, your board still behind it. Want more room? Expand to full screen. Click out to come back.",
     Anim:  ScrimOpen,
   },
   {
     title: "Everything for the project, in one place.",
-    body:  "Inside each project: a writing canvas, a task list, linked contacts, notes, and files. No tab-hopping — your whole project lives here, with Ash a click away if you want a partner.",
+    body:  "The left rail holds your sections — Canvas, Tasks, Contacts, Notes, Files — and the content sits beside it. Pick a section to jump straight in, with Ash a click away if you want a partner.",
     Anim:  FormFill,
   },
 ];
