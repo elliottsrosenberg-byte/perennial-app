@@ -117,8 +117,8 @@ export const createProjectTool: AshToolDefinition = {
     type: "object",
     properties: {
       title:       { type: "string", description: "Project title" },
-      type:        { type: "string", enum: ["furniture", "sculpture", "painting", "client_project"], description: "Project type" },
-      priority:    { type: "string", enum: ["high", "medium", "low"] },
+      type:        { type: "string", description: "Project type — defaults are furniture / sculpture / painting / client_project, but the user may have renamed or added their own. Match the user's stated value to one of their existing option keys when possible." },
+      priority:    { type: "string", description: "Priority — defaults are high / medium / low. Like type and status, the user can customise these." },
       due_date:    { type: "string", description: "Due date in YYYY-MM-DD format" },
       description: { type: "string" },
     },
@@ -150,7 +150,7 @@ export const updateProjectStatusTool: AshToolDefinition = {
     type: "object",
     properties: {
       project_id: { type: "string", description: "The UUID of the project to update" },
-      status:     { type: "string", enum: ["in_progress", "planning", "on_hold", "complete", "cut"] },
+      status:     { type: "string", description: "New status key — defaults are planning / in_progress / on_hold / complete / cut, but the user may have customised these." },
     },
     required: ["project_id", "status"],
   },
