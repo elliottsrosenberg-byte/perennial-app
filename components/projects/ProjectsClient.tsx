@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import { createClient } from "@/lib/supabase/client";
-import type { Project, ProjectStatus, ProjectType, ProjectPriority } from "@/types/database";
+import type { Project, ProjectStatus } from "@/types/database";
 import ProjectCard from "./ProjectCard";
 import NewProjectModal from "./NewProjectModal";
 import ProjectDetailPanel from "./ProjectDetailPanel";
@@ -12,144 +12,43 @@ import Topbar from "@/components/layout/Topbar";
 import FilterTabs from "@/components/ui/FilterTabs";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
-import { FolderOpen, MoreHorizontal, GripVertical } from "lucide-react";
+import { FolderOpen, MoreHorizontal } from "lucide-react";
 import ProjectsIntroModal from "@/components/tour/projects/ProjectsIntroModal";
 import ProjectsTooltipTour from "@/components/tour/projects/ProjectsTooltipTour";
+import { ProjectOptionsProvider, useProjectOptions, type OptionDimension } from "@/lib/projects/options";
+import OptionsMenu from "./OptionsMenu";
 
-// ─── Group definitions ───────────────────────────────────────────────────────
-// One entry per category so the same renderer can group by status, type, or
-// priority. Drag-and-drop only works in "status" mode — the DnD handler is
-// gated by GROUP_DIMENSIONS[groupBy].draggable.
+type GroupBy = OptionDimension;
 
-interface GroupDef<K extends string> {
-  key:   K;
-  label: string;
-  color: string;
+interface DimensionMeta {
+  key:       GroupBy;
+  label:     string;
+  field:     "status" | "type" | "priority";
+  draggable: boolean;
 }
 
-const STATUS_GROUPS: GroupDef<ProjectStatus>[] = [
-  { key: "planning",    label: "Planning",    color: "var(--color-grey)"        },
-  { key: "in_progress", label: "In Progress", color: "var(--color-sage)"        },
-  { key: "on_hold",     label: "On Hold",     color: "var(--color-warm-yellow)" },
-  { key: "complete",    label: "Complete",    color: "var(--color-green)"       },
-  { key: "cut",         label: "Cut",         color: "var(--color-red-orange)"  },
-];
-
-const TYPE_GROUPS: GroupDef<ProjectType>[] = [
-  { key: "furniture",      label: "Furniture", color: "#b8860b" },
-  { key: "sculpture",      label: "Sculpture", color: "#b8860b" },
-  { key: "painting",       label: "Painting",  color: "#6d4fa3" },
-  { key: "client_project", label: "Client",    color: "#2563ab" },
-];
-
-const PRIORITY_GROUPS: GroupDef<ProjectPriority>[] = [
-  { key: "high",   label: "High",   color: "var(--color-red-orange)" },
-  { key: "medium", label: "Medium", color: "#b8860b"                 },
-  { key: "low",    label: "Low",    color: "var(--color-sage)"       },
-];
-
-type GroupBy = "status" | "type" | "priority";
-
-const GROUP_DIMENSIONS: {
-  key: GroupBy;
-  label: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  groups: GroupDef<any>[];
-  field: "status" | "type" | "priority";
-  draggable: boolean;
-}[] = [
-  { key: "status",   label: "Status",   groups: STATUS_GROUPS,   field: "status",   draggable: true  },
-  { key: "type",     label: "Type",     groups: TYPE_GROUPS,     field: "type",     draggable: false },
-  { key: "priority", label: "Priority", groups: PRIORITY_GROUPS, field: "priority", draggable: false },
+const DIMENSIONS: DimensionMeta[] = [
+  { key: "status",   label: "Status",   field: "status",   draggable: true  },
+  { key: "type",     label: "Type",     field: "type",     draggable: false },
+  { key: "priority", label: "Priority", field: "priority", draggable: false },
 ];
 
 interface Props {
   initialProjects: Project[];
 }
 
-// ── OptionsMenu ──────────────────────────────────────────────────────────────
-// Surfaces the current Status/Type/Priority options as a reference, with a
-// note that customisation is coming. Implementing real customisation requires
-// either swapping the Postgres enum columns for free-text columns + a
-// preferences table, or storing label overrides in profile.preferences JSONB.
-// Either path is bigger than today's pass — this popover is the entry point.
-function OptionsMenu({ onClose }: { onClose: () => void }) {
-  const sections: { title: string; items: { label: string; color: string }[] }[] = [
-    { title: "Status",   items: STATUS_GROUPS },
-    { title: "Type",     items: TYPE_GROUPS   },
-    { title: "Priority", items: PRIORITY_GROUPS },
-  ];
-
+// Outer component wraps the inner board in the options provider so all of
+// the projects UI (board, cards, detail panel, modal) can share one fetch.
+export default function ProjectsClient({ initialProjects }: Props) {
   return (
-    <div style={{
-      position: "absolute", right: 0, top: "calc(100% + 6px)",
-      width: 280, zIndex: 70,
-      background: "var(--color-surface-raised)",
-      border: "0.5px solid var(--color-border)",
-      borderRadius: 12,
-      boxShadow: "var(--shadow-md)",
-      padding: "12px 14px 14px",
-      fontFamily: "inherit",
-    }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-        <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-tertiary)" }}>
-          Project options
-        </p>
-      </div>
-
-      {sections.map(s => (
-        <div key={s.title} style={{ marginBottom: 12 }}>
-          <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-grey)", marginBottom: 5 }}>
-            {s.title}
-          </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {s.items.map(it => (
-              <div
-                key={it.label}
-                style={{
-                  display: "flex", alignItems: "center", gap: 7,
-                  padding: "5px 7px", borderRadius: 6,
-                  fontSize: 12, color: "var(--color-text-secondary)",
-                }}
-              >
-                <GripVertical size={11} strokeWidth={1.5} style={{ color: "var(--color-text-tertiary)", opacity: 0.5 }} />
-                <span style={{ width: 7, height: 7, borderRadius: 99, background: it.color, flexShrink: 0 }} />
-                <span style={{ flex: 1 }}>{it.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-
-      <div style={{
-        marginTop: 4, padding: "8px 10px",
-        background: "var(--color-surface-sunken)",
-        borderRadius: 7,
-        fontSize: 10.5, lineHeight: 1.5,
-        color: "var(--color-text-tertiary)",
-      }}>
-        Rename, reorder, and add your own options — coming soon. Ash will be able to set these up for you on request.
-      </div>
-
-      <button
-        type="button"
-        onClick={onClose}
-        style={{
-          marginTop: 10, width: "100%",
-          padding: "6px 10px", fontSize: 11, fontWeight: 500,
-          background: "transparent",
-          color: "var(--color-text-secondary)",
-          border: "0.5px solid var(--color-border-strong)",
-          borderRadius: 7, cursor: "pointer", fontFamily: "inherit",
-        }}
-      >
-        Close
-      </button>
-    </div>
+    <ProjectOptionsProvider>
+      <ProjectsBoard initialProjects={initialProjects} />
+    </ProjectOptionsProvider>
   );
 }
 
-export default function ProjectsClient({ initialProjects }: Props) {
+function ProjectsBoard({ initialProjects }: Props) {
+  const { options }       = useProjectOptions();
   const [projects,        setProjects]        = useState<Project[]>(initialProjects);
   const [groupBy,         setGroupBy]         = useState<GroupBy>("status");
   const [filter,          setFilter]          = useState<string>("all");
@@ -183,8 +82,8 @@ export default function ProjectsClient({ initialProjects }: Props) {
     setShowModal(true);
   }
 
-  const activeDim   = GROUP_DIMENSIONS.find(d => d.key === groupBy)!;
-  const groupsForUI = activeDim.groups;
+  const activeDim   = DIMENSIONS.find(d => d.key === groupBy)!;
+  const groupsForUI = options[groupBy];
   const filterField = activeDim.field;
 
   // Auto-open the New Project modal when arriving with ?new=1 (e.g. from
@@ -343,7 +242,7 @@ export default function ProjectsClient({ initialProjects }: Props) {
             borderRadius: 7,
             padding: 2,
           }}>
-            {GROUP_DIMENSIONS.map(d => (
+            {DIMENSIONS.map(d => (
               <button
                 key={d.key}
                 type="button"
@@ -367,7 +266,6 @@ export default function ProjectsClient({ initialProjects }: Props) {
 
         <p style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
           {visible.length} project{visible.length !== 1 ? "s" : ""}
-          {filter === "all" && groupBy === "status" ? " · drag cards between sections to change status" : ""}
         </p>
       </div>
 

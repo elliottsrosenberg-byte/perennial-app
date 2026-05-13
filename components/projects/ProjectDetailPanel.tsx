@@ -2,9 +2,31 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Project, Task, Note, Contact, ProjectType, ProjectStatus, ProjectPriority } from "@/types/database";
+import type { Project, Task, Note, Contact } from "@/types/database";
 import { Maximize2, Minimize2, X, Settings, FileText, CheckSquare, FolderOpen, Trash2, Pencil, Plus, Link2, ExternalLink, Users, Mail, Phone } from "lucide-react";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { useProjectOptions, type ProjectOption } from "@/lib/projects/options";
+
+// ── Convert a stored colour into a soft chip background ─────────────────────
+function chipBg(color: string): string {
+  if (color.startsWith("#")) {
+    const hex = color.slice(1);
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    if (!Number.isNaN(r)) return `rgba(${r},${g},${b},0.12)`;
+  }
+  if (color === "var(--color-sage)")        return "rgba(155,163,122,0.16)";
+  if (color === "var(--color-warm-yellow)") return "rgba(232,197,71,0.15)";
+  if (color === "var(--color-red-orange)")  return "rgba(220,62,13,0.10)";
+  if (color === "var(--color-green)")       return "rgba(141,208,71,0.12)";
+  if (color === "var(--color-grey)")        return "rgba(154,150,144,0.14)";
+  return "rgba(31,33,26,0.06)";
+}
+
+function optionTagStyle(opt: ProjectOption): { bg: string; color: string } {
+  return { bg: chipBg(opt.color), color: opt.color === "var(--color-grey)" ? "#6b6860" : opt.color };
+}
 import { useEditor, EditorContent } from "@tiptap/react";
 import { getRichExtensions, RichToolbar, InlineAshPopover } from "@/components/ui/RichEditor";
 import type { AshPromptState } from "@/components/ui/RichEditor";
@@ -50,49 +72,6 @@ function timeAgo(d: string): string {
   return days < 7 ? `${days}d ago` : new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-// ── Options ───────────────────────────────────────────────────────────────────
-
-const TYPE_OPTIONS: { value: ProjectType; label: string }[] = [
-  { value: "furniture",      label: "Furniture" },
-  { value: "sculpture",      label: "Sculpture" },
-  { value: "painting",       label: "Painting"  },
-  { value: "client_project", label: "Client"    },
-];
-
-const STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
-  { value: "planning",    label: "Planning"    },
-  { value: "in_progress", label: "In Progress" },
-  { value: "on_hold",     label: "On Hold"     },
-  { value: "complete",    label: "Complete"    },
-  { value: "cut",         label: "Cut"         },
-];
-
-const PRIORITY_OPTIONS: { value: ProjectPriority; label: string }[] = [
-  { value: "high",   label: "High"   },
-  { value: "medium", label: "Medium" },
-  { value: "low",    label: "Low"    },
-];
-
-const TYPE_STYLE: Record<string, { bg: string; color: string }> = {
-  furniture:      { bg: "#f0ebe0",                  color: "#b8860b"                   },
-  sculpture:      { bg: "#f0ebe0",                  color: "#b8860b"                   },
-  painting:       { bg: "rgba(37,99,171,0.10)",     color: "#2563ab"                   },
-  client_project: { bg: "#e0eaf5",                  color: "#2563ab"                   },
-};
-
-const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
-  planning:    { bg: "rgba(155,163,122,0.14)", color: "#6b6860"                      },
-  in_progress: { bg: "rgba(141,208,71,0.15)",  color: "#5a7040"                      },
-  on_hold:     { bg: "rgba(232,197,71,0.15)",  color: "#a07800"                      },
-  complete:    { bg: "rgba(141,208,71,0.12)",  color: "#3d6b4f"                      },
-  cut:         { bg: "rgba(220,62,13,0.08)",   color: "var(--color-red-orange)"      },
-};
-
-const PRIORITY_STYLE: Record<string, { bg: string; color: string }> = {
-  high:   { bg: "rgba(220,62,13,0.10)",   color: "var(--color-red-orange)" },
-  medium: { bg: "rgba(232,197,71,0.15)",  color: "#a07800"                 },
-  low:    { bg: "rgba(155,163,122,0.12)", color: "#5a7040"                 },
-};
 
 // ── CustomSelect ──────────────────────────────────────────────────────────────
 
@@ -1830,9 +1809,15 @@ export default function ProjectDetailPanel({ project: initialProject, onClose, o
     onClose();
   }
 
-  const typeStyle     = localProject.type ? (TYPE_STYLE[localProject.type] ?? { bg: "var(--color-cream)", color: "#6b6860" }) : { bg: "var(--color-cream)", color: "#6b6860" };
-  const statusStyle   = STATUS_STYLE[localProject.status] ?? STATUS_STYLE.planning;
-  const priorityStyle = PRIORITY_STYLE[localProject.priority] ?? PRIORITY_STYLE.medium;
+  const { options: projectOptions, resolve } = useProjectOptions();
+  const statusStyle   = optionTagStyle(resolve("status",   localProject.status));
+  const priorityStyle = optionTagStyle(resolve("priority", localProject.priority));
+  const typeStyle     = localProject.type
+    ? optionTagStyle(resolve("type", localProject.type))
+    : { bg: "var(--color-cream)", color: "#6b6860" };
+  const statusOptions   = projectOptions.status.map(o => ({ value: o.key, label: o.label }));
+  const typeOptions     = projectOptions.type.map(o => ({ value: o.key, label: o.label }));
+  const priorityOptions = projectOptions.priority.map(o => ({ value: o.key, label: o.label }));
   const isClient      = localProject.type === "client_project";
   const overdue       = isOverdue(localProject.due_date);
 
@@ -1885,21 +1870,21 @@ export default function ProjectDetailPanel({ project: initialProject, onClose, o
             {/* Status / Type / Priority — labeled */}
             <div data-tour-target="projects.detail-properties" style={{ marginBottom: 12 }}>
               <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Tags</p>
-              <CustomSelect<ProjectStatus>
+              <CustomSelect<string>
                 label="Status"   value={localProject.status}
-                options={STATUS_OPTIONS} tagStyle={statusStyle}
+                options={statusOptions} tagStyle={statusStyle}
                 onSave={v => handleUpdate("status", v)}
               />
               {localProject.type && (
-                <CustomSelect<ProjectType>
+                <CustomSelect<string>
                   label="Type"   value={localProject.type}
-                  options={TYPE_OPTIONS} tagStyle={typeStyle}
+                  options={typeOptions} tagStyle={typeStyle}
                   onSave={v => handleUpdate("type", v)}
                 />
               )}
-              <CustomSelect<ProjectPriority>
+              <CustomSelect<string>
                 label="Priority" value={localProject.priority}
-                options={PRIORITY_OPTIONS} tagStyle={priorityStyle}
+                options={priorityOptions} tagStyle={priorityStyle}
                 onSave={v => handleUpdate("priority", v)}
               />
             </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import type { Project } from "@/types/database";
+import { useProjectOptions } from "@/lib/projects/options";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -32,26 +33,25 @@ function formatDate(d: string) {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-const STATUS_ACCENT: Record<string, string> = {
-  in_progress: "var(--color-sage)",
-  planning:    "var(--color-grey)",
-  on_hold:     "var(--color-warm-yellow)",
-  complete:    "var(--color-green)",
-  cut:         "var(--color-red-orange)",
-};
-
-const PRIORITY_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  high:   { bg: "rgba(220,62,13,0.10)",   color: "var(--color-red-orange)", label: "High" },
-  medium: { bg: "rgba(232,197,71,0.15)",  color: "#a07800",                 label: "Med"  },
-  low:    { bg: "rgba(155,163,122,0.12)", color: "#5a7040",                 label: "Low"  },
-};
-
-const TYPE_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  painting:       { bg: "#e8e3f0", color: "#6d4fa3", label: "Painting"  },
-  sculpture:      { bg: "#f0ebe0", color: "#b8860b", label: "Sculpture" },
-  furniture:      { bg: "#f0ebe0", color: "#b8860b", label: "Furniture" },
-  client_project: { bg: "#e0eaf5", color: "#2563ab", label: "Client"    },
-};
+// Convert an accent colour into a soft chip background — works for both
+// hex strings (`#b8860b`) and our CSS variables (we fall back to a neutral
+// translucent backdrop for the variable case, since color-mix on `var(...)`
+// can be uneven across browsers).
+function chipBackground(color: string): string {
+  if (color.startsWith("#")) {
+    const hex = color.slice(1);
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    if (!Number.isNaN(r)) return `rgba(${r},${g},${b},0.12)`;
+  }
+  if (color === "var(--color-sage)")        return "rgba(155,163,122,0.14)";
+  if (color === "var(--color-warm-yellow)") return "rgba(232,197,71,0.15)";
+  if (color === "var(--color-red-orange)")  return "rgba(220,62,13,0.10)";
+  if (color === "var(--color-green)")       return "rgba(141,208,71,0.12)";
+  if (color === "var(--color-grey)")        return "rgba(154,150,144,0.14)";
+  return "rgba(31,33,26,0.06)";
+}
 
 function TypeSpecificProps({ project }: { project: Project }) {
   const rows: { label: string; value: string }[] = [];
@@ -94,18 +94,22 @@ interface Props {
 }
 
 export default function ProjectCard({ project, onClick, isDragging }: Props) {
+  const { resolve } = useProjectOptions();
   const tasks = project.tasks ?? [];
   const completedCount = tasks.filter((t) => t.completed).length;
   const totalCount = tasks.length;
   const taskPct = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
-  const timeline = timelineProgress(project.start_date, project.due_date);
-  const priority = PRIORITY_STYLE[project.priority] ?? PRIORITY_STYLE.medium;
-  const typeStyle = project.type ? TYPE_STYLE[project.type] : null;
+  const timeline      = timelineProgress(project.start_date, project.due_date);
+  const statusOption  = resolve("status",   project.status);
+  const priorityOption = resolve("priority", project.priority);
+  const typeOption    = project.type ? resolve("type", project.type) : null;
   // Accent bar always reflects status — overdue is communicated via due badge and bar
-  const accentColor = STATUS_ACCENT[project.status] ?? "var(--color-grey)";
-  const isHold = project.status === "on_hold";
-  const isCut  = project.status === "cut";
+  const accentColor = statusOption.color;
+  const priorityChip = { bg: chipBackground(priorityOption.color), color: priorityOption.color, label: priorityOption.label };
+  const typeChip     = typeOption ? { bg: chipBackground(typeOption.color), color: typeOption.color, label: typeOption.label } : null;
+  // Visual "muted" state for legacy on_hold / cut keys (still labelled by user)
+  const isMuted = project.status === "on_hold" || project.status === "cut";
 
   // Due badge
   let dueBadge: { label: string; bg: string; color: string } | null = null;
@@ -120,8 +124,8 @@ export default function ProjectCard({ project, onClick, isDragging }: Props) {
     } else {
       dueBadge = { label: `Due ${formatDate(project.due_date)}`, bg: "var(--color-cream)", color: "#6b6860" };
     }
-  } else if (isHold) {
-    dueBadge = { label: "On hold", bg: "rgba(232,197,71,0.15)", color: "#a07800" };
+  } else if (project.status === "on_hold") {
+    dueBadge = { label: statusOption.label, bg: "rgba(232,197,71,0.15)", color: "#a07800" };
   }
 
   return (
@@ -133,7 +137,7 @@ export default function ProjectCard({ project, onClick, isDragging }: Props) {
         background: "var(--color-off-white)",
         border: "0.5px solid var(--color-border)",
         boxShadow: "0 1px 4px rgba(0,0,0,0.07)",
-        opacity: isDragging ? 0.88 : isHold || isCut ? 0.65 : 1,
+        opacity: isDragging ? 0.88 : isMuted ? 0.65 : 1,
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.boxShadow = "0 3px 10px rgba(0,0,0,0.1)";
@@ -155,20 +159,20 @@ export default function ProjectCard({ project, onClick, isDragging }: Props) {
           </span>
           <span
             className="text-[10px] font-medium px-[7px] py-[2px] rounded-full shrink-0 mt-[1px]"
-            style={{ background: priority.bg, color: priority.color }}
+            style={{ background: priorityChip.bg, color: priorityChip.color }}
           >
-            {priority.label}
+            {priorityChip.label}
           </span>
         </div>
 
         {/* Type tag */}
-        {typeStyle && (
+        {typeChip && (
           <div className="mb-3">
             <span
               className="text-[10px] font-medium px-[7px] py-[2px] rounded-full"
-              style={{ background: typeStyle.bg, color: typeStyle.color }}
+              style={{ background: typeChip.bg, color: typeChip.color }}
             >
-              {typeStyle.label}
+              {typeChip.label}
             </span>
           </div>
         )}
