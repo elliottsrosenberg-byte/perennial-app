@@ -25,12 +25,12 @@ type AdvanceMode = "click-new" | "create" | "open-card" | "next";
 
 interface Step {
   id:          string;
-  anchor:      string;          // CSS selector — required
+  anchor:      string | null;   // null = center the callout, no spotlight
   title:       string;
   body:        string;
   hint?:       string;          // italicised hint about how it advances
   advance:     AdvanceMode;     // action-driven or Next button
-  spotlight?:  boolean;         // ring + dim. default true
+  spotlight?:  boolean;         // ring + dim. default true if anchored
   finalCta?:   { label: string; action: "ash-draft-tasks" };
 }
 
@@ -78,9 +78,9 @@ const STEPS: Step[] = [
   },
   {
     id:       "ash-handoff",
-    anchor:   '[data-tour-target="projects.detail-panel"]',
+    anchor:   null,
     title:    "Let Ash get this started",
-    body:     "Ash knows this project and has a working sense of how successful design studios actually price, scope, and ship work like it. Hit the button — Ash will draft starter tasks straight into your project and brief you on what to focus on first.",
+    body:     "Ash hasn't met this project yet — give it the title and type, and it'll draft 3–5 starter tasks based on what design studios actually do at this stage. You'll get a quick brief on where to focus first.",
     advance:  "next",
     spotlight: false,
     finalCta: { label: "Draft starter tasks", action: "ash-draft-tasks" },
@@ -181,6 +181,14 @@ export default function ProjectsTooltipTour() {
   const reposition = useCallback(() => {
     if (!active || hidden) { setHighlight(null); setPos(null); return; }
     const step = STEPS[stepIdx];
+
+    // No anchor → center the callout, no spotlight.
+    if (!step.anchor) {
+      setHighlight(null);
+      setPos(null); // null pos = centered (handled in render)
+      return;
+    }
+
     const el = document.querySelector<HTMLElement>(step.anchor);
     if (!el) { setHighlight(null); setPos(null); return; }
 
@@ -274,10 +282,14 @@ export default function ProjectsTooltipTour() {
     dismiss();
   }
 
-  if (!active || hidden || !pos) return null;
+  if (!active || hidden) return null;
   const step   = STEPS[stepIdx];
+  // Anchored steps wait for `pos` to be computed; centered steps render
+  // immediately with no anchor (pos === null).
+  if (step.anchor && !pos) return null;
   const isLast = stepIdx === STEPS.length - 1;
   const isActionStep = step.advance !== "next";
+  const centered = !step.anchor;
 
   return (
     <>
@@ -301,14 +313,29 @@ export default function ProjectsTooltipTour() {
         />
       )}
 
-      {/* Callout */}
+      {/* Centered backdrop dim for anchor-less steps (no spotlight target). */}
+      {centered && (
+        <div
+          aria-hidden
+          style={{
+            position: "fixed", inset: 0,
+            background: "rgba(0,0,0,0.42)",
+            zIndex: 55,
+            pointerEvents: "none",
+          }}
+        />
+      )}
+
+      {/* Callout. `userSelect: none` prevents accidental drag-selection of
+          tooltip body or buttons when the layout shifts during the tour. */}
       <div
         role="dialog"
         aria-label={`Projects tour step ${stepIdx + 1}: ${step.title}`}
         style={{
           position: "fixed",
-          top:  pos.top,
-          left: pos.left,
+          top:  centered ? "50%" : pos!.top,
+          left: centered ? "50%" : pos!.left,
+          transform: centered ? "translate(-50%, -50%)" : "none",
           width: W,
           zIndex: 60,
           background: "#1f211a",
@@ -317,6 +344,7 @@ export default function ProjectsTooltipTour() {
           boxShadow: "0 16px 40px rgba(0,0,0,0.36), 0 2px 6px rgba(0,0,0,0.20)",
           padding: "13px 15px",
           fontFamily: "inherit",
+          userSelect: "none",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
@@ -388,8 +416,20 @@ export default function ProjectsTooltipTour() {
             </button>
           </>
         ) : !isActionStep ? (
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 4, gap: 8 }}>
             <button
+              type="button"
+              onClick={dismiss}
+              style={{
+                background: "none", border: "none", padding: "6px 4px",
+                fontSize: 11, color: "rgba(245,241,233,0.55)",
+                cursor: "pointer", fontFamily: "inherit",
+              }}
+            >
+              Skip tour
+            </button>
+            <button
+              type="button"
               onClick={nextStep}
               style={{
                 padding: "6px 14px", fontSize: 11, fontWeight: 600,
@@ -401,7 +441,25 @@ export default function ProjectsTooltipTour() {
               Next →
             </button>
           </div>
-        ) : null}
+        ) : (
+          // Action step (waiting for click-new / create / open-card). No Next,
+          // but always offer an explicit Skip option so users aren't trapped
+          // if they don't want to take the prescribed action.
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
+            <button
+              type="button"
+              onClick={dismiss}
+              style={{
+                background: "none", border: "none", padding: "4px 6px",
+                fontSize: 10.5, color: "rgba(245,241,233,0.55)",
+                cursor: "pointer", fontFamily: "inherit",
+                textDecoration: "underline", textUnderlineOffset: 2,
+              }}
+            >
+              Skip tour
+            </button>
+          </div>
+        )}
       </div>
     </>
   );

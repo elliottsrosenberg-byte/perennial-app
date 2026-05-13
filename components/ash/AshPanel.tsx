@@ -268,6 +268,12 @@ export default function AshPanel({
       setActiveTool(null);
       setIsStreaming(false);
       setTimeout(() => inputRef.current?.focus(), 80);
+      // Let the rest of the app know an Ash turn finished, so views that
+      // care about Ash-driven writes (project detail panel, tasks list, etc.)
+      // can refetch without requiring the user to navigate away and back.
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("ash:turn-complete"));
+      }
     }
   }, [isStreaming, conversationId, module, messages.length, onExpand]);
 

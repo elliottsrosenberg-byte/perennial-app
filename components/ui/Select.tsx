@@ -54,6 +54,7 @@ export default function Select({ value, onChange, options, placeholder, disabled
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <button
+        type="button"
         onClick={() => !disabled && setOpen((v) => !v)}
         style={trigBase}
       >
@@ -88,6 +89,7 @@ export default function Select({ value, onChange, options, placeholder, disabled
             const isActive = o.value === value;
             return (
               <button
+                type="button"
                 key={o.value}
                 onClick={() => { onChange(o.value); setOpen(false); }}
                 style={{

@@ -1655,6 +1655,25 @@ export default function ProjectDetailPanel({ project: initialProject, onClose, o
     });
   }, [initialProject.id]);
 
+  // Refetch tasks + notes after each Ash turn — Ash may have created tasks
+  // or notes via its tools, and those should appear without requiring the
+  // user to close and reopen the panel.
+  useEffect(() => {
+    function refetchTasksAndNotes() {
+      const supabase = createClient();
+      const id = initialProject.id;
+      Promise.all([
+        supabase.from("tasks").select("*").eq("project_id", id).order("created_at", { ascending: true }),
+        supabase.from("notes").select("*").eq("project_id", id).order("updated_at", { ascending: false }),
+      ]).then(([{ data: t }, { data: n }]) => {
+        if (t) setTasks(t as Task[]);
+        if (n) setNotes(n as Note[]);
+      });
+    }
+    window.addEventListener("ash:turn-complete", refetchTasksAndNotes);
+    return () => window.removeEventListener("ash:turn-complete", refetchTasksAndNotes);
+  }, [initialProject.id]);
+
   async function handleUpdate(field: string, value: unknown) {
     const updated = { ...localProject, [field]: value };
     setLocalProject(updated);
