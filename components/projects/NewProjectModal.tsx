@@ -2,40 +2,20 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Project, ProjectType, ProjectStatus, ProjectPriority } from "@/types/database";
+import type { Project } from "@/types/database";
 import { X } from "lucide-react";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
 import Button from "@/components/ui/Button";
+import { useProjectOptions } from "@/lib/projects/options";
 
 interface Props {
   onClose:        () => void;
   onCreated:      (project: Project) => void;
   /** Optional preset status — used when the user clicks "+ New project"
    *  inside a specific status column. */
-  initialStatus?: ProjectStatus;
+  initialStatus?: string;
 }
-
-const TYPE_OPTIONS    = [
-  { value: "furniture",      label: "Furniture"      },
-  { value: "sculpture",      label: "Sculpture"      },
-  { value: "painting",       label: "Painting"       },
-  { value: "client_project", label: "Client project" },
-];
-
-const STATUS_OPTIONS  = [
-  { value: "planning",    label: "Planning"    },
-  { value: "in_progress", label: "In Progress" },
-  { value: "on_hold",     label: "On Hold"     },
-  { value: "complete",    label: "Complete"    },
-  { value: "cut",         label: "Cut"         },
-];
-
-const PRIORITY_OPTIONS = [
-  { value: "high",   label: "High"   },
-  { value: "medium", label: "Medium" },
-  { value: "low",    label: "Low"    },
-];
 
 // ─── Field label ───────────────────────────────────────────────────────────────
 
@@ -79,10 +59,19 @@ function TextInput({ value, onChange, placeholder, type = "text" }: {
 // ─── Modal ────────────────────────────────────────────────────────────────────
 
 export default function NewProjectModal({ onClose, onCreated, initialStatus }: Props) {
+  const { options } = useProjectOptions();
+  const typeOptions     = options.type.map(o => ({ value: o.key, label: o.label }));
+  const statusOptions   = options.status.map(o => ({ value: o.key, label: o.label }));
+  const priorityOptions = options.priority.map(o => ({ value: o.key, label: o.label }));
+
   const [title,        setTitle]        = useState("");
-  const [type,         setType]         = useState<ProjectType>("furniture");
-  const [status,       setStatus]       = useState<ProjectStatus>(initialStatus ?? "planning");
-  const [priority,     setPriority]     = useState<ProjectPriority>("medium");
+  const [type,         setType]         = useState<string>(options.type[0]?.key ?? "furniture");
+  const [status,       setStatus]       = useState<string>(initialStatus ?? options.status[0]?.key ?? "planning");
+  const [priority,     setPriority]     = useState<string>(
+    options.priority.find(o => o.key === "medium")?.key
+    ?? options.priority[Math.floor(options.priority.length / 2)]?.key
+    ?? "medium"
+  );
   const [startDate,    setStartDate]    = useState<Date | null>(null);
   const [dueDate,      setDueDate]      = useState<Date | null>(null);
   const [description,  setDescription]  = useState("");
@@ -182,15 +171,15 @@ export default function NewProjectModal({ onClose, onCreated, initialStatus }: P
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <div>
               <Label>Type</Label>
-              <Select value={type} onChange={(v) => setType(v as ProjectType)} options={TYPE_OPTIONS} />
+              <Select value={type} onChange={setType} options={typeOptions} />
             </div>
             <div>
               <Label>Status</Label>
-              <Select value={status} onChange={(v) => setStatus(v as ProjectStatus)} options={STATUS_OPTIONS} />
+              <Select value={status} onChange={setStatus} options={statusOptions} />
             </div>
             <div>
               <Label>Priority</Label>
-              <Select value={priority} onChange={(v) => setPriority(v as ProjectPriority)} options={PRIORITY_OPTIONS} />
+              <Select value={priority} onChange={setPriority} options={priorityOptions} />
             </div>
           </div>
 

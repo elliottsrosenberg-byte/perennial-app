@@ -1,6 +1,10 @@
-export type ProjectType = "painting" | "sculpture" | "furniture" | "client_project";
-export type ProjectStatus = "in_progress" | "planning" | "on_hold" | "complete" | "cut";
-export type ProjectPriority = "high" | "medium" | "low";
+// Project status / type / priority are user-customisable via the Project
+// options menu, so these are runtime-defined strings rather than fixed
+// literal unions. The default keys are seeded into profiles.project_options
+// at signup; see lib/projects/options.ts for the canonical defaults.
+export type ProjectType     = string;
+export type ProjectStatus   = string;
+export type ProjectPriority = string;
 
 export interface Project {
   id: string;
