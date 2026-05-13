@@ -49,6 +49,7 @@ export default function DatePicker({ value, onChange, placeholder = "Pick a date
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <button
+        type="button"
         onClick={() => !disabled && setOpen((v) => !v)}
         style={{
           width:        "100%",
@@ -98,6 +99,7 @@ export default function DatePicker({ value, onChange, placeholder = "Pick a date
                 </span>
               ) : (
                 <button
+                  type="button"
                   key={i}
                   onClick={item.action}
                   style={{
@@ -129,6 +131,7 @@ export default function DatePicker({ value, onChange, placeholder = "Pick a date
                 <div key={`e${i}`} />
               ) : (
                 <button
+                  type="button"
                   key={day}
                   onClick={() => { onChange(new Date(yr, mo, day)); setOpen(false); }}
                   style={{

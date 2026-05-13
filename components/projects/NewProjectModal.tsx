@@ -156,6 +156,7 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
         }}>
           <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)" }}>New project</h2>
           <button
+            type="button"
             onClick={onClose}
             style={{ width: 28, height: 28, borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-tertiary)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-surface-sunken)")}
