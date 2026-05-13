@@ -461,7 +461,13 @@ function EditableDescription({ value, onSave }: { value: string | null; onSave: 
 
 // ── CanvasEditor ──────────────────────────────────────────────────────────────
 
-function CanvasEditor({ projectId, initialHtml }: { projectId: string; initialHtml: string | null }) {
+function CanvasEditor({
+  projectId, initialHtml, onSaved,
+}: {
+  projectId:   string;
+  initialHtml: string | null;
+  onSaved:     (html: string | null) => void;
+}) {
   const [saving,    setSaving]    = useState(false);
   const [saved,     setSaved]     = useState(false);
   const [ashPrompt, setAshPrompt] = useState<AshPromptState>(null);
@@ -486,13 +492,16 @@ function CanvasEditor({ projectId, initialHtml }: { projectId: string; initialHt
     },
   }, [projectId]);
 
-  // Flush pending save on unmount
+  // Flush pending save on unmount — and lift the final HTML up to the parent
+  // so the next remount (e.g. switching back to the Canvas tab) loads the
+  // freshest content instead of the stale snapshot from the initial fetch.
   useEffect(() => {
     return () => {
       if (saveTimer.current) {
         clearTimeout(saveTimer.current);
         const html = editor?.getHTML() ?? "";
         createClient().from("projects").update({ canvas_html: html || null }).eq("id", projectId);
+        onSaved(html || null);
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -503,6 +512,7 @@ function CanvasEditor({ projectId, initialHtml }: { projectId: string; initialHt
     setSaving(true); setSaved(false);
     saveTimer.current = setTimeout(async () => {
       await createClient().from("projects").update({ canvas_html: html || null }).eq("id", projectId);
+      onSaved(html || null);
       setSaving(false); setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     }, 800);
@@ -949,109 +959,130 @@ function ProjectTasksTab({
   );
 }
 
-// ── QuickNote ─────────────────────────────────────────────────────────────────
-
-function QuickNote({ projectId, onSave }: { projectId: string; onSave: (n: Note) => void }) {
-  const [focused, setFocused] = useState(false);
-
-  const editor = useEditor({
-    immediatelyRender: false,
-    extensions: getRichExtensions({ placeholder: "Jot a note…" }),
-    onFocus: () => setFocused(true),
-    editorProps: {
-      attributes: { style: "outline: none; min-height: 56px; font-size: 13px; line-height: 1.7; color: var(--color-charcoal);" },
-    },
-  });
-
-  const hasContent = !!(editor && editor.getText().trim());
-
-  async function save() {
-    if (!editor || !hasContent) return;
-    const content = editor.getHTML();
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const { data } = await supabase.from("notes").insert({ user_id: user.id, project_id: projectId, content }).select().single();
-    if (data) {
-      onSave(data as Note);
-      editor.commands.clearContent();
-      setFocused(false);
-    }
-  }
-
-  return (
-    <div style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-      {(focused || hasContent) && <RichToolbar editor={editor} />}
-      <div
-        style={{ padding: "10px 16px", cursor: "text" }}
-        onClick={() => editor?.chain().focus().run()}
-      >
-        <EditorContent editor={editor} />
-      </div>
-      {hasContent && (
-        <div style={{ display: "flex", justifyContent: "flex-end", padding: "0 16px 10px" }}>
-          <button onClick={save} style={{ fontSize: 11, fontWeight: 500, padding: "4px 12px", borderRadius: 6, background: "var(--color-sage)", color: "white", border: "none", cursor: "pointer" }}>
-            Save
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── InlineNoteEditor ──────────────────────────────────────────────────────────
+// Auto-saves on title and content changes (debounced). Mirrors the Notes
+// module's pattern — title up top, content below, no manual Save click.
 
 function InlineNoteEditor({
-  note, onSave, onCancel, onDelete,
+  note, onDirtyChange, onDone, onDelete,
 }: {
-  note:     Note;
-  onSave:   (id: string, title: string | null, content: string | null) => void;
-  onCancel: () => void;
-  onDelete: (id: string) => void;
+  note:          Note;
+  onDirtyChange: (patch: Partial<Note>) => void; // local state sync for parent list
+  onDone:        () => void;
+  onDelete:      (id: string) => void;
 }) {
-  const [title, setTitle] = useState(note.title ?? "");
+  const [title, setTitle]   = useState(note.title ?? "");
+  const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Persist title + content changes with a small debounce so quick typing
+  // doesn't pile up DB writes. Updates parent's note state too so the list
+  // view shows the latest title/snippet immediately on Done.
+  const persist = useCallback((fields: Partial<Note>) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    setStatus("saving");
+    saveTimer.current = setTimeout(async () => {
+      const updates = { ...fields, updated_at: new Date().toISOString() };
+      await createClient().from("notes").update(updates).eq("id", note.id);
+      onDirtyChange(updates);
+      setStatus("saved");
+      setTimeout(() => setStatus("idle"), 1500);
+    }, 500);
+  }, [note.id, onDirtyChange]);
 
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: getRichExtensions({ placeholder: "Note content…" }),
+    extensions: getRichExtensions({ placeholder: "Start writing…" }),
     content: note.content ?? "",
+    onUpdate({ editor }) {
+      persist({ content: editor.getHTML() || null });
+    },
     editorProps: {
-      attributes: { style: "outline: none; min-height: 80px; font-size: 13px; line-height: 1.7; color: var(--color-text-secondary);" },
+      attributes: { style: "outline: none; min-height: 140px; font-size: 13px; line-height: 1.7; color: var(--color-text-secondary);" },
     },
   }, [note.id]);
 
-  function save() {
-    const content = editor?.getHTML() ?? null;
-    onSave(note.id, title.trim() || null, content || null);
+  // Auto-focus the title for newly-created (empty) notes so the user can
+  // name it right away — matching the Notes module flow.
+  const titleRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!note.title && !note.content) titleRef.current?.focus();
+  }, [note.title, note.content]);
+
+  // Flush any pending save on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, []);
+
+  function changeTitle(v: string) {
+    setTitle(v);
+    persist({ title: v.trim() || null });
   }
 
   return (
-    <div style={{ borderRadius: 10, background: "var(--color-off-white)", border: "0.5px solid var(--color-sage)", boxShadow: "0 0 0 2px rgba(155,163,122,0.15)", overflow: "hidden", marginBottom: 8 }}>
+    <div style={{
+      borderRadius: 10,
+      background: "var(--color-surface-raised)",
+      border: "0.5px solid var(--color-sage)",
+      boxShadow: "0 0 0 2px rgba(155,163,122,0.15)",
+      overflow: "hidden",
+      marginBottom: 10,
+    }}>
       <RichToolbar editor={editor} />
-      <div style={{ padding: "10px 14px 4px" }}>
+      <div style={{ padding: "12px 16px 8px" }}>
         <input
-          value={title} onChange={e => setTitle(e.target.value)}
-          placeholder="Title (optional)"
-          style={{ width: "100%", fontSize: 12, fontWeight: 600, color: "var(--color-charcoal)", background: "transparent", border: "none", outline: "none", marginBottom: 6, fontFamily: "inherit" }}
+          ref={titleRef}
+          value={title}
+          onChange={e => changeTitle(e.target.value)}
+          placeholder="Untitled note"
+          style={{
+            width: "100%",
+            fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em",
+            color: "var(--color-charcoal)",
+            background: "transparent", border: "none", outline: "none",
+            marginBottom: 8, fontFamily: "var(--font-display)",
+          }}
         />
         <div onClick={() => editor?.chain().focus().run()}>
           <EditorContent editor={editor} />
         </div>
       </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", borderTop: "0.5px solid var(--color-border)" }}>
-        <a href={`/notes?id=${note.id}`} style={{ fontSize: 10, color: "var(--color-text-tertiary)", display: "flex", alignItems: "center", gap: 3, textDecoration: "none" }}
-          onMouseEnter={e => (e.currentTarget.style.color = "var(--color-sage)")}
-          onMouseLeave={e => (e.currentTarget.style.color = "var(--color-text-tertiary)")}
-        >
-          <ExternalLink size={10} strokeWidth={1.75} /> Open in Notes
-        </a>
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "8px 14px",
+        borderTop: "0.5px solid var(--color-border)",
+        background: "var(--color-off-white)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <a
+            href={`/notes?id=${note.id}`}
+            style={{ fontSize: 10, color: "var(--color-text-tertiary)", display: "flex", alignItems: "center", gap: 3, textDecoration: "none" }}
+            onMouseEnter={e => (e.currentTarget.style.color = "var(--color-sage)")}
+            onMouseLeave={e => (e.currentTarget.style.color = "var(--color-text-tertiary)")}
+          >
+            <ExternalLink size={10} strokeWidth={1.75} /> Open in Notes
+          </a>
+          {status !== "idle" && (
+            <span style={{ fontSize: 10, color: status === "saved" ? "var(--color-sage)" : "var(--color-text-tertiary)" }}>
+              {status === "saving" ? "Saving…" : "✓ Saved"}
+            </span>
+          )}
+        </div>
         <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={() => onDelete(note.id)} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, border: "none", background: "transparent", cursor: "pointer", color: "var(--color-text-tertiary)", fontFamily: "inherit" }}
+          <button
+            type="button"
+            onClick={() => onDelete(note.id)}
+            style={{ fontSize: 11, padding: "4px 10px", borderRadius: 5, border: "none", background: "transparent", cursor: "pointer", color: "var(--color-text-tertiary)", fontFamily: "inherit" }}
             onMouseEnter={e => e.currentTarget.style.color = "var(--color-red-orange)"}
             onMouseLeave={e => e.currentTarget.style.color = "var(--color-text-tertiary)"}
           >Delete</button>
-          <button onClick={onCancel} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, border: "0.5px solid var(--color-border)", background: "transparent", cursor: "pointer", color: "var(--color-text-secondary)", fontFamily: "inherit" }}>Cancel</button>
-          <button onClick={save} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, border: "none", background: "var(--color-sage)", color: "white", cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}>Save</button>
+          <button
+            type="button"
+            onClick={onDone}
+            style={{ fontSize: 11, padding: "4px 14px", borderRadius: 5, border: "none", background: "var(--color-sage)", color: "white", cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}
+          >Done</button>
         </div>
       </div>
     </div>
@@ -1063,13 +1094,26 @@ function InlineNoteEditor({
 function NotesTab({ projectId, notes, setNotes }: { projectId: string; notes: Note[]; setNotes: React.Dispatch<React.SetStateAction<Note[]>> }) {
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  function handleAdd(note: Note) { setNotes(prev => [note, ...prev]); }
+  // Mirrors NotesClient.createNote: insert an empty note and open it for
+  // editing right away, so the user names + writes from a clean slate.
+  async function createNote() {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from("notes")
+      .insert({ user_id: user.id, project_id: projectId, title: null, content: null })
+      .select()
+      .single();
+    if (data) {
+      const fresh = data as Note;
+      setNotes(prev => [fresh, ...prev]);
+      setEditingId(fresh.id);
+    }
+  }
 
-  async function handleSave(id: string, title: string | null, content: string | null) {
-    const updates = { title, content, updated_at: new Date().toISOString() };
-    await createClient().from("notes").update(updates).eq("id", id);
-    setNotes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n));
-    setEditingId(null);
+  function handleDirtyChange(id: string, patch: Partial<Note>) {
+    setNotes(prev => prev.map(n => n.id === id ? { ...n, ...patch } : n));
   }
 
   async function handleDelete(id: string) {
@@ -1080,12 +1124,52 @@ function NotesTab({ projectId, notes, setNotes }: { projectId: string; notes: No
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-      {editingId === null && <QuickNote projectId={projectId} onSave={handleAdd} />}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "10px 16px",
+        borderBottom: "0.5px solid var(--color-border)",
+        flexShrink: 0,
+      }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          {notes.length} note{notes.length === 1 ? "" : "s"}
+        </span>
+        <button
+          type="button"
+          onClick={createNote}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 5,
+            padding: "5px 12px", borderRadius: 6,
+            fontSize: 11, fontWeight: 500,
+            background: "var(--color-sage)", color: "white",
+            border: "none", cursor: "pointer", fontFamily: "inherit",
+            transition: "background 0.12s ease",
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = "var(--color-sage-hover)"}
+          onMouseLeave={e => e.currentTarget.style.background = "var(--color-sage)"}
+        >
+          <Plus size={12} strokeWidth={2.25} />
+          New note
+        </button>
+      </div>
+
       <div style={{ flex: 1, overflowY: "auto", padding: "12px 16px" }}>
         {notes.length === 0 && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 160, gap: 6, color: "var(--color-grey)" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 200, gap: 8, color: "var(--color-grey)" }}>
             <FileText size={28} strokeWidth={1.25} style={{ opacity: 0.4 }} />
             <p style={{ fontSize: 12 }}>No notes yet</p>
+            <button
+              type="button"
+              onClick={createNote}
+              style={{
+                marginTop: 4, padding: "5px 12px", borderRadius: 6,
+                fontSize: 11, fontWeight: 500,
+                background: "transparent", color: "var(--color-sage)",
+                border: "0.5px solid var(--color-sage)",
+                cursor: "pointer", fontFamily: "inherit",
+              }}
+            >
+              + Create your first note
+            </button>
           </div>
         )}
         {notes.map(note => {
@@ -1097,8 +1181,8 @@ function NotesTab({ projectId, notes, setNotes }: { projectId: string; notes: No
               <InlineNoteEditor
                 key={note.id}
                 note={note}
-                onSave={handleSave}
-                onCancel={() => setEditingId(null)}
+                onDirtyChange={(patch) => handleDirtyChange(note.id, patch)}
+                onDone={() => setEditingId(null)}
                 onDelete={handleDelete}
               />
             );
@@ -1112,10 +1196,12 @@ function NotesTab({ projectId, notes, setNotes }: { projectId: string; notes: No
               onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--color-border-strong)")}
               onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--color-border)")}
             >
-              {note.title && <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 3 }}>{note.title}</p>}
+              <p style={{ fontSize: 13, fontWeight: 600, fontFamily: "var(--font-display)", letterSpacing: "-0.01em", color: note.title ? "var(--color-charcoal)" : "var(--color-text-tertiary)", marginBottom: 4 }}>
+                {note.title ?? "Untitled note"}
+              </p>
               {snippet
-                ? <p style={{ fontSize: 12, color: "#6b6860", lineHeight: 1.6, marginBottom: 4 }}>{snippet}{note.content && note.content.length > 120 ? "…" : ""}</p>
-                : <p style={{ fontSize: 12, color: "var(--color-grey)", fontStyle: "italic" }}>Empty note</p>
+                ? <p style={{ fontSize: 11.5, color: "#6b6860", lineHeight: 1.6, marginBottom: 4 }}>{snippet}{note.content && note.content.length > 120 ? "…" : ""}</p>
+                : <p style={{ fontSize: 11, color: "var(--color-grey)", fontStyle: "italic", marginBottom: 4 }}>Empty</p>
               }
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontSize: 10, color: "var(--color-grey)" }}>{timeAgo(note.updated_at)}</span>
@@ -1342,6 +1428,28 @@ function ContactsTab({ projectId }: { projectId: string }) {
     setSearch(""); setShowSearch(false);
   }
 
+  // Create a new contact from the search query and attach it in one shot.
+  // Splits the search on the first space — "Sarah Okonkwo" → first/last.
+  async function createAndAttach() {
+    const trimmed = search.trim();
+    if (!trimmed) return;
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const firstSpace = trimmed.indexOf(" ");
+    const first = firstSpace > 0 ? trimmed.slice(0, firstSpace) : trimmed;
+    const last  = firstSpace > 0 ? trimmed.slice(firstSpace + 1) : "";
+    const { data: newContact } = await supabase
+      .from("contacts")
+      .insert({ user_id: user.id, first_name: first, last_name: last, status: "active" })
+      .select("id, first_name, last_name, email, phone, title, status, tags")
+      .single();
+    if (!newContact) return;
+    const c = newContact as Contact;
+    setAllContacts(prev => [...prev, c]);
+    await attach(c);
+  }
+
   async function detach(id: string) {
     await createClient().from("project_contacts")
       .delete().eq("project_id", projectId).eq("contact_id", id);
@@ -1383,8 +1491,42 @@ function ContactsTab({ projectId }: { projectId: string }) {
                 <div style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_DOT[c.status] ?? "var(--color-grey)", flexShrink: 0 }} />
               </button>
             ))}
-            {search && searchResults.length === 0 && (
-              <p style={{ fontSize: 11, color: "var(--color-grey)", padding: "6px 10px" }}>No contacts found</p>
+            {search.trim() && searchResults.length === 0 && (
+              <div style={{ padding: "6px 4px 0" }}>
+                <p style={{ fontSize: 11, color: "var(--color-grey)", padding: "0 6px 6px" }}>
+                  No contact named &ldquo;{search.trim()}&rdquo;
+                </p>
+                <button
+                  type="button"
+                  onClick={createAndAttach}
+                  style={{
+                    width: "100%", display: "flex", alignItems: "center", gap: 9,
+                    padding: "7px 10px", borderRadius: 7,
+                    border: "0.5px dashed var(--color-sage)",
+                    background: "rgba(155,163,122,0.06)",
+                    cursor: "pointer", fontFamily: "inherit",
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(155,163,122,0.12)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "rgba(155,163,122,0.06)"}
+                >
+                  <div style={{
+                    width: 26, height: 26, borderRadius: "50%",
+                    background: "var(--color-sage)", color: "white",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    flexShrink: 0,
+                  }}>
+                    <Plus size={14} strokeWidth={2.25} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                    <p style={{ fontSize: 12, fontWeight: 500, color: "var(--color-charcoal)" }}>
+                      Create &ldquo;{search.trim()}&rdquo;
+                    </p>
+                    <p style={{ fontSize: 10, color: "var(--color-grey)" }}>
+                      Adds a new contact and attaches it to this project
+                    </p>
+                  </div>
+                </button>
+              </div>
             )}
           </div>
         ) : (
@@ -1925,7 +2067,7 @@ export default function ProjectDetailPanel({ project: initialProject, onClose, o
             {activeTab === "canvas" && (
               canvasHtml === undefined
                 ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "var(--color-grey)" }}>Loading…</div>
-                : <CanvasEditor key={localProject.id} projectId={localProject.id} initialHtml={canvasHtml} />
+                : <CanvasEditor key={localProject.id} projectId={localProject.id} initialHtml={canvasHtml} onSaved={(h) => setCanvasHtml(h)} />
             )}
             {activeTab === "tasks" && (
               <ProjectTasksTab projectId={localProject.id} tasks={tasks} setTasks={setTasks} />

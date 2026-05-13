@@ -91,11 +91,11 @@ interface Highlight { top: number; left: number; w: number; h: number; radius: n
 interface CalloutPos { top: number; left: number; }
 
 // Read the target's computed border-radius so the spotlight ring matches its
-// shape (a pill button stays a pill; a card stays a card). Pads by the same
-// offset the ring expands by, keeping the curve concentric with the target.
-// If the anchor is a wrapper span with no radius of its own (a common pattern
-// for adding a data-tour-target without forking the inner component), fall
-// through to the first child whose own radius is non-zero.
+// shape (a pill stays a pill; a card stays a card). Many anchors are wrapper
+// elements (`<span data-tour-target>` around a Button, or a Draggable div
+// around a card), so when the anchor itself has no radius we descend a few
+// levels to find the first descendant that does. Pads by the same offset the
+// ring expands by, keeping the curve concentric with the target.
 function ringRadiusFor(el: HTMLElement, pad: number): number {
   function readRadius(node: HTMLElement): number {
     const parts = window.getComputedStyle(node)
@@ -103,11 +103,18 @@ function ringRadiusFor(el: HTMLElement, pad: number): number {
       .map((p) => parseFloat(p) || 0);
     return Math.max(0, ...parts);
   }
-  let raw = readRadius(el);
-  if (raw === 0) {
-    const child = el.querySelector<HTMLElement>("button, a, [data-radius-source]");
-    if (child) raw = readRadius(child);
+  function findRadius(node: HTMLElement, depth: number): number {
+    const own = readRadius(node);
+    if (own > 0) return own;
+    if (depth <= 0) return 0;
+    for (let i = 0; i < node.children.length; i++) {
+      const child = node.children[i] as HTMLElement;
+      const found = findRadius(child, depth - 1);
+      if (found > 0) return found;
+    }
+    return 0;
   }
+  const raw = findRadius(el, 3);
   const r = el.getBoundingClientRect();
   const isPill = raw >= Math.min(r.width, r.height) / 2 - 0.5;
   if (isPill) return Math.min(r.width, r.height) / 2 + pad;
@@ -305,7 +312,7 @@ export default function ProjectsTooltipTour() {
             width:  highlight.w,
             height: highlight.h,
             borderRadius: highlight.radius,
-            boxShadow: "0 0 0 2px var(--color-sage), 0 0 0 9999px rgba(0,0,0,0.42)",
+            boxShadow: "0 0 0 2px var(--color-sage), 0 0 0 9999px rgba(0,0,0,0.28)",
             pointerEvents: "none",
             zIndex: 55,
             transition: "top 0.18s ease, left 0.18s ease, width 0.18s ease, height 0.18s ease",
@@ -319,7 +326,7 @@ export default function ProjectsTooltipTour() {
           aria-hidden
           style={{
             position: "fixed", inset: 0,
-            background: "rgba(0,0,0,0.42)",
+            background: "rgba(0,0,0,0.32)",
             zIndex: 55,
             pointerEvents: "none",
           }}
