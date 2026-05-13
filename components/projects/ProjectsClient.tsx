@@ -12,6 +12,8 @@ import Topbar from "@/components/layout/Topbar";
 import FilterTabs from "@/components/ui/FilterTabs";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
+import ProjectsIntroModal from "@/components/tour/projects/ProjectsIntroModal";
+import ProjectsTooltipTour from "@/components/tour/projects/ProjectsTooltipTour";
 
 // ─── Status config — ordered as user specified ─────────────────────────────────
 
@@ -60,7 +62,24 @@ export default function ProjectsClient({ initialProjects }: Props) {
 
   function handleCreated(project: Project) {
     setProjects((prev) => [project, ...prev]);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("projects:created", { detail: { title: project.title, id: project.id } }));
+    }
   }
+
+  // Notify the tooltip tour whenever the new-project modal opens.
+  useEffect(() => {
+    if (showModal && typeof window !== "undefined") {
+      window.dispatchEvent(new Event("projects:modal-opened"));
+    }
+  }, [showModal]);
+
+  // Notify the tooltip tour whenever the detail panel opens.
+  useEffect(() => {
+    if (selectedProject && typeof window !== "undefined") {
+      window.dispatchEvent(new Event("projects:detail-opened"));
+    }
+  }, [selectedProject]);
 
   function handleUpdated(project: Project) {
     setProjects((prev) => prev.map((p) => (p.id === project.id ? project : p)));
@@ -106,9 +125,11 @@ export default function ProjectsClient({ initialProjects }: Props) {
       <Topbar
         title="Projects"
         actions={
-          <Button variant="primary" size="sm" onClick={() => setShowModal(true)}>
-            + New project
-          </Button>
+          <span data-tour-target="projects.new-button">
+            <Button variant="primary" size="sm" onClick={() => setShowModal(true)}>
+              + New project
+            </Button>
+          </span>
         }
       />
 
@@ -202,6 +223,7 @@ export default function ProjectsClient({ initialProjects }: Props) {
                                 ref={provided.innerRef}
                                 {...provided.draggableProps}
                                 {...provided.dragHandleProps}
+                                data-tour-target={index === 0 ? "projects.first-card" : undefined}
                                 style={{
                                   ...provided.draggableProps.style,
                                   flex:    "0 0 280px",
@@ -253,17 +275,25 @@ export default function ProjectsClient({ initialProjects }: Props) {
 
       {/* ── Modals ── */}
       {showModal && (
-        <NewProjectModal onClose={() => setShowModal(false)} onCreated={handleCreated} />
+        <div data-tour-target="projects.new-modal">
+          <NewProjectModal onClose={() => setShowModal(false)} onCreated={handleCreated} />
+        </div>
       )}
 
       {selectedProject && (
-        <ProjectDetailPanel
-          project={selectedProject}
-          onClose={() => setSelectedProject(null)}
-          onUpdated={handleUpdated}
-          onDeleted={handleDeleted}
-        />
+        <div data-tour-target="projects.detail-panel">
+          <ProjectDetailPanel
+            project={selectedProject}
+            onClose={() => setSelectedProject(null)}
+            onUpdated={handleUpdated}
+            onDeleted={handleDeleted}
+          />
+        </div>
       )}
+
+      {/* ── Walkthrough: intro modal first, then progressive tooltips ── */}
+      <ProjectsIntroModal />
+      <ProjectsTooltipTour />
     </>
   );
 }

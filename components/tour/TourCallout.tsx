@@ -6,7 +6,7 @@
 // on window resize and on a small interval to catch sidebar expand/collapse.
 
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { X as XIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { TOUR_MODULES, nextUnvisited, type TourVisited } from "@/lib/tour";
@@ -15,7 +15,8 @@ import { TOUR_WAITING_KEY } from "@/components/tour/DashboardTour";
 interface Pos { top: number; left: number }
 
 export default function TourCallout() {
-  const router = useRouter();
+  const router   = useRouter();
+  const pathname = usePathname();
   const [visited,    setVisited]    = useState<TourVisited | null>(null);
   const [dismissed,  setDismissed]  = useState<boolean | null>(null);
   const [pos,        setPos]        = useState<Pos | null>(null);
@@ -66,8 +67,13 @@ export default function TourCallout() {
   // "home" is owned by DashboardTour (no sidebar anchor). If it's the next
   // unvisited module, the sidebar callout stays hidden — the dashboard tour
   // is in charge until the user opens Ash from its final step.
+  // Also hide if the user is already on the target page — the in-module
+  // walkthrough is in charge there.
   const rawNext = visited && !dismissed && !waitingAsh ? nextUnvisited(visited) : null;
-  const next = rawNext && rawNext.key !== "home" ? rawNext : null;
+  const onTargetPage =
+    rawNext != null && pathname != null &&
+    (pathname === rawNext.href || (rawNext.href !== "/" && pathname.startsWith(rawNext.href + "/")));
+  const next = rawNext && rawNext.key !== "home" && !onTargetPage ? rawNext : null;
 
   const reposition = useCallback(() => {
     if (!next) { setPos(null); return; }
