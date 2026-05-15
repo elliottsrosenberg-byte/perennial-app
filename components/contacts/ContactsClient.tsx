@@ -79,12 +79,17 @@ export default function ContactsClient({ initialContacts }: Props) {
   const [showImport, setShowImport] = useState(false);
 
   // Deep links — all stripped from the URL after consume:
-  //   ?new=1        → open the new-contact modal (home banner CTA)
-  //   ?import=1     → open the CSV importer (home banner CTA)
-  //   ?contactId=X  → open the detail panel for that contact (Ash inline
-  //                   "Created contact … View →" etc.)
+  //   ?new=1                                       → open the new-contact modal
+  //   ?import=1                                    → open the CSV importer
+  //   ?contactId=X[&tab=tasks|notes|activity|…]    → open panel, set tab
+  //   ?contactId=X&tab=tasks&taskId=Y              → also highlight that task
+  //   ?contactId=X&tab=notes&noteId=Y              → also highlight that note
   const searchParams = useSearchParams();
   const router       = useRouter();
+  const [openTab,         setOpenTab]         = useState<string | null>(null);
+  const [openTaskId,      setOpenTaskId]      = useState<string | null>(null);
+  const [openNoteId,      setOpenNoteId]      = useState<string | null>(null);
+
   useEffect(() => {
     const newFlag    = searchParams.get("new");
     const importFlag = searchParams.get("import");
@@ -99,6 +104,9 @@ export default function ContactsClient({ initialContacts }: Props) {
     } else if (contactId) {
       const found = contacts.find((c) => c.id === contactId);
       if (found) setOpenContact(found);
+      setOpenTab(searchParams.get("tab"));
+      setOpenTaskId(searchParams.get("taskId"));
+      setOpenNoteId(searchParams.get("noteId"));
       router.replace("/contacts");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -460,9 +468,12 @@ export default function ContactsClient({ initialContacts }: Props) {
       {openContact && (
         <ContactDetailPanel
           contact={openContact}
-          onClose={() => setOpenContact(null)}
+          onClose={() => { setOpenContact(null); setOpenTab(null); setOpenTaskId(null); setOpenNoteId(null); }}
           onUpdated={handleUpdated}
           onArchived={handleArchived}
+          initialTab={openTab}
+          initialHighlightTaskId={openTaskId}
+          initialHighlightNoteId={openNoteId}
         />
       )}
 

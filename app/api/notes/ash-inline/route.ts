@@ -41,24 +41,84 @@ interface Body {
 
 interface ViewSpec {
   label: string;
-  /** Builds the deep-link href given the created-entity id (when present)
-   *  and the tool's input object (used for fallbacks like contact_id on
-   *  log_contact_activity, which doesn't return an id of its own). */
-  href:  (id: string | null, input: Record<string, unknown>) => string;
+  /** Builds the deep-link href given the created-entity id, the tool's
+   *  input object, and the surface the user is acting from. When the tool
+   *  is linked to the surface's own contact/project, we keep the user IN
+   *  that detail panel (route to /contacts?contactId=…&tab=…&taskId=…)
+   *  rather than bouncing to the global module page. */
+  href:  (id: string | null, input: Record<string, unknown>, surface: Surface | undefined) => string;
+}
+
+/** True when the write tool's input links back to the current canvas's
+ *  contact or project — i.e. the user is acting on the entity they're
+ *  already viewing. */
+function staysOnPanel(input: Record<string, unknown>, surface: Surface | undefined): boolean {
+  if (surface?.type === "canvas-contact" && surface.contact_id) {
+    return input.contact_id === surface.contact_id;
+  }
+  if (surface?.type === "canvas-project" && surface.project_id) {
+    return input.project_id === surface.project_id;
+  }
+  return false;
+}
+
+function panelHref(surface: Surface, tab: string, highlight?: { key: string; value: string }): string {
+  const base =
+    surface.type === "canvas-contact" && surface.contact_id
+      ? `/contacts?contactId=${surface.contact_id}&tab=${tab}`
+      : surface.type === "canvas-project" && surface.project_id
+      ? `/projects?projectId=${surface.project_id}&tab=${tab}`
+      : "";
+  if (!base) return "";
+  return highlight ? `${base}&${highlight.key}=${highlight.value}` : base;
 }
 
 const VIEW_FOR_TOOL: Record<string, ViewSpec> = {
-  add_task:        { label: "View task",     href: (id) => id ? `/tasks?taskId=${id}`         : "/tasks" },
-  create_note:     { label: "View note",     href: (id) => id ? `/notes?noteId=${id}`         : "/notes" },
-  create_reminder: { label: "View reminder", href: (id) => id ? `/calendar?reminderId=${id}`  : "/calendar" },
-  create_project:  { label: "View project",  href: (id) => id ? `/projects?projectId=${id}`   : "/projects" },
-  create_contact:  { label: "View contact",  href: (id) => id ? `/contacts?contactId=${id}`   : "/contacts" },
-  log_time:        { label: "View time",     href: ()   => "/finance?tab=time" },
+  add_task: {
+    label: "View task",
+    href: (id, input, surface) => {
+      if (surface && staysOnPanel(input, surface)) {
+        const h = panelHref(surface, "tasks", id ? { key: "taskId", value: id } : undefined);
+        if (h) return h;
+      }
+      return id ? `/tasks?taskId=${id}` : "/tasks";
+    },
+  },
+  create_note: {
+    label: "View note",
+    href: (id, input, surface) => {
+      if (surface && staysOnPanel(input, surface)) {
+        const h = panelHref(surface, "notes", id ? { key: "noteId", value: id } : undefined);
+        if (h) return h;
+      }
+      return id ? `/notes?noteId=${id}` : "/notes";
+    },
+  },
+  create_reminder: {
+    label: "View reminder",
+    href: (id) => id ? `/calendar?reminderId=${id}` : "/calendar",
+  },
+  create_project: {
+    label: "View project",
+    href: (id) => id ? `/projects?projectId=${id}` : "/projects",
+  },
+  create_contact: {
+    label: "View contact",
+    href: (id) => id ? `/contacts?contactId=${id}` : "/contacts",
+  },
+  log_time: {
+    label: "View time",
+    href: () => "/finance?tab=time",
+  },
   log_contact_activity: {
     label: "View activity",
-    href: (_id, input) => {
+    href: (_id, input, surface) => {
+      if (surface && staysOnPanel(input, surface)) {
+        const h = panelHref(surface, "activity");
+        if (h) return h;
+      }
       const cid = typeof input.contact_id === "string" ? input.contact_id : null;
-      return cid ? `/contacts?contactId=${cid}` : "/contacts";
+      return cid ? `/contacts?contactId=${cid}&tab=activity` : "/contacts";
     },
   },
 };
@@ -83,10 +143,10 @@ function buildSystemPrompt(surface: Surface | undefined, noteContext: string | u
 
   const surfaceLine =
     surface?.type === "canvas-contact" && surface.contact_id
-      ? `You are inline inside the canvas of a CONTACT — ${surface.contact_name ?? "this person"} (contact_id: ${surface.contact_id}). When the user asks for a task, reminder, note, or logged activity that's about this person, link it to this contact_id by default. Do not ask which person they mean.`
+      ? `You are inline inside the canvas of a CONTACT — ${surface.contact_name ?? "this person"} (contact_id: ${surface.contact_id}). Every action item the user asks for here is, by default, ABOUT this person. Link it to this contact_id. CRITICAL: when the user says "remind me to…" or "set a reminder to…" about an action they need to take with this contact (e.g. reach out, follow up, send something), call **add_task** with contact_id = ${surface.contact_id} — DO NOT use create_reminder. Reminders are for date-anchored things not tied to a person; tasks are first-class todos that show up on the contact's Tasks tab. Word-for-word "reminder" in the user's prompt does not change this — tasks linked to the contact are what they want.`
       : surface?.type === "canvas-project" && surface.project_id
-      ? `You are inline inside the canvas of a PROJECT — "${surface.project_title ?? "this project"}" (project_id: ${surface.project_id}). When the user asks for a task, note, or reminder about this project, link it to this project_id by default. Do not ask which project they mean.`
-      : `You are inline inside a note. There is no specific contact or project in context — create unlinked items unless the user names one.`;
+      ? `You are inline inside the canvas of a PROJECT — "${surface.project_title ?? "this project"}" (project_id: ${surface.project_id}). Every action item the user asks for here is, by default, ABOUT this project. Link it to this project_id. CRITICAL: when the user says "remind me to…" call **add_task** with project_id = ${surface.project_id} — not create_reminder. Tasks linked to the project show on the project's Tasks tab.`
+      : `You are inline inside a note. There is no specific contact or project in context — create unlinked items unless the user names one. Reserve create_reminder for genuinely date-anchored prompts not tied to a person; otherwise prefer add_task.`;
 
   return `You are Ash, embedded as an inline assistant inside a Perennial canvas. The user just pressed Space on an empty line and is typing a quick prompt.
 
@@ -204,7 +264,7 @@ export async function POST(req: Request) {
 
     const action: ActionResult = {
       summary,
-      viewHref:  view?.href(id, lastWrite.input),
+      viewHref:  view?.href(id, lastWrite.input, surface),
       viewLabel: view?.label,
     };
     return Response.json({ action, toolsRun: toolsRun.map((t) => t.name) });

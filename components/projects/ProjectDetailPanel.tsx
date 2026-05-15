@@ -786,11 +786,12 @@ function TaskPriorityPicker({ value, onChange, align = "right" }: {
 // ── ProjectTaskRow ────────────────────────────────────────────────────────────
 
 function ProjectTaskRow({
-  task, onToggle, onUpdate,
+  task, onToggle, onUpdate, highlighted,
 }: {
-  task:     Task;
-  onToggle: (id: string, completed: boolean) => void;
-  onUpdate: (id: string, fields: Partial<Task>) => void;
+  task:         Task;
+  onToggle:     (id: string, completed: boolean) => void;
+  onUpdate:     (id: string, fields: Partial<Task>) => void;
+  highlighted?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -821,12 +822,17 @@ function ProjectTaskRow({
 
   return (
     <div
+      id={`project-task-${task.id}`}
       style={{
         display: "flex", alignItems: "center", gap: 9, padding: "8px 16px",
         borderBottom: "0.5px solid var(--color-border)",
-        background: hovered && !task.completed ? "rgba(0,0,0,0.015)" : "transparent",
+        background: highlighted
+          ? "rgba(155,163,122,0.18)"
+          : hovered && !task.completed
+            ? "rgba(0,0,0,0.015)"
+            : "transparent",
         opacity: task.completed ? 0.5 : 1,
-        transition: "opacity 0.25s ease, background 0.08s ease",
+        transition: "opacity 0.25s ease, background 0.6s ease",
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -893,11 +899,12 @@ function ProjectTaskRow({
 // ── ProjectTasksTab ───────────────────────────────────────────────────────────
 
 function ProjectTasksTab({
-  projectId, tasks, setTasks,
+  projectId, tasks, setTasks, highlightedTaskId,
 }: {
-  projectId: string;
-  tasks:     Task[];
-  setTasks:  React.Dispatch<React.SetStateAction<Task[]>>;
+  projectId:          string;
+  tasks:              Task[];
+  setTasks:           React.Dispatch<React.SetStateAction<Task[]>>;
+  highlightedTaskId?: string | null;
 }) {
   const [newTitle,      setNewTitle]      = useState("");
   const [newPriority,   setNewPriority]   = useState<"high" | "medium" | "low" | null>(null);
@@ -969,7 +976,7 @@ function ProjectTasksTab({
           )}
         </div>
 
-        {active.map(task => <ProjectTaskRow key={task.id} task={task} onToggle={handleToggle} onUpdate={handleUpdate} />)}
+        {active.map(task => <ProjectTaskRow key={task.id} task={task} onToggle={handleToggle} onUpdate={handleUpdate} highlighted={highlightedTaskId === task.id} />)}
 
         {active.length === 0 && completed.length === 0 && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 180, gap: 6, color: "var(--color-grey)" }}>
@@ -1132,7 +1139,12 @@ function InlineNoteEditor({
 
 // ── NotesTab ──────────────────────────────────────────────────────────────────
 
-function NotesTab({ projectId, notes, setNotes }: { projectId: string; notes: Note[]; setNotes: React.Dispatch<React.SetStateAction<Note[]>> }) {
+function NotesTab({ projectId, notes, setNotes, highlightedNoteId }: {
+  projectId:          string;
+  notes:              Note[];
+  setNotes:           React.Dispatch<React.SetStateAction<Note[]>>;
+  highlightedNoteId?: string | null;
+}) {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Mirrors NotesClient.createNote: insert an empty note and open it for
@@ -1229,13 +1241,21 @@ function NotesTab({ projectId, notes, setNotes }: { projectId: string; notes: No
             );
           }
 
+          const hi = highlightedNoteId === note.id;
           return (
             <div
               key={note.id}
+              id={`project-note-${note.id}`}
               onClick={() => setEditingId(note.id)}
-              style={{ padding: "12px 14px", marginBottom: 8, borderRadius: 10, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", cursor: "pointer", transition: "border-color 0.1s ease" }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--color-border-strong)")}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--color-border)")}
+              style={{
+                padding: "12px 14px", marginBottom: 8, borderRadius: 10,
+                background: hi ? "rgba(155,163,122,0.18)" : "var(--color-off-white)",
+                border: `0.5px solid ${hi ? "rgba(155,163,122,0.46)" : "var(--color-border)"}`,
+                cursor: "pointer",
+                transition: "background 0.6s ease, border-color 0.6s ease",
+              }}
+              onMouseEnter={e => { if (!hi) e.currentTarget.style.borderColor = "var(--color-border-strong)"; }}
+              onMouseLeave={e => { if (!hi) e.currentTarget.style.borderColor = "var(--color-border)"; }}
             >
               <p style={{ fontSize: 13, fontWeight: 600, fontFamily: "var(--font-display)", letterSpacing: "-0.01em", color: note.title ? "var(--color-charcoal)" : "var(--color-text-tertiary)", marginBottom: 4 }}>
                 {note.title ?? "Untitled note"}
@@ -1720,18 +1740,41 @@ interface Props {
   onClose:    () => void;
   onUpdated?: (p: Project) => void;
   onDeleted?: (id: string) => void;
+  /** Deep-link inputs from ProjectsClient: which tab to land on and which
+   *  row to briefly tint (used by Ash inline "View task →" affordances). */
+  initialTab?:             string | null;
+  initialHighlightTaskId?: string | null;
+  initialHighlightNoteId?: string | null;
 }
 
-export default function ProjectDetailPanel({ project: initialProject, onClose, onUpdated, onDeleted }: Props) {
+const SECTION_TABS = new Set<SectionTab>(["canvas", "tasks", "notes", "files", "contacts"]);
+
+export default function ProjectDetailPanel({
+  project: initialProject, onClose, onUpdated, onDeleted,
+  initialTab, initialHighlightTaskId, initialHighlightNoteId,
+}: Props) {
   const [localProject,   setLocalProject]   = useState<Project>(initialProject);
   const [tasks,          setTasks]          = useState<Task[]>(initialProject.tasks ?? []);
   const [notes,          setNotes]          = useState<Note[]>([]);
   const [canvasHtml,     setCanvasHtml]     = useState<string | null | undefined>(undefined);
-  const [activeTab,      setActiveTab]      = useState<SectionTab>("canvas");
+  const [activeTab,      setActiveTab]      = useState<SectionTab>(
+    initialTab && SECTION_TABS.has(initialTab as SectionTab) ? (initialTab as SectionTab) : "canvas",
+  );
   const [maximized,      setMaximized]      = useState(false);
   const [settingsOpen,   setSettingsOpen]   = useState(false);
   const [financeData,    setFinanceData]    = useState<{ hours: number; billableAmount: number; invoiceCount: number; invoiceTotal: number } | null>(null);
   const [confirmDelete,  setConfirmDelete]  = useState(false);
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(initialHighlightTaskId ?? null);
+  const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(initialHighlightNoteId ?? null);
+
+  useEffect(() => {
+    if (!initialHighlightTaskId && !initialHighlightNoteId) return;
+    const t = setTimeout(() => {
+      setHighlightedTaskId(null);
+      setHighlightedNoteId(null);
+    }, 2400);
+    return () => clearTimeout(t);
+  }, [initialHighlightTaskId, initialHighlightNoteId]);
 
   // Hide the floating Ash button in scrim mode; broadcast project context for Ash
   useEffect(() => {
@@ -1772,11 +1815,16 @@ export default function ProjectDetailPanel({ project: initialProject, onClose, o
     });
   }, [initialProject.id, initialProject]);
 
+  // Skip the per-project-change tab reset on the very first mount, so a
+  // deep-link `initialTab` survives.
+  const firstLoadRef = useRef(true);
+
   // Fetch fresh data on open — including canvas_html which is not in the server-rendered snapshot
   useEffect(() => {
     setLocalProject(initialProject);
     setTasks(initialProject.tasks ?? []);
-    setActiveTab("canvas");
+    if (!firstLoadRef.current) setActiveTab("canvas");
+    firstLoadRef.current = false;
     setSettingsOpen(false);
     setCanvasHtml(undefined); // show loading state while fetching
 
@@ -2088,13 +2136,13 @@ export default function ProjectDetailPanel({ project: initialProject, onClose, o
                 : <CanvasEditor key={localProject.id} projectId={localProject.id} projectTitle={localProject.title} initialHtml={canvasHtml} onSaved={(h) => setCanvasHtml(h)} />
             )}
             {activeTab === "tasks" && (
-              <ProjectTasksTab projectId={localProject.id} tasks={tasks} setTasks={setTasks} />
+              <ProjectTasksTab projectId={localProject.id} tasks={tasks} setTasks={setTasks} highlightedTaskId={highlightedTaskId} />
             )}
             {activeTab === "contacts" && (
               <ContactsTab key={localProject.id} projectId={localProject.id} />
             )}
             {activeTab === "notes" && (
-              <NotesTab projectId={localProject.id} notes={notes} setNotes={setNotes} />
+              <NotesTab projectId={localProject.id} notes={notes} setNotes={setNotes} highlightedNoteId={highlightedNoteId} />
             )}
             {activeTab === "files" && (
               <FilesTab key={localProject.id} projectId={localProject.id} />
