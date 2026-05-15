@@ -855,7 +855,9 @@ export default function ContactDetailPanel({ contact: initialContact, onClose, o
       <div className="fixed z-20 flex overflow-hidden" style={{
         top:    maximized ? 0 : "52px",
         bottom: maximized ? 0 : "32px",
-        left:   maximized ? 0 : "calc(56px + 32px)",
+        // Maximized leaves the sidebar visible (flush to its right edge);
+        // scrim mode adds a 32px breathing-room gap on both sides.
+        left:   maximized ? "var(--sidebar-width, 52px)" : "calc(var(--sidebar-width, 52px) + 32px)",
         right:  maximized ? 0 : "32px",
         background:   "var(--color-off-white)",
         borderRadius: maximized ? 0 : 12,
