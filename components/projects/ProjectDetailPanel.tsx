@@ -28,8 +28,9 @@ function optionTagStyle(opt: ProjectOption): { bg: string; color: string } {
   return { bg: chipBg(opt.color), color: opt.color === "var(--color-grey)" ? "#6b6860" : opt.color };
 }
 import { useEditor, EditorContent } from "@tiptap/react";
-import { getRichExtensions, RichToolbar, InlineAshPopover } from "@/components/ui/RichEditor";
+import { getRichExtensions, RichToolbar, InlineAshPopover, SelectionBubble } from "@/components/ui/RichEditor";
 import type { AshPromptState } from "@/components/ui/RichEditor";
+import CanvasAshHint from "@/components/ui/CanvasAshHint";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -546,12 +547,14 @@ function CanvasEditor({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", position: "relative" }}>
-      <RichToolbar editor={editor} onConvertToNote={handleConvertToNote} convertingToNote={convertingNote} />
+      <RichToolbar editor={editor} />
+      <SelectionBubble editor={editor} onConvertToNote={handleConvertToNote} convertingToNote={convertingNote} />
 
-      <div style={{ flex: 1, overflowY: "auto", background: "var(--color-off-white)" }}>
+      <div style={{ flex: 1, overflowY: "auto", background: "var(--color-off-white)", position: "relative" }}>
         <div style={{ maxWidth: 760, padding: "36px 60px 80px" }}>
           <EditorContent editor={editor} />
         </div>
+        <CanvasAshHint />
       </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, padding: "5px 20px", borderTop: "0.5px solid var(--color-border)", background: "var(--color-off-white)", flexShrink: 0 }}>
