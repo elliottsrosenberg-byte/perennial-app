@@ -1016,13 +1016,19 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
     }
   }
 
-  // Auto-create a new note when arriving with ?new=1 (e.g. from the home banner).
-  // Strip the query after firing so refresh doesn't keep spawning notes.
+  // Deep links — stripped from the URL after consume:
+  //   ?new=1     → create a fresh note (home banner CTA)
+  //   ?noteId=X  → focus an existing note (Ash inline "Created note … View →")
   const router = useRouter();
   const searchParams = useSearchParams();
   useEffect(() => {
-    if (searchParams.get("new") === "1") {
+    const newFlag = searchParams.get("new");
+    const noteId  = searchParams.get("noteId");
+    if (newFlag === "1") {
       createNote();
+      router.replace("/notes");
+    } else if (noteId) {
+      if (notes.some((n) => n.id === noteId)) setSelectedNoteId(noteId);
       router.replace("/notes");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
