@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Project, Task, Note, Contact } from "@/types/database";
 import { Maximize2, Minimize2, X, Settings, FileText, CheckSquare, FolderOpen, Trash2, Pencil, Plus, Link2, ExternalLink, Users, Mail, Phone } from "lucide-react";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import AshPromptsModule, { type AshPrompt } from "@/components/ui/AshPromptsModule";
 import { useProjectOptions, type ProjectOption } from "@/lib/projects/options";
 
 // ── Convert a stored colour into a soft chip background ─────────────────────
@@ -1615,124 +1616,78 @@ function ContactsTab({ projectId }: { projectId: string }) {
   );
 }
 
-// ── AshStrip ──────────────────────────────────────────────────────────────────
+// ── Ash prompt builder ────────────────────────────────────────────────────────
+//
+// Picks the most useful contextual action for the project (status, due-date
+// proximity, open task count) and appends a small list of always-relevant
+// generic prompts. Mirrors the intelligence that used to live in the removed
+// bottom AshStrip — now surfaced as a left-rail module.
 
-function AshStrip({ project, activeTasks }: { project: Project; activeTasks: number }) {
-  function generateContent(): { prompt: string; action: string; buttonLabel: string } {
-    const t = project.title;
-    const n = activeTasks;
-    const tasks = `${n} open task${n !== 1 ? "s" : ""}`;
+interface ProjectAshPrompts {
+  headline: string;
+  primary:  AshPrompt;
+  prompts:  AshPrompt[];
+}
 
-    if (project.due_date) {
-      const days = Math.round((new Date(project.due_date + "T00:00:00").getTime() - Date.now()) / 86400000);
-      if (days < 0 && n > 0) return {
-        prompt:      `"${t}" is overdue with ${tasks} still open.`,
-        action:      `Triage "${t}" — it's overdue with ${tasks}. Tell me what needs to move, what to drop, and the single most important next step.`,
-        buttonLabel: "Triage tasks",
-      };
-      if (days >= 0 && days <= 7 && n > 0) return {
-        prompt:      `"${t}" is due ${days === 0 ? "today" : `in ${days} day${days !== 1 ? "s" : ""}`} with ${tasks} open.`,
-        action:      `Build a focused plan for "${t}" — it's due ${days === 0 ? "today" : `in ${days} days`} with ${tasks} still open. Prioritize ruthlessly.`,
-        buttonLabel: "Build a plan",
-      };
+function buildProjectAshPrompts(project: Project, activeTasks: number): ProjectAshPrompts {
+  const t = project.title;
+  const n = activeTasks;
+  const tasks = `${n} open task${n !== 1 ? "s" : ""}`;
+
+  let headline: string;
+  let primary:  AshPrompt;
+
+  if (project.due_date) {
+    const days = Math.round((new Date(project.due_date + "T00:00:00").getTime() - Date.now()) / 86400000);
+    if (days < 0 && n > 0) {
+      headline = `"${t}" is overdue with ${tasks} still open.`;
+      primary  = { label: "Triage tasks", message: `Triage "${t}" — it's overdue with ${tasks}. Tell me what needs to move, what to drop, and the single most important next step.` };
+    } else if (days >= 0 && days <= 7 && n > 0) {
+      headline = `"${t}" is due ${days === 0 ? "today" : `in ${days} day${days !== 1 ? "s" : ""}`} with ${tasks} open.`;
+      primary  = { label: "Build a plan", message: `Build a focused plan for "${t}" — it's due ${days === 0 ? "today" : `in ${days} days`} with ${tasks} still open. Prioritize ruthlessly.` };
+    } else if (project.status === "on_hold") {
+      headline = `"${t}" is on hold. I can help figure out what's blocking it.`;
+      primary  = { label: "Unblock it", message: `Think through what's blocking "${t}" (currently on hold) and suggest a concrete path to get it moving again.` };
+    } else if (project.status === "planning") {
+      headline = `"${t}" is in planning — I can map out the key tasks and what to tackle first.`;
+      primary  = { label: "Map it out", message: `Plan "${t}" from scratch — give me the key tasks, a rough timeline, and the single best place to start building momentum.` };
+    } else if (n > 3) {
+      headline = `${n} open tasks on "${t}" — I can prioritise and flag what's at risk.`;
+      primary  = { label: "Prioritize tasks", message: `Prioritize the ${n} open tasks for "${t}". Flag anything overdue or at risk, then give me a clear focus order.` };
+    } else {
+      headline = `"${t}" has ${tasks}. I can give you a clear view of where things stand.`;
+      primary  = { label: "Where things stand", message: `Give me a focused view of "${t}" — open tasks, timeline pressure, and what I should do next.` };
     }
-    if (project.status === "on_hold") return {
-      prompt:      `"${t}" is on hold. I can help figure out what's blocking it.`,
-      action:      `Think through what's blocking "${t}" (currently on hold) and suggest a concrete path to get it moving again.`,
-      buttonLabel: "Unblock it",
-    };
-    if (project.status === "planning") return {
-      prompt:      `"${t}" is in planning — I can map out the key tasks and what to tackle first.`,
-      action:      `Plan "${t}" from scratch — give me the key tasks, a rough timeline, and the single best place to start building momentum.`,
-      buttonLabel: "Map it out",
-    };
-    if (project.status === "complete") return {
-      prompt:      `"${t}" is complete. Want a quick wrap-up before moving on?`,
-      action:      `Quick retrospective on "${t}" — what was accomplished, what to document, and any loose ends to tie off.`,
-      buttonLabel: "Wrap it up",
-    };
-    if (n > 3) return {
-      prompt:      `${n} open tasks on "${t}" — I can prioritise and flag what's at risk.`,
-      action:      `Prioritize the ${n} open tasks for "${t}". Flag anything overdue or at risk, then give me a clear focus order.`,
-      buttonLabel: "Prioritize tasks",
-    };
-    if (n > 0) return {
-      prompt:      `"${t}" has ${tasks} — want a clear view of where things stand?`,
-      action:      `Give me a focused view of "${t}" — look at the open tasks, any timeline pressure, and what I should do next.`,
-      buttonLabel: "Where things stand",
-    };
-    return {
-      prompt:      `I can pull together a full picture of where "${t}" stands right now.`,
-      action:      `Give me a full rundown of "${t}" — status, what's in flight, any risks, and the clearest next move.`,
-      buttonLabel: "Full rundown",
-    };
+  } else if (project.status === "on_hold") {
+    headline = `"${t}" is on hold. I can help figure out what's blocking it.`;
+    primary  = { label: "Unblock it", message: `Think through what's blocking "${t}" (currently on hold) and suggest a concrete path to get it moving again.` };
+  } else if (project.status === "planning") {
+    headline = `"${t}" is in planning — I can map out the key tasks and what to tackle first.`;
+    primary  = { label: "Map it out", message: `Plan "${t}" from scratch — give me the key tasks, a rough timeline, and the single best place to start building momentum.` };
+  } else if (project.status === "complete") {
+    headline = `"${t}" is complete. Want a quick wrap-up before moving on?`;
+    primary  = { label: "Wrap it up", message: `Quick retrospective on "${t}" — what was accomplished, what to document, and any loose ends to tie off.` };
+  } else if (n > 3) {
+    headline = `${n} open tasks on "${t}" — I can prioritise and flag what's at risk.`;
+    primary  = { label: "Prioritize tasks", message: `Prioritize the ${n} open tasks for "${t}". Flag anything overdue or at risk, then give me a clear focus order.` };
+  } else if (n > 0) {
+    headline = `"${t}" has ${tasks} — want a clear view of where things stand?`;
+    primary  = { label: "Where things stand", message: `Give me a focused view of "${t}" — open tasks, timeline pressure, and what I should do next.` };
+  } else {
+    headline = `I can pull together a full picture of where "${t}" stands right now.`;
+    primary  = { label: "Full rundown", message: `Give me a full rundown of "${t}" — status, what's in flight, any risks, and the clearest next move.` };
   }
 
-  const { prompt, action, buttonLabel } = generateContent();
-  const projectDetail = { title: project.title, status: project.status, priority: project.priority };
+  const prompts: AshPrompt[] = [
+    { label: "Summarize this project",       message: `Summarize "${t}" in 3–5 sentences. Status, what's done, what's in flight, the next big thing.` },
+    { label: "Draft an update for a client", message: `Draft a brief, professional update on "${t}" I could send to a client. Highlight progress and what's next.` },
+    { label: "What's the next move?",        message: `Looking at "${t}" today, what's the single most useful thing I could do next?` },
+    ...(n > 0
+      ? [{ label: "Suggest tasks I'm missing", message: `Look at the open tasks for "${t}" — what's missing that a project like this usually needs at this stage?` }]
+      : [{ label: "Draft a starter task list",  message: `Draft a starter task list for "${t}" — what does a project like this typically need at this stage?` }]),
+  ];
 
-  function handleContextual() {
-    window.dispatchEvent(new CustomEvent("open-ash", {
-      detail: { message: action, project: projectDetail },
-    }));
-  }
-
-  function handleOpenAsh() {
-    // No message — just opens the panel with project context but no auto-send
-    window.dispatchEvent(new CustomEvent("open-ash", {
-      detail: { project: projectDetail },
-    }));
-  }
-
-  return (
-    <div style={{
-      flexShrink: 0,
-      display: "flex", alignItems: "center", gap: 12,
-      padding: "0 18px", height: 56,
-      background: "linear-gradient(135deg, #7a9a55 0%, #5a7a38 45%, #3a5228 100%)",
-    }}>
-      <img
-        src="/Ash-Logomak.svg"
-        alt=""
-        style={{ width: 16, height: 16, flexShrink: 0, filter: "brightness(0) invert(1)", opacity: 0.9, animation: "ash-shimmer 4s ease-in-out infinite" }}
-      />
-      <span style={{ flex: 1, fontSize: 11, color: "rgba(255,255,255,0.88)", lineHeight: 1.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {prompt}
-      </span>
-      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-        {/* Contextual action — sends a specific action statement */}
-        <button
-          onClick={handleContextual}
-          style={{
-            fontSize: 11, fontWeight: 700, color: "white",
-            background: "rgba(255,255,255,0.22)", border: "0.5px solid rgba(255,255,255,0.35)",
-            borderRadius: 9999, padding: "4px 12px",
-            cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", lineHeight: 1,
-            transition: "background 0.1s ease",
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.32)"}
-          onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.22)"}
-        >
-          {buttonLabel} →
-        </button>
-        {/* Ask Ash — opens the dialogue without auto-sending */}
-        <button
-          onClick={handleOpenAsh}
-          style={{
-            fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,0.75)",
-            background: "transparent", border: "0.5px solid rgba(255,255,255,0.25)",
-            borderRadius: 9999, padding: "4px 12px",
-            cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", lineHeight: 1,
-            transition: "all 0.1s ease",
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; e.currentTarget.style.color = "white"; }}
-          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.75)"; }}
-        >
-          Ask Ash
-        </button>
-      </div>
-    </div>
-  );
+  return { headline, primary, prompts };
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -1866,6 +1821,12 @@ export default function ProjectDetailPanel({ project: initialProject, onClose, o
     { key: "notes",    label: "Notes",    icon: <FileText    size={13} strokeWidth={1.75} />, count: notes.length },
     { key: "files",    label: "Files",    icon: <FolderOpen  size={13} strokeWidth={1.75} /> },
   ];
+
+  const activeTaskCount = tasks.filter(t => !t.completed).length;
+  const ashContext = useMemo(
+    () => buildProjectAshPrompts(localProject, activeTaskCount),
+    [localProject, activeTaskCount],
+  );
 
   return (
     <>
@@ -2010,6 +1971,15 @@ export default function ProjectDetailPanel({ project: initialProject, onClose, o
                 );
               })}
             </div>
+
+            {/* Ash module — context-aware prompts in a sage-tinted card */}
+            <AshPromptsModule
+              headline={ashContext.headline}
+              primaryPrompt={ashContext.primary}
+              prompts={ashContext.prompts}
+              context={{ project: { title: localProject.title, status: localProject.status, priority: localProject.priority } }}
+              placeholder={`Ask Ash about ${localProject.title}…`}
+            />
           </div>
 
           {/* ── Settings — fixed at bottom, expands upward ── */}
@@ -2106,8 +2076,6 @@ export default function ProjectDetailPanel({ project: initialProject, onClose, o
             )}
           </div>
 
-          {/* Ash strip — scrim mode only */}
-          {!maximized && <AshStrip project={localProject} activeTasks={tasks.filter(t => !t.completed).length} />}
         </div>
       </div>
 
