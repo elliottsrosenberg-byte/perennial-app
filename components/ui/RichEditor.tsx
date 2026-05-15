@@ -229,16 +229,33 @@ export function RichToolbar({
 }
 
 // ─── InlineAshPopover ────────────────────────────────────────────────────────
+//
+// Inline Ash entry point. Triggered by pressing Space on a blank line in the
+// canvas. Two response shapes from the caller's onSubmit:
+//
+//   - returning nothing / void  → text was inserted; the popover closes.
+//   - returning an action object → a write tool ran (task / reminder / note /
+//                                  …). The popover transitions to a success
+//                                  state with a "View →" link.
+
+export interface InlineAshAction {
+  summary:    string;
+  viewHref?:  string;
+  viewLabel?: string;
+}
 
 export function InlineAshPopover({
   anchor, onSubmit, onClose,
 }: {
   anchor:   { top: number; left: number; bottom: number };
-  onSubmit: (prompt: string) => Promise<void>;
+  /** Returns an `InlineAshAction` when a write tool ran (popover stays open
+   *  with a confirmation), or void when text was inserted (popover closes). */
+  onSubmit: (prompt: string) => Promise<InlineAshAction | void>;
   onClose:  () => void;
 }) {
   const [value,   setValue]   = useState("");
   const [loading, setLoading] = useState(false);
+  const [done,    setDone]    = useState<InlineAshAction | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const ref      = useRef<HTMLDivElement>(null);
 
@@ -255,15 +272,19 @@ export function InlineAshPopover({
     e.preventDefault();
     if (!value.trim() || loading) return;
     setLoading(true);
-    await onSubmit(value.trim());
+    const result = await onSubmit(value.trim());
     setLoading(false);
+    if (result && result.summary) {
+      setDone(result);
+    }
+    // If void/undefined the parent will call onClose() once it inserts text.
   }
 
   return (
     <div ref={ref} style={{
       position: "fixed", top: anchor.bottom + 4, left: anchor.left, zIndex: 500,
       background: "var(--color-surface-raised)", border: "0.5px solid var(--color-border)",
-      borderRadius: 10, boxShadow: "var(--shadow-overlay)", width: 340, overflow: "hidden",
+      borderRadius: 10, boxShadow: "var(--shadow-overlay)", width: 360, overflow: "hidden",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderBottom: "0.5px solid var(--color-border)" }}>
         <svg width="12" height="12" viewBox="0 0 20 20" fill="var(--color-sage)"><circle cx="10" cy="10" r="10"/><path d="M6 10.5c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/><circle cx="10" cy="14" r="1" fill="white"/></svg>
@@ -272,17 +293,64 @@ export function InlineAshPopover({
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M1 1l8 8M9 1L1 9"/></svg>
         </button>
       </div>
-      <form onSubmit={handleSubmit} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px" }}>
-        <input ref={inputRef} value={value} onChange={e => setValue(e.target.value)}
-          onKeyDown={e => { if (e.key === "Escape") onClose(); }}
-          placeholder="Write me a paragraph about…" disabled={loading}
-          style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 12, color: "var(--color-text-primary)", fontFamily: "inherit" }}
-        />
-        {loading
-          ? <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>Thinking…</span>
-          : value.trim() && <button type="submit" style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, background: "var(--color-sage)", color: "white", border: "none", cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>Insert</button>
-        }
-      </form>
+
+      {done ? (
+        <div style={{ padding: "10px 12px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+            <div style={{
+              width: 18, height: 18, borderRadius: 99, flexShrink: 0,
+              background: "rgba(155,163,122,0.18)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "var(--color-sage)", marginTop: 1,
+            }}>
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 8l3.5 3.5L13 4.5" />
+              </svg>
+            </div>
+            <p style={{ fontSize: 12, lineHeight: 1.5, color: "var(--color-text-primary)", flex: 1 }}>
+              {done.summary}
+            </p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
+            {done.viewHref && done.viewLabel && (
+              <a
+                href={done.viewHref}
+                style={{
+                  fontSize: 11, fontWeight: 600,
+                  padding: "4px 10px", borderRadius: 6,
+                  background: "var(--color-sage)", color: "white",
+                  border: "none", textDecoration: "none", fontFamily: "inherit",
+                }}
+              >
+                {done.viewLabel} →
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                fontSize: 11, fontWeight: 500, color: "var(--color-text-tertiary)",
+                background: "transparent", border: "none", cursor: "pointer",
+                padding: "4px 6px", fontFamily: "inherit",
+              }}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px" }}>
+          <input ref={inputRef} value={value} onChange={e => setValue(e.target.value)}
+            onKeyDown={e => { if (e.key === "Escape") onClose(); }}
+            placeholder="Ask, draft, or create…" disabled={loading}
+            style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 12, color: "var(--color-text-primary)", fontFamily: "inherit" }}
+          />
+          {loading
+            ? <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>Thinking…</span>
+            : value.trim() && <button type="submit" style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, background: "var(--color-sage)", color: "white", border: "none", cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>Send</button>
+          }
+        </form>
+      )}
     </div>
   );
 }

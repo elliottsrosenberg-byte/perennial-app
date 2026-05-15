@@ -125,7 +125,7 @@ function PickerTag({ label, color, dot, onClick }: { label: string; color: strin
 
 // ── Canvas editor for contacts ────────────────────────────────────────────────
 
-function ContactCanvasEditor({ contactId, initialHtml }: { contactId: string; initialHtml: string | null }) {
+function ContactCanvasEditor({ contactId, contactName, initialHtml }: { contactId: string; contactName: string; initialHtml: string | null }) {
   const [saving,         setSaving]         = useState(false);
   const [saved,          setSaved]          = useState(false);
   const [convertingNote, setConvertingNote] = useState(false);
@@ -169,9 +169,33 @@ function ContactCanvasEditor({ contactId, initialHtml }: { contactId: string; in
   async function handleAshSubmit(prompt: string) {
     if (!editor || !ashPrompt) return;
     const context = editor.getText().slice(0, 800);
-    const res = await fetch("/api/notes/ash-inline", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, noteContext: context }) });
-    const { text } = await res.json() as { text: string };
-    if (text) editor.chain().focus().setTextSelection(ashPrompt.pos).insertContent(text).run();
+    const res = await fetch("/api/notes/ash-inline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt,
+        noteContext: context,
+        surface: {
+          type:         "canvas-contact",
+          contact_id:   contactId,
+          contact_name: contactName,
+        },
+      }),
+    });
+    const data = await res.json() as {
+      text?:   string;
+      action?: { summary: string; viewHref?: string; viewLabel?: string };
+    };
+
+    if (data.action) {
+      // A write tool ran — surface the success state in the popover.
+      window.dispatchEvent(new CustomEvent("ash:write-tool-ran", { detail: { tools: ["inline"] } }));
+      return data.action;
+    }
+
+    if (data.text) {
+      editor.chain().focus().setTextSelection(ashPrompt.pos).insertContent(data.text).run();
+    }
     setAshPrompt(null);
   }
 
@@ -1157,7 +1181,7 @@ export default function ContactDetailPanel({ contact: initialContact, onClose, o
             {activeTab === "canvas" && (
               canvasHtml === undefined
                 ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "var(--color-grey)" }}>Loading…</div>
-                : <ContactCanvasEditor key={contact.id} contactId={contact.id} initialHtml={canvasHtml} />
+                : <ContactCanvasEditor key={contact.id} contactId={contact.id} contactName={`${contact.first_name} ${contact.last_name}`} initialHtml={canvasHtml} />
             )}
             {activeTab === "activity" && (
               <ActivityTab contactId={contact.id} activities={activities} setActivities={setActivities} contact={contact}
