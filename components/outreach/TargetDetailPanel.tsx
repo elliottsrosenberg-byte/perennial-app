@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { OutreachTarget, OutreachPipeline, PipelineStage } from "@/types/database";
 import { X, Maximize2, Minimize2, FileText, Trash2, Settings } from "lucide-react";
 import { useEditor, EditorContent } from "@tiptap/react";
-import { getRichExtensions, RichToolbar, InlineAshPopover } from "@/components/ui/RichEditor";
+import { getRichExtensions, RichToolbar, InlineAshPopover, submitInlineAsh } from "@/components/ui/RichEditor";
 import type { AshPromptState } from "@/components/ui/RichEditor";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -25,7 +25,16 @@ function daysSince(iso: string) {
 
 // ── Canvas editor ─────────────────────────────────────────────────────────────
 
-function TargetCanvasEditor({ targetId, initialHtml }: { targetId: string; initialHtml: string | null }) {
+function TargetCanvasEditor({
+  targetId, targetName, contactId, initialHtml,
+}: {
+  targetId:    string;
+  targetName:  string;
+  /** When the outreach target is a known contact, surface that id so Ash
+   *  auto-links new tasks/activities to the person. */
+  contactId:   string | null;
+  initialHtml: string | null;
+}) {
   const [saving,    setSaving]    = useState(false);
   const [saved,     setSaved]     = useState(false);
   const [ashPrompt, setAshPrompt] = useState<AshPromptState>(null);
@@ -64,13 +73,17 @@ function TargetCanvasEditor({ targetId, initialHtml }: { targetId: string; initi
     }, 800);
   }
 
-  async function handleAshSubmit(prompt: string) {
-    if (!editor || !ashPrompt) return;
-    const context = editor.getText().slice(0, 800);
-    const res = await fetch("/api/notes/ash-inline", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, noteContext: context }) });
-    const { text } = await res.json() as { text: string };
-    if (text) editor.chain().focus().setTextSelection(ashPrompt.pos).insertContent(text).run();
-    setAshPrompt(null);
+  function handleAshSubmit(prompt: string) {
+    return submitInlineAsh({
+      prompt, editor, ashPrompt,
+      surface: {
+        type:        "outreach-target",
+        target_id:   targetId,
+        target_name: targetName,
+        contact_id:  contactId ?? undefined,
+      },
+      clearPrompt: () => setAshPrompt(null),
+    });
   }
 
   return (
@@ -502,7 +515,13 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
             {activeTab === "canvas" && (
               canvasHtml === undefined
                 ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "var(--color-grey)" }}>Loading…</div>
-                : <TargetCanvasEditor key={target.id} targetId={target.id} initialHtml={canvasHtml} />
+                : <TargetCanvasEditor
+                    key={target.id}
+                    targetId={target.id}
+                    targetName={target.name}
+                    contactId={target.contact_id}
+                    initialHtml={canvasHtml}
+                  />
             )}
           </div>
 

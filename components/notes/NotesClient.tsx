@@ -4,14 +4,14 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Note } from "@/types/database";
-import { useEditor, EditorContent, Extension, NodeViewWrapper, NodeViewContent, ReactNodeViewRenderer } from "@tiptap/react";
-import type { NodeViewProps } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Underline from "@tiptap/extension-underline";
-import Placeholder from "@tiptap/extension-placeholder";
-import { Node as TiptapNode, mergeAttributes } from "@tiptap/core";
+import { useEditor, EditorContent } from "@tiptap/react";
 import { Pin, Search, Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered } from "lucide-react";
 import Button from "@/components/ui/Button";
+import {
+  getRichExtensions,
+  InlineAshPopover,
+  submitInlineAsh,
+} from "@/components/ui/RichEditor";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -110,138 +110,11 @@ type LinkState = {
 
 type SuggestedTask = { title: string; dueDate: string | null; selected: boolean };
 
-// ─── Toggle Node ──────────────────────────────────────────────────────────────
+// ToggleBlock, InlineAsh extension, and InlineAshPopover all live in
+// components/ui/RichEditor.tsx so every inline-Ash surface uses the same
+// implementation. getRichExtensions wires the toggle + Space-trigger; the
+// shared InlineAshPopover renders the prompt UI.
 
-function ToggleNodeView({ node, updateAttributes, editor, getPos }: NodeViewProps) {
-  const open    = node.attrs.open as boolean;
-  const summary = node.attrs.summary as string;
-  const [hovered, setHovered] = useState(false);
-  const summaryRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (summary === "") {
-      const t = setTimeout(() => summaryRef.current?.focus(), 60);
-      return () => clearTimeout(t);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function deleteBlock() {
-    const pos = getPos();
-    if (typeof pos === "number") {
-      editor.chain().focus().deleteRange({ from: pos, to: pos + node.nodeSize }).run();
-    }
-  }
-
-  return (
-    <NodeViewWrapper
-      as="div"
-      style={{ margin: "4px 0" }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
-        <button
-          contentEditable={false}
-          onClick={() => updateAttributes({ open: !open })}
-          style={{
-            flexShrink: 0, width: 18, height: 18, border: "none", background: "transparent",
-            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-            marginTop: 3, color: "var(--color-text-tertiary)", padding: 0,
-            transition: "transform 0.15s ease",
-            transform: open ? "rotate(90deg)" : "rotate(0deg)",
-          }}
-        >
-          <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
-            <path d="M2 1l4 3-4 3V1z"/>
-          </svg>
-        </button>
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <input
-              ref={summaryRef}
-              contentEditable={false}
-              value={summary}
-              placeholder="Toggle heading…"
-              onChange={e => updateAttributes({ summary: e.target.value })}
-              onKeyDown={e => {
-                e.stopPropagation();
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  updateAttributes({ open: true });
-                  setTimeout(() => editor.chain().focus().run(), 10);
-                }
-              }}
-              style={{
-                flex: 1, border: "none", outline: "none", background: "transparent",
-                fontFamily: "inherit", fontSize: 14, fontWeight: 600, lineHeight: "1.8",
-                color: "var(--color-text-primary)", padding: 0, cursor: "text", minWidth: 0,
-              }}
-            />
-            {hovered && (
-              <button
-                contentEditable={false}
-                onClick={deleteBlock}
-                title="Delete toggle"
-                style={{
-                  flexShrink: 0, width: 16, height: 16, border: "none", background: "transparent",
-                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "var(--color-text-tertiary)", borderRadius: 3, padding: 0,
-                  fontSize: 15, lineHeight: 1,
-                }}
-                onMouseEnter={e => (e.currentTarget.style.color = "var(--color-red-orange)")}
-                onMouseLeave={e => (e.currentTarget.style.color = "var(--color-text-tertiary)")}
-              >×</button>
-            )}
-          </div>
-
-          {open && (
-            <div style={{ marginTop: 2, paddingLeft: 4, borderLeft: "2px solid var(--color-border)" }}>
-              <NodeViewContent />
-            </div>
-          )}
-        </div>
-      </div>
-    </NodeViewWrapper>
-  );
-}
-
-const ToggleBlock = TiptapNode.create({
-  name: "toggleBlock",
-  group: "block",
-  content: "block+",
-  addAttributes() {
-    return {
-      summary: { default: "", parseHTML: el => el.getAttribute("data-summary") ?? "", renderHTML: attrs => ({ "data-summary": attrs.summary }) },
-      open:    { default: false, parseHTML: el => el.getAttribute("data-open") !== "false", renderHTML: attrs => ({ "data-open": String(attrs.open) }) },
-    };
-  },
-  parseHTML()  { return [{ tag: 'div[data-type="toggle"]' }]; },
-  renderHTML({ HTMLAttributes }) { return ["div", mergeAttributes(HTMLAttributes, { "data-type": "toggle" }), 0]; },
-  addNodeView() { return ReactNodeViewRenderer(ToggleNodeView); },
-});
-
-// ─── InlineAsh extension ──────────────────────────────────────────────────────
-
-const InlineAsh = Extension.create<{
-  onTrigger: (pos: number, coords: { top: number; left: number; bottom: number }) => void;
-}>({
-  name: "inlineAsh",
-  addKeyboardShortcuts() {
-    return {
-      Space: ({ editor }) => {
-        const { $from } = editor.state.selection;
-        if ($from.parentOffset === 0 && $from.parent.textContent === "") {
-          const coords = editor.view.coordsAtPos(editor.state.selection.from);
-          this.options.onTrigger(editor.state.selection.from, coords);
-          return true;
-        }
-        return false;
-      },
-    };
-  },
-});
 
 // ─── InlineLinkPicker ─────────────────────────────────────────────────────────
 
@@ -499,69 +372,6 @@ function FormatToolbar({
   );
 }
 
-// ─── InlineAshPopover ─────────────────────────────────────────────────────────
-
-function InlineAshPopover({
-  anchor, onSubmit, onClose,
-}: {
-  anchor:   { top: number; left: number; bottom: number };
-  onSubmit: (prompt: string) => Promise<void>;
-  onClose:  () => void;
-}) {
-  const [value,   setValue]   = useState("");
-  const [loading, setLoading] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const ref      = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as globalThis.Node)) onClose();
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [onClose]);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!value.trim() || loading) return;
-    setLoading(true);
-    await onSubmit(value.trim());
-    setLoading(false);
-  }
-
-  return (
-    <div ref={ref} style={{
-      position: "fixed", top: anchor.bottom + 4, left: anchor.left, zIndex: 500,
-      background: "var(--color-surface-raised)", border: "0.5px solid var(--color-border)",
-      borderRadius: 10, boxShadow: "var(--shadow-overlay)", width: 340, overflow: "hidden",
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderBottom: "0.5px solid var(--color-border)" }}>
-        <svg width="12" height="12" viewBox="0 0 20 20" fill="var(--color-sage)"><circle cx="10" cy="10" r="10"/><path d="M6 10.5c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/><circle cx="10" cy="14" r="1" fill="white"/></svg>
-        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)" }}>Ask Ash</span>
-        <button onClick={onClose} style={{ marginLeft: "auto", border: "none", background: "transparent", cursor: "pointer", color: "var(--color-text-tertiary)", padding: 2 }}>
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M1 1l8 8M9 1L1 9"/></svg>
-        </button>
-      </div>
-      <form onSubmit={handleSubmit} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px" }}>
-        <input
-          ref={inputRef} value={value} onChange={e => setValue(e.target.value)}
-          onKeyDown={e => { if (e.key === "Escape") onClose(); }}
-          placeholder="Write me a paragraph about…"
-          disabled={loading}
-          style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 12, color: "var(--color-text-primary)", fontFamily: "inherit" }}
-        />
-        {loading
-          ? <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>Thinking…</span>
-          : value.trim() && (
-            <button type="submit" style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, background: "var(--color-sage)", color: "white", border: "none", cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>Insert</button>
-          )
-        }
-      </form>
-    </div>
-  );
-}
-
 // ─── SuggestTasksModal ────────────────────────────────────────────────────────
 
 function SuggestTasksModal({
@@ -742,13 +552,7 @@ function NoteEditor({
 
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: [
-      StarterKit,
-      Underline,
-      Placeholder.configure({ placeholder: "Start writing…" }),
-      ToggleBlock,
-      InlineAsh.configure({ onTrigger: handleAshTrigger }),
-    ],
+    extensions: getRichExtensions({ onAshTrigger: handleAshTrigger }),
     content: note.content ?? "",
     onUpdate({ editor }) {
       const html = editor.getHTML();
@@ -799,19 +603,20 @@ function NoteEditor({
     onUpdate(note.id, fields);
   }
 
-  async function handleAshSubmit(prompt: string) {
-    if (!editor || !ashPrompt) return;
-    const noteText = editor.getText().slice(0, 800);
-    const res = await fetch("/api/notes/ash-inline", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, noteContext: noteText }),
+  function handleAshSubmit(prompt: string) {
+    return submitInlineAsh({
+      prompt, editor, ashPrompt,
+      surface: {
+        type:        "note",
+        note_id:     note.id,
+        note_title:  note.title ?? undefined,
+        // Forward any entities the note links to so inline-Ash actions
+        // (tasks, activities, etc.) auto-link to the right thing.
+        project_id:  note.project_id ?? undefined,
+        contact_id:  note.contact_id ?? undefined,
+      },
+      clearPrompt: () => setAshPrompt(null),
     });
-    const { text } = await res.json() as { text: string };
-    if (text) {
-      editor.chain().focus().setTextSelection(ashPrompt.pos).insertContent(text).run();
-    }
-    setAshPrompt(null);
   }
 
   return (

@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Contact, ContactActivity, ContactActivityType, ContactStatus, LeadStage, Project, Task, Note } from "@/types/database";
 import { X, Maximize2, Minimize2, FileText, CheckSquare, FolderOpen, Calendar, Settings, Trash2, Users, Link2 } from "lucide-react";
 import { useEditor, EditorContent } from "@tiptap/react";
-import { getRichExtensions, RichToolbar, InlineAshPopover, SelectionBubble } from "@/components/ui/RichEditor";
+import { getRichExtensions, RichToolbar, InlineAshPopover, SelectionBubble, submitInlineAsh } from "@/components/ui/RichEditor";
 import type { AshPromptState } from "@/components/ui/RichEditor";
 import CanvasAshHint from "@/components/ui/CanvasAshHint";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -210,37 +210,12 @@ function ContactCanvasEditor({
     }, 800);
   }
 
-  async function handleAshSubmit(prompt: string) {
-    if (!editor || !ashPrompt) return;
-    const context = editor.getText().slice(0, 800);
-    const res = await fetch("/api/notes/ash-inline", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        prompt,
-        noteContext: context,
-        surface: {
-          type:         "canvas-contact",
-          contact_id:   contactId,
-          contact_name: contactName,
-        },
-      }),
+  function handleAshSubmit(prompt: string) {
+    return submitInlineAsh({
+      prompt, editor, ashPrompt,
+      surface: { type: "canvas-contact", contact_id: contactId, contact_name: contactName },
+      clearPrompt: () => setAshPrompt(null),
     });
-    const data = await res.json() as {
-      text?:   string;
-      action?: { summary: string; viewHref?: string; viewLabel?: string };
-    };
-
-    if (data.action) {
-      // A write tool ran — surface the success state in the popover.
-      window.dispatchEvent(new CustomEvent("ash:write-tool-ran", { detail: { tools: ["inline"] } }));
-      return data.action;
-    }
-
-    if (data.text) {
-      editor.chain().focus().setTextSelection(ashPrompt.pos).insertContent(data.text).run();
-    }
-    setAshPrompt(null);
   }
 
   async function handleConvertToNote(sel: { text: string; html: string }) {
