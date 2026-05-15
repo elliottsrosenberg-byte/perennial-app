@@ -59,7 +59,7 @@ Project-based income creates feast-or-famine cycles. Invoice dates and payment d
 
 **Outreach:** Pipeline management for gallery submissions, press pitches, fair applications, and client pursuits. Tracks stages: identify → submit → discuss → make happen → closed. Shows recency of last touch.
 
-**Calendar:** Deadlines, fair dates, events, reminders. Connected to projects and contacts.
+**Calendar:** Tasks with due dates, project deadlines, fair dates, and external events (Google Calendar). Connected to projects and contacts.
 
 **Presence:** Website, social media, newsletter tracking, and an opportunities feed (fairs, open calls, grants, residencies).
 
@@ -138,7 +138,6 @@ export interface AshContext {
   overdueInvoices:     Array<{ number: number; total: number }>;
   recentNotes:         Array<{ title: string | null; content: string | null; updated_at: string }>;
   staleContacts:       Array<{ first_name: string; last_name: string; last_contacted_at: string | null; company_name: string | null }>;
-  upcomingReminders:   Array<{ title: string; due_date: string | null }>;
   openTasks:           Array<{ title: string; due_date: string | null; priority: string | null; project: string | null }>;
   billableHoursThisMonth: number;
 }
@@ -203,17 +202,6 @@ export function buildDynamicContext(ctx: AshContext): string {
         ? `last contact ${Math.floor((Date.now() - new Date(c.last_contacted_at).getTime()) / 86400000)}d ago`
         : "never contacted";
       lines.push(`- ${c.first_name} ${c.last_name}${co} · ${ago}`);
-    }
-  }
-
-  // Upcoming reminders
-  if (ctx.upcomingReminders.length > 0) {
-    lines.push(`\n**Upcoming reminders:**`);
-    for (const r of ctx.upcomingReminders) {
-      const due = r.due_date
-        ? new Date(r.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-        : "no date";
-      lines.push(`- ${r.title} · ${due}`);
     }
   }
 

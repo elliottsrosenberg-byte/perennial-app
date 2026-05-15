@@ -895,12 +895,12 @@ export default function DocsPage() {
               ],
             },
             {
-              group: "Reminders",
+              group: "Tasks on the calendar",
               tests: [
-                "Create reminder from Reminders tab — appears in DB",
-                "Reminder with due date shows in Today card on Home",
-                "Reminder appears in Calendar module",
-                "Toggle complete — updates DB",
+                "Create task with due date from Calendar — appears in DB",
+                "Task with due date shows in Today card on Home",
+                "Task shows in the Calendar all-day strip on its due date",
+                "Toggle complete from calendar popover — updates DB",
               ],
             },
             {

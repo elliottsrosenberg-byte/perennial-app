@@ -41,48 +41,6 @@ export const createNoteTool: AshToolDefinition = {
   handler: create_note,
 };
 
-// ─── create_reminder ──────────────────────────────────────────────────────────
-
-async function create_reminder(
-  input: { title: string; due_date?: string; description?: string; project_id?: string },
-  { supabase, userId }: ToolContext
-): Promise<string> {
-  const { data, error } = await supabase
-    .from("reminders")
-    .insert({
-      user_id:     userId,
-      title:       input.title,
-      description: input.description ?? null,
-      due_date:    input.due_date ?? null,
-      project_id:  input.project_id ?? null,
-      completed:   false,
-    })
-    .select("id, title, due_date")
-    .single();
-
-  if (error) return `Failed to create reminder: ${error.message}`;
-  const when = data.due_date ? ` due ${data.due_date}` : "";
-  return `Reminder created: "${data.title}"${when} (id: ${data.id})`;
-}
-
-export const createReminderTool: AshToolDefinition = {
-  name: "create_reminder",
-  description:
-    "Create a new reminder for the user with an optional due date. Use when the user asks " +
-    "you to remind them about something, set a deadline alert, or add a follow-up task.",
-  input_schema: {
-    type: "object",
-    properties: {
-      title:       { type: "string", description: "What to be reminded about" },
-      due_date:    { type: "string", description: "Due date in YYYY-MM-DD or ISO datetime format" },
-      description: { type: "string", description: "Optional additional detail" },
-      project_id:  { type: "string", description: "Optional project to link this reminder to" },
-    },
-    required: ["title"],
-  },
-  handler: create_reminder,
-};
-
 // ─── create_project ───────────────────────────────────────────────────────────
 
 async function create_project(
@@ -365,7 +323,6 @@ export const logTimeTool: AshToolDefinition = {
 
 export const WRITE_TOOLS: AshToolDefinition[] = [
   createNoteTool,
-  createReminderTool,
   createProjectTool,
   updateProjectStatusTool,
   addTaskTool,

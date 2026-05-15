@@ -113,7 +113,7 @@ export default function NotesCard({ notes: initialNotes }: { notes: HomeNote[] }
               className="flex items-center gap-1 px-2.5 py-[5px] rounded-full text-[11px] font-semibold leading-none transition-colors"
               style={{ background: "transparent", color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
             >
-              Reminder
+              Task
             </Link>
 
             <button

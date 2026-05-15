@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Reminder } from "@/types/database";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import type { Task, Contact } from "@/types/database";
+import { ChevronLeft, ChevronRight, Plus, CheckSquare } from "lucide-react";
 import AshMark from "@/components/ui/AshMark";
 
 const ASH_GRADIENT = "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)";
@@ -61,15 +61,18 @@ function fmtDate(date: Date, opts: Intl.DateTimeFormatOptions): string {
   return date.toLocaleDateString("en-US", opts);
 }
 
-function parseReminderDate(due: string): { date: Date; hasTime: boolean } | null {
-  const d = new Date(due);
-  if (isNaN(d.getTime())) return null;
-  return { date: d, hasTime: d.getHours() !== 0 || d.getMinutes() !== 0 };
+/** Tasks store due_date as a YYYY-MM-DD string (date-only, no time). Parse
+ *  it as local midnight so timezone offsets don't push the day forward. */
+function parseTaskDueDate(due: string): Date | null {
+  const d = new Date(due + "T00:00:00");
+  return isNaN(d.getTime()) ? null : d;
 }
 
 function getDueBadge(due: string): { text: string; color: string } {
-  const d    = new Date(due);
-  const diff = Math.ceil((d.getTime() - Date.now()) / 86400000);
+  const d = parseTaskDueDate(due);
+  if (!d) return { text: "", color: "var(--color-grey)" };
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
   if (diff < 0)   return { text: "Overdue",   color: "var(--color-red-orange)" };
   if (diff === 0) return { text: "Today",     color: "#a07800"                 };
   if (diff === 1) return { text: "Tomorrow",  color: "#6b6860"                 };
@@ -206,10 +209,10 @@ function MiniCalendar({ selectedDate, onSelect }: {
   );
 }
 
-// ── ReminderPopover ────────────────────────────────────────────────────────────
+// ── TaskPopover ────────────────────────────────────────────────────────────────
 
-function ReminderPopover({ reminder, x, y, onMarkComplete, onUndo, onClose }: {
-  reminder: Reminder;
+function TaskPopover({ task, x, y, onMarkComplete, onUndo, onClose }: {
+  task: Task;
   x: number;
   y: number;
   onMarkComplete: () => void;
@@ -217,7 +220,7 @@ function ReminderPopover({ reminder, x, y, onMarkComplete, onUndo, onClose }: {
   onClose: () => void;
 }) {
   const ref    = useRef<HTMLDivElement>(null);
-  const parsed = reminder.due_date ? parseReminderDate(reminder.due_date) : null;
+  const parsed = task.due_date ? parseTaskDueDate(task.due_date) : null;
 
   useEffect(() => {
     function onMouse(e: MouseEvent) {
@@ -234,6 +237,12 @@ function ReminderPopover({ reminder, x, y, onMarkComplete, onUndo, onClose }: {
     };
   }, [onClose]);
 
+  const linkedProject = (task.project as unknown as { title: string } | null | undefined)?.title;
+  const linkedContact = (() => {
+    const c = task.contact as unknown as { first_name: string; last_name: string } | null | undefined;
+    return c ? `${c.first_name} ${c.last_name}`.trim() : null;
+  })();
+
   return (
     <div
       ref={ref}
@@ -242,7 +251,7 @@ function ReminderPopover({ reminder, x, y, onMarkComplete, onUndo, onClose }: {
         top: `${y}px`,
         left: `${x}px`,
         zIndex: 60,
-        width: "224px",
+        width: "240px",
         background: "var(--color-off-white)",
         border: "0.5px solid var(--color-border)",
         borderRadius: "12px",
@@ -251,17 +260,20 @@ function ReminderPopover({ reminder, x, y, onMarkComplete, onUndo, onClose }: {
       }}
     >
       <p className="text-[13px] font-semibold leading-snug mb-[5px]" style={{ color: "var(--color-charcoal)" }}>
-        {reminder.title}
+        {task.title}
       </p>
       {parsed && (
-        <p className="text-[11px] mb-3" style={{ color: "var(--color-grey)" }}>
-          {parsed.hasTime
-            ? parsed.date.toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
-            : parsed.date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+        <p className="text-[11px] mb-1" style={{ color: "var(--color-grey)" }}>
+          {parsed.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+        </p>
+      )}
+      {(linkedProject || linkedContact) && (
+        <p className="text-[10px] mb-3" style={{ color: "var(--color-grey)" }}>
+          {[linkedProject && `📁 ${linkedProject}`, linkedContact && `👤 ${linkedContact}`].filter(Boolean).join(" · ")}
         </p>
       )}
 
-      {reminder.completed ? (
+      {task.completed ? (
         <div className="flex gap-2">
           <button
             onClick={() => { onUndo?.(); onClose(); }}
@@ -298,24 +310,33 @@ function ReminderPopover({ reminder, x, y, onMarkComplete, onUndo, onClose }: {
   );
 }
 
-// ── NewReminderModal ───────────────────────────────────────────────────────────
+// ── NewTaskModal ───────────────────────────────────────────────────────────────
 
-function NewReminderModal({ projects, defaultDate, onClose, onCreate }: {
+interface NewTaskInput {
+  title:      string;
+  dueDate:    string | null;       // YYYY-MM-DD or null
+  projectId:  string | null;
+  contactId:  string | null;
+}
+
+function NewTaskModal({ projects, contacts, defaultDate, onClose, onCreate }: {
   projects: { id: string; title: string }[];
-  defaultDate: string;
+  contacts: Pick<Contact, "id" | "first_name" | "last_name">[];
+  defaultDate: string;              // YYYY-MM-DD
   onClose: () => void;
-  onCreate: (title: string, dueDate: string | null, projectId: string | null) => void;
+  onCreate: (input: NewTaskInput) => void;
 }) {
   const [title,     setTitle]     = useState("");
   const [dueDate,   setDueDate]   = useState(defaultDate);
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [contactId, setContactId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   function submit() {
     if (!title.trim()) return;
-    onCreate(title.trim(), dueDate || null, projectId);
+    onCreate({ title: title.trim(), dueDate: dueDate || null, projectId, contactId });
     onClose();
   }
 
@@ -330,7 +351,7 @@ function NewReminderModal({ projects, defaultDate, onClose, onCreate }: {
         style={{ width: "380px", background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 40px rgba(0,0,0,0.15)" }}
       >
         <div className="flex items-center justify-between">
-          <h3 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>New Reminder</h3>
+          <h3 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>New task</h3>
           <button onClick={onClose}
             className="w-6 h-6 flex items-center justify-center rounded text-[18px] leading-none transition-colors"
             style={{ color: "var(--color-grey)" }}
@@ -344,14 +365,14 @@ function NewReminderModal({ projects, defaultDate, onClose, onCreate }: {
           value={title}
           onChange={e => setTitle(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") submit(); if (e.key === "Escape") onClose(); }}
-          placeholder="Reminder title…"
+          placeholder="What needs to get done?"
           className="w-full bg-transparent focus:outline-none text-[14px] font-medium"
           style={{ color: "var(--color-charcoal)", borderBottom: "0.5px solid var(--color-border)", paddingBottom: "6px" }}
         />
 
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--color-grey)" }}>Date & Time</label>
-          <input type="datetime-local" value={dueDate} onChange={e => setDueDate(e.target.value)}
+          <label className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--color-grey)" }}>Due date</label>
+          <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
             className="text-[12px] bg-transparent focus:outline-none"
             style={{ color: "#6b6860", border: "0.5px solid var(--color-border)", borderRadius: "6px", padding: "5px 9px" }}
           />
@@ -360,6 +381,11 @@ function NewReminderModal({ projects, defaultDate, onClose, onCreate }: {
         <div className="flex flex-col gap-1">
           <label className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--color-grey)" }}>Project</label>
           <ProjectPicker projectId={projectId} projects={projects} onChange={setProjectId} />
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--color-grey)" }}>Contact</label>
+          <ContactPicker contactId={contactId} contacts={contacts} onChange={setContactId} />
         </div>
 
         <div className="flex justify-end gap-2 mt-1">
@@ -372,9 +398,68 @@ function NewReminderModal({ projects, defaultDate, onClose, onCreate }: {
           <button onClick={submit} disabled={!title.trim()}
             className="px-4 py-[6px] text-[12px] font-medium rounded-lg text-white transition-opacity"
             style={{ background: "var(--color-sage)", opacity: title.trim() ? 1 : 0.5 }}
-          >Add Reminder</button>
+          >Add task</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── ContactPicker ─────────────────────────────────────────────────────────────
+
+function ContactPicker({
+  contactId, contacts, onChange,
+}: {
+  contactId: string | null;
+  contacts:  Pick<Contact, "id" | "first_name" | "last_name">[];
+  onChange:  (id: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref             = useRef<HTMLDivElement>(null);
+  const linked          = contacts.find(c => c.id === contactId);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="text-[11px] font-medium rounded-full px-[9px] py-[3px] transition-colors"
+        style={linked ? {
+          background: "rgba(37,99,171,0.10)", color: "#2563ab", border: "0.5px solid rgba(37,99,171,0.25)",
+        } : {
+          background: "transparent", color: "var(--color-grey)", border: "0.5px dashed var(--color-border)",
+        }}
+      >
+        {linked ? `${linked.first_name} ${linked.last_name}` : "+ Link contact"}
+      </button>
+      {open && (
+        <div
+          className="absolute top-full left-0 mt-1 rounded-xl overflow-hidden z-30"
+          style={{ minWidth: "200px", maxHeight: "240px", overflowY: "auto", background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 4px 20px rgba(0,0,0,0.12)" }}
+        >
+          <button className="w-full text-left px-4 py-[8px] text-[12px] transition-colors"
+            style={{ color: "var(--color-grey)" }}
+            onClick={() => { onChange(null); setOpen(false); }}
+            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+          >No contact</button>
+          {contacts.map(c => (
+            <button key={c.id} className="w-full text-left px-4 py-[8px] text-[12px] transition-colors"
+              style={{ color: "#6b6860", fontWeight: c.id === contactId ? 600 : 400 }}
+              onClick={() => { onChange(c.id); setOpen(false); }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+            >{c.first_name} {c.last_name}</button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -401,18 +486,19 @@ const GCAL_COLORS: Record<string, string> = {
 };
 
 interface Props {
-  initialReminders: Reminder[];
+  initialTasks:    Task[];
   initialProjects: { id: string; title: string; due_date: string | null; status: string }[];
-  gcalConnected?: boolean;
+  initialContacts: Pick<Contact, "id" | "first_name" | "last_name">[];
+  gcalConnected?:  boolean;
   gcalAccountName?: string | null;
 }
 
-interface PopoverState { reminder: Reminder; x: number; y: number }
+interface PopoverState { task: Task; x: number; y: number }
 
-export default function CalendarClient({ initialReminders, initialProjects, gcalConnected = false, gcalAccountName }: Props) {
+export default function CalendarClient({ initialTasks, initialProjects, initialContacts, gcalConnected = false, gcalAccountName }: Props) {
   const [viewDate,        setViewDate]        = useState(new Date());
-  const [reminders,       setReminders]       = useState(initialReminders);
-  const [newReminderOpen, setNewReminderOpen] = useState(false);
+  const [tasks,           setTasks]           = useState<Task[]>(initialTasks);
+  const [newTaskOpen,     setNewTaskOpen]     = useState(false);
   const [popover,         setPopover]         = useState<PopoverState | null>(null);
   const [nowY,            setNowY]            = useState<number | null>(null);
   const [gcalEvents,      setGcalEvents]      = useState<GCalEvent[]>([]);
@@ -477,60 +563,87 @@ export default function CalendarClient({ initialReminders, initialProjects, gcal
     const existing = undoTimers.current.get(id);
     if (existing) clearTimeout(existing);
     const t = setTimeout(() => {
-      setReminders(prev => prev.filter(r => r.id !== id));
+      setTasks(prev => prev.filter(r => r.id !== id));
       undoTimers.current.delete(id);
     }, 5000);
     undoTimers.current.set(id, t);
   }
 
   async function markComplete(id: string) {
-    setReminders(prev => prev.map(r => r.id === id ? { ...r, completed: true } : r));
-    await supabase.from("reminders").update({ completed: true }).eq("id", id);
+    setTasks(prev => prev.map(r => r.id === id ? { ...r, completed: true } : r));
+    await supabase.from("tasks").update({ completed: true }).eq("id", id);
     scheduleRemoval(id);
   }
 
   async function undoComplete(id: string) {
     const t = undoTimers.current.get(id);
     if (t) { clearTimeout(t); undoTimers.current.delete(id); }
-    setReminders(prev => prev.map(r => r.id === id ? { ...r, completed: false } : r));
-    await supabase.from("reminders").update({ completed: false }).eq("id", id);
+    setTasks(prev => prev.map(r => r.id === id ? { ...r, completed: false } : r));
+    await supabase.from("tasks").update({ completed: false }).eq("id", id);
   }
 
   // ── Popover
-  const openPopover = useCallback((e: React.MouseEvent, reminder: Reminder) => {
+  const openPopover = useCallback((e: React.MouseEvent, task: Task) => {
     e.stopPropagation();
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = rect.right + 8 + 224 > window.innerWidth ? rect.left - 232 : rect.right + 8;
-    const y = Math.min(rect.top, window.innerHeight - 180);
-    setPopover({ reminder, x, y });
+    const x = rect.right + 8 + 240 > window.innerWidth ? rect.left - 248 : rect.right + 8;
+    const y = Math.min(rect.top, window.innerHeight - 200);
+    setPopover({ task, x, y });
   }, []);
 
   // ── CRUD
-  async function createReminder(title: string, dueDate: string | null, projectId: string | null) {
+  async function createTask(input: NewTaskInput) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const payload: Record<string, unknown> = { user_id: user.id, title };
-    if (dueDate)   payload.due_date   = dueDate;
-    if (projectId) payload.project_id = projectId;
-    const { data } = await supabase.from("reminders").insert(payload).select().single();
-    if (data) setReminders(prev => [...prev, data as Reminder]);
+    const payload: Record<string, unknown> = {
+      user_id:    user.id,
+      title:      input.title,
+      completed:  false,
+      due_date:   input.dueDate,
+      project_id: input.projectId,
+      contact_id: input.contactId,
+    };
+    const { data } = await supabase
+      .from("tasks")
+      .insert(payload)
+      .select("*, project:projects(id, title), contact:contacts(id, first_name, last_name)")
+      .single();
+    if (data) setTasks(prev => [data as Task, ...prev]);
   }
 
-  // ── Derived lists (include completed so they linger in view)
-  const timedReminders  = reminders.filter(r => r.due_date && parseReminderDate(r.due_date)?.hasTime);
-  const allDayReminders = reminders.filter(r => r.due_date && !parseReminderDate(r.due_date)?.hasTime);
+  // ── Derived lists ────────────────────────────────────────────────────────────
+  // Tasks store due_date as a date (no time) — so everything renders as
+  // all-day on the week grid. Time-of-day reminders are gone with the
+  // reminders table.
 
-  const upcomingReminders = [...reminders]
-    .filter(r => r.due_date)
-    .sort((a, b) => new Date(a.due_date!).getTime() - new Date(b.due_date!).getTime());
-  const unscheduledReminders = reminders.filter(r => !r.due_date);
+  const today = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d; }, []);
 
-  // ── Default date for new reminder (next round half-hour)
-  const defaultNewDate = (() => {
+  const scheduledTasks   = useMemo(() => tasks.filter(t => t.due_date), [tasks]);
+  const unscheduledTasks = useMemo(() => tasks.filter(t => !t.due_date), [tasks]);
+
+  // Top rail: today + overdue tasks. The user asked for a "task section at
+  // the top" — this is where it lives.
+  const topRailTasks = useMemo(() => {
+    return scheduledTasks
+      .filter(t => {
+        const d = parseTaskDueDate(t.due_date!);
+        return d ? d.getTime() <= today.getTime() : false;
+      })
+      .sort((a, b) => (a.due_date! < b.due_date! ? -1 : 1));
+  }, [scheduledTasks, today]);
+
+  // Left sidebar "Upcoming": everything with a date, sorted ascending.
+  const upcomingTasks = useMemo(() => {
+    return [...scheduledTasks].sort((a, b) =>
+      a.due_date! < b.due_date! ? -1 : a.due_date! > b.due_date! ? 1 : 0,
+    );
+  }, [scheduledTasks]);
+
+  // Default date for the new-task modal: today.
+  const defaultNewDate = useMemo(() => {
     const d = new Date();
-    d.setMinutes(Math.ceil(d.getMinutes() / 30) * 30, 0, 0);
-    return d.toISOString().slice(0, 16);
-  })();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }, []);
 
   return (
     <div className="flex h-full overflow-hidden" style={{ background: "var(--color-off-white)" }}>
@@ -548,19 +661,23 @@ export default function CalendarClient({ initialReminders, initialProjects, gcal
           {/* Upcoming (with due date) */}
           <div className="px-3 pt-3 pb-1 flex items-center justify-between">
             <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--color-grey)" }}>Upcoming</span>
-            {upcomingReminders.length > 0 && (
-              <span className="text-[10px]" style={{ color: "var(--color-grey)" }}>{upcomingReminders.length}</span>
+            {upcomingTasks.length > 0 && (
+              <span className="text-[10px]" style={{ color: "var(--color-grey)" }}>{upcomingTasks.length}</span>
             )}
           </div>
 
-          {upcomingReminders.length === 0 && unscheduledReminders.length === 0 && reminders.length === 0 && (
+          {upcomingTasks.length === 0 && unscheduledTasks.length === 0 && (
             <div style={{ padding: "12px 14px 16px" }}>
-              <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 5 }}>No reminders yet</p>
+              <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 5 }}>No upcoming tasks</p>
               <p style={{ fontSize: 11, lineHeight: 1.6, color: "var(--color-text-tertiary)", marginBottom: 12 }}>
-                Reminders keep you on top of deadlines, follow-ups, and anything time-sensitive. They also appear in your Home dashboard.
+                Tasks with a due date show up here and on the calendar grid below. Add one for any follow-up, deadline, or thing you don&apos;t want to forget.
               </p>
               <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-grey)", marginBottom: 6 }}>Tips</p>
-              {["Set reminders with a due date to pin them to the calendar grid.", "Reminders linked to projects carry context — you'll see which project they belong to.", "Ash can create reminders for you — just ask it to \"remind me to follow up with X next Thursday\"."].map((tip, i) => (
+              {[
+                "Tasks linked to a project or contact carry that context everywhere.",
+                "Ash can create tasks for you — try \"remind me to follow up with X next Thursday\".",
+                "Open tasks roll up to the contact's Tasks tab and the project's Tasks tab too.",
+              ].map((tip, i) => (
                 <div key={i} style={{ display: "flex", gap: 7, marginBottom: 6, alignItems: "flex-start" }}>
                   <span style={{ fontSize: 9, fontWeight: 700, color: "var(--color-sage)", flexShrink: 0, marginTop: 2 }}>{i + 1}</span>
                   <p style={{ fontSize: 10, lineHeight: 1.55, color: "#6b6860" }}>{tip}</p>
@@ -568,31 +685,28 @@ export default function CalendarClient({ initialReminders, initialProjects, gcal
               ))}
             </div>
           )}
-          {upcomingReminders.length === 0 && unscheduledReminders.length === 0 && reminders.length > 0 && (
-            <p className="px-3 pb-3 text-[11px]" style={{ color: "var(--color-grey)" }}>All caught up.</p>
-          )}
 
-          {upcomingReminders.map(r => {
-            const badge = getDueBadge(r.due_date!);
+          {upcomingTasks.map(t => {
+            const badge = getDueBadge(t.due_date!);
             return (
               <div
-                key={r.id}
+                key={t.id}
                 className="flex items-start gap-2 px-3 py-[8px] transition-colors"
                 style={{ borderBottom: "0.5px solid var(--color-border)" }}
-                onMouseEnter={e => { if (!r.completed) e.currentTarget.style.background = "var(--color-cream)"; }}
+                onMouseEnter={e => { if (!t.completed) e.currentTarget.style.background = "var(--color-cream)"; }}
                 onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
               >
-                {/* Check circle — direct action */}
+                {/* Check square — direct action */}
                 <div
-                  onClick={() => r.completed ? undoComplete(r.id) : markComplete(r.id)}
-                  className="flex items-center justify-center cursor-pointer rounded-full shrink-0 mt-[1px] transition-colors"
+                  onClick={() => t.completed ? undoComplete(t.id) : markComplete(t.id)}
+                  className="flex items-center justify-center cursor-pointer shrink-0 mt-[1px] transition-colors"
                   style={{
-                    width: "16px", height: "16px",
-                    border: r.completed ? "none" : "1.5px solid var(--color-border)",
-                    background: r.completed ? "var(--color-sage)" : "transparent",
+                    width: "16px", height: "16px", borderRadius: 4,
+                    border: t.completed ? "none" : "1.5px solid var(--color-border)",
+                    background: t.completed ? "var(--color-sage)" : "transparent",
                   }}
                 >
-                  {r.completed && (
+                  {t.completed && (
                     <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
                       <path d="M1 3l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
@@ -600,20 +714,20 @@ export default function CalendarClient({ initialReminders, initialProjects, gcal
                 </div>
 
                 {/* Title + badge */}
-                <div className="flex-1 min-w-0 mt-[-1px]" style={{ opacity: r.completed ? 0.45 : 1 }}>
+                <div className="flex-1 min-w-0 mt-[-1px]" style={{ opacity: t.completed ? 0.45 : 1 }}>
                   <p
                     className="text-[12px] font-medium leading-snug truncate"
-                    style={{ color: "var(--color-charcoal)", textDecoration: r.completed ? "line-through" : "none" }}
+                    style={{ color: "var(--color-charcoal)", textDecoration: t.completed ? "line-through" : "none" }}
                   >
-                    {r.title}
+                    {t.title}
                   </p>
-                  {!r.completed && <p className="text-[10px] mt-[2px]" style={{ color: badge.color }}>{badge.text}</p>}
+                  {!t.completed && <p className="text-[10px] mt-[2px]" style={{ color: badge.color }}>{badge.text}</p>}
                 </div>
 
                 {/* Undo link — only when completed/lingering */}
-                {r.completed && (
+                {t.completed && (
                   <button
-                    onClick={() => undoComplete(r.id)}
+                    onClick={() => undoComplete(t.id)}
                     className="text-[10px] font-medium shrink-0 transition-opacity hover:opacity-70"
                     style={{ color: "var(--color-sage)" }}
                   >
@@ -625,26 +739,26 @@ export default function CalendarClient({ initialReminders, initialProjects, gcal
           })}
 
           {/* No date */}
-          {unscheduledReminders.length > 0 && (
+          {unscheduledTasks.length > 0 && (
             <>
               <div className="px-3 pt-4 pb-1">
                 <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--color-grey)" }}>No date</span>
               </div>
-              {unscheduledReminders.map(r => (
+              {unscheduledTasks.map(t => (
                 <div
-                  key={r.id}
+                  key={t.id}
                   className="flex items-start gap-2 px-3 py-[8px] transition-colors"
                   style={{ borderBottom: "0.5px solid var(--color-border)" }}
                   onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                 >
                   <div
-                    onClick={() => r.completed ? undoComplete(r.id) : markComplete(r.id)}
-                    className="flex items-center justify-center cursor-pointer rounded-full shrink-0 mt-[1px]"
-                    style={{ width: "16px", height: "16px", border: "1.5px solid var(--color-border)", background: "transparent" }}
+                    onClick={() => t.completed ? undoComplete(t.id) : markComplete(t.id)}
+                    className="flex items-center justify-center cursor-pointer shrink-0 mt-[1px]"
+                    style={{ width: "16px", height: "16px", borderRadius: 4, border: "1.5px solid var(--color-border)", background: "transparent" }}
                   />
                   <p className="text-[12px] font-medium leading-snug truncate mt-[-1px]" style={{ color: "var(--color-charcoal)" }}>
-                    {r.title}
+                    {t.title}
                   </p>
                 </div>
               ))}
@@ -682,23 +796,23 @@ export default function CalendarClient({ initialReminders, initialProjects, gcal
                 </svg>
                 <div>
                   <p className="text-[11px] font-medium" style={{ color: "var(--color-charcoal)" }}>Connect Google Calendar</p>
-                  <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>See your events alongside reminders</p>
+                  <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>See your events alongside tasks</p>
                 </div>
               </button>
             </div>
           )}
         </div>
 
-        {/* Add reminder */}
+        {/* Add task */}
         <div className="px-3 py-3 shrink-0" style={{ borderTop: "0.5px solid var(--color-border)" }}>
           <button
-            onClick={() => setNewReminderOpen(true)}
+            onClick={() => setNewTaskOpen(true)}
             className="w-full text-[11px] py-[7px] rounded-lg transition-colors"
             style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", background: "transparent" }}
             onMouseEnter={e => { e.currentTarget.style.background = "var(--color-off-white)"; e.currentTarget.style.color = "#6b6860"; }}
             onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-grey)"; }}
           >
-            + New reminder
+            + New task
           </button>
         </div>
       </div>
@@ -753,7 +867,7 @@ export default function CalendarClient({ initialReminders, initialProjects, gcal
           </div>
 
           <button
-            onClick={() => openAshCal("What's coming up in my calendar this week? Any deadlines or reminders I should know about?")}
+            onClick={() => openAshCal("What's coming up in my calendar this week? Any tasks or deadlines I should know about?")}
             style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", fontSize: 11, fontWeight: 500, borderRadius: 6, background: "transparent", color: "var(--color-ash-dark)", border: "0.5px solid var(--color-border)", cursor: "pointer", fontFamily: "inherit", transition: "background 0.1s ease" }}
             onMouseEnter={e => (e.currentTarget.style.background = "var(--color-ash-tint)")}
             onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
@@ -765,14 +879,81 @@ export default function CalendarClient({ initialReminders, initialProjects, gcal
           </button>
 
           <button
-            onClick={() => setNewReminderOpen(true)}
+            onClick={() => setNewTaskOpen(true)}
             className="flex items-center gap-1.5 px-3 py-[5px] text-[11px] font-medium rounded-md text-white transition-opacity hover:opacity-90"
             style={{ background: "var(--color-sage)" }}
           >
             <Plus size={11} />
-            Reminder
+            Task
           </button>
         </div>
+
+        {/* ── Today + overdue rail ────────────────────────────────────────────
+            User-facing "tasks at the top" section. Anything due today or
+            already overdue surfaces here so the day starts with a clear
+            punch-list, regardless of which week is in view. */}
+        {topRailTasks.length > 0 && (
+          <div
+            className="flex items-center gap-2 px-4 py-[8px] shrink-0 overflow-x-auto"
+            style={{
+              background: "var(--color-warm-white)",
+              borderBottom: "0.5px solid var(--color-border)",
+            }}
+          >
+            <CheckSquare size={11} strokeWidth={1.75} style={{ color: "var(--color-sage)", flexShrink: 0 }} />
+            <span
+              className="text-[10px] font-semibold uppercase tracking-widest shrink-0"
+              style={{ color: "var(--color-text-tertiary)" }}
+            >
+              Today
+            </span>
+            <div className="flex items-center gap-1.5 flex-1 overflow-x-auto">
+              {topRailTasks.map(t => {
+                const d = parseTaskDueDate(t.due_date!);
+                const overdue = d && d.getTime() < today.getTime();
+                return (
+                  <button
+                    key={t.id}
+                    onClick={(e) => openPopover(e, t)}
+                    className="flex items-center gap-1.5 px-2.5 py-[4px] rounded-full shrink-0 transition-colors"
+                    style={{
+                      background: overdue ? "rgba(220,62,13,0.10)" : "rgba(155,163,122,0.14)",
+                      border: `0.5px solid ${overdue ? "rgba(220,62,13,0.28)" : "rgba(155,163,122,0.28)"}`,
+                      color: overdue ? "var(--color-red-orange)" : "#4a5630",
+                      cursor: "pointer", fontFamily: "inherit",
+                      opacity: t.completed ? 0.45 : 1,
+                    }}
+                  >
+                    <span
+                      onClick={(e) => { e.stopPropagation(); t.completed ? undoComplete(t.id) : markComplete(t.id); }}
+                      className="flex items-center justify-center"
+                      style={{
+                        width: 12, height: 12, borderRadius: 3,
+                        border: t.completed ? "none" : `1.5px solid ${overdue ? "var(--color-red-orange)" : "rgba(155,163,122,0.5)"}`,
+                        background: t.completed ? "var(--color-sage)" : "transparent",
+                      }}
+                    >
+                      {t.completed && (
+                        <svg width="7" height="5" viewBox="0 0 8 6" fill="none">
+                          <path d="M1 3l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </span>
+                    <span
+                      className="text-[11px] font-medium whitespace-nowrap"
+                      style={{ textDecoration: t.completed ? "line-through" : "none" }}
+                    >
+                      {t.title}
+                    </span>
+                    {overdue && !t.completed && (
+                      <span className="text-[9px] uppercase tracking-wider font-semibold ml-0.5">overdue</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── Single scroll container: day headers + all-day + time grid all share same width ── */}
         <div
@@ -862,8 +1043,11 @@ export default function CalendarClient({ initialReminders, initialProjects, gcal
               All day
             </div>
             {weekDays.map((day, i) => {
-              const dayReminders  = allDayReminders.filter(r => isSameDay(new Date(r.due_date!), day));
-              const dayProjects   = initialProjects.filter(p => p.due_date && isSameDay(new Date(p.due_date), day));
+              const dayTasks      = scheduledTasks.filter(t => {
+                const d = parseTaskDueDate(t.due_date!);
+                return d ? isSameDay(d, day) : false;
+              });
+              const dayProjects   = initialProjects.filter(p => p.due_date && isSameDay(new Date(p.due_date + "T00:00:00"), day));
               const dayGcalAllDay = gcalEvents.filter(e => e.allDay && isSameDay(new Date(e.start), day));
               return (
                 <div
@@ -880,10 +1064,21 @@ export default function CalendarClient({ initialReminders, initialProjects, gcal
                       </a>
                     );
                   })}
-                  {dayReminders.map(r => (
-                    <div key={r.id} className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate"
-                      style={{ background: "rgba(37,99,171,0.09)", color: "#2563ab", border: "0.5px solid rgba(37,99,171,0.18)" }}
-                    >↑ {r.title}</div>
+                  {dayTasks.map(t => (
+                    <button
+                      key={t.id}
+                      onClick={(e) => openPopover(e, t)}
+                      className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate text-left"
+                      style={{
+                        background: "rgba(37,99,171,0.09)", color: "#2563ab",
+                        border: "0.5px solid rgba(37,99,171,0.18)",
+                        cursor: "pointer", fontFamily: "inherit",
+                        opacity: t.completed ? 0.45 : 1,
+                        textDecoration: t.completed ? "line-through" : "none",
+                      }}
+                    >
+                      ☐ {t.title}
+                    </button>
                   ))}
                   {dayProjects.map(p => (
                     <div key={p.id} className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate"
@@ -926,11 +1121,6 @@ export default function CalendarClient({ initialReminders, initialProjects, gcal
             <div style={{ flex: 1, display: "flex", position: "relative" }}>
               {weekDays.map((day, colIdx) => {
                 const today = isToday(day);
-                const dayTimedReminders = timedReminders.filter(r => {
-                  const parsed = parseReminderDate(r.due_date!);
-                  return parsed && isSameDay(parsed.date, day);
-                });
-
                 return (
                   <div
                     key={colIdx}
@@ -1010,52 +1200,8 @@ export default function CalendarClient({ initialReminders, initialProjects, gcal
                       })
                     }
 
-                    {/* Reminder events — click opens popover */}
-                    {dayTimedReminders.map((r, ri) => {
-                      const parsed = parseReminderDate(r.due_date!);
-                      if (!parsed) return null;
-                      const { date } = parsed;
-                      const y = timeToY(date.getHours(), date.getMinutes());
-                      if (y < 0 || y > GRID_HEIGHT) return null;
-
-                      return (
-                        <div
-                          key={r.id}
-                          onClick={e => openPopover(e, r)}
-                          style={{
-                            position: "absolute",
-                            top: `${y}px`,
-                            left: "4px",
-                            right: "4px",
-                            height: "34px",
-                            borderRadius: "4px",
-                            borderLeft: "2.5px solid #2563ab",
-                            background: "rgba(37,99,171,0.09)",
-                            padding: "3px 6px",
-                            cursor: "pointer",
-                            zIndex: 2 + ri,
-                            overflow: "hidden",
-                            opacity: r.completed ? 0.4 : 1,
-                            transition: "opacity 0.2s",
-                          }}
-                          title={r.title}
-                        >
-                          <p
-                            className="text-[11px] font-medium truncate"
-                            style={{
-                              color: "#2563ab",
-                              lineHeight: "1.25",
-                              textDecoration: r.completed ? "line-through" : "none",
-                            }}
-                          >
-                            ↑ {r.title}
-                          </p>
-                          <p className="text-[9px]" style={{ color: "#2563ab", opacity: 0.7 }}>
-                            {date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                          </p>
-                        </div>
-                      );
-                    })}
+                    {/* Tasks have no time-of-day — they render in the all-day
+                        strip above, not in the time grid. */}
                   </div>
                 );
               })}
@@ -1065,25 +1211,26 @@ export default function CalendarClient({ initialReminders, initialProjects, gcal
         </div>{/* /scroll container */}
       </div>
 
-      {/* Reminder popover */}
+      {/* Task popover */}
       {popover && (
-        <ReminderPopover
-          reminder={popover.reminder}
+        <TaskPopover
+          task={popover.task}
           x={popover.x}
           y={popover.y}
-          onMarkComplete={() => markComplete(popover.reminder.id)}
-          onUndo={() => undoComplete(popover.reminder.id)}
+          onMarkComplete={() => markComplete(popover.task.id)}
+          onUndo={() => undoComplete(popover.task.id)}
           onClose={() => setPopover(null)}
         />
       )}
 
-      {/* New reminder modal */}
-      {newReminderOpen && (
-        <NewReminderModal
+      {/* New task modal */}
+      {newTaskOpen && (
+        <NewTaskModal
           projects={initialProjects}
+          contacts={initialContacts}
           defaultDate={defaultNewDate}
-          onClose={() => setNewReminderOpen(false)}
-          onCreate={createReminder}
+          onClose={() => setNewTaskOpen(false)}
+          onCreate={createTask}
         />
       )}
     </div>

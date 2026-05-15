@@ -1,20 +1,31 @@
 import { createClient } from "@/lib/supabase/server";
 import CalendarClient from "@/components/calendar/CalendarClient";
-import type { Reminder } from "@/types/database";
+import type { Task, Contact } from "@/types/database";
 
 export default async function CalendarPage() {
   const supabase = await createClient();
 
-  const [{ data: reminders }, { data: projects }] = await Promise.all([
+  const [
+    { data: tasks },
+    { data: projects },
+    { data: contacts },
+  ] = await Promise.all([
+    // Calendar now reads from the tasks table directly — reminders were
+    // merged into tasks. We pull open tasks for the user; the client owns
+    // sorting and filtering by date window.
     supabase
-      .from("reminders")
-      .select("*")
+      .from("tasks")
+      .select("*, project:projects(id, title), contact:contacts(id, first_name, last_name)")
       .eq("completed", false)
       .order("due_date", { ascending: true, nullsFirst: false }),
     supabase
       .from("projects")
       .select("id, title, due_date, status")
       .order("title"),
+    supabase
+      .from("contacts")
+      .select("id, first_name, last_name")
+      .order("first_name"),
   ]);
 
   // Check if Google Calendar is connected
@@ -26,7 +37,7 @@ export default async function CalendarPage() {
 
   return (
     <CalendarClient
-      initialReminders={(reminders ?? []) as Reminder[]}
+      initialTasks={(tasks ?? []) as Task[]}
       initialProjects={
         (projects ?? []) as {
           id: string;
@@ -35,6 +46,7 @@ export default async function CalendarPage() {
           status: string;
         }[]
       }
+      initialContacts={(contacts ?? []) as Pick<Contact, "id" | "first_name" | "last_name">[]}
       gcalConnected={!!gcalIntegration}
       gcalAccountName={(gcalIntegration?.metadata as { email?: string } | null)?.email ?? gcalIntegration?.account_name ?? null}
     />

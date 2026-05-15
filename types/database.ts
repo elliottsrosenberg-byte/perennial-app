@@ -69,16 +69,10 @@ export interface Note {
   opportunity?: { id: string; title: string; category: string } | null;
 }
 
-export interface Reminder {
-  id: string;
-  user_id: string;
-  project_id: string | null;
-  title: string;
-  description: string | null;
-  due_date: string | null;
-  completed: boolean;
-  created_at: string;
-}
+// `Reminder` was merged into `Task`. The `reminders` table still exists in
+// Postgres with historical rows but nothing in the app reads from it; the
+// table can be dropped in a follow-up migration once we're sure nothing
+// external depends on it.
 
 // ── Contacts ─────────────────────────────────────────────────────────────────
 

@@ -486,58 +486,6 @@ export const getOutreachSummaryTool: AshToolDefinition = {
   handler: get_outreach_summary,
 };
 
-// ─── get_upcoming_reminders ───────────────────────────────────────────────────
-
-async function get_upcoming_reminders(
-  input: { days?: number },
-  { supabase, userId }: ToolContext
-): Promise<string> {
-  const daysAhead = input.days ?? 14;
-  const cutoff = new Date(Date.now() + daysAhead * 86400000).toISOString().split("T")[0];
-  const today  = new Date().toISOString().split("T")[0];
-
-  const { data } = await supabase
-    .from("reminders")
-    .select("id, title, due_date, description, project:projects(title)")
-    .eq("user_id", userId)
-    .eq("completed", false)
-    .lte("due_date", cutoff)
-    .order("due_date", { ascending: true });
-
-  if (!data?.length) return `No upcoming reminders in the next ${daysAhead} days.`;
-
-  const overdue  = data.filter((r) => r.due_date && r.due_date < today);
-  const upcoming = data.filter((r) => r.due_date && r.due_date >= today);
-
-  return JSON.stringify({
-    overdue_count:   overdue.length,
-    upcoming_count:  upcoming.length,
-    reminders: data.map((r) => ({
-      id:       r.id,
-      title:    r.title,
-      due_date: r.due_date,
-      project:  (r.project as unknown as { title: string } | null)?.title,
-      overdue:  r.due_date ? r.due_date < today : false,
-    })),
-  });
-}
-
-export const getUpcomingRemindersTool: AshToolDefinition = {
-  name: "get_upcoming_reminders",
-  description:
-    "Get upcoming and overdue reminders from the user's calendar. " +
-    "Use when the user asks what's coming up, what they have on their calendar, " +
-    "or what reminders are overdue.",
-  input_schema: {
-    type: "object",
-    properties: {
-      days: { type: "number", description: "How many days ahead to look (default: 14)" },
-    },
-    required: [],
-  },
-  handler: get_upcoming_reminders,
-};
-
 // ─── get_opportunities ────────────────────────────────────────────────────────
 
 async function get_opportunities(
@@ -600,6 +548,5 @@ export const READ_TOOLS: AshToolDefinition[] = [
   searchNotesTool,
   getTasksTool,
   getOutreachSummaryTool,
-  getUpcomingRemindersTool,
   getOpportunitiesTool,
 ];
