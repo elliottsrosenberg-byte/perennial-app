@@ -204,9 +204,7 @@ function ProjectsBoard({ initialProjects }: Props) {
             </div>
 
             <span data-tour-target="projects.new-button">
-              <Button variant="primary" size="sm" onClick={() => openModalForStatus(null)}>
-                + New project
-              </Button>
+              <Button onClick={() => openModalForStatus(null)}>+ New project</Button>
             </span>
           </>
         }

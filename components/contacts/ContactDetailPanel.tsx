@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, KeyboardEvent } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, KeyboardEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Contact, ContactActivity, ContactActivityType, ContactStatus, LeadStage, Project, Task, Note } from "@/types/database";
 import { X, Maximize2, Minimize2, FileText, CheckSquare, FolderOpen, Calendar, Settings, Trash2, Users, Link2 } from "lucide-react";
@@ -9,6 +9,7 @@ import { getRichExtensions, RichToolbar, InlineAshPopover, SelectionBubble } fro
 import type { AshPromptState } from "@/components/ui/RichEditor";
 import CanvasAshHint from "@/components/ui/CanvasAshHint";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import AshPromptsModule, { type AshPrompt } from "@/components/ui/AshPromptsModule";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -536,90 +537,71 @@ function ContactFilesTab({ contactId }: { contactId: string }) {
   );
 }
 
-// ── ContactAshStrip ───────────────────────────────────────────────────────────
+// ── Ash prompt builder ────────────────────────────────────────────────────────
+//
+// Picks the most useful contextual action for the contact (lead stage,
+// freshness of last contact) and appends a small list of always-relevant
+// generic prompts. Mirrors the intelligence that used to live in the
+// removed ContactAshStrip, now surfaced as a left-rail module.
 
-function ContactAshStrip({ contact }: { contact: Contact }) {
+interface ContactAshPrompts {
+  headline:      string;
+  primary:       AshPrompt;
+  prompts:       AshPrompt[];
+}
+
+function buildContactAshPrompts(contact: Contact): ContactAshPrompts {
   const name = contact.first_name;
-  const isLead = contact.is_lead;
 
-  function generateContent(): { prompt: string; action: string; buttonLabel: string } {
-    if (isLead) {
-      const stage = contact.lead_stage ?? "new";
-      if (stage === "new") return {
-        prompt:      `${name} is a new lead. I can help you craft a strong opener.`,
-        action:      `Write a personalized first-touch message to ${name}. Keep it genuine and short — no fluff.`,
-        buttonLabel: "Draft opener",
-      };
-      if (stage === "reached_out") return {
-        prompt:      `You've reached out to ${name}. I can draft a follow-up if there's been no reply.`,
-        action:      `Draft a brief, non-pushy follow-up to ${name}. Reference the first message and give them a clear, easy next step.`,
-        buttonLabel: "Draft follow-up",
-      };
-      if (stage === "in_conversation") return {
-        prompt:      `You're in conversation with ${name}. Want help moving things forward?`,
-        action:      `Help me advance my conversation with ${name}. What's the best move to get to a clear yes or no?`,
-        buttonLabel: "Move forward",
-      };
-      return {
-        prompt:      `I can help you think through your next move with ${name}.`,
-        action:      `What's the best next step with ${name} as a lead? Give me a concrete action and the message to send.`,
-        buttonLabel: "Next step",
-      };
+  let headline: string;
+  let primary:  AshPrompt;
+
+  if (contact.is_lead) {
+    const stage = contact.lead_stage ?? "new";
+    if (stage === "new") {
+      headline = `${name} is a new lead. I can help you craft a strong opener.`;
+      primary  = { label: "Draft an opener", message: `Write a personalized first-touch message to ${name}. Keep it genuine and short — no fluff.` };
+    } else if (stage === "reached_out") {
+      headline = `You've reached out to ${name}. I can draft a follow-up if there's been no reply.`;
+      primary  = { label: "Draft a follow-up", message: `Draft a brief, non-pushy follow-up to ${name}. Reference the first message and give them a clear, easy next step.` };
+    } else if (stage === "in_conversation") {
+      headline = `You're in conversation with ${name}. Want help moving things forward?`;
+      primary  = { label: "Move it forward", message: `Help me advance my conversation with ${name}. What's the best move to get to a clear yes or no?` };
+    } else {
+      headline = `I can help you think through your next move with ${name}.`;
+      primary  = { label: "Plan the next move", message: `What's the best next step with ${name} as a lead? Give me a concrete action and the message to send.` };
     }
+  } else {
     const days = contact.last_contacted_at
       ? Math.floor((Date.now() - new Date(contact.last_contacted_at).getTime()) / 86400000)
       : null;
-    if (days === null || days > 60) return {
-      prompt:      `It's been a while since you connected with ${name}. I can draft a check-in.`,
-      action:      `Draft a warm, genuine check-in message to ${name}. Keep it natural — no selling.`,
-      buttonLabel: "Draft check-in",
-    };
-    if (days > 30) return {
-      prompt:      `You last spoke with ${name} ${days} days ago. Good time for a follow-up?`,
-      action:      `Draft a follow-up to ${name} that picks up naturally from where you left off.`,
-      buttonLabel: "Draft follow-up",
-    };
-    return {
-      prompt:      `I can help you prepare for your next interaction with ${name}.`,
-      action:      `What should I know about ${name} before my next conversation? Give me key context and one thing to bring up.`,
-      buttonLabel: "Prep for chat",
-    };
+    if (days === null || days > 60) {
+      headline = days === null
+        ? `You haven't logged any contact with ${name} yet. I can draft a check-in.`
+        : `It's been ${Math.floor(days / 30)} months since you connected with ${name}. I can draft a check-in.`;
+      primary  = { label: "Draft a check-in", message: `Draft a warm, genuine check-in message to ${name}. Keep it natural — no selling.` };
+    } else if (days > 30) {
+      headline = `You last spoke with ${name} ${days} days ago. Good time for a follow-up?`;
+      primary  = { label: "Draft a follow-up", message: `Draft a follow-up to ${name} that picks up naturally from where you left off.` };
+    } else {
+      headline = `I can help you prepare for your next interaction with ${name}.`;
+      primary  = { label: "Prep for chat", message: `What should I know about ${name} before my next conversation? Give me key context and one thing to bring up.` };
+    }
   }
 
-  const { prompt, action, buttonLabel } = generateContent();
-  const contactDetail = { name: `${contact.first_name} ${contact.last_name}`, is_lead: contact.is_lead };
+  const prompts: AshPrompt[] = contact.is_lead
+    ? [
+        { label: `What's a good opener for ${name}?`,        message: `What's the strongest opener I could send ${name}? Suggest 2 angles.` },
+        { label: `How should I qualify ${name}?`,            message: `Help me qualify ${name} as a lead — what questions should I be answering before I invest more time?` },
+        { label: "Summarize what I know",                    message: `Summarize everything I have on ${name} — activity, notes, tags. Pull the relevant signals into one paragraph.` },
+      ]
+    : [
+        { label: `What should I know about ${name}?`,        message: `What should I know about ${name} based on the activity, notes, and tags I have on file?` },
+        { label: `Summarize my history with ${name}`,        message: `Summarize my full history with ${name} — every logged activity and note. Highlight anything I should bring up next time.` },
+        { label: "Draft a message to send next",             message: `Suggest the next message I should send ${name}. Match the tone of how we've communicated before.` },
+      ];
 
-  function handleContextual() {
-    window.dispatchEvent(new CustomEvent("open-ash", { detail: { message: action, contact: contactDetail } }));
-  }
-  function handleOpenAsh() {
-    window.dispatchEvent(new CustomEvent("open-ash", { detail: { contact: contactDetail } }));
-  }
-
-  return (
-    <div style={{
-      flexShrink: 0, display: "flex", alignItems: "center", gap: 12,
-      padding: "0 18px", height: 56,
-      background: "linear-gradient(135deg, #7a9a55 0%, #5a7a38 45%, #3a5228 100%)",
-    }}>
-      <img src="/Ash-Logomak.svg" alt="" style={{ width: 16, height: 16, flexShrink: 0, filter: "brightness(0) invert(1)", opacity: 0.9, animation: "ash-shimmer 4s ease-in-out infinite" }} />
-      <span style={{ flex: 1, fontSize: 11, color: "rgba(255,255,255,0.88)", lineHeight: 1.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {prompt}
-      </span>
-      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-        <button onClick={handleContextual} style={{ fontSize: 11, fontWeight: 700, color: "white", background: "rgba(255,255,255,0.22)", border: "0.5px solid rgba(255,255,255,0.35)", borderRadius: 9999, padding: "4px 12px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", lineHeight: 1 }}
-          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.32)"}
-          onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.22)"}>
-          {buttonLabel} →
-        </button>
-        <button onClick={handleOpenAsh} style={{ fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,0.75)", background: "transparent", border: "0.5px solid rgba(255,255,255,0.25)", borderRadius: 9999, padding: "4px 12px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", lineHeight: 1 }}
-          onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; e.currentTarget.style.color = "white"; }}
-          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.75)"; }}>
-          Ask Ash
-        </button>
-      </div>
-    </div>
-  );
+  return { headline, primary, prompts };
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -838,8 +820,6 @@ export default function ContactDetailPanel({ contact: initialContact, onClose, o
 
   // ── Ash ─────────────────────────────────────────────────────────────────────
 
-  function openAsh(message: string) { window.dispatchEvent(new CustomEvent("open-ash", { detail: { message } })); }
-
   // ── Nav items ───────────────────────────────────────────────────────────────
 
   const NAV_ITEMS: { key: SectionTab; label: string; icon: React.ReactNode; count?: number }[] = [
@@ -856,10 +836,11 @@ export default function ContactDetailPanel({ contact: initialContact, onClose, o
     : STATUS_CONFIG[contact.status];
   const pickerFiltered = availableProjects.filter(p => p.title.toLowerCase().includes(projectSearch.toLowerCase()));
 
-  // ── Ash banner prompts ──────────────────────────────────────────────────────
-  const ASH_PROMPTS = contact.is_lead
-    ? [`What's a good opener to send ${contact.first_name}?`, `How should I qualify ${contact.first_name} as a lead?`, `Draft a follow-up for ${contact.first_name}.`]
-    : [`What should I know about ${contact.first_name}?`, `Draft a follow-up to ${contact.first_name}.`, `Summarize my history with ${contact.first_name}.`];
+  // ── Ash prompts (left-rail module — replaces the bottom strip) ──────────────
+  // The "primary" prompt is the one most worth doing right now given who
+  // this contact is and how recently you've connected. The rest are
+  // generic asks that always apply.
+  const ashContext = useMemo(() => buildContactAshPrompts(contact), [contact]);
 
   return (
     <>
@@ -1094,20 +1075,14 @@ export default function ContactDetailPanel({ contact: initialContact, onClose, o
               })}
             </div>
 
-            {/* Ash prompts */}
-            <div style={{ marginTop: 16, borderTop: "0.5px solid var(--color-border)", paddingTop: 10 }}>
-              <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Ask Ash</p>
-              {ASH_PROMPTS.map(prompt => (
-                <button key={prompt} onClick={() => openAsh(prompt)} style={{
-                  width: "100%", textAlign: "left", fontSize: 11, padding: "5px 8px", borderRadius: 7,
-                  background: "transparent", border: "none", cursor: "pointer", color: "#6b6860", fontFamily: "inherit",
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = "rgba(155,163,122,0.08)"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                  {prompt}
-                </button>
-              ))}
-            </div>
+            {/* Ash module — context-aware prompts in a sage-tinted card */}
+            <AshPromptsModule
+              headline={ashContext.headline}
+              primaryPrompt={ashContext.primary}
+              prompts={ashContext.prompts}
+              context={{ contact: { name: `${contact.first_name} ${contact.last_name}`, is_lead: contact.is_lead } }}
+              placeholder={`Ask Ash about ${contact.first_name}…`}
+            />
           </div>
 
           {/* Settings (bottom) */}
@@ -1154,16 +1129,22 @@ export default function ContactDetailPanel({ contact: initialContact, onClose, o
               {NAV_ITEMS.find(n => n.key === activeTab)?.label}
             </span>
             <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <button onClick={() => setMaximized(v => !v)}
+              <button
+                onClick={() => setMaximized(v => !v)}
+                title={maximized ? "Restore" : "Maximize"}
                 style={{ width: 28, height: 28, borderRadius: 6, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-tertiary)" }}
                 onMouseEnter={e => e.currentTarget.style.background = "var(--color-surface-sunken)"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+              >
                 {maximized ? <Minimize2 size={13} strokeWidth={1.75} /> : <Maximize2 size={13} strokeWidth={1.75} />}
               </button>
-              <button onClick={onClose}
+              <button
+                onClick={onClose}
+                title="Close"
                 style={{ width: 28, height: 28, borderRadius: 6, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-tertiary)" }}
                 onMouseEnter={e => e.currentTarget.style.background = "var(--color-surface-sunken)"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+              >
                 <X size={13} strokeWidth={2} />
               </button>
             </div>
@@ -1190,7 +1171,6 @@ export default function ContactDetailPanel({ contact: initialContact, onClose, o
               <ContactFilesTab key={contact.id} contactId={contact.id} />
             )}
           </div>
-          {!maximized && <ContactAshStrip contact={contact} />}
         </div>
       </div>
 

@@ -202,17 +202,9 @@ export default function ContactsClient({ initialContacts }: Props) {
       <Topbar
         title="Contacts"
         actions={
-          <>
-            <Button variant="secondary" size="sm" onClick={() => setShowImport(true)}>
-              <Upload size={11} strokeWidth={2} />
-              Import contacts
-            </Button>
-            <span data-tour-target="contacts.new-button">
-              <Button variant="primary" size="sm" onClick={openNewContactModal}>
-                + New contact
-              </Button>
-            </span>
-          </>
+          <span data-tour-target="contacts.new-button">
+            <Button onClick={openNewContactModal}>+ New contact</Button>
+          </span>
         }
       />
 
@@ -285,6 +277,15 @@ export default function ContactsClient({ initialContacts }: Props) {
             onMouseEnter={e => { e.currentTarget.style.background = "var(--color-cream)"; e.currentTarget.style.color = "var(--color-charcoal)"; }}
             onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-grey)"; }}>
             Export
+          </button>
+          <button
+            onClick={() => setShowImport(true)}
+            title="Import contacts from CSV"
+            className="px-2.5 py-1.5 text-[10px] font-medium rounded-lg transition-colors"
+            style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
+            onMouseEnter={e => { e.currentTarget.style.background = "var(--color-cream)"; e.currentTarget.style.color = "var(--color-charcoal)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-grey)"; }}>
+            Import
           </button>
         </div>
       </div>
