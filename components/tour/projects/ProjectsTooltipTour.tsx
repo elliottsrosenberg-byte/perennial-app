@@ -31,6 +31,10 @@ interface Step {
   hint?:       string;          // italicised hint about how it advances
   advance:     AdvanceMode;     // action-driven or Next button
   spotlight?:  boolean;         // ring + dim. default true if anchored
+  /** Free-roam step: nothing dimmed, nothing spotlit. Callout pins to the
+   *  bottom-right corner so the user can scan the whole UI on their own
+   *  before we start pointing at specific affordances. */
+  freeRoam?:   boolean;
   finalCta?:   { label: string; action: "ash-draft-tasks" };
 }
 
@@ -61,6 +65,14 @@ const STEPS: Step[] = [
     body:    "Click your project card to slide its detail panel open.",
     hint:    "Waiting for you to open it…",
     advance: "open-card",
+  },
+  {
+    id:       "explore",
+    anchor:   null,
+    title:    "Take it in.",
+    body:     "This is your project's home. Left rail has properties, status, type, priority, due date. The main pane is Canvas — your workspace. Tabs at the top jump between Tasks, Contacts, Notes, and Files. Look around — when you're ready, hit Next and we'll point things out.",
+    advance:  "next",
+    freeRoam: true,
   },
   {
     id:      "properties",
@@ -189,6 +201,16 @@ export default function ProjectsTooltipTour() {
     if (!active || hidden) { setHighlight(null); setPos(null); return; }
     const step = STEPS[stepIdx];
 
+    // Free-roam step: pin to bottom-right corner, no spotlight, no dim. Lets
+    // the user scan the whole panel before we start pointing at controls.
+    if (step.freeRoam) {
+      setHighlight(null);
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      setPos({ top: vh - 240, left: vw - W - 24 });
+      return;
+    }
+
     // No anchor → center the callout, no spotlight.
     if (!step.anchor) {
       setHighlight(null);
@@ -292,11 +314,12 @@ export default function ProjectsTooltipTour() {
   if (!active || hidden) return null;
   const step   = STEPS[stepIdx];
   // Anchored steps wait for `pos` to be computed; centered steps render
-  // immediately with no anchor (pos === null).
+  // immediately with no anchor (pos === null). Free-roam steps always have
+  // a computed pos (corner pin).
   if (step.anchor && !pos) return null;
   const isLast = stepIdx === STEPS.length - 1;
   const isActionStep = step.advance !== "next";
-  const centered = !step.anchor;
+  const centered = !step.anchor && !step.freeRoam;
 
   return (
     <>

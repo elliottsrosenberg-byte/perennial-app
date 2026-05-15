@@ -335,8 +335,12 @@ export default function ContactsClient({ initialContacts }: Props) {
               icon={<Users size={24} strokeWidth={1.5} color="var(--color-sage)" />}
               heading="Build your network"
               body="Contacts holds your full relationship graph — galleries, collectors, press, clients, fabricators, and collaborators. Knowing who you know and how recently you've connected is one of the most undertracked assets in a creative practice."
-              action={{ label: "+ New contact", onClick: openNewContactModal }}
-              ashPrompt="I'm starting to build my contacts in Perennial. How should I think about organizing my network — who should I add first, and what tags make sense for a designer?"
+              action={{ label: "+ Add contact", onClick: openNewContactModal }}
+              secondaryAction={{
+                label:   "Import contacts",
+                onClick: () => setShowImport(true),
+                icon:    <Upload size={11} strokeWidth={2} />,
+              }}
               tips={[
                 "Add galleries, collectors, press contacts, clients, and suppliers — anyone relevant to your practice.",
                 "Tag contacts (e.g. 'gallery', 'press', 'client') to filter and segment your network quickly.",

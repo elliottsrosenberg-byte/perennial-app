@@ -6,8 +6,12 @@ interface EmptyStateProps {
   icon: React.ReactNode;
   heading: string;
   body: string;
-  /** Primary CTA — rendered as a button */
+  /** Primary CTA — rendered as a sage button */
   action?: { label: string; onClick: () => void };
+  /** Optional secondary CTA — rendered as an outlined button alongside the
+   *  primary action. Useful when there are two equal-weight on-ramps
+   *  (e.g. "Add contact" + "Import contacts"). */
+  secondaryAction?: { label: string; onClick: () => void; icon?: React.ReactNode };
   /** Optional Ash prompt to send when user clicks "Ask Ash" */
   ashPrompt?: string;
   /** Optional list of 2–3 short educational bullets */
@@ -21,7 +25,7 @@ function openAsh(message: string) {
 }
 
 export default function EmptyState({
-  icon, heading, body, action, ashPrompt, tips,
+  icon, heading, body, action, secondaryAction, ashPrompt, tips,
 }: EmptyStateProps) {
   return (
     <div
@@ -105,6 +109,26 @@ export default function EmptyState({
             onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-sage)")}
           >
             {action.label}
+          </button>
+        )}
+        {secondaryAction && (
+          <button
+            onClick={secondaryAction.onClick}
+            style={{
+              padding: "8px 14px", fontSize: 12, fontWeight: 500,
+              background: "transparent",
+              border: "0.5px solid var(--color-border)",
+              borderRadius: 8, cursor: "pointer",
+              fontFamily: "inherit",
+              display: "flex", alignItems: "center", gap: 7,
+              color: "var(--color-text-secondary)",
+              transition: "background 0.1s ease",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-surface-sunken)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+          >
+            {secondaryAction.icon}
+            {secondaryAction.label}
           </button>
         )}
         {ashPrompt && (
