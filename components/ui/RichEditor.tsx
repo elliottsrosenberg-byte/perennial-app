@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   useEditor, EditorContent,
   Extension, NodeViewWrapper, NodeViewContent, ReactNodeViewRenderer,
 } from "@tiptap/react";
+import { BubbleMenu } from "@tiptap/react/menus";
 import type { NodeViewProps } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -159,19 +160,13 @@ export function getSelectionExtract(editor: Editor): { text: string; html: strin
 }
 
 export function RichToolbar({
-  editor, onGenerateTasks, suggesting, onConvertToNote, convertingToNote,
+  editor, onGenerateTasks, suggesting,
 }: {
-  editor:            ReturnType<typeof useEditor> | null;
-  onGenerateTasks?:  () => void;
-  suggesting?:       boolean;
-  /** Called when the user clicks the "Convert to note" button while a range
-   *  is selected. The caller is responsible for creating the note record. */
-  onConvertToNote?:  (selection: { text: string; html: string }) => void | Promise<void>;
-  convertingToNote?: boolean;
+  editor:           ReturnType<typeof useEditor> | null;
+  onGenerateTasks?: () => void;
+  suggesting?:      boolean;
 }) {
   if (!editor) return null;
-
-  const hasSelection = !editor.state.selection.empty;
 
   function btn(label: React.ReactNode, action: () => void, active?: boolean, title?: string) {
     return (
@@ -216,35 +211,6 @@ export function RichToolbar({
         false, "Toggle block",
       )}
       <div style={{ flex: 1 }} />
-      {onConvertToNote && (
-        <button
-          type="button"
-          onMouseDown={(e) => {
-            // Prevent the editor from losing its selection on mousedown — we
-            // need the selection range intact when the click handler reads it.
-            e.preventDefault();
-          }}
-          onClick={() => {
-            const sel = getSelectionExtract(editor);
-            if (sel) onConvertToNote(sel);
-          }}
-          disabled={!hasSelection || convertingToNote}
-          title={hasSelection ? "Convert selection to a linked note" : "Select text to convert to a note"}
-          style={{
-            display: "flex", alignItems: "center", gap: 5,
-            padding: "3px 10px", fontSize: 11, fontWeight: 500, borderRadius: 6,
-            border: "0.5px solid var(--color-border)",
-            background: hasSelection ? "rgba(155,163,122,0.14)" : "transparent",
-            color: hasSelection ? "#4a5630" : "var(--color-text-tertiary)",
-            cursor: hasSelection && !convertingToNote ? "pointer" : "not-allowed",
-            opacity: convertingToNote ? 0.6 : 1,
-            fontFamily: "inherit", flexShrink: 0, marginRight: 6,
-          }}
-        >
-          <FileText size={11} strokeWidth={1.75} />
-          {convertingToNote ? "Creating…" : "→ Note"}
-        </button>
-      )}
       {onGenerateTasks && (
         <button type="button" onClick={onGenerateTasks} disabled={suggesting} title="Generate tasks from this note" style={{
           display: "flex", alignItems: "center", gap: 5, padding: "3px 10px",
@@ -318,6 +284,72 @@ export function InlineAshPopover({
         }
       </form>
     </div>
+  );
+}
+
+// ─── Selection bubble ────────────────────────────────────────────────────────
+//
+// Floating context menu anchored to the current text selection. Currently
+// exposes a single "Convert to note" action; future actions (Ask Ash on
+// selection, link, etc.) can slot in alongside it. Built on Tiptap's
+// BubbleMenu which handles positioning + show/hide logic for us.
+
+export function SelectionBubble({
+  editor, onConvertToNote, convertingToNote,
+}: {
+  editor:            Editor | null;
+  onConvertToNote:   (selection: { text: string; html: string }) => void | Promise<void>;
+  convertingToNote?: boolean;
+}) {
+  if (!editor) return null;
+
+  return (
+    <BubbleMenu
+      editor={editor}
+      // Only show when there's a non-empty selection (the default), and not
+      // when the selection is inside a NodeView control like our ToggleBlock.
+      shouldShow={({ editor: ed, from, to }) => {
+        if (from === to) return false;
+        if (!ed.isFocused && !ed.isEditable) return false;
+        return true;
+      }}
+      options={{ placement: "top", offset: 8 }}
+    >
+      <div
+        style={{
+          display: "flex", alignItems: "center", gap: 4,
+          padding: 4, borderRadius: 10,
+          background: "var(--color-charcoal)",
+          border: "0.5px solid rgba(255,255,255,0.08)",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.22)",
+        }}
+      >
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            const sel = getSelectionExtract(editor);
+            if (sel) onConvertToNote(sel);
+          }}
+          disabled={convertingToNote}
+          style={{
+            display: "flex", alignItems: "center", gap: 6,
+            padding: "5px 10px", fontSize: 11, fontWeight: 500,
+            borderRadius: 7, border: "none",
+            background: "transparent",
+            color: "rgba(245,241,233,0.92)",
+            cursor: convertingToNote ? "not-allowed" : "pointer",
+            fontFamily: "inherit",
+            opacity: convertingToNote ? 0.6 : 1,
+          }}
+          onMouseEnter={(e) => { if (!convertingToNote) e.currentTarget.style.background = "rgba(255,255,255,0.08)"; }}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        >
+          <FileText size={11} strokeWidth={1.75} />
+          {convertingToNote ? "Creating…" : "Convert to note"}
+        </button>
+      </div>
+    </BubbleMenu>
   );
 }
 

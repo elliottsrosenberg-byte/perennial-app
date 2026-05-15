@@ -5,8 +5,9 @@ import { createClient } from "@/lib/supabase/client";
 import type { Contact, ContactActivity, ContactActivityType, ContactStatus, LeadStage, Project, Task, Note } from "@/types/database";
 import { X, Maximize2, Minimize2, FileText, CheckSquare, FolderOpen, Calendar, Settings, Trash2, Users, Link2 } from "lucide-react";
 import { useEditor, EditorContent } from "@tiptap/react";
-import { getRichExtensions, RichToolbar, InlineAshPopover } from "@/components/ui/RichEditor";
+import { getRichExtensions, RichToolbar, InlineAshPopover, SelectionBubble } from "@/components/ui/RichEditor";
 import type { AshPromptState } from "@/components/ui/RichEditor";
+import CanvasAshHint from "@/components/ui/CanvasAshHint";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -192,11 +193,13 @@ function ContactCanvasEditor({ contactId, initialHtml }: { contactId: string; in
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", position: "relative" }}>
-      <RichToolbar editor={editor} onConvertToNote={handleConvertToNote} convertingToNote={convertingNote} />
-      <div style={{ flex: 1, overflowY: "auto", background: "var(--color-off-white)" }}>
+      <RichToolbar editor={editor} />
+      <SelectionBubble editor={editor} onConvertToNote={handleConvertToNote} convertingToNote={convertingNote} />
+      <div style={{ flex: 1, overflowY: "auto", background: "var(--color-off-white)", position: "relative" }}>
         <div style={{ maxWidth: 760, padding: "36px 60px 80px" }}>
           <EditorContent editor={editor} />
         </div>
+        <CanvasAshHint />
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, padding: "5px 20px", borderTop: "0.5px solid var(--color-border)", background: "var(--color-off-white)", flexShrink: 0, fontSize: 10, color: "var(--color-text-tertiary)" }}>
         {noteCreated && <span style={{ color: "#4a5630", fontWeight: 600 }}>✓ Note created</span>}
