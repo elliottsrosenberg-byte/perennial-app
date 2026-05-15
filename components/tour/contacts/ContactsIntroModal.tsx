@@ -61,10 +61,15 @@ export default function ContactsIntroModal() {
         .eq("user_id", user.id)
         .maybeSingle();
       const visited = (data?.tour_visited ?? {}) as TourVisited;
+      // Gate on a dedicated `contacts_intro` key. We deliberately do NOT
+      // gate on `visited.contacts` — that key gets auto-marked by
+      // TourTracker on sidebar nav for any user who visited /contacts
+      // before this walkthrough shipped, which would otherwise silently
+      // suppress the intro for them.
       const shouldShow =
         Boolean(data?.onboarding_complete) &&
         !data?.tour_dismissed &&
-        !visited.contacts;
+        !visited.contacts_intro;
       setOpen(shouldShow);
     })();
   }, []);
@@ -86,7 +91,15 @@ export default function ContactsIntroModal() {
       .select("tour_visited")
       .eq("user_id", user.id)
       .maybeSingle();
-    const next = { ...((data?.tour_visited ?? {}) as TourVisited), contacts: new Date().toISOString() };
+    const stamp = new Date().toISOString();
+    // Write both keys: `contacts_intro` is the modal-specific gate, and
+    // `contacts` keeps the dashboard / sidebar getting-started progress
+    // widget ticking — same key TourTracker would use for a plain nav.
+    const next = {
+      ...((data?.tour_visited ?? {}) as TourVisited),
+      contacts_intro: stamp,
+      contacts:       stamp,
+    };
     await supabase.from("profiles").update({ tour_visited: next }).eq("user_id", user.id);
     window.dispatchEvent(new CustomEvent("tour-visited", { detail: { visited: next } }));
   }
