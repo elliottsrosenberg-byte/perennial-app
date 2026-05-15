@@ -44,7 +44,7 @@ export default function NewInvoiceModal({ projects, nextNumber, onClose, onCreat
     setSearching(true);
     const supabase = createClient();
     const [{ data: contacts }, { data: companies }] = await Promise.all([
-      supabase.from("contacts").select("*").or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`).limit(5),
+      supabase.from("contacts").select("*").eq("archived", false).or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`).limit(5),
       supabase.from("companies").select("*").ilike("name", `%${q}%`).limit(4),
     ]);
     setSearchResults([

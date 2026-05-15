@@ -270,7 +270,6 @@ export default function Sidebar() {
         <nav style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "6px 0" }}>
           {NAV_GROUPS.map((group, gi) => (
             <div key={gi}>
-              {gi > 0 && <div style={{ height: "0.5px", background: C.divider, margin: "5px 11px" }} />}
               <div style={{ padding: "0 7px", display: "flex", flexDirection: "column", gap: 1 }}>
                 {group.map(({ href, label, icon: Icon, soon }) => {
                   const active = isActive(href);

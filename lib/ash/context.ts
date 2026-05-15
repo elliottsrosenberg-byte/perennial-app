@@ -46,6 +46,7 @@ export async function buildAshContext(
       .select("first_name, last_name, last_contacted_at, company:companies(name)")
       .eq("user_id", userId)
       .eq("status", "active")
+      .eq("archived", false)
       .or(`last_contacted_at.is.null,last_contacted_at.lt.${thirtyDaysAgo}`)
       .order("last_contacted_at", { ascending: true, nullsFirst: true })
       .limit(5),

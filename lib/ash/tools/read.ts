@@ -128,7 +128,8 @@ async function search_contacts(
   let q = supabase
     .from("contacts")
     .select("id, first_name, last_name, email, phone, title, tags, status, last_contacted_at, location, company:companies(name)")
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .eq("archived", false);
 
   if (input.status) q = q.eq("status", input.status);
 
@@ -452,6 +453,7 @@ async function get_outreach_summary(
       .select("id, first_name, last_name, last_contacted_at")
       .eq("user_id", userId)
       .eq("status", "active")
+      .eq("archived", false)
       .lt("last_contacted_at", new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0])
       .limit(10),
   ]);

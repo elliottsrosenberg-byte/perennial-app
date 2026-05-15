@@ -149,7 +149,7 @@ function InlineLinkPicker({
     if (!loaded) {
       const supabase = createClient();
       Promise.all([
-        supabase.from("contacts").select("id, first_name, last_name").order("first_name"),
+        supabase.from("contacts").select("id, first_name, last_name").eq("archived", false).order("first_name"),
         supabase.from("opportunities").select("id, title, category").order("title"),
       ]).then(([{ data: c }, { data: o }]) => {
         if (c) setContacts(c as ContactOpt[]);
