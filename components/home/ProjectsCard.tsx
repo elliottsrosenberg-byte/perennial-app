@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import VisitButton from "@/components/ui/VisitButton";
 
 interface HomeProject {
   id: string;
@@ -54,17 +55,13 @@ export default function ProjectsCard({ projects }: { projects: HomeProject[] }) 
           </span>
         )}
         <div className="flex-1" />
-        <Link href="/projects" className="text-[11px] hover:underline" style={{ color: "#2563ab" }}>
-          View all →
-        </Link>
+        <VisitButton href="/projects" />
       </div>
 
       {projects.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-7 px-4 text-center flex-1">
-          <p className="text-[12px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>No active projects</p>
-          <Link href="/projects" className="text-[11px] hover:underline mt-1" style={{ color: "#2563ab" }}>
-            Create your first project →
-          </Link>
+          <p className="text-[12px] font-medium mb-2" style={{ color: "var(--color-charcoal)" }}>No active projects</p>
+          <VisitButton href="/projects" label="Create your first project" />
         </div>
       ) : (
         projects.map((p) => {

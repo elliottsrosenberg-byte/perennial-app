@@ -1,4 +1,4 @@
-import Link from "next/link";
+import VisitButton from "@/components/ui/VisitButton";
 
 interface Props {
   billableHours:        number;
@@ -87,9 +87,7 @@ export default function FinanceCard({
           {month} {now.getFullYear()}
         </span>
         <div className="flex-1" />
-        <Link href="/finance" className="text-[11px] hover:underline" style={{ color: "#2563ab" }}>
-          View all →
-        </Link>
+        <VisitButton href="/finance" />
       </div>
 
       {ROWS.map((row, i) => (

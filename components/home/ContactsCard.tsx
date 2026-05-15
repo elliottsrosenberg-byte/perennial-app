@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import VisitButton from "@/components/ui/VisitButton";
 
 interface HomeContact {
   id: string;
@@ -49,9 +50,7 @@ export default function ContactsCard({ contacts }: { contacts: HomeContact[] }) 
           </span>
         )}
         <div className="flex-1" />
-        <Link href="/contacts" className="text-[11px] hover:underline" style={{ color: "#2563ab" }}>
-          View all →
-        </Link>
+        <VisitButton href="/contacts" />
       </div>
 
       {contacts.length === 0 ? (

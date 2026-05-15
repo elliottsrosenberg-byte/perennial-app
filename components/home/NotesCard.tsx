@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import AshMark from "@/components/ui/AshMark";
+import VisitButton from "@/components/ui/VisitButton";
 import { createClient } from "@/lib/supabase/client";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { getRichExtensions, RichToolbar } from "@/components/ui/RichEditor";
@@ -153,9 +154,7 @@ export default function NotesCard({ notes: initialNotes }: { notes: HomeNote[] }
         <span className="flex-1 text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--color-grey)" }}>
           Recent notes
         </span>
-        <Link href="/notes" className="text-[11px] hover:underline" style={{ color: "#2563ab" }}>
-          View all →
-        </Link>
+        <VisitButton href="/notes" />
       </div>
 
       {/* Notes list */}

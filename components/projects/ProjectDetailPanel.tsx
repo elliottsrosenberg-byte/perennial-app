@@ -447,9 +447,11 @@ function CanvasEditor({
   initialHtml: string | null;
   onSaved:     (html: string | null) => void;
 }) {
-  const [saving,    setSaving]    = useState(false);
-  const [saved,     setSaved]     = useState(false);
-  const [ashPrompt, setAshPrompt] = useState<AshPromptState>(null);
+  const [saving,        setSaving]        = useState(false);
+  const [saved,         setSaved]         = useState(false);
+  const [convertingNote, setConvertingNote] = useState(false);
+  const [noteCreated,   setNoteCreated]   = useState(false);
+  const [ashPrompt,     setAshPrompt]     = useState<AshPromptState>(null);
   const saveTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Mirror of the latest HTML the editor produced, kept in a ref so the
   // unmount cleanup doesn't have to read from a possibly torn-down editor.
@@ -524,9 +526,27 @@ function CanvasEditor({
     setAshPrompt(null);
   }
 
+  async function handleConvertToNote(sel: { text: string; html: string }) {
+    if (convertingNote) return;
+    setConvertingNote(true);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setConvertingNote(false); return; }
+    const title = sel.text.replace(/\s+/g, " ").trim().slice(0, 60);
+    await supabase.from("notes").insert({
+      user_id:    user.id,
+      project_id: projectId,
+      title:      title || null,
+      content:    sel.html,
+    });
+    setConvertingNote(false);
+    setNoteCreated(true);
+    setTimeout(() => setNoteCreated(false), 2400);
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", position: "relative" }}>
-      <RichToolbar editor={editor} />
+      <RichToolbar editor={editor} onConvertToNote={handleConvertToNote} convertingToNote={convertingNote} />
 
       <div style={{ flex: 1, overflowY: "auto", background: "var(--color-off-white)" }}>
         <div style={{ maxWidth: 760, padding: "36px 60px 80px" }}>
@@ -534,7 +554,8 @@ function CanvasEditor({
         </div>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "flex-end", padding: "5px 20px", borderTop: "0.5px solid var(--color-border)", background: "var(--color-off-white)", flexShrink: 0 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, padding: "5px 20px", borderTop: "0.5px solid var(--color-border)", background: "var(--color-off-white)", flexShrink: 0 }}>
+        {noteCreated && <span style={{ fontSize: 10, color: "#4a5630", fontWeight: 600 }}>✓ Note created</span>}
         {saving  && <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>Saving…</span>}
         {!saving && saved && <span style={{ fontSize: 10, color: "var(--color-sage)" }}>✓ Saved</span>}
       </div>

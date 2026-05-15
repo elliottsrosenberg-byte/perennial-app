@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Layers, Users, Receipt, Send, Clock, Globe, BookOpen, UploadCloud, X as XIcon } from "lucide-react";
+import { Layers, Users, Receipt, Send, Clock, Globe, BookOpen, UploadCloud, X as XIcon, Armchair, Lamp, Diamond, Gem, Palette, Hammer, PenTool, Briefcase, Boxes, Play } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import AshMark from "@/components/ui/AshMark";
@@ -18,11 +18,69 @@ const PRACTICE_OPTIONS = [
   "Jewelry", "Painting", "Sculpture", "Printmaking", "Client-based work",
 ];
 
+// Stable key + colour per practice option so the Projects board can default
+// to a list of types that mirrors how the user describes their work. Order
+// here is the canonical order; the user's selection order determines which
+// types appear first on their board.
+const PRACTICE_TO_PROJECT_TYPE: Record<string, { key: string; color: string }> = {
+  "Furniture":          { key: "furniture",   color: "#b8860b" },
+  "Objects & lighting": { key: "objects",     color: "#d97706" },
+  "Ceramics & glass":   { key: "ceramics",    color: "#2a8a8a" },
+  "Textiles":           { key: "textiles",    color: "#6d4fa3" },
+  "Jewelry":            { key: "jewelry",     color: "#c93a6a" },
+  "Painting":           { key: "painting",    color: "#a13a1f" },
+  "Sculpture":          { key: "sculpture",   color: "#5a6470" },
+  "Printmaking":        { key: "printmaking", color: "#4a4fa3" },
+  "Client-based work":  { key: "client_project", color: "#2563ab" },
+};
+
+function buildProjectTypeOptions(practiceTypes: string[], workTypes: string[]) {
+  // The user's picked practice types become the priority list — their first
+  // pick anchors the Projects board's default type.
+  const seen = new Set<string>();
+  const out: { key: string; label: string; color: string }[] = [];
+  for (const p of practiceTypes) {
+    const map = PRACTICE_TO_PROJECT_TYPE[p];
+    if (map && !seen.has(map.key)) {
+      out.push({ key: map.key, label: p, color: map.color });
+      seen.add(map.key);
+    } else if (!map && !seen.has(p.toLowerCase())) {
+      // Custom "Other"-added practice — keep it.
+      out.push({ key: p.toLowerCase().replace(/[^a-z0-9]+/g, "_"), label: p, color: "#5a6470" });
+      seen.add(p.toLowerCase());
+    }
+  }
+  // Always keep a "Client" type available if any client-style work was picked,
+  // so client projects have somewhere to live even if the user didn't tick the
+  // practice chip.
+  const wantsClient =
+    practiceTypes.includes("Client-based work") ||
+    workTypes.includes("client_work") ||
+    workTypes.includes("bespoke");
+  if (wantsClient && !seen.has("client_project")) {
+    out.push({ key: "client_project", label: "Client", color: "#2563ab" });
+  }
+  return out;
+}
+
+const PRACTICE_ICONS: Record<string, LucideIcon> = {
+  "Furniture":          Armchair,
+  "Objects & lighting": Lamp,
+  "Ceramics & glass":   Diamond,
+  "Textiles":           Boxes,
+  "Jewelry":            Gem,
+  "Painting":           Palette,
+  "Sculpture":          Hammer,
+  "Printmaking":        PenTool,
+  "Client-based work":  Briefcase,
+};
+
 const WORK_TYPE_OPTIONS = [
-  { id: "editions",    label: "Studio editions",         sub: "Small-batch objects, multiples, or prints" },
-  { id: "bespoke",     label: "Bespoke commissions",      sub: "One-off pieces made to client specification" },
-  { id: "client_work", label: "Client-based design work", sub: "Fees, retainers, or project-based client engagements" },
-  { id: "wholesale",   label: "Wholesale / retail",       sub: "Selling through stockists, shops, or platforms" },
+  { id: "editions",     label: "Studio editions",          sub: "Small-batch objects, multiples, or prints" },
+  { id: "bespoke",      label: "Bespoke commissions",       sub: "One-off pieces made to client specification" },
+  { id: "client_work",  label: "Client-based design work",  sub: "Fees, retainers, or project-based client engagements" },
+  { id: "wholesale",    label: "Wholesale / retail",        sub: "Selling through stockists, shops, or platforms" },
+  { id: "partnerships", label: "Partnerships & brand deals", sub: "Collaborations with brands, sponsored work, licensing" },
 ];
 
 const CHANNEL_OPTIONS = [
@@ -336,6 +394,25 @@ export default function OnboardingClient({ userId }: { userId: string }) {
       }
     }
 
+    // Seed the user's project_options.type from their practice picks so the
+    // Projects board defaults to a type list that matches their work.
+    const projectTypeOptions = buildProjectTypeOptions(data.practiceTypes, data.workTypes);
+    const projectOptionsPatch = projectTypeOptions.length > 0
+      ? { project_options: { type: projectTypeOptions } as Record<string, unknown> }
+      : {};
+    if (projectOptionsPatch.project_options) {
+      // Merge with any existing project_options (status / priority) so we
+      // don't clobber other dimensions. profiles.project_options is jsonb and
+      // may have been seeded by a signup trigger.
+      const { data: existing } = await supabase
+        .from("profiles")
+        .select("project_options")
+        .eq("user_id", userId)
+        .maybeSingle();
+      const merged = { ...(existing?.project_options as Record<string, unknown> ?? {}), type: projectTypeOptions };
+      projectOptionsPatch.project_options = merged;
+    }
+
     await supabase.from("profiles").upsert({
       user_id:             userId,
       display_name:        data.displayName || null,
@@ -354,6 +431,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
       urgent_needs:        data.urgentNeeds || null,
       perennial_goals:     data.goals,
       onboarding_complete: true,
+      ...projectOptionsPatch,
       // Reset the post-onboarding tour state so a fresh onboarding always
       // triggers the dashboard walkthrough. (Real users only onboard once;
       // this matters mostly for testing.)
@@ -541,7 +619,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                     type="text"
                     value={data.displayName}
                     onChange={e => set("displayName", e.target.value)}
-                    placeholder="e.g. Elliott Rosenberg"
+                    placeholder="What should Ash call you?"
                     onKeyDown={e => { if (e.key === "Enter" && canAdvance2) setStep(3); }}
                     style={{ width: "100%", padding: "9px 13px", fontSize: 13, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 9, color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
                     onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
@@ -569,7 +647,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                     type="text"
                     value={data.studioName}
                     onChange={e => set("studioName", e.target.value)}
-                    placeholder="e.g. Atelier Rosenberg"
+                    placeholder="Your studio or practice name"
                     onKeyDown={e => { if (e.key === "Enter" && canAdvance3) setStep(4); }}
                     style={{ width: "100%", padding: "9px 13px", fontSize: 13, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 9, color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
                     onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
@@ -614,12 +692,76 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                 </div>
                 <div>
                   <FieldLabel>What do you make?</FieldLabel>
+                  <p style={{ fontSize: 11, color: "var(--color-grey)", lineHeight: 1.6, marginTop: -2, marginBottom: 12 }}>
+                    Perennial uses this to tailor your Projects board — your top picks become the default project types.
+                  </p>
+
+                  {/* Illustration + video aside */}
+                  <div style={{
+                    display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10,
+                    marginBottom: 14,
+                  }}>
+                    <div style={{
+                      position: "relative", borderRadius: 10, overflow: "hidden",
+                      border: "0.5px solid var(--color-border)",
+                      background: "var(--color-cream)",
+                      aspectRatio: "16 / 9",
+                    }}>
+                      <img
+                        src="/botanicals/Botanical Illustrations-2.png"
+                        alt=""
+                        aria-hidden="true"
+                        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: 0.85, mixBlendMode: "multiply" }}
+                      />
+                      <div style={{ position: "absolute", left: 10, bottom: 8, fontSize: 10, color: "var(--color-charcoal)", fontWeight: 600, letterSpacing: "0.02em" }}>
+                        Built for makers
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {}}
+                      disabled
+                      style={{
+                        position: "relative", borderRadius: 10, overflow: "hidden",
+                        border: "0.5px solid var(--color-border)",
+                        background: "linear-gradient(145deg, #2a2c25 0%, #1f211a 100%)",
+                        aspectRatio: "16 / 9", cursor: "default", padding: 0,
+                        fontFamily: "inherit",
+                      }}
+                      title="Quick tour coming soon"
+                    >
+                      <div style={{
+                        position: "absolute", inset: 0,
+                        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                        gap: 6,
+                      }}>
+                        <div style={{
+                          width: 32, height: 32, borderRadius: "50%",
+                          background: "rgba(255,255,255,0.16)",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                        }}>
+                          <Play size={13} fill="rgba(255,255,255,0.85)" stroke="rgba(255,255,255,0.85)" />
+                        </div>
+                        <span style={{ fontSize: 10, color: "rgba(245,241,233,0.7)", fontWeight: 500 }}>
+                          Quick tour · coming soon
+                        </span>
+                      </div>
+                    </button>
+                  </div>
+
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {PRACTICE_OPTIONS.map(opt => (
-                      <Chip key={opt} selected={data.practiceTypes.includes(opt)} onClick={() => toggle("practiceTypes", opt)}>
-                        {opt}
-                      </Chip>
-                    ))}
+                    {PRACTICE_OPTIONS.map(opt => {
+                      const Icon = PRACTICE_ICONS[opt];
+                      const selected = data.practiceTypes.includes(opt);
+                      return (
+                        <Chip key={opt} selected={selected} onClick={() => toggle("practiceTypes", opt)}>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            {Icon && <Icon size={12} strokeWidth={1.75} style={{ opacity: selected ? 0.95 : 0.75 }} />}
+                            {opt}
+                          </span>
+                        </Chip>
+                      );
+                    })}
                     {data.practiceTypes.filter(v => !PRACTICE_OPTIONS.includes(v)).map(v => (
                       <Chip key={v} selected onClick={() => toggle("practiceTypes", v)}>
                         {v}

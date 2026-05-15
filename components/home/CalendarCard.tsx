@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import VisitButton from "@/components/ui/VisitButton";
 
 export interface CalendarItem {
   id:    string;
@@ -49,9 +49,7 @@ export default function CalendarCard({ items }: { items: CalendarItem[] }) {
         >
           {MONTHS[now.getMonth()]} {now.getDate()}
         </span>
-        <Link href="/calendar" className="text-[11px] hover:underline" style={{ color: "#2563ab" }}>
-          View all →
-        </Link>
+        <VisitButton href="/calendar" />
       </div>
 
       <div className="flex-1 overflow-y-auto">

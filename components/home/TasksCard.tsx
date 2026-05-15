@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useRef } from "react";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import VisitButton from "@/components/ui/VisitButton";
 
 export interface HomeTask {
   id:        string;
@@ -87,9 +87,7 @@ export default function TasksCard({ initialTasks }: { initialTasks: HomeTask[] }
             {tasks.length}
           </span>
         )}
-        <Link href="/tasks" className="text-[11px] hover:underline" style={{ color: "#2563ab" }}>
-          View all →
-        </Link>
+        <VisitButton href="/tasks" />
       </div>
 
       {/* Quick add */}
@@ -97,7 +95,7 @@ export default function TasksCard({ initialTasks }: { initialTasks: HomeTask[] }
         className="flex items-center gap-2 px-[14px] py-[9px] shrink-0"
         style={{ borderBottom: "0.5px solid var(--color-border)" }}
       >
-        <div className="w-3.5 h-3.5 rounded-full shrink-0" style={{ border: "1px solid var(--color-border)" }} />
+        <div className="w-3.5 h-3.5 rounded-[4px] shrink-0" style={{ border: "1px solid var(--color-border)" }} />
         <input
           ref={inputRef}
           type="text"
@@ -135,7 +133,7 @@ export default function TasksCard({ initialTasks }: { initialTasks: HomeTask[] }
                 onMouseLeave={(e) => { if (!t.completed) e.currentTarget.style.background = "transparent"; }}
               >
                 <div
-                  className="w-3.5 h-3.5 rounded-full shrink-0 flex items-center justify-center"
+                  className="w-3.5 h-3.5 rounded-[4px] shrink-0 flex items-center justify-center"
                   style={{
                     border: t.completed ? "none" : "1px solid var(--color-border)",
                     background: t.completed ? "var(--color-sage)" : "transparent",
