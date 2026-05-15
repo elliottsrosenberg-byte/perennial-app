@@ -443,11 +443,12 @@ function EditableDescription({ value, onSave }: { value: string | null; onSave: 
 // ── CanvasEditor ──────────────────────────────────────────────────────────────
 
 function CanvasEditor({
-  projectId, initialHtml, onSaved,
+  projectId, projectTitle, initialHtml, onSaved,
 }: {
-  projectId:   string;
-  initialHtml: string | null;
-  onSaved:     (html: string | null) => void;
+  projectId:    string;
+  projectTitle: string;
+  initialHtml:  string | null;
+  onSaved:      (html: string | null) => void;
 }) {
   const [saving,        setSaving]        = useState(false);
   const [saved,         setSaved]         = useState(false);
@@ -521,10 +522,32 @@ function CanvasEditor({
     const res = await fetch("/api/notes/ash-inline", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, noteContext: context }),
+      body: JSON.stringify({
+        prompt,
+        noteContext: context,
+        surface: {
+          type:          "canvas-project",
+          project_id:    projectId,
+          project_title: projectTitle,
+        },
+      }),
     });
-    const { text } = await res.json() as { text: string };
-    if (text) editor.chain().focus().setTextSelection(ashPrompt.pos).insertContent(text).run();
+    const data = await res.json() as {
+      text?:   string;
+      action?: { summary: string; viewHref?: string; viewLabel?: string };
+    };
+
+    if (data.action) {
+      // Write tool ran. Popover stays open with the success state; trigger
+      // a tasks/notes refetch so the relevant tab updates if the user opens
+      // it next.
+      window.dispatchEvent(new CustomEvent("ash:write-tool-ran", { detail: { tools: ["inline"] } }));
+      return data.action;
+    }
+
+    if (data.text) {
+      editor.chain().focus().setTextSelection(ashPrompt.pos).insertContent(data.text).run();
+    }
     setAshPrompt(null);
   }
 
@@ -2062,7 +2085,7 @@ export default function ProjectDetailPanel({ project: initialProject, onClose, o
             {activeTab === "canvas" && (
               canvasHtml === undefined
                 ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "var(--color-grey)" }}>Loading…</div>
-                : <CanvasEditor key={localProject.id} projectId={localProject.id} initialHtml={canvasHtml} onSaved={(h) => setCanvasHtml(h)} />
+                : <CanvasEditor key={localProject.id} projectId={localProject.id} projectTitle={localProject.title} initialHtml={canvasHtml} onSaved={(h) => setCanvasHtml(h)} />
             )}
             {activeTab === "tasks" && (
               <ProjectTasksTab projectId={localProject.id} tasks={tasks} setTasks={setTasks} />
