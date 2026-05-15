@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Layers, Users, Receipt, Send, Clock, Globe, BookOpen, UploadCloud, X as XIcon, Armchair, Lamp, Diamond, Gem, Palette, Hammer, PenTool, Briefcase, Boxes, Play } from "lucide-react";
+import { Layers, Users, Receipt, Send, Clock, Globe, BookOpen, UploadCloud, X as XIcon, Armchair, Lamp, Diamond, Gem, Palette, Hammer, PenTool, Briefcase, Boxes, Pencil, Video } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import AshMark from "@/components/ui/AshMark";
@@ -15,7 +15,8 @@ const TOTAL_STEPS = 8;
 
 const PRACTICE_OPTIONS = [
   "Furniture", "Objects & lighting", "Ceramics & glass", "Textiles",
-  "Jewelry", "Painting", "Sculpture", "Printmaking", "Client-based work",
+  "Jewelry", "Painting", "Illustration", "Sculpture", "Printmaking",
+  "Video", "Client-based work",
 ];
 
 // Stable key + colour per practice option so the Projects board can default
@@ -23,14 +24,16 @@ const PRACTICE_OPTIONS = [
 // here is the canonical order; the user's selection order determines which
 // types appear first on their board.
 const PRACTICE_TO_PROJECT_TYPE: Record<string, { key: string; color: string }> = {
-  "Furniture":          { key: "furniture",   color: "#b8860b" },
-  "Objects & lighting": { key: "objects",     color: "#d97706" },
-  "Ceramics & glass":   { key: "ceramics",    color: "#2a8a8a" },
-  "Textiles":           { key: "textiles",    color: "#6d4fa3" },
-  "Jewelry":            { key: "jewelry",     color: "#c93a6a" },
-  "Painting":           { key: "painting",    color: "#a13a1f" },
-  "Sculpture":          { key: "sculpture",   color: "#5a6470" },
-  "Printmaking":        { key: "printmaking", color: "#4a4fa3" },
+  "Furniture":          { key: "furniture",    color: "#b8860b" },
+  "Objects & lighting": { key: "objects",      color: "#d97706" },
+  "Ceramics & glass":   { key: "ceramics",     color: "#2a8a8a" },
+  "Textiles":           { key: "textiles",     color: "#6d4fa3" },
+  "Jewelry":            { key: "jewelry",      color: "#c93a6a" },
+  "Painting":           { key: "painting",     color: "#a13a1f" },
+  "Illustration":       { key: "illustration", color: "#3b8fc4" },
+  "Sculpture":          { key: "sculpture",    color: "#5a6470" },
+  "Printmaking":        { key: "printmaking",  color: "#4a4fa3" },
+  "Video":              { key: "video",        color: "#a1308a" },
   "Client-based work":  { key: "client_project", color: "#2563ab" },
 };
 
@@ -70,8 +73,10 @@ const PRACTICE_ICONS: Record<string, LucideIcon> = {
   "Textiles":           Boxes,
   "Jewelry":            Gem,
   "Painting":           Palette,
+  "Illustration":       Pencil,
   "Sculpture":          Hammer,
   "Printmaking":        PenTool,
+  "Video":              Video,
   "Client-based work":  Briefcase,
 };
 
@@ -695,59 +700,6 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                   <p style={{ fontSize: 11, color: "var(--color-grey)", lineHeight: 1.6, marginTop: -2, marginBottom: 12 }}>
                     Perennial uses this to tailor your Projects board — your top picks become the default project types.
                   </p>
-
-                  {/* Illustration + video aside */}
-                  <div style={{
-                    display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10,
-                    marginBottom: 14,
-                  }}>
-                    <div style={{
-                      position: "relative", borderRadius: 10, overflow: "hidden",
-                      border: "0.5px solid var(--color-border)",
-                      background: "var(--color-cream)",
-                      aspectRatio: "16 / 9",
-                    }}>
-                      <img
-                        src="/botanicals/Botanical Illustrations-2.png"
-                        alt=""
-                        aria-hidden="true"
-                        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: 0.85, mixBlendMode: "multiply" }}
-                      />
-                      <div style={{ position: "absolute", left: 10, bottom: 8, fontSize: 10, color: "var(--color-charcoal)", fontWeight: 600, letterSpacing: "0.02em" }}>
-                        Built for makers
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {}}
-                      disabled
-                      style={{
-                        position: "relative", borderRadius: 10, overflow: "hidden",
-                        border: "0.5px solid var(--color-border)",
-                        background: "linear-gradient(145deg, #2a2c25 0%, #1f211a 100%)",
-                        aspectRatio: "16 / 9", cursor: "default", padding: 0,
-                        fontFamily: "inherit",
-                      }}
-                      title="Quick tour coming soon"
-                    >
-                      <div style={{
-                        position: "absolute", inset: 0,
-                        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                        gap: 6,
-                      }}>
-                        <div style={{
-                          width: 32, height: 32, borderRadius: "50%",
-                          background: "rgba(255,255,255,0.16)",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                        }}>
-                          <Play size={13} fill="rgba(255,255,255,0.85)" stroke="rgba(255,255,255,0.85)" />
-                        </div>
-                        <span style={{ fontSize: 10, color: "rgba(245,241,233,0.7)", fontWeight: 500 }}>
-                          Quick tour · coming soon
-                        </span>
-                      </div>
-                    </button>
-                  </div>
 
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                     {PRACTICE_OPTIONS.map(opt => {
