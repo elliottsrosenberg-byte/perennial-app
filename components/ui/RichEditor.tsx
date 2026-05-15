@@ -22,6 +22,28 @@ export type AshPromptState = {
   anchor: { top: number; left: number; bottom: number };
 } | null;
 
+/** Where the user is when they press Space to open inline Ash. The route
+ *  uses this to: (1) auto-link any new tasks/notes/activities to the right
+ *  entity, and (2) build a View → href that stays inside the panel the user
+ *  is already in.
+ *
+ *  Every inline-Ash surface in the app should pass one of these. New
+ *  surfaces only need to be added here + handled in the inline route's
+ *  system prompt + VIEW_FOR_TOOL routing. */
+export interface InlineAshSurface {
+  type:            "canvas-contact" | "canvas-project" | "note" | "outreach-target";
+  contact_id?:     string;
+  contact_name?:   string;
+  project_id?:     string;
+  project_title?:  string;
+  /** For "note" surface — useful in the prompt to ground Ash. */
+  note_id?:        string;
+  note_title?:     string;
+  /** For "outreach-target" surface — useful in the prompt. */
+  target_id?:      string;
+  target_name?:    string;
+}
+
 // ─── ToggleBlock extension ────────────────────────────────────────────────────
 
 function ToggleNodeView({ node, updateAttributes, editor, getPos }: NodeViewProps) {
@@ -419,6 +441,52 @@ export function SelectionBubble({
       </div>
     </BubbleMenu>
   );
+}
+
+// ─── submitInlineAsh ─────────────────────────────────────────────────────────
+//
+// The one-and-only path for fulfilling an InlineAshPopover submit. Every
+// surface in the app (project canvas, contact canvas, note editor, outreach
+// target canvas, …) routes through this — so behavior changes (new tool,
+// new response shape, telemetry, etc.) only need to land here.
+//
+// Returns the action result when a write tool ran (caller passes it back
+// from `onSubmit` so the popover can show the success state), or void when
+// text was inserted (popover closes via the parent setting its prompt state
+// to null).
+
+export async function submitInlineAsh({
+  prompt, editor, ashPrompt, surface, clearPrompt,
+}: {
+  prompt:      string;
+  editor:      Editor | null;
+  ashPrompt:   AshPromptState;
+  surface:     InlineAshSurface;
+  clearPrompt: () => void;
+}): Promise<InlineAshAction | void> {
+  if (!editor || !ashPrompt) return;
+  const noteContext = editor.getText().slice(0, 800);
+  const res = await fetch("/api/notes/ash-inline", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, noteContext, surface }),
+  });
+  const data = await res.json() as {
+    text?:   string;
+    action?: InlineAshAction;
+  };
+
+  if (data.action) {
+    // Broadcast for any listeners (e.g. background refetches of tasks/notes
+    // so panels stay in sync after Ash writes).
+    window.dispatchEvent(new CustomEvent("ash:write-tool-ran", { detail: { tools: ["inline"] } }));
+    return data.action;
+  }
+
+  if (data.text) {
+    editor.chain().focus().setTextSelection(ashPrompt.pos).insertContent(data.text).run();
+  }
+  clearPrompt();
 }
 
 // ─── Re-exports for convenience ───────────────────────────────────────────────

@@ -9,12 +9,17 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Surface {
-  /** Where the prompt was triggered. Drives auto-linking. */
-  type:           "canvas-contact" | "canvas-project" | "note";
-  contact_id?:    string;
-  contact_name?:  string;
-  project_id?:    string;
-  project_title?: string;
+  /** Where the prompt was triggered. Drives auto-linking + View → routing.
+   *  Mirror of components/ui/RichEditor#InlineAshSurface. */
+  type:            "canvas-contact" | "canvas-project" | "note" | "outreach-target";
+  contact_id?:     string;
+  contact_name?:   string;
+  project_id?:     string;
+  project_title?:  string;
+  note_id?:        string;
+  note_title?:     string;
+  target_id?:      string;
+  target_name?:    string;
 }
 
 interface ActionResult {
@@ -49,26 +54,41 @@ interface ViewSpec {
   href:  (id: string | null, input: Record<string, unknown>, surface: Surface | undefined) => string;
 }
 
-/** True when the write tool's input links back to the current canvas's
- *  contact or project — i.e. the user is acting on the entity they're
- *  already viewing. */
+/** True when the write tool's input links back to the current panel's
+ *  primary entity — i.e. the user is acting on the entity they're already
+ *  viewing. Covers canvas surfaces directly; for notes + outreach targets,
+ *  matches by whichever linked entity the surface carries. */
 function staysOnPanel(input: Record<string, unknown>, surface: Surface | undefined): boolean {
-  if (surface?.type === "canvas-contact" && surface.contact_id) {
+  if (!surface) return false;
+  if (surface.type === "canvas-contact" && surface.contact_id) {
     return input.contact_id === surface.contact_id;
   }
-  if (surface?.type === "canvas-project" && surface.project_id) {
+  if (surface.type === "canvas-project" && surface.project_id) {
     return input.project_id === surface.project_id;
+  }
+  // Note + outreach-target surfaces don't have their own detail panel that
+  // can host a Tasks tab today — anything created should route to the
+  // linked contact's or project's panel instead.
+  if (surface.type === "note" || surface.type === "outreach-target") {
+    if (surface.contact_id && input.contact_id === surface.contact_id) return true;
+    if (surface.project_id && input.project_id === surface.project_id) return true;
   }
   return false;
 }
 
 function panelHref(surface: Surface, tab: string, highlight?: { key: string; value: string }): string {
-  const base =
-    surface.type === "canvas-contact" && surface.contact_id
-      ? `/contacts?contactId=${surface.contact_id}&tab=${tab}`
-      : surface.type === "canvas-project" && surface.project_id
-      ? `/projects?projectId=${surface.project_id}&tab=${tab}`
-      : "";
+  // For canvas surfaces, the panel == the user's current view. For note +
+  // outreach-target surfaces, the user is "elsewhere" but acting on a
+  // linked contact/project — route to whichever exists (contact first).
+  let base = "";
+  if (surface.type === "canvas-contact" && surface.contact_id) {
+    base = `/contacts?contactId=${surface.contact_id}&tab=${tab}`;
+  } else if (surface.type === "canvas-project" && surface.project_id) {
+    base = `/projects?projectId=${surface.project_id}&tab=${tab}`;
+  } else if ((surface.type === "note" || surface.type === "outreach-target")) {
+    if (surface.contact_id)      base = `/contacts?contactId=${surface.contact_id}&tab=${tab}`;
+    else if (surface.project_id) base = `/projects?projectId=${surface.project_id}&tab=${tab}`;
+  }
   if (!base) return "";
   return highlight ? `${base}&${highlight.key}=${highlight.value}` : base;
 }
@@ -130,6 +150,50 @@ function extractToolId(result: string): string | null {
   return match ? match[1] : null;
 }
 
+// ─── Surface → prompt line ───────────────────────────────────────────────────
+//
+// Describes what context the user is in, and what Ash should auto-link new
+// items to by default. New inline-Ash surfaces only need to add a branch
+// here + a viewHref entry in VIEW_FOR_TOOL below.
+
+function buildSurfaceLine(surface: Surface | undefined): string {
+  if (!surface) {
+    return `You are inline inside a note. There's no specific contact or project in context — create unlinked tasks unless the user names a project or contact.`;
+  }
+
+  if (surface.type === "canvas-contact" && surface.contact_id) {
+    return `You are inline inside the canvas of a CONTACT — ${surface.contact_name ?? "this person"} (contact_id: ${surface.contact_id}). Every action item the user asks for here is, by default, ABOUT this person. Link it to this contact_id. When the user says "remind me to…" / "set a reminder to…" / "add a follow-up to…" — that's a TASK. Call add_task with contact_id = ${surface.contact_id} and an appropriate due_date.`;
+  }
+
+  if (surface.type === "canvas-project" && surface.project_id) {
+    return `You are inline inside the canvas of a PROJECT — "${surface.project_title ?? "this project"}" (project_id: ${surface.project_id}). Every action item the user asks for here is, by default, ABOUT this project. Link it to this project_id. When the user says "remind me to…" — that's a TASK. Call add_task with project_id = ${surface.project_id}.`;
+  }
+
+  if (surface.type === "note") {
+    const links: string[] = [];
+    if (surface.contact_id) links.push(`Contact: ${surface.contact_name ?? "(unnamed)"} (contact_id: ${surface.contact_id})`);
+    if (surface.project_id) links.push(`Project: ${surface.project_title ?? "(unnamed)"} (project_id: ${surface.project_id})`);
+    const title = surface.note_title ? `"${surface.note_title}"` : "this note";
+    if (links.length === 0) {
+      return `You are inline inside a note (${title}, note_id: ${surface.note_id ?? "unknown"}). The note isn't linked to anyone yet — create unlinked tasks unless the user names a project or contact.`;
+    }
+    const primary =
+      surface.contact_id
+        ? `Prefer add_task with contact_id = ${surface.contact_id} for action items.`
+        : `Prefer add_task with project_id = ${surface.project_id} for action items.`;
+    return `You are inline inside a note (${title}, note_id: ${surface.note_id ?? "unknown"}) linked to:\n${links.map((l) => `  - ${l}`).join("\n")}\n${primary} When the user says "remind me to…" — that's a TASK, not a separate reminder.`;
+  }
+
+  if (surface.type === "outreach-target" && surface.target_id) {
+    const personLine = surface.contact_id
+      ? `This target is a known contact (contact_id: ${surface.contact_id}). Link tasks and activities to that contact_id.`
+      : `This target doesn't have a linked contact record yet — create unlinked tasks unless the user names someone.`;
+    return `You are inline inside an OUTREACH target — ${surface.target_name ?? "this lead"} (target_id: ${surface.target_id}). The user is researching, planning, or strategizing about this lead. ${personLine} When the user says "remind me to…" — that's a TASK. Call add_task with the right contact_id and a due_date.`;
+  }
+
+  return `You are inline inside a note. Create unlinked tasks unless the user names a project or contact.`;
+}
+
 // ─── System prompt ────────────────────────────────────────────────────────────
 
 function buildSystemPrompt(surface: Surface | undefined, noteContext: string | undefined): string {
@@ -137,12 +201,7 @@ function buildSystemPrompt(surface: Surface | undefined, noteContext: string | u
   const todayIso = today.toISOString().split("T")[0];
   const dayName = today.toLocaleDateString("en-US", { weekday: "long" });
 
-  const surfaceLine =
-    surface?.type === "canvas-contact" && surface.contact_id
-      ? `You are inline inside the canvas of a CONTACT — ${surface.contact_name ?? "this person"} (contact_id: ${surface.contact_id}). Every action item the user asks for here is, by default, ABOUT this person. Link it to this contact_id. When the user says "remind me to…" / "set a reminder to…" / "add a follow-up to…" — that's a TASK. Call add_task with contact_id = ${surface.contact_id} and an appropriate due_date.`
-      : surface?.type === "canvas-project" && surface.project_id
-      ? `You are inline inside the canvas of a PROJECT — "${surface.project_title ?? "this project"}" (project_id: ${surface.project_id}). Every action item the user asks for here is, by default, ABOUT this project. Link it to this project_id. When the user says "remind me to…" — that's a TASK. Call add_task with project_id = ${surface.project_id}.`
-      : `You are inline inside a note. There is no specific contact or project in context — create unlinked tasks unless the user names a project or contact.`;
+  const surfaceLine = buildSurfaceLine(surface);
 
   return `You are Ash, embedded as an inline assistant inside a Perennial canvas. The user just pressed Space on an empty line and is typing a quick prompt.
 
