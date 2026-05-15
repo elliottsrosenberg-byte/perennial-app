@@ -32,6 +32,10 @@ interface Step {
   hint?:       string;
   advance:     AdvanceMode;
   spotlight?:  boolean;
+  /** Free-roam step: nothing dimmed, nothing spotlit. Callout pins to the
+   *  bottom-right corner so the user can scan the whole panel before we
+   *  start pointing at specific affordances. */
+  freeRoam?:   boolean;
   finalCta?:   { label: string; action: "ash-suggest-contacts" };
 }
 
@@ -62,6 +66,14 @@ const STEPS: Step[] = [
     body:    "Click the row. The detail panel slides open with everything Perennial knows about this person — and you can fill in the rest from inside.",
     hint:    "Waiting for you to open it…",
     advance: "open-row",
+  },
+  {
+    id:       "explore",
+    anchor:   null,
+    title:    "Take it in.",
+    body:     "This is the person's full file. Left rail holds their identity, status, tags, and any linked projects. The main pane defaults to Canvas — your private thinking about this relationship. Tabs along the top jump to Activity, Tasks, Notes, and Files. Take a look around. Hit Next when you want a guided pass.",
+    advance:  "next",
+    freeRoam: true,
   },
   {
     id:      "tags-status",
@@ -195,6 +207,16 @@ export default function ContactsTooltipTour() {
     if (!active || hidden) { setHighlight(null); setPos(null); return; }
     const step = STEPS[stepIdx];
 
+    // Free-roam step: pin to bottom-right corner, no spotlight, no dim. Lets
+    // the user scan the whole panel before we start pointing at controls.
+    if (step.freeRoam) {
+      setHighlight(null);
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      setPos({ top: vh - 240, left: vw - W - 24 });
+      return;
+    }
+
     if (!step.anchor) {
       setHighlight(null);
       setPos(null);
@@ -296,7 +318,7 @@ export default function ContactsTooltipTour() {
   if (step.anchor && !pos) return null;
   const isLast = stepIdx === STEPS.length - 1;
   const isActionStep = step.advance !== "next";
-  const centered = !step.anchor;
+  const centered = !step.anchor && !step.freeRoam;
 
   return (
     <>
