@@ -94,10 +94,6 @@ const VIEW_FOR_TOOL: Record<string, ViewSpec> = {
       return id ? `/notes?noteId=${id}` : "/notes";
     },
   },
-  create_reminder: {
-    label: "View reminder",
-    href: (id) => id ? `/calendar?reminderId=${id}` : "/calendar",
-  },
   create_project: {
     label: "View project",
     href: (id) => id ? `/projects?projectId=${id}` : "/projects",
@@ -143,10 +139,10 @@ function buildSystemPrompt(surface: Surface | undefined, noteContext: string | u
 
   const surfaceLine =
     surface?.type === "canvas-contact" && surface.contact_id
-      ? `You are inline inside the canvas of a CONTACT — ${surface.contact_name ?? "this person"} (contact_id: ${surface.contact_id}). Every action item the user asks for here is, by default, ABOUT this person. Link it to this contact_id. CRITICAL: when the user says "remind me to…" or "set a reminder to…" about an action they need to take with this contact (e.g. reach out, follow up, send something), call **add_task** with contact_id = ${surface.contact_id} — DO NOT use create_reminder. Reminders are for date-anchored things not tied to a person; tasks are first-class todos that show up on the contact's Tasks tab. Word-for-word "reminder" in the user's prompt does not change this — tasks linked to the contact are what they want.`
+      ? `You are inline inside the canvas of a CONTACT — ${surface.contact_name ?? "this person"} (contact_id: ${surface.contact_id}). Every action item the user asks for here is, by default, ABOUT this person. Link it to this contact_id. When the user says "remind me to…" / "set a reminder to…" / "add a follow-up to…" — that's a TASK. Call add_task with contact_id = ${surface.contact_id} and an appropriate due_date.`
       : surface?.type === "canvas-project" && surface.project_id
-      ? `You are inline inside the canvas of a PROJECT — "${surface.project_title ?? "this project"}" (project_id: ${surface.project_id}). Every action item the user asks for here is, by default, ABOUT this project. Link it to this project_id. CRITICAL: when the user says "remind me to…" call **add_task** with project_id = ${surface.project_id} — not create_reminder. Tasks linked to the project show on the project's Tasks tab.`
-      : `You are inline inside a note. There is no specific contact or project in context — create unlinked items unless the user names one. Reserve create_reminder for genuinely date-anchored prompts not tied to a person; otherwise prefer add_task.`;
+      ? `You are inline inside the canvas of a PROJECT — "${surface.project_title ?? "this project"}" (project_id: ${surface.project_id}). Every action item the user asks for here is, by default, ABOUT this project. Link it to this project_id. When the user says "remind me to…" — that's a TASK. Call add_task with project_id = ${surface.project_id}.`
+      : `You are inline inside a note. There is no specific contact or project in context — create unlinked tasks unless the user names a project or contact.`;
 
   return `You are Ash, embedded as an inline assistant inside a Perennial canvas. The user just pressed Space on an empty line and is typing a quick prompt.
 
@@ -156,11 +152,11 @@ Today is ${dayName}, ${todayIso}.
 
 You have two response modes. Pick the right one without asking:
 
-1) **ACTION MODE** — the user wants something CREATED, SAVED, or LOGGED ("create a reminder", "make a task", "add a note", "log this call", "schedule…", "remember to…"). In this mode you MUST:
-   - Call the appropriate write tool (add_task, create_reminder, create_note, log_contact_activity, log_time, create_contact, create_project).
+1) **ACTION MODE** — the user wants something CREATED, SAVED, or LOGGED ("create a task", "remind me to", "add a note", "log this call", "schedule…", "remember to…"). In this mode you MUST:
+   - Call the appropriate write tool (add_task, create_note, log_contact_activity, log_time, create_contact, create_project).
+   - Tasks are the single home for action items in Perennial. There is no separate "reminder" — "remind me to do X by Friday" means add_task with title "X" and due_date = this Friday. The Calendar module surfaces tasks with due dates automatically.
    - Auto-link to the current contact_id / project_id when you have one.
    - Parse natural-language dates relative to today (${todayIso}, ${dayName}). "Friday" means this coming Friday; "next week" means next Monday; "tomorrow" means ${new Date(today.getTime() + 86400000).toISOString().split("T")[0]}.
-   - Prefer **add_task** for action items linked to a contact or project. Prefer **create_reminder** for date-anchored prompts not tied to a contact (project_id is allowed).
    - Do not emit text content along with the tool call — when you've called a tool, your final response can be empty or a single short sentence confirming what was done. The UI handles confirmation.
 
 2) **CONTENT MODE** — the user wants PROSE to insert into the document ("write a paragraph about…", "draft a few lines…", "summarize this"). In this mode:

@@ -11,7 +11,6 @@ export async function buildAshContext(
   const today      = now.toISOString().split("T")[0];
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000).toISOString().split("T")[0];
-  const ninetyDaysFromNow = new Date(now.getTime() + 90 * 86400000).toISOString().split("T")[0];
 
   const [
     { data: projects },
@@ -19,7 +18,6 @@ export async function buildAshContext(
     { data: timeEntries },
     { data: staleContacts },
     { data: recentNotes },
-    { data: upcomingReminders },
     { data: openTasks },
     { data: profile },
   ] = await Promise.all([
@@ -58,16 +56,6 @@ export async function buildAshContext(
       .eq("user_id", userId)
       .order("updated_at", { ascending: false })
       .limit(3),
-
-    supabase
-      .from("reminders")
-      .select("title, due_date")
-      .eq("user_id", userId)
-      .eq("completed", false)
-      .gte("due_date", today)
-      .lte("due_date", ninetyDaysFromNow)
-      .order("due_date", { ascending: true })
-      .limit(5),
 
     supabase
       .from("tasks")
@@ -153,7 +141,6 @@ export async function buildAshContext(
       last_contacted_at: c.last_contacted_at,
       company_name: c.company?.name ?? null,
     })),
-    upcomingReminders: (upcomingReminders ?? []) as AshContext["upcomingReminders"],
     openTasks:      tasks.map((t) => ({
       title:    t.title,
       due_date: t.due_date,
