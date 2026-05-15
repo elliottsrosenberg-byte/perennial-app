@@ -38,6 +38,15 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // Legacy /contacts → /people (the module was renamed; old shared links,
+  // bookmarks, and inline-Ash deep-links from before the move land here).
+  // Preserves search + hash.
+  if (pathname === "/contacts" || pathname.startsWith("/contacts/") || pathname.startsWith("/contacts?")) {
+    const url = request.nextUrl.clone();
+    url.pathname = pathname.replace(/^\/contacts/, "/people");
+    return NextResponse.redirect(url);
+  }
+
   // Routes that must work without a session
   const PUBLIC_PREFIXES = [
     "/login",

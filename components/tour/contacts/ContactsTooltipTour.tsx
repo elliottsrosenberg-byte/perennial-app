@@ -356,7 +356,7 @@ export default function ContactsTooltipTour() {
 
       <div
         role="dialog"
-        aria-label={`Contacts tour step ${stepIdx + 1}: ${step.title}`}
+        aria-label={`People tour step ${stepIdx + 1}: ${step.title}`}
         style={{
           position: "fixed",
           top:  centered ? "50%" : pos!.top,
@@ -375,7 +375,7 @@ export default function ContactsTooltipTour() {
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(245,241,233,0.5)" }}>
-            Contacts tour · {stepIdx + 1} of {STEPS.length}
+            People tour · {stepIdx + 1} of {STEPS.length}
           </span>
           <button
             onClick={dismiss}

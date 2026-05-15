@@ -17,7 +17,7 @@ import { createClient } from "@/lib/supabase/client";
 const NAV = [
   { href: "/",          label: "Home",      icon: LayoutDashboard },
   { href: "/projects",  label: "Projects",  icon: Layers          },
-  { href: "/contacts",  label: "Contacts",  icon: Users           },
+  { href: "/people",    label: "People",    icon: Users           },
   { href: "/outreach",  label: "Outreach",  icon: Send            },
   { href: "/notes",     label: "Notes",     icon: FileText        },
   { href: "/tasks",     label: "Tasks",     icon: CheckSquare     },

@@ -24,7 +24,7 @@ const NAV_GROUPS: NavItem[][] = [
   [
     { href: "/",          label: "Home",      icon: LayoutDashboard          },
     { href: "/projects",  label: "Projects",  icon: Layers                   },
-    { href: "/contacts",  label: "Contacts",  icon: Users                    },
+    { href: "/people",    label: "People",    icon: Users                    },
     { href: "/outreach",  label: "Outreach",  icon: Send                     },
   ],
   [

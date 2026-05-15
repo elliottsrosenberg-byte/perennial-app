@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { Contact, ContactStatus } from "@/types/database";
+import type { Contact, ContactStatus, LeadStage } from "@/types/database";
 import ContactDetailPanel from "./ContactDetailPanel";
 import NewContactModal from "./NewContactModal";
 import Button from "@/components/ui/Button";
@@ -63,15 +63,34 @@ function lastContactedDisplay(date: string | null): { label: string; color: stri
 
 type SortKey = "name" | "last_contact" | "status" | "added";
 
+// The "People" module hosts two views of the same `contacts` table: real
+// relationships you've already started ("contacts", is_lead=false) and the
+// pipeline of people you're still chasing ("leads", is_lead=true). The view
+// is purely a lens — the data type is identical, only the filter + theme +
+// status semantics change.
+type View = "contacts" | "leads";
+
+const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
+  new:               "New",
+  reached_out:       "Reached out",
+  in_conversation:   "In conversation",
+  proposal_sent:     "Proposal sent",
+  qualified:         "Qualified",
+  nurturing:         "Nurturing",
+  lost:              "Lost",
+};
+const LEAD_STAGE_ORDER: LeadStage[] = ["new", "reached_out", "in_conversation", "proposal_sent", "qualified", "nurturing", "lost"];
+
 const GRID = "32px 2.6fr 1.6fr 1.2fr 0.9fr 1.1fr 0.8fr";
 
 interface Props { initialContacts: Contact[] }
 
 export default function ContactsClient({ initialContacts }: Props) {
   const [contacts, setContacts]       = useState<Contact[]>(initialContacts);
+  const [view, setView]               = useState<View>("contacts");
   const [search,   setSearch]         = useState("");
   const [tagFilter, setTagFilter]     = useState<string | null>(null);
-  const [showLeads, setShowLeads]     = useState(false);
+  const [stageFilter, setStageFilter] = useState<LeadStage | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [sortKey,  setSortKey]        = useState<SortKey>("name");
@@ -95,39 +114,63 @@ export default function ContactsClient({ initialContacts }: Props) {
   const [openNoteId,      setOpenNoteId]      = useState<string | null>(null);
 
   useEffect(() => {
+    // ?view=leads jumps the top-level toggle into the leads pipeline.
+    const v = searchParams.get("view");
+    if (v === "leads" || v === "contacts") setView(v);
+
     const newFlag    = searchParams.get("new");
     const importFlag = searchParams.get("import");
     const contactId  = searchParams.get("contactId");
     if (newFlag === "1") {
       setShowModal(true);
       window.dispatchEvent(new Event("contacts:modal-opened"));
-      router.replace("/contacts");
+      router.replace("/people");
     } else if (importFlag === "1") {
       setShowImport(true);
-      router.replace("/contacts");
+      router.replace("/people");
     } else if (contactId) {
       const found = contacts.find((c) => c.id === contactId);
-      if (found) setOpenContact(found);
+      if (found) {
+        setOpenContact(found);
+        // If the deep-linked person is a lead, flip the view so the panel
+        // appears against the matching backdrop.
+        if (found.is_lead) setView("leads");
+      }
       setOpenTab(searchParams.get("tab"));
       setOpenTaskId(searchParams.get("taskId"));
       setOpenNoteId(searchParams.get("noteId"));
-      router.replace("/contacts");
+      router.replace("/people");
+    } else if (v) {
+      router.replace("/people");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Tag filter is contacts-view-only; leads have their own stage filter.
   const allTags = useMemo(() => {
     const set = new Set<string>();
     contacts.filter(c => !c.is_lead && !c.archived).forEach(c => c.tags.forEach(t => set.add(t)));
     return Array.from(set).sort();
   }, [contacts]);
 
+  // Stage counts for the Leads view — used by the stage filter pill row.
+  const stageCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    contacts.filter(c => c.is_lead && !c.archived).forEach(c => {
+      const s = c.lead_stage ?? "new";
+      counts[s] = (counts[s] ?? 0) + 1;
+    });
+    return counts;
+  }, [contacts]);
+
   const visible = useMemo(() => {
     const q = search.toLowerCase().trim();
+    const wantLead = view === "leads";
     let list = contacts.filter(c => {
       if (!showArchived && c.archived) return false;
-      if (!showLeads && c.is_lead) return false;
-      if (tagFilter && !c.tags.includes(tagFilter)) return false;
+      if (c.is_lead !== wantLead) return false;
+      if (wantLead && stageFilter && (c.lead_stage ?? "new") !== stageFilter) return false;
+      if (!wantLead && tagFilter && !c.tags.includes(tagFilter)) return false;
       if (q) {
         const full  = `${c.first_name} ${c.last_name}`.toLowerCase();
         const email = (c.email ?? "").toLowerCase();
@@ -153,7 +196,7 @@ export default function ContactsClient({ initialContacts }: Props) {
       }
       return sortAsc ? cmp : -cmp;
     });
-  }, [contacts, search, tagFilter, showLeads, sortKey, sortAsc]);
+  }, [contacts, view, search, tagFilter, stageFilter, showArchived, sortKey, sortAsc]);
 
   function toggleSelect(id: string) {
     setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -178,6 +221,15 @@ export default function ContactsClient({ initialContacts }: Props) {
     setShowModal(true);
     window.dispatchEvent(new Event("contacts:modal-opened"));
   }
+
+  // ── View-driven theme tokens ────────────────────────────────────────────────
+  // The data is identical between views; we just swap the accent colour so
+  // the user always knows whether they're looking at relationships (sage)
+  // or pipeline (amber).
+  const isLeads = view === "leads";
+  const accent = isLeads
+    ? { primary: "#b8860b", primaryHover: "#a07800", tint: "rgba(184,134,11,0.10)", ring: "rgba(184,134,11,0.32)" }
+    : { primary: "var(--color-sage)", primaryHover: "var(--color-sage-hover)", tint: "rgba(155,163,122,0.10)", ring: "rgba(155,163,122,0.32)" };
   function openDetail(contact: Contact) {
     setOpenContact(contact);
     window.dispatchEvent(new Event("contacts:detail-opened"));
@@ -204,7 +256,6 @@ export default function ContactsClient({ initialContacts }: Props) {
   }
 
   const allChecked = visible.length > 0 && selected.size === visible.length;
-  const leadCount     = contacts.filter(c => c.is_lead).length;
   const archivedCount = contacts.filter(c => c.archived).length;
 
   function exportCSV() {
@@ -230,7 +281,48 @@ export default function ContactsClient({ initialContacts }: Props) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <Topbar
-        title="Contacts"
+        title={
+          // Segmented Contacts/Leads toggle — the People module's primary
+          // navigation. Same data underneath, different lens on top.
+          <div
+            role="tablist"
+            aria-label="People view"
+            style={{
+              display: "inline-flex",
+              padding: 3,
+              background: "var(--color-surface-sunken)",
+              border: "0.5px solid var(--color-border)",
+              borderRadius: 8,
+            }}
+          >
+            {(["contacts", "leads"] as const).map((v) => {
+              const active = view === v;
+              const tint = v === "leads"
+                ? { fg: "#b8860b", ringBg: "var(--color-surface-raised)" }
+                : { fg: "#3d6b4f", ringBg: "var(--color-surface-raised)" };
+              return (
+                <button
+                  key={v}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => { setView(v); setSelected(new Set()); setStageFilter(null); setTagFilter(null); }}
+                  style={{
+                    padding: "4px 12px", borderRadius: 6,
+                    fontSize: 12, fontWeight: 600,
+                    background: active ? tint.ringBg : "transparent",
+                    color: active ? tint.fg : "var(--color-text-tertiary)",
+                    border: "none", cursor: "pointer", fontFamily: "inherit",
+                    transition: "background 0.12s ease, color 0.12s ease",
+                    boxShadow: active ? "var(--shadow-sm)" : "none",
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {v}
+                </button>
+              );
+            })}
+          </div>
+        }
         actions={
           <>
             {/* 3-dot options menu — list-wide preferences + bulk actions. */}
@@ -238,8 +330,8 @@ export default function ContactsClient({ initialContacts }: Props) {
               <button
                 type="button"
                 onClick={() => setOptionsOpen(v => !v)}
-                aria-label="Contact options"
-                title="Contact options"
+                aria-label={isLeads ? "Lead options" : "Contact options"}
+                title={isLeads ? "Lead options" : "Contact options"}
                 style={{
                   width: 28, height: 28, borderRadius: 7,
                   display: "inline-flex", alignItems: "center", justifyContent: "center",
@@ -262,8 +354,22 @@ export default function ContactsClient({ initialContacts }: Props) {
                 />
               )}
             </div>
+            {/* New button — themed amber in leads view */}
             <span data-tour-target="contacts.new-button">
-              <Button onClick={openNewContactModal}>+ New contact</Button>
+              <button
+                onClick={openNewContactModal}
+                style={{
+                  padding: "7px 20px", fontSize: 12, fontWeight: 500,
+                  borderRadius: 8, border: "none", cursor: "pointer",
+                  background: accent.primary, color: "white",
+                  fontFamily: "inherit",
+                  transition: "background 0.12s ease",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = accent.primaryHover)}
+                onMouseLeave={(e) => (e.currentTarget.style.background = accent.primary)}
+              >
+                {isLeads ? "+ New lead" : "+ New contact"}
+              </button>
             </span>
           </>
         }
@@ -301,25 +407,6 @@ export default function ContactsClient({ initialContacts }: Props) {
         </button>
 
         <div style={{ flex: 1 }} />
-
-        {/* Leads toggle */}
-        {leadCount > 0 && (
-          <button
-            onClick={() => { setShowLeads(v => !v); if (showLeads) setTagFilter(null); }}
-            title="Leads are people you're pursuing (lives in Outreach). Convert to a contact once the relationship starts."
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              padding: "5px 12px", borderRadius: 7, fontSize: 11, fontWeight: 500,
-              background: showLeads ? "rgba(184,134,11,0.10)" : "transparent",
-              color: showLeads ? "#b8860b" : "var(--color-text-tertiary)",
-              border: `0.5px solid ${showLeads ? "#b8860b55" : "var(--color-border)"}`,
-              cursor: "pointer", fontFamily: "inherit",
-            }}
-          >
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: showLeads ? "#b8860b" : "var(--color-grey)", display: "inline-block", flexShrink: 0 }} />
-            Leads
-          </button>
-        )}
 
         {/* Search */}
         <div style={{
@@ -371,27 +458,63 @@ export default function ContactsClient({ initialContacts }: Props) {
         </div>
       </div>
 
-      {/* ── Tag filter ── */}
-      {allTags.length > 0 && (
+      {/* ── Secondary filter strip ──────────────────────────────────────────
+          Contacts view: tag pills (gallery, press, …).
+          Leads view: stage pills (New, Reached out, …) with counts. */}
+      {isLeads ? (
         <div className="flex items-center gap-1.5 px-6 py-1.5 shrink-0 overflow-x-auto"
           style={{ borderBottom: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
-          <button onClick={() => setTagFilter(null)}
+          <button onClick={() => setStageFilter(null)}
             className="px-2.5 py-0.5 rounded-full text-[10px] font-medium shrink-0"
-            style={{ background: tagFilter === null ? "var(--color-charcoal)" : "transparent", color: tagFilter === null ? "white" : "#6b6860", border: "0.5px solid var(--color-border)" }}>
+            style={{
+              background: stageFilter === null ? "#b8860b" : "transparent",
+              color: stageFilter === null ? "white" : "var(--color-text-tertiary)",
+              border: `0.5px solid ${stageFilter === null ? "#b8860b" : "var(--color-border)"}`,
+            }}>
             All
           </button>
-          {allTags.map(tag => {
-            const s = tagStyle(tag);
-            const active = tagFilter === tag;
+          {LEAD_STAGE_ORDER.map(stage => {
+            const active = stageFilter === stage;
+            const count = stageCounts[stage] ?? 0;
             return (
-              <button key={tag} onClick={() => setTagFilter(active ? null : tag)}
-                className="px-2.5 py-0.5 rounded-full text-[10px] font-medium shrink-0"
-                style={{ background: active ? s.color : "transparent", color: active ? "white" : s.color, border: `0.5px solid ${active ? s.color : s.color + "55"}` }}>
-                {tag}
+              <button
+                key={stage}
+                onClick={() => setStageFilter(active ? null : stage)}
+                className="px-2.5 py-0.5 rounded-full text-[10px] font-medium shrink-0 flex items-center gap-1.5"
+                style={{
+                  background: active ? "#b8860b" : "transparent",
+                  color: active ? "white" : "#a07800",
+                  border: `0.5px solid ${active ? "#b8860b" : "rgba(184,134,11,0.32)"}`,
+                }}
+              >
+                {LEAD_STAGE_LABELS[stage]}
+                <span style={{ fontSize: 9, opacity: active ? 0.85 : 0.7 }}>{count}</span>
               </button>
             );
           })}
         </div>
+      ) : (
+        allTags.length > 0 && (
+          <div className="flex items-center gap-1.5 px-6 py-1.5 shrink-0 overflow-x-auto"
+            style={{ borderBottom: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
+            <button onClick={() => setTagFilter(null)}
+              className="px-2.5 py-0.5 rounded-full text-[10px] font-medium shrink-0"
+              style={{ background: tagFilter === null ? "var(--color-charcoal)" : "transparent", color: tagFilter === null ? "white" : "#6b6860", border: "0.5px solid var(--color-border)" }}>
+              All
+            </button>
+            {allTags.map(tag => {
+              const s = tagStyle(tag);
+              const active = tagFilter === tag;
+              return (
+                <button key={tag} onClick={() => setTagFilter(active ? null : tag)}
+                  className="px-2.5 py-0.5 rounded-full text-[10px] font-medium shrink-0"
+                  style={{ background: active ? s.color : "transparent", color: active ? "white" : s.color, border: `0.5px solid ${active ? s.color : s.color + "55"}` }}>
+                  {tag}
+                </button>
+              );
+            })}
+          </div>
+        )
       )}
 
       {/* ── Table ── */}
@@ -400,7 +523,7 @@ export default function ContactsClient({ initialContacts }: Props) {
         <div className="grid items-center px-6 py-2 sticky top-0 z-10"
           style={{ gridTemplateColumns: GRID, background: "var(--color-cream)", borderBottom: "0.5px solid var(--color-border)" }}>
           <div><Checkbox checked={allChecked} onChange={toggleSelectAll} /></div>
-          {["Name", "Company", "Tags", "Status", "Last contact", "Location"].map(h => (
+          {["Name", "Company", "Tags", isLeads ? "Stage" : "Status", "Last contact", "Location"].map(h => (
             <div key={h} className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>{h}</div>
           ))}
         </div>
@@ -413,30 +536,57 @@ export default function ContactsClient({ initialContacts }: Props) {
               <p className="text-[12px]" style={{ color: "var(--color-grey)" }}>Try adjusting your search or filters.</p>
             </div>
           ) : contacts.length === 0 ? (
-            <EmptyState
-              icon={<Users size={24} strokeWidth={1.5} color="var(--color-sage)" />}
-              heading="Build your network"
-              body="Contacts holds your full relationship graph — galleries, collectors, press, clients, fabricators, and collaborators. Knowing who you know and how recently you've connected is one of the most undertracked assets in a creative practice."
-              action={{ label: "+ Add contact", onClick: openNewContactModal }}
-              secondaryAction={{
-                label:   "Import contacts",
-                onClick: () => setShowImport(true),
-                icon:    <Upload size={11} strokeWidth={2} />,
-              }}
-              tips={[
-                "Add galleries, collectors, press contacts, clients, and suppliers — anyone relevant to your practice.",
-                "Tag contacts (e.g. 'gallery', 'press', 'client') to filter and segment your network quickly.",
-                "Perennial tracks when you last connected with each person and surfaces who needs a follow-up.",
-              ]}
-            />
+            isLeads ? (
+              <EmptyState
+                icon={<Users size={24} strokeWidth={1.5} color="#b8860b" />}
+                heading="Start your pipeline"
+                body="Leads are the people you're pursuing — galleries you want to show with, press you want covering you, collectors you're warming up. Add them with a stage so you can see at a glance who's at the top of the funnel and who's almost across the line."
+                action={{ label: "+ New lead", onClick: openNewContactModal }}
+                tips={[
+                  "New leads start in 'New'; move them along as you make contact.",
+                  "Once a lead replies and you start a real relationship, hit Convert in their panel — they move into Contacts with their history intact.",
+                  "The same pipeline shows up in the Outreach module as a kanban for drag-and-drop.",
+                ]}
+              />
+            ) : (
+              <EmptyState
+                icon={<Users size={24} strokeWidth={1.5} color="var(--color-sage)" />}
+                heading="Build your network"
+                body="Contacts holds your full relationship graph — galleries, collectors, press, clients, fabricators, and collaborators. Knowing who you know and how recently you've connected is one of the most undertracked assets in a creative practice."
+                action={{ label: "+ Add contact", onClick: openNewContactModal }}
+                secondaryAction={{
+                  label:   "Import contacts",
+                  onClick: () => setShowImport(true),
+                  icon:    <Upload size={11} strokeWidth={2} />,
+                }}
+                tips={[
+                  "Add galleries, collectors, press contacts, clients, and suppliers — anyone relevant to your practice.",
+                  "Tag contacts (e.g. 'gallery', 'press', 'client') to filter and segment your network quickly.",
+                  "Perennial tracks when you last connected with each person and surfaces who needs a follow-up.",
+                ]}
+              />
+            )
           ) : (
-            <div className="flex flex-col items-center justify-center h-48 text-center">
-              <p className="text-[13px] font-medium" style={{ color: "var(--color-charcoal)" }}>No contacts match this filter</p>
+            <div className="flex flex-col items-center justify-center h-48 text-center px-6">
+              <p className="text-[13px] font-medium" style={{ color: "var(--color-charcoal)" }}>
+                {isLeads ? "No leads in this stage" : "No contacts match this filter"}
+              </p>
+              {isLeads && (
+                <button
+                  onClick={openNewContactModal}
+                  className="mt-3 text-[11px] font-semibold px-3 py-1 rounded-md text-white"
+                  style={{ background: "#b8860b", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+                >
+                  + New lead
+                </button>
+              )}
             </div>
           )
         ) : visible.map((c, idx) => {
           const isSelected = selected.has(c.id);
           const status = STATUS_CONFIG[c.status];
+          const stageKey = (c.lead_stage ?? "new") as LeadStage;
+          const stageLabel = LEAD_STAGE_LABELS[stageKey];
           const lc = lastContactedDisplay(c.last_contacted_at);
           return (
             <div key={c.id} className="group grid items-center px-6 cursor-pointer transition-colors"
@@ -466,12 +616,6 @@ export default function ContactsClient({ initialContacts }: Props) {
                     <div className="text-[13px] font-medium" style={{ color: "var(--color-charcoal)" }}>
                       {c.first_name} {c.last_name}
                     </div>
-                    {c.is_lead && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium"
-                        style={{ background: "rgba(184,134,11,0.10)", color: "#b8860b" }}>
-                        Lead
-                      </span>
-                    )}
                   </div>
                   {c.email && <div className="text-[11px]" style={{ color: "var(--color-grey)" }}>{c.email}</div>}
                 </div>
@@ -495,8 +639,10 @@ export default function ContactsClient({ initialContacts }: Props) {
               </div>
 
               <div className="flex items-center gap-1.5 pr-4">
-                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: c.archived ? "var(--color-grey)" : status.dot }} />
-                <span className="text-[11px]" style={{ color: "#6b6860" }}>{c.archived ? "Archived" : status.label}</span>
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: c.archived ? "var(--color-grey)" : isLeads ? "#b8860b" : status.dot }} />
+                <span className="text-[11px]" style={{ color: "#6b6860" }}>
+                  {c.archived ? "Archived" : isLeads ? stageLabel : status.label}
+                </span>
               </div>
 
               <div className="text-[11px] pr-4" style={{ color: lc.color }}>{lc.label}</div>
@@ -544,7 +690,7 @@ export default function ContactsClient({ initialContacts }: Props) {
 
       {showModal && (
         <div data-tour-target="contacts.new-modal">
-          <NewContactModal isLead={false} onClose={() => setShowModal(false)} onCreated={handleCreated} />
+          <NewContactModal isLead={isLeads} onClose={() => setShowModal(false)} onCreated={handleCreated} />
         </div>
       )}
       {openContact && (

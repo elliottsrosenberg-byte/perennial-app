@@ -571,7 +571,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   {[
                     { Icon: Layers,  label: "Projects", body: "Every piece of work you're making, selling, or pitching — tracked with tasks, timelines, linked contacts, and value." },
-                    { Icon: Users,   label: "Contacts", body: "Galleries, collectors, press, clients, fabricators. Know who you know and when you last connected." },
+                    { Icon: Users,   label: "People",   body: "Contacts and leads in one place — galleries, collectors, press, clients, fabricators, and the people you're still chasing. Know who you know and where each relationship stands." },
                     { Icon: Receipt, label: "Finance",  body: "Time tracking, expenses, and invoicing in one place. Understand what you're earning and what you're owed." },
                     { Icon: Send,    label: "Outreach", body: "Pipeline management for gallery submissions, press pitches, fair applications, and client pursuits." },
                     { Icon: null,    label: "Ash",      body: "Your AI business partner — Ash has full context on your studio and can answer questions, create records, and help you think.", ash: true },

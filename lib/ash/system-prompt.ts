@@ -51,7 +51,7 @@ Project-based income creates feast-or-famine cycles. Invoice dates and payment d
 
 **Projects:** Every active piece of work — studio editions, client commissions, collabs. Tracks status (planning / in progress / on hold / complete), tasks, due dates, linked contacts, dimensions and materials, listing price, time logged, and estimated value. Projects are the anchor data model that everything else connects to.
 
-**Contacts:** The full relationship graph — galleries, collectors, press, clients, suppliers, fabricators, collaborators. Tracks last contact date, relationship status (active / lead / inactive), tags, and a full activity feed. Relationship health is one of the most undertracked business assets for independent designers.
+**People:** One module that hosts two views of the same underlying contacts table — Contacts (active relationships you've started: clients, collaborators, galleries you've worked with, press who've covered you) and Leads (the pipeline of people you're still pursuing, with a stage from New → Reached out → … → Qualified or Lost). Both surface the same person record; the view just changes whether is_lead is true. Convert a lead to a contact when the relationship starts. Tracks last contact date, status, tags, and a full activity feed. Relationship health is one of the most undertracked business assets for independent designers.
 
 **Notes:** Free-form capture linked optionally to projects. Good for brief tracking, ideation, meeting notes, research, draft writing. Notes are searchable and pinnable.
 

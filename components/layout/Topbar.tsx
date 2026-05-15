@@ -1,5 +1,8 @@
 interface TopbarProps {
-  title: string;
+  /** A plain string renders as the page title. Pass a ReactNode for a
+   *  custom left-side element (e.g. a segmented view-toggle on the People
+   *  page that flips between Contacts and Leads). */
+  title: React.ReactNode;
   actions?: React.ReactNode;
   greeting?: boolean;
 }
@@ -34,10 +37,12 @@ export default function Topbar({ title, actions, greeting }: TopbarProps) {
             <span style={{ color: "var(--color-grey)", fontSize: "12px" }}>·</span>
             <span style={{ fontSize: "12px", color: "var(--color-grey)" }}>{formatGreetingDate()}</span>
           </>
-        ) : (
+        ) : typeof title === "string" ? (
           <h1 className="font-semibold" style={{ fontSize: "14px", color: "var(--color-charcoal)" }}>
             {title}
           </h1>
+        ) : (
+          title
         )}
       </div>
 
