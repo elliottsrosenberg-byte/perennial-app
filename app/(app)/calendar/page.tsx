@@ -25,6 +25,7 @@ export default async function CalendarPage() {
     supabase
       .from("contacts")
       .select("id, first_name, last_name")
+      .eq("archived", false)
       .order("first_name"),
   ]);
 

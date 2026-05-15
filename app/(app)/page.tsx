@@ -92,12 +92,14 @@ export default async function HomePage() {
       .from("contacts")
       .select("id, first_name, last_name, last_contacted_at, company:companies(name)")
       .eq("status", "active")
+      .eq("archived", false)
       .or(`last_contacted_at.is.null,last_contacted_at.lt.${thirtyDaysAgo}`)
       .order("last_contacted_at", { ascending: true, nullsFirst: true })
       .limit(4),
     supabase
       .from("contacts")
-      .select("id", { count: "exact", head: true }),
+      .select("id", { count: "exact", head: true })
+      .eq("archived", false),
     supabase
       .from("active_timers")
       .select("*, project:projects(id, title, type, rate)")

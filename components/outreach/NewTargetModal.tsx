@@ -57,7 +57,7 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
     setSearching(true);
     const supabase = createClient();
     const [{ data: contacts }, { data: companies }] = await Promise.all([
-      supabase.from("contacts").select("*, company:companies(*)").or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`).limit(5),
+      supabase.from("contacts").select("*, company:companies(*)").eq("archived", false).or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`).limit(5),
       supabase.from("companies").select("*").ilike("name", `%${q}%`).limit(5),
     ]);
     const results: (Contact | Company)[] = [

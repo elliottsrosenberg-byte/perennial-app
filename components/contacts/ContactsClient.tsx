@@ -13,7 +13,9 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import ImportContactsModal from "./ImportContactsModal";
 import ContactsIntroModal from "@/components/tour/contacts/ContactsIntroModal";
 import ContactsTooltipTour from "@/components/tour/contacts/ContactsTooltipTour";
-import { Users, Upload } from "lucide-react";
+import ContactsOptionsMenu from "./ContactsOptionsMenu";
+import FilterTabs from "@/components/ui/FilterTabs";
+import { Users, Upload, MoreHorizontal, ArrowUpDown } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -70,6 +72,8 @@ export default function ContactsClient({ initialContacts }: Props) {
   const [search,   setSearch]         = useState("");
   const [tagFilter, setTagFilter]     = useState<string | null>(null);
   const [showLeads, setShowLeads]     = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [sortKey,  setSortKey]        = useState<SortKey>("name");
   const [sortAsc,  setSortAsc]        = useState(true);
   const [selected, setSelected]       = useState<Set<string>>(new Set());
@@ -114,13 +118,14 @@ export default function ContactsClient({ initialContacts }: Props) {
 
   const allTags = useMemo(() => {
     const set = new Set<string>();
-    contacts.filter(c => !c.is_lead).forEach(c => c.tags.forEach(t => set.add(t)));
+    contacts.filter(c => !c.is_lead && !c.archived).forEach(c => c.tags.forEach(t => set.add(t)));
     return Array.from(set).sort();
   }, [contacts]);
 
   const visible = useMemo(() => {
     const q = search.toLowerCase().trim();
     let list = contacts.filter(c => {
+      if (!showArchived && c.archived) return false;
       if (!showLeads && c.is_lead) return false;
       if (tagFilter && !c.tags.includes(tagFilter)) return false;
       if (q) {
@@ -178,7 +183,9 @@ export default function ContactsClient({ initialContacts }: Props) {
     window.dispatchEvent(new Event("contacts:detail-opened"));
   }
   function handleArchived(id: string) {
-    setContacts(prev => prev.filter(c => c.id !== id));
+    // We keep archived contacts in state (the options menu can toggle them
+    // back on); just flip the flag instead of dropping the row.
+    setContacts(prev => prev.map(c => c.id === id ? { ...c, archived: true } : c));
     setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
     if (openContact?.id === id) setOpenContact(null);
   }
@@ -186,13 +193,19 @@ export default function ContactsClient({ initialContacts }: Props) {
   async function performBulkArchive() {
     const ids = Array.from(selected);
     await createClient().from("contacts").update({ archived: true }).in("id", ids);
-    setContacts(prev => prev.filter(c => !selected.has(c.id)));
+    setContacts(prev => prev.map(c => selected.has(c.id) ? { ...c, archived: true } : c));
     setSelected(new Set());
     setConfirmBulkArchive(false);
   }
 
+  async function handleRestore(id: string) {
+    await createClient().from("contacts").update({ archived: false }).eq("id", id);
+    setContacts(prev => prev.map(c => c.id === id ? { ...c, archived: false } : c));
+  }
+
   const allChecked = visible.length > 0 && selected.size === visible.length;
-  const leadCount  = contacts.filter(c => c.is_lead).length;
+  const leadCount     = contacts.filter(c => c.is_lead).length;
+  const archivedCount = contacts.filter(c => c.archived).length;
 
   function exportCSV() {
     const rows = visible.map(c => [
@@ -219,89 +232,140 @@ export default function ContactsClient({ initialContacts }: Props) {
       <Topbar
         title="Contacts"
         actions={
-          <span data-tour-target="contacts.new-button">
-            <Button onClick={openNewContactModal}>+ New contact</Button>
-          </span>
+          <>
+            {/* 3-dot options menu — list-wide preferences + bulk actions. */}
+            <div style={{ position: "relative" }}>
+              <button
+                type="button"
+                onClick={() => setOptionsOpen(v => !v)}
+                aria-label="Contact options"
+                title="Contact options"
+                style={{
+                  width: 28, height: 28, borderRadius: 7,
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  background: optionsOpen ? "var(--color-surface-sunken)" : "transparent",
+                  border: "none", cursor: "pointer",
+                  color: "var(--color-text-secondary)",
+                  transition: "background 0.12s ease",
+                }}
+                onMouseEnter={e => { if (!optionsOpen) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+                onMouseLeave={e => { if (!optionsOpen) e.currentTarget.style.background = "transparent"; }}
+              >
+                <MoreHorizontal size={16} strokeWidth={2} />
+              </button>
+              {optionsOpen && (
+                <ContactsOptionsMenu
+                  showArchived={showArchived}
+                  onToggleShowArchived={() => setShowArchived(v => !v)}
+                  archivedCount={archivedCount}
+                  onClose={() => setOptionsOpen(false)}
+                />
+              )}
+            </div>
+            <span data-tour-target="contacts.new-button">
+              <Button onClick={openNewContactModal}>+ New contact</Button>
+            </span>
+          </>
         }
       />
 
-      {/* ── Action bar ── */}
-      <div className="flex items-center gap-2 px-6 py-2 shrink-0"
-        style={{ borderBottom: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
+      {/* ── Sort + filter bar (matches the Projects topbar visual language) ── */}
+      <div
+        style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "10px 24px", borderBottom: "0.5px solid var(--color-border)",
+          background: "var(--color-surface-raised)", flexShrink: 0,
+        }}
+      >
+        <FilterTabs
+          tabs={SORT_OPTIONS.map(s => ({ key: s.key, label: s.label }))}
+          active={sortKey}
+          onSelect={(k) => setSortKey(k as SortKey)}
+        />
 
-        <button onClick={() => setSortAsc(v => !v)}
-          className="w-6 h-6 flex items-center justify-center rounded"
-          style={{ color: "var(--color-grey)" }}
-          onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
-          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            {sortAsc
-              ? <><path d="M4 12V4M4 4L2 6M4 4l2 2"/><path d="M9 4h5M9 8h4M9 12h3"/></>
-              : <><path d="M4 4v8M4 12l-2-2M4 12l2-2"/><path d="M9 4h5M9 8h4M9 12h3"/></>}
-          </svg>
+        {/* Asc / desc */}
+        <button
+          onClick={() => setSortAsc(v => !v)}
+          title={`Sort ${sortAsc ? "descending" : "ascending"}`}
+          style={{
+            width: 28, height: 28, borderRadius: 7,
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            background: "transparent", border: "none", cursor: "pointer",
+            color: "var(--color-text-tertiary)",
+            transition: "background 0.12s ease",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-surface-sunken)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        >
+          <ArrowUpDown size={13} strokeWidth={1.75} style={{ transform: sortAsc ? "none" : "scaleY(-1)" }} />
         </button>
-        {SORT_OPTIONS.map(s => (
-          <button key={s.key} onClick={() => setSortKey(s.key)}
-            className="px-2 py-0.5 rounded text-[10px] transition-colors"
-            style={{
-              background: sortKey === s.key ? "var(--color-cream)" : "transparent",
-              color: sortKey === s.key ? "var(--color-charcoal)" : "#9a9690",
-              border: `0.5px solid ${sortKey === s.key ? "var(--color-border)" : "transparent"}`,
-            }}>
-            {s.label}
-          </button>
-        ))}
 
-        <div className="flex-1" />
+        <div style={{ flex: 1 }} />
 
         {/* Leads toggle */}
         {leadCount > 0 && (
           <button
             onClick={() => { setShowLeads(v => !v); if (showLeads) setTagFilter(null); }}
             title="Leads are people you're pursuing (lives in Outreach). Convert to a contact once the relationship starts."
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-medium transition-colors"
             style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "5px 12px", borderRadius: 7, fontSize: 11, fontWeight: 500,
               background: showLeads ? "rgba(184,134,11,0.10)" : "transparent",
-              color: showLeads ? "#b8860b" : "#9a9690",
+              color: showLeads ? "#b8860b" : "var(--color-text-tertiary)",
               border: `0.5px solid ${showLeads ? "#b8860b55" : "var(--color-border)"}`,
-            }}>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: showLeads ? "#b8860b" : "#9a9690", display: "inline-block", flexShrink: 0 }} />
+              cursor: "pointer", fontFamily: "inherit",
+            }}
+          >
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: showLeads ? "#b8860b" : "var(--color-grey)", display: "inline-block", flexShrink: 0 }} />
             Leads
           </button>
         )}
 
         {/* Search */}
-        <div className="flex items-center gap-2 px-3 rounded-lg"
-          style={{ background: "var(--color-cream)", border: "0.5px solid var(--color-border)", height: "28px", width: "200px" }}>
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "0 12px", borderRadius: 7, height: 28, width: 200,
+          background: "var(--color-surface-sunken)",
+          border: "0.5px solid var(--color-border)",
+        }}>
           <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.4">
             <circle cx="7" cy="7" r="5"/><path d="M11 11l3 3"/>
           </svg>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search contacts…"
-            className="flex-1 bg-transparent border-none outline-none text-[11px]"
-            style={{ color: "var(--color-charcoal)" }} />
+            style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 11, color: "var(--color-text-primary)", fontFamily: "inherit" }} />
           {search && (
-            <button onClick={() => setSearch("")} style={{ color: "var(--color-grey)" }}>
+            <button onClick={() => setSearch("")} style={{ color: "var(--color-grey)", background: "transparent", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
               <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3l10 10M13 3L3 13"/></svg>
             </button>
           )}
         </div>
-        <span className="text-[11px] shrink-0" style={{ color: "var(--color-grey)" }}>{visible.length}</span>
-        <div className="flex items-center gap-1" style={{ borderLeft: "0.5px solid var(--color-border)", paddingLeft: 8, marginLeft: 4 }}>
+
+        <p style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
+          {visible.length} contact{visible.length !== 1 ? "s" : ""}
+        </p>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 4, borderLeft: "0.5px solid var(--color-border)", paddingLeft: 8, marginLeft: 4 }}>
           <button onClick={exportCSV} title="Export visible contacts as CSV"
-            className="px-2.5 py-1.5 text-[10px] font-medium rounded-lg transition-colors"
-            style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
-            onMouseEnter={e => { e.currentTarget.style.background = "var(--color-cream)"; e.currentTarget.style.color = "var(--color-charcoal)"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-grey)"; }}>
+            style={{
+              padding: "5px 10px", fontSize: 11, fontWeight: 500, borderRadius: 7,
+              color: "var(--color-text-tertiary)", border: "0.5px solid var(--color-border)",
+              background: "transparent", cursor: "pointer", fontFamily: "inherit",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = "var(--color-surface-sunken)"; e.currentTarget.style.color = "var(--color-text-primary)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}>
             Export
           </button>
           <button
             onClick={() => setShowImport(true)}
             title="Import contacts from CSV"
-            className="px-2.5 py-1.5 text-[10px] font-medium rounded-lg transition-colors"
-            style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
-            onMouseEnter={e => { e.currentTarget.style.background = "var(--color-cream)"; e.currentTarget.style.color = "var(--color-charcoal)"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-grey)"; }}>
+            style={{
+              padding: "5px 10px", fontSize: 11, fontWeight: 500, borderRadius: 7,
+              color: "var(--color-text-tertiary)", border: "0.5px solid var(--color-border)",
+              background: "transparent", cursor: "pointer", fontFamily: "inherit",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = "var(--color-surface-sunken)"; e.currentTarget.style.color = "var(--color-text-primary)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}>
             Import
           </button>
         </div>
@@ -380,6 +444,7 @@ export default function ContactsClient({ initialContacts }: Props) {
               style={{
                 gridTemplateColumns: GRID, borderBottom: "0.5px solid var(--color-border)",
                 background: isSelected ? "rgba(61,107,79,0.06)" : "var(--color-off-white)", minHeight: "48px",
+                opacity: c.archived ? 0.6 : 1,
               }}
               onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = "var(--color-warm-white)"; }}
               onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = "var(--color-off-white)"; }}
@@ -430,12 +495,29 @@ export default function ContactsClient({ initialContacts }: Props) {
               </div>
 
               <div className="flex items-center gap-1.5 pr-4">
-                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: status.dot }} />
-                <span className="text-[11px]" style={{ color: "#6b6860" }}>{status.label}</span>
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: c.archived ? "var(--color-grey)" : status.dot }} />
+                <span className="text-[11px]" style={{ color: "#6b6860" }}>{c.archived ? "Archived" : status.label}</span>
               </div>
 
               <div className="text-[11px] pr-4" style={{ color: lc.color }}>{lc.label}</div>
-              <div className="text-[11px]" style={{ color: "var(--color-grey)" }}>{c.location ?? "—"}</div>
+              <div className="text-[11px] flex items-center gap-2" style={{ color: "var(--color-grey)" }}>
+                {c.archived ? (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleRestore(c.id); }}
+                    className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                    style={{
+                      background: "rgba(155,163,122,0.16)",
+                      color: "#4a5630",
+                      border: "0.5px solid rgba(155,163,122,0.36)",
+                      cursor: "pointer", fontFamily: "inherit",
+                    }}
+                  >
+                    Restore
+                  </button>
+                ) : (
+                  <span>{c.location ?? "—"}</span>
+                )}
+              </div>
             </div>
           );
         })}
