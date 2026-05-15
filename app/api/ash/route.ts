@@ -75,13 +75,26 @@ export async function POST(req: Request) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
 
         try {
+          // Anthropic's server-side web search — appended to our local tools
+          // so Ash can pull external facts (galleries, fairs, companies,
+          // people, market context) without us hosting a search backend.
+          // Bounded by max_uses for cost control.
+          const tools = [
+            ...(ANTHROPIC_TOOLS as Anthropic.Tool[]),
+            {
+              type: "web_search_20250305",
+              name: "web_search",
+              max_uses: 5,
+            } as unknown as Anthropic.Tool,
+          ];
+
           // Max 5 agentic turns to prevent runaway loops
           for (let turn = 0; turn < 5; turn++) {
             const stream = anthropic.messages.stream({
               model:      "claude-sonnet-4-6",
               max_tokens: 2048,
               system:     systemBlocks as Anthropic.TextBlockParam[],
-              tools:      ANTHROPIC_TOOLS as Anthropic.Tool[],
+              tools,
               messages,
             });
 

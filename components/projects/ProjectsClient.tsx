@@ -86,15 +86,24 @@ function ProjectsBoard({ initialProjects }: Props) {
   const groupsForUI = options[groupBy];
   const filterField = activeDim.field;
 
-  // Auto-open the New Project modal when arriving with ?new=1 (e.g. from
-  // the home banner). Strip the query once consumed so refreshes don't re-trigger.
+  // Deep-link handlers — both stripped from the URL after consume:
+  //   ?new=1       → open the New Project modal (home banner CTA)
+  //   ?projectId=X → open the detail panel for that project (Ash inline
+  //                  "Created project … View →" link, etc.)
   const router = useRouter();
   const searchParams = useSearchParams();
   useEffect(() => {
-    if (searchParams.get("new") === "1") {
+    const newFlag   = searchParams.get("new");
+    const projectId = searchParams.get("projectId");
+    if (newFlag === "1") {
       setShowModal(true);
       router.replace("/projects");
+    } else if (projectId) {
+      const found = projects.find((p) => p.id === projectId);
+      if (found) setSelectedProject(found);
+      router.replace("/projects");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, router]);
 
   const visible = filter === "all"

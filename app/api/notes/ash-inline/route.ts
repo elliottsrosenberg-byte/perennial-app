@@ -34,21 +34,45 @@ interface Body {
 // ─── Tool-name → "view" routing ───────────────────────────────────────────────
 //
 // After Ash runs a write tool, we surface a "View →" link in the inline
-// popover so the user can jump to the thing that was just created. The
-// target URL is intentionally generic (the module page) — picking a
-// specific row requires server state we don't surface here yet.
+// popover so the user can jump to the thing that was just created. Each
+// module's client reads its own deep-link query param on mount and opens
+// the matching row (see ProjectsClient, ContactsClient, NotesClient,
+// TasksClient).
 
-const VIEW_FOR_TOOL: Record<string, { label: string; href: string }> = {
-  add_task:            { label: "View task",     href: "/tasks" },
-  create_note:         { label: "View note",     href: "/notes" },
-  create_reminder:     { label: "View reminder", href: "/calendar" },
-  create_project:      { label: "View project",  href: "/projects" },
-  create_contact:      { label: "View contact",  href: "/contacts" },
-  log_time:            { label: "View time",     href: "/finance" },
-  log_contact_activity: { label: "View activity", href: "/contacts" },
+interface ViewSpec {
+  label: string;
+  /** Builds the deep-link href given the created-entity id (when present)
+   *  and the tool's input object (used for fallbacks like contact_id on
+   *  log_contact_activity, which doesn't return an id of its own). */
+  href:  (id: string | null, input: Record<string, unknown>) => string;
+}
+
+const VIEW_FOR_TOOL: Record<string, ViewSpec> = {
+  add_task:        { label: "View task",     href: (id) => id ? `/tasks?taskId=${id}`         : "/tasks" },
+  create_note:     { label: "View note",     href: (id) => id ? `/notes?noteId=${id}`         : "/notes" },
+  create_reminder: { label: "View reminder", href: (id) => id ? `/calendar?reminderId=${id}`  : "/calendar" },
+  create_project:  { label: "View project",  href: (id) => id ? `/projects?projectId=${id}`   : "/projects" },
+  create_contact:  { label: "View contact",  href: (id) => id ? `/contacts?contactId=${id}`   : "/contacts" },
+  log_time:        { label: "View time",     href: ()   => "/finance?tab=time" },
+  log_contact_activity: {
+    label: "View activity",
+    href: (_id, input) => {
+      const cid = typeof input.contact_id === "string" ? input.contact_id : null;
+      return cid ? `/contacts?contactId=${cid}` : "/contacts";
+    },
+  },
 };
 
 const WRITE_TOOL_NAMES = new Set(Object.keys(VIEW_FOR_TOOL));
+
+/** Extracts the entity UUID a write-tool handler embedded in its result
+ *  string, e.g. `Task created: "X" (id: <uuid>). It will appear...` or
+ *  `Time logged: ... Entry id: <uuid>...`. Returns null when no id is present
+ *  (log_contact_activity doesn't surface one). */
+function extractToolId(result: string): string | null {
+  const match = result.match(/(?:\(id:|Entry id:)\s*([0-9a-f-]+)/i);
+  return match ? match[1] : null;
+}
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
@@ -84,7 +108,9 @@ You have two response modes. Pick the right one without asking:
    - But your final response MUST be clean prose ready to drop directly into the document — no "Here is...", no markdown headers, no meta-commentary.
    - Do not call create_note or any write tool in content mode unless the user explicitly says "save as a note" / "make this a note" — in which case switch to ACTION MODE and call create_note with the prose as content (plus the current contact_id/project_id).
 
-If the user asks you to "write up everything you know about X as a note" or similar — that's BOTH: gather data with read tools, then call create_note with a strong summary as the content, linked to the current contact_id/project_id when relevant. Don't also emit the same prose as text.
+If the user asks you to "write up everything you know about X as a note" or similar — that's BOTH: gather data with the read tools AND the **web_search** tool (you have it — use it for external facts about real people, galleries, fairs, magazines, companies), then call create_note with a strong, grounded summary as the content, linked to the current contact_id/project_id when relevant. Don't also emit the same prose as text. Cite specifics from web search where useful but keep the note clean prose, not bracketed citations.
+
+You can use **web_search** any time the user asks for external information — about a contact, a gallery, a fair, a company, market context, pricing benchmarks, etc. Don't over-search; cap yourself at the most useful 1–2 queries.
 
 ${noteContext ? `\nThe surrounding canvas text the user has open right now (truncated):\n${noteContext}\n` : ""}
 Stay concrete. Don't ask clarifying questions for simple action requests — just do it. If the request is genuinely ambiguous (e.g. multiple people named "Adele"), ask one short question.`;
@@ -102,17 +128,32 @@ export async function POST(req: Request) {
 
   let messages: Anthropic.MessageParam[] = [{ role: "user", content: prompt }];
 
-  const toolsRun: { name: string; result: string }[] = [];
+  // Anthropic's server-side web search lets Ash fetch external info about a
+  // person, gallery, fair, or company. Added alongside our local Supabase
+  // tools so prompts like "what does the web say about Adele Naudé" or
+  // "summarize this gallery's program for me" work without us hosting a
+  // search backend. max_uses is bounded for cost control.
+  const tools = [
+    ...(ANTHROPIC_TOOLS as Anthropic.Tool[]),
+    {
+      type: "web_search_20250305",
+      name: "web_search",
+      max_uses: 3,
+    } as unknown as Anthropic.Tool,
+  ];
+
+  const toolsRun: { name: string; result: string; input: Record<string, unknown> }[] = [];
   let finalText = "";
 
   // Cap at 4 turns — typically the user request resolves in 1–2 (gather data,
-  // optionally call a write tool, return).
+  // optionally call a write tool, return). Web search uses count toward the
+  // 4-turn budget since each search → response cycle is one turn.
   for (let turn = 0; turn < 4; turn++) {
     const msg = await anthropic.messages.create({
       model:      "claude-sonnet-4-6",
       max_tokens: 1024,
       system,
-      tools:      ANTHROPIC_TOOLS as Anthropic.Tool[],
+      tools,
       messages,
     });
 
@@ -127,12 +168,9 @@ export async function POST(req: Request) {
     const toolResults: Anthropic.ToolResultBlockParam[] = [];
     for (const block of msg.content) {
       if (block.type !== "tool_use") continue;
-      const result = await executeTool(
-        block.name,
-        block.input as Record<string, unknown>,
-        { supabase, userId: user.id },
-      );
-      toolsRun.push({ name: block.name, result });
+      const input = block.input as Record<string, unknown>;
+      const result = await executeTool(block.name, input, { supabase, userId: user.id });
+      toolsRun.push({ name: block.name, result, input });
       toolResults.push({
         type:        "tool_result",
         tool_use_id: block.id,
@@ -156,6 +194,7 @@ export async function POST(req: Request) {
 
   if (lastWrite) {
     const view = VIEW_FOR_TOOL[lastWrite.name];
+    const id = extractToolId(lastWrite.result);
     // Prefer Ash's own short confirmation when it's tight; otherwise pull the
     // first line out of the tool result (e.g. "Task created: \"Reach out…\"").
     const summary =
@@ -165,7 +204,7 @@ export async function POST(req: Request) {
 
     const action: ActionResult = {
       summary,
-      viewHref:  view?.href,
+      viewHref:  view?.href(id, lastWrite.input),
       viewLabel: view?.label,
     };
     return Response.json({ action, toolsRun: toolsRun.map((t) => t.name) });

@@ -78,18 +78,27 @@ export default function ContactsClient({ initialContacts }: Props) {
   const [confirmBulkArchive, setConfirmBulkArchive] = useState(false);
   const [showImport, setShowImport] = useState(false);
 
-  // Deep links from the home dashboard: /contacts?new=1 opens the new-contact
-  // modal, /contacts?import=1 opens the CSV importer. We clean the URL after
-  // so a refresh doesn't re-trigger.
+  // Deep links — all stripped from the URL after consume:
+  //   ?new=1        → open the new-contact modal (home banner CTA)
+  //   ?import=1     → open the CSV importer (home banner CTA)
+  //   ?contactId=X  → open the detail panel for that contact (Ash inline
+  //                   "Created contact … View →" etc.)
   const searchParams = useSearchParams();
   const router       = useRouter();
   useEffect(() => {
-    if (searchParams.get("new") === "1") {
+    const newFlag    = searchParams.get("new");
+    const importFlag = searchParams.get("import");
+    const contactId  = searchParams.get("contactId");
+    if (newFlag === "1") {
       setShowModal(true);
       window.dispatchEvent(new Event("contacts:modal-opened"));
       router.replace("/contacts");
-    } else if (searchParams.get("import") === "1") {
+    } else if (importFlag === "1") {
       setShowImport(true);
+      router.replace("/contacts");
+    } else if (contactId) {
+      const found = contacts.find((c) => c.id === contactId);
+      if (found) setOpenContact(found);
       router.replace("/contacts");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

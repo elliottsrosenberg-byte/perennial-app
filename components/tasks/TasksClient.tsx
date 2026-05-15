@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Task } from "@/types/database";
 import EmptyState from "@/components/ui/EmptyState";
@@ -593,12 +594,14 @@ function SectionHeader({ title, count, dot, dimCount }: { title: string; count: 
 // ─── TaskRow ──────────────────────────────────────────────────────────────────
 
 function TaskRow({
-  task, projects, onToggle, onUpdate,
+  task, projects, onToggle, onUpdate, highlighted,
 }: {
-  task:     Task;
-  projects: { id: string; title: string }[];
-  onToggle: (id: string, completed: boolean) => void;
-  onUpdate: (id: string, fields: Partial<Task> & { project?: { id: string; title: string } | null; contact?: { id: string; first_name: string; last_name: string } | null; opportunity?: { id: string; title: string; category: string } | null }) => void;
+  task:        Task;
+  projects:    { id: string; title: string }[];
+  onToggle:    (id: string, completed: boolean) => void;
+  onUpdate:    (id: string, fields: Partial<Task> & { project?: { id: string; title: string } | null; contact?: { id: string; first_name: string; last_name: string } | null; opportunity?: { id: string; title: string; category: string } | null }) => void;
+  /** Briefly tints the row when arriving via /tasks?taskId=… deep-link. */
+  highlighted?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -628,12 +631,17 @@ function TaskRow({
 
   return (
     <div
+      id={`task-${task.id}`}
       style={{
         display: "flex", alignItems: "center", gap: 10, padding: "9px 16px",
         borderBottom: "0.5px solid var(--color-border)",
-        background: (hovered || editing) && !task.completed ? "var(--color-surface-sunken)" : "var(--color-surface-raised)",
+        background: highlighted
+          ? "rgba(155,163,122,0.18)"
+          : (hovered || editing) && !task.completed
+            ? "var(--color-surface-sunken)"
+            : "var(--color-surface-raised)",
         opacity: task.completed ? 0.5 : 1,
-        transition: "opacity 0.3s ease, background 0.08s ease",
+        transition: "opacity 0.3s ease, background 0.6s ease",
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -791,6 +799,26 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
   const [completedExpanded,   setCompletedExpanded]   = useState(false);
   const [showProjCompleted,   setShowProjCompleted]   = useState(false);
   const [projCompleted,       setProjCompleted]       = useState<Task[]>([]);
+  const [highlightedId,       setHighlightedId]       = useState<string | null>(null);
+
+  // Deep link: /tasks?taskId=… (from Ash inline "Created task → View task")
+  // scrolls the row into view and briefly tints it sage. Cleared after 2.4s
+  // so the row settles back into its normal state.
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const taskId = searchParams.get("taskId");
+    if (!taskId) return;
+    setHighlightedId(taskId);
+    router.replace("/tasks");
+    // Wait one frame for the row to render, then scroll into view.
+    const raf = requestAnimationFrame(() => {
+      document.getElementById(`task-${taskId}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+    const t = setTimeout(() => setHighlightedId(null), 2400);
+    return () => { cancelAnimationFrame(raf); clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Reset per-project completed when filter changes
   useEffect(() => { setShowProjCompleted(false); setProjCompleted([]); }, [filter]);
@@ -1120,7 +1148,7 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
                     <div key={section.title}>
                       <SectionHeader title={section.title} count={section.active.length} dot={section.dot} />
                       {section.active.map(task => (
-                        <TaskRow key={task.id} task={task} projects={projects} onToggle={handleToggle} onUpdate={handleUpdate} />
+                        <TaskRow key={task.id} task={task} projects={projects} onToggle={handleToggle} onUpdate={handleUpdate} highlighted={highlightedId === task.id} />
                       ))}
                       {section.ghost.map(task => (
                         <TaskRow key={`ghost-${task.id}`} task={task} projects={projects} onToggle={handleToggle} onUpdate={handleUpdate} />
@@ -1154,7 +1182,7 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
                       <span style={{ fontSize: 10, color: "rgba(0,0,0,0.25)" }}>{completed.length}</span>
                     </button>
                     {completedExpanded && completed.map(task => (
-                      <TaskRow key={task.id} task={task} projects={projects} onToggle={handleToggle} onUpdate={handleUpdate} />
+                      <TaskRow key={task.id} task={task} projects={projects} onToggle={handleToggle} onUpdate={handleUpdate} highlighted={highlightedId === task.id} />
                     ))}
                   </div>
                 )}
@@ -1165,7 +1193,7 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
                 {!hasActiveTasks && filter !== "completed" ? <TaskEmptyState /> : (
                   <>
                     {viewTasks.map(task => (
-                      <TaskRow key={task.id} task={task} projects={projects} onToggle={handleToggle} onUpdate={handleUpdate} />
+                      <TaskRow key={task.id} task={task} projects={projects} onToggle={handleToggle} onUpdate={handleUpdate} highlighted={highlightedId === task.id} />
                     ))}
                     {lingeringForView.map(task => (
                       <TaskRow key={`ghost-${task.id}`} task={task} projects={projects} onToggle={handleToggle} onUpdate={handleUpdate} />
@@ -1180,7 +1208,7 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
                   <div>
                     <SectionHeader title="Completed" count={projCompleted.length} dot={undefined} dimCount />
                     {projCompleted.map(task => (
-                      <TaskRow key={task.id} task={task} projects={projects} onToggle={handleToggle} onUpdate={handleUpdate} />
+                      <TaskRow key={task.id} task={task} projects={projects} onToggle={handleToggle} onUpdate={handleUpdate} highlighted={highlightedId === task.id} />
                     ))}
                   </div>
                 )}
