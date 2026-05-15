@@ -207,7 +207,7 @@ async function create_contact(
     .single();
 
   if (error) return `Failed to create contact: ${error.message}`;
-  return `Contact created: "${data.first_name} ${data.last_name}"${input.company ? ` at ${input.company}` : ""} (id: ${data.id}). They will appear in the Contacts module.`;
+  return `Contact created: "${data.first_name} ${data.last_name}"${input.company ? ` at ${input.company}` : ""} (id: ${data.id}). They will appear in the People module.`;
 }
 
 export const createContactTool: AshToolDefinition = {

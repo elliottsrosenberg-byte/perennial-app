@@ -23,7 +23,7 @@ interface Slide {
 const SLIDES: Slide[] = [
   {
     title: "Your network, alive.",
-    body:  "Contacts isn't a Rolodex — it's everyone connected to your studio. Galleries, collectors, press, clients, fabricators. Each row carries stage, tags, and when you last connected, so the list reads like a living map of your practice.",
+    body:  "People holds everyone connected to your studio — galleries, collectors, press, clients, fabricators, plus the leads you're still chasing. Each row carries status, tags, and when you last connected, so the list reads like a living map of your practice.",
     Anim:  NetworkMaterialize,
   },
   {
@@ -32,13 +32,13 @@ const SLIDES: Slide[] = [
     Anim:  StaleSurface,
   },
   {
-    title: "Tag your world.",
-    body:  "Tags — gallery, press, collector, client, supplier — make a 500-person network filterable in seconds. Click a tag to slice the list; clear it to see all. Leads (people you're still pursuing) sit in their own pill, separate from the contacts you've actually met. They live in Outreach, with a stage; convert one to a contact the moment the relationship starts.",
+    title: "Two views, one record.",
+    body:  "Toggle between Contacts (relationships you've started) and Leads (the pipeline you're working) at the top. Same person record, different lens — convert a lead to a contact the moment the relationship begins, and their history follows. Tags slice your network in seconds; stages keep the pipeline honest.",
     Anim:  TagFilter,
   },
   {
-    title: "Every contact, a relationship file.",
-    body:  "Open a contact and you get its full file — Canvas for your thinking, Activity for every logged touchpoint, Tasks, Notes, Files. Linked projects show in the sidebar. One scrim, everything you know about this person.",
+    title: "Every person, a relationship file.",
+    body:  "Open a row and you get its full file — Canvas for your thinking, Activity for every logged touchpoint, Tasks, Notes, Files. Linked projects show in the sidebar. One scrim, everything you know about this person.",
     Anim:  RelationshipFile,
   },
 ];
@@ -159,7 +159,7 @@ export default function ContactsIntroModal() {
           background: "var(--color-off-white)",
         }}>
           <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-grey)" }}>
-            Contacts · {stepIdx + 1} of {SLIDES.length}
+            People · {stepIdx + 1} of {SLIDES.length}
           </span>
           <button
             onClick={() => close(false)}

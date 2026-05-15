@@ -52,7 +52,7 @@ export default function ContactsCard({ contacts, totalCount }: Props) {
         style={{ borderBottom: "0.5px solid var(--color-border)" }}
       >
         <span className="text-[12px] font-semibold flex-1" style={{ color: "var(--color-charcoal)" }}>
-          Contacts
+          People
         </span>
         {contacts.length > 0 && (
           <span
@@ -63,7 +63,7 @@ export default function ContactsCard({ contacts, totalCount }: Props) {
           </span>
         )}
         <div className="flex-1" />
-        <VisitButton href="/contacts" />
+        <VisitButton href="/people" />
       </div>
 
       {contacts.length === 0 ? (
@@ -77,7 +77,7 @@ export default function ContactsCard({ contacts, totalCount }: Props) {
             </p>
             <div className="flex gap-1.5">
               <Link
-                href="/contacts?new=1"
+                href="/people?new=1"
                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium text-white"
                 style={{ background: "var(--color-sage)" }}
               >
@@ -85,7 +85,7 @@ export default function ContactsCard({ contacts, totalCount }: Props) {
                 New contact
               </Link>
               <Link
-                href="/contacts?import=1"
+                href="/people?import=1"
                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium"
                 style={{ background: "transparent", color: "#6b6860", border: "0.5px solid var(--color-border)" }}
               >

@@ -25,7 +25,7 @@ const CHALLENGE_MODULES: Record<string, { label: string; href: string }> = {
   "Staying organized across projects": { label: "Projects", href: "/projects" },
   "Press and visibility":            { label: "Presence", href: "/presence" },
   "Tracking time and profitability": { label: "Finance", href: "/finance" },
-  "Managing client expectations":    { label: "Contacts", href: "/contacts" },
+  "Managing client expectations":    { label: "People", href: "/people" },
 };
 
 export default function WelcomeBanner() {

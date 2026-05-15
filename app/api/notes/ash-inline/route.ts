@@ -49,7 +49,7 @@ interface ViewSpec {
   /** Builds the deep-link href given the created-entity id, the tool's
    *  input object, and the surface the user is acting from. When the tool
    *  is linked to the surface's own contact/project, we keep the user IN
-   *  that detail panel (route to /contacts?contactId=…&tab=…&taskId=…)
+   *  that detail panel (route to /people?contactId=…&tab=…&taskId=…)
    *  rather than bouncing to the global module page. */
   href:  (id: string | null, input: Record<string, unknown>, surface: Surface | undefined) => string;
 }
@@ -82,11 +82,11 @@ function panelHref(surface: Surface, tab: string, highlight?: { key: string; val
   // linked contact/project — route to whichever exists (contact first).
   let base = "";
   if (surface.type === "canvas-contact" && surface.contact_id) {
-    base = `/contacts?contactId=${surface.contact_id}&tab=${tab}`;
+    base = `/people?contactId=${surface.contact_id}&tab=${tab}`;
   } else if (surface.type === "canvas-project" && surface.project_id) {
     base = `/projects?projectId=${surface.project_id}&tab=${tab}`;
   } else if ((surface.type === "note" || surface.type === "outreach-target")) {
-    if (surface.contact_id)      base = `/contacts?contactId=${surface.contact_id}&tab=${tab}`;
+    if (surface.contact_id)      base = `/people?contactId=${surface.contact_id}&tab=${tab}`;
     else if (surface.project_id) base = `/projects?projectId=${surface.project_id}&tab=${tab}`;
   }
   if (!base) return "";
@@ -120,7 +120,7 @@ const VIEW_FOR_TOOL: Record<string, ViewSpec> = {
   },
   create_contact: {
     label: "View contact",
-    href: (id) => id ? `/contacts?contactId=${id}` : "/contacts",
+    href: (id) => id ? `/people?contactId=${id}` : "/people",
   },
   log_time: {
     label: "View time",
@@ -134,7 +134,7 @@ const VIEW_FOR_TOOL: Record<string, ViewSpec> = {
         if (h) return h;
       }
       const cid = typeof input.contact_id === "string" ? input.contact_id : null;
-      return cid ? `/contacts?contactId=${cid}&tab=activity` : "/contacts";
+      return cid ? `/people?contactId=${cid}&tab=activity` : "/people";
     },
   },
 };
