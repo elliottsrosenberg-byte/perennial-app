@@ -390,8 +390,11 @@ function ActivityTab({ contactId, activities, setActivities, filterType, contact
 
 // ── Tasks tab ─────────────────────────────────────────────────────────────────
 
-function TasksTab({ contactId, tasks, setTasks }: {
-  contactId: string; tasks: Task[]; setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
+function TasksTab({ contactId, tasks, setTasks, highlightedTaskId }: {
+  contactId:          string;
+  tasks:              Task[];
+  setTasks:           React.Dispatch<React.SetStateAction<Task[]>>;
+  highlightedTaskId?: string | null;
 }) {
   const [taskInput, setTaskInput] = useState("");
   const openTasks = tasks.filter(t => !t.completed);
@@ -423,8 +426,20 @@ function TasksTab({ contactId, tasks, setTasks }: {
         {tasks.length === 0
           ? <p style={{ fontSize: 12, textAlign: "center", padding: "32px 0", color: "var(--color-grey)" }}>No tasks yet.</p>
           : <>
-            {openTasks.map(task => (
-              <div key={task.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "0.5px solid var(--color-border)" }}>
+            {openTasks.map(task => {
+              const hi = highlightedTaskId === task.id;
+              return (
+              <div
+                key={task.id}
+                id={`contact-task-${task.id}`}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "9px 8px", marginLeft: -8, marginRight: -8, borderRadius: 6,
+                  borderBottom: "0.5px solid var(--color-border)",
+                  background: hi ? "rgba(155,163,122,0.18)" : "transparent",
+                  transition: "background 0.6s ease",
+                }}
+              >
                 <button onClick={() => toggleTask(task.id, true)}
                   style={{ width: 16, height: 16, borderRadius: 4, border: "1.5px solid var(--color-border-strong)", background: "transparent", cursor: "pointer", flexShrink: 0 }}
                   onMouseEnter={e => e.currentTarget.style.borderColor = "var(--color-sage)"}
@@ -432,7 +447,8 @@ function TasksTab({ contactId, tasks, setTasks }: {
                 <span style={{ flex: 1, fontSize: 13, color: "var(--color-charcoal)" }}>{task.title}</span>
                 {task.due_date && <span style={{ fontSize: 10, color: "var(--color-grey)" }}>{new Date(task.due_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>}
               </div>
-            ))}
+              );
+            })}
             {doneTasks.length > 0 && (
               <>
                 <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", padding: "14px 0 6px", color: "var(--color-grey)" }}>Done ({doneTasks.length})</div>
@@ -725,13 +741,23 @@ interface Props {
   onClose:    () => void;
   onUpdated:  (contact: Contact) => void;
   onArchived: (id: string) => void;
+  /** When the panel is opened via a deep-link (e.g. Ash inline action that
+   *  created a contact-linked task), these steer the initial tab + which
+   *  row to briefly tint. */
+  initialTab?:              string | null;
+  initialHighlightTaskId?:  string | null;
+  initialHighlightNoteId?:  string | null;
 }
 
 type SectionTab = "canvas" | "activity" | "tasks" | "notes" | "files";
+const SECTION_TABS = new Set<SectionTab>(["canvas", "activity", "tasks", "notes", "files"]);
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function ContactDetailPanel({ contact: initialContact, onClose, onUpdated, onArchived }: Props) {
+export default function ContactDetailPanel({
+  contact: initialContact, onClose, onUpdated, onArchived,
+  initialTab, initialHighlightTaskId, initialHighlightNoteId,
+}: Props) {
   const supabase = createClient();
 
   const [contact,        setContact]        = useState(initialContact);
@@ -740,13 +766,27 @@ export default function ContactDetailPanel({ contact: initialContact, onClose, o
   const [tasks,          setTasks]          = useState<Task[]>([]);
   const [notes,          setNotes]          = useState<Note[]>([]);
   const [canvasHtml,     setCanvasHtml]     = useState<string | null | undefined>(undefined);
-  const [activeTab,      setActiveTab]      = useState<SectionTab>("canvas");
+  const [activeTab,      setActiveTab]      = useState<SectionTab>(
+    initialTab && SECTION_TABS.has(initialTab as SectionTab) ? (initialTab as SectionTab) : "canvas",
+  );
   const [maximized,      setMaximized]      = useState(false);
   const [settingsOpen,   setSettingsOpen]   = useState(false);
   const [invoiceData,    setInvoiceData]    = useState<{ count: number; total: number } | null>(null);
-  // Briefly tints a note in the Notes tab when the user clicks "View note →"
-  // after a convert-to-note action.
-  const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(null);
+  // Briefly tints a row in the Tasks / Notes tab — used by the "View note →"
+  // affordance after a convert-to-note, and by deep-links from Ash inline
+  // actions ("View task →" landing on the contact's Tasks subtab).
+  const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(initialHighlightNoteId ?? null);
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(initialHighlightTaskId ?? null);
+
+  // Clear initial highlights after a beat so the tint settles back to neutral.
+  useEffect(() => {
+    if (!initialHighlightNoteId && !initialHighlightTaskId) return;
+    const t = setTimeout(() => {
+      setHighlightedNoteId(null);
+      setHighlightedTaskId(null);
+    }, 2400);
+    return () => clearTimeout(t);
+  }, [initialHighlightNoteId, initialHighlightTaskId]);
 
   // Status/stage pickers
   const [statusOpen, setStatusOpen] = useState(false);
@@ -789,9 +829,17 @@ export default function ContactDetailPanel({ contact: initialContact, onClose, o
     return () => { window.dispatchEvent(new CustomEvent("clear-contact-context")); };
   }, []);
 
+  // Skip the per-contact-change tab reset on the very first mount, so a
+  // deep-link `initialTab` survives. Subsequent contact changes (opening a
+  // different contact's panel without unmounting) still reset to Canvas.
+  const firstLoadRef = useRef(true);
+
   useEffect(() => {
     setContact(initialContact);
-    setActiveTab("canvas");
+    if (!firstLoadRef.current) {
+      setActiveTab("canvas");
+    }
+    firstLoadRef.current = false;
     setSettingsOpen(false);
     setCanvasHtml(undefined);
 
@@ -1294,7 +1342,7 @@ export default function ContactDetailPanel({ contact: initialContact, onClose, o
                 onContactUpdated={c => { setContact(c); onUpdated(c); }} />
             )}
             {activeTab === "tasks" && (
-              <TasksTab contactId={contact.id} tasks={tasks} setTasks={setTasks} />
+              <TasksTab contactId={contact.id} tasks={tasks} setTasks={setTasks} highlightedTaskId={highlightedTaskId} />
             )}
             {activeTab === "notes" && (
               <NotesTab contactId={contact.id} notes={notes} setNotes={setNotes} highlightedNoteId={highlightedNoteId} />

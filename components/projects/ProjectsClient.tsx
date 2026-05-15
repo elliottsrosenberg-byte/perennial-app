@@ -86,12 +86,16 @@ function ProjectsBoard({ initialProjects }: Props) {
   const groupsForUI = options[groupBy];
   const filterField = activeDim.field;
 
-  // Deep-link handlers — both stripped from the URL after consume:
-  //   ?new=1       → open the New Project modal (home banner CTA)
-  //   ?projectId=X → open the detail panel for that project (Ash inline
-  //                  "Created project … View →" link, etc.)
-  const router = useRouter();
+  // Deep-link handlers — all stripped from the URL after consume:
+  //   ?new=1                                          → open New Project modal
+  //   ?projectId=X[&tab=tasks|notes|…[&taskId|noteId]] → open panel, set tab,
+  //                                                     briefly tint the row
+  const router       = useRouter();
   const searchParams = useSearchParams();
+  const [openTab,    setOpenTab]    = useState<string | null>(null);
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const [openNoteId, setOpenNoteId] = useState<string | null>(null);
+
   useEffect(() => {
     const newFlag   = searchParams.get("new");
     const projectId = searchParams.get("projectId");
@@ -101,6 +105,9 @@ function ProjectsBoard({ initialProjects }: Props) {
     } else if (projectId) {
       const found = projects.find((p) => p.id === projectId);
       if (found) setSelectedProject(found);
+      setOpenTab(searchParams.get("tab"));
+      setOpenTaskId(searchParams.get("taskId"));
+      setOpenNoteId(searchParams.get("noteId"));
       router.replace("/projects");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -412,9 +419,12 @@ function ProjectsBoard({ initialProjects }: Props) {
         <div data-tour-target="projects.detail-panel">
           <ProjectDetailPanel
             project={selectedProject}
-            onClose={() => setSelectedProject(null)}
+            onClose={() => { setSelectedProject(null); setOpenTab(null); setOpenTaskId(null); setOpenNoteId(null); }}
             onUpdated={handleUpdated}
             onDeleted={handleDeleted}
+            initialTab={openTab}
+            initialHighlightTaskId={openTaskId}
+            initialHighlightNoteId={openNoteId}
           />
         </div>
       )}
