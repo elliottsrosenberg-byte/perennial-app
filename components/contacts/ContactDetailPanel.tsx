@@ -123,9 +123,11 @@ function PickerTag({ label, color, dot, onClick }: { label: string; color: strin
 // ── Canvas editor for contacts ────────────────────────────────────────────────
 
 function ContactCanvasEditor({ contactId, initialHtml }: { contactId: string; initialHtml: string | null }) {
-  const [saving,    setSaving]    = useState(false);
-  const [saved,     setSaved]     = useState(false);
-  const [ashPrompt, setAshPrompt] = useState<AshPromptState>(null);
+  const [saving,         setSaving]         = useState(false);
+  const [saved,          setSaved]          = useState(false);
+  const [convertingNote, setConvertingNote] = useState(false);
+  const [noteCreated,    setNoteCreated]    = useState(false);
+  const [ashPrompt,      setAshPrompt]      = useState<AshPromptState>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleAshTrigger = useCallback((pos: number, coords: { top: number; left: number; bottom: number }) => {
@@ -170,15 +172,34 @@ function ContactCanvasEditor({ contactId, initialHtml }: { contactId: string; in
     setAshPrompt(null);
   }
 
+  async function handleConvertToNote(sel: { text: string; html: string }) {
+    if (convertingNote) return;
+    setConvertingNote(true);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setConvertingNote(false); return; }
+    const title = sel.text.replace(/\s+/g, " ").trim().slice(0, 60);
+    await supabase.from("notes").insert({
+      user_id:    user.id,
+      contact_id: contactId,
+      title:      title || null,
+      content:    sel.html,
+    });
+    setConvertingNote(false);
+    setNoteCreated(true);
+    setTimeout(() => setNoteCreated(false), 2400);
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", position: "relative" }}>
-      <RichToolbar editor={editor} />
+      <RichToolbar editor={editor} onConvertToNote={handleConvertToNote} convertingToNote={convertingNote} />
       <div style={{ flex: 1, overflowY: "auto", background: "var(--color-off-white)" }}>
         <div style={{ maxWidth: 760, padding: "36px 60px 80px" }}>
           <EditorContent editor={editor} />
         </div>
       </div>
-      <div style={{ display: "flex", justifyContent: "flex-end", padding: "5px 20px", borderTop: "0.5px solid var(--color-border)", background: "var(--color-off-white)", flexShrink: 0, fontSize: 10, color: "var(--color-text-tertiary)" }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, padding: "5px 20px", borderTop: "0.5px solid var(--color-border)", background: "var(--color-off-white)", flexShrink: 0, fontSize: 10, color: "var(--color-text-tertiary)" }}>
+        {noteCreated && <span style={{ color: "#4a5630", fontWeight: 600 }}>✓ Note created</span>}
         {saving && "Saving…"}
         {!saving && saved && <span style={{ color: "var(--color-sage)" }}>✓ Saved</span>}
       </div>

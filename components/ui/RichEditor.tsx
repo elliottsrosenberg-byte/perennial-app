@@ -10,7 +10,9 @@ import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Node as TiptapNode, mergeAttributes } from "@tiptap/core";
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered } from "lucide-react";
+import { DOMSerializer } from "@tiptap/pm/model";
+import type { Editor } from "@tiptap/core";
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, FileText } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -143,14 +145,33 @@ export function getRichExtensions(opts: {
 
 // ─── RichToolbar ──────────────────────────────────────────────────────────────
 
+/** Pulls the current selection from a TipTap editor as both plain text and
+ *  serialized HTML. Returns null if the selection is empty. */
+export function getSelectionExtract(editor: Editor): { text: string; html: string } | null {
+  const { from, to } = editor.state.selection;
+  if (from === to) return null;
+  const text = editor.state.doc.textBetween(from, to, "\n\n");
+  const slice = editor.state.doc.slice(from, to);
+  const fragment = DOMSerializer.fromSchema(editor.schema).serializeFragment(slice.content);
+  const wrapper = document.createElement("div");
+  wrapper.appendChild(fragment);
+  return { text, html: wrapper.innerHTML };
+}
+
 export function RichToolbar({
-  editor, onGenerateTasks, suggesting,
+  editor, onGenerateTasks, suggesting, onConvertToNote, convertingToNote,
 }: {
-  editor:           ReturnType<typeof useEditor> | null;
-  onGenerateTasks?: () => void;
-  suggesting?:      boolean;
+  editor:            ReturnType<typeof useEditor> | null;
+  onGenerateTasks?:  () => void;
+  suggesting?:       boolean;
+  /** Called when the user clicks the "Convert to note" button while a range
+   *  is selected. The caller is responsible for creating the note record. */
+  onConvertToNote?:  (selection: { text: string; html: string }) => void | Promise<void>;
+  convertingToNote?: boolean;
 }) {
   if (!editor) return null;
+
+  const hasSelection = !editor.state.selection.empty;
 
   function btn(label: React.ReactNode, action: () => void, active?: boolean, title?: string) {
     return (
@@ -195,6 +216,35 @@ export function RichToolbar({
         false, "Toggle block",
       )}
       <div style={{ flex: 1 }} />
+      {onConvertToNote && (
+        <button
+          type="button"
+          onMouseDown={(e) => {
+            // Prevent the editor from losing its selection on mousedown — we
+            // need the selection range intact when the click handler reads it.
+            e.preventDefault();
+          }}
+          onClick={() => {
+            const sel = getSelectionExtract(editor);
+            if (sel) onConvertToNote(sel);
+          }}
+          disabled={!hasSelection || convertingToNote}
+          title={hasSelection ? "Convert selection to a linked note" : "Select text to convert to a note"}
+          style={{
+            display: "flex", alignItems: "center", gap: 5,
+            padding: "3px 10px", fontSize: 11, fontWeight: 500, borderRadius: 6,
+            border: "0.5px solid var(--color-border)",
+            background: hasSelection ? "rgba(155,163,122,0.14)" : "transparent",
+            color: hasSelection ? "#4a5630" : "var(--color-text-tertiary)",
+            cursor: hasSelection && !convertingToNote ? "pointer" : "not-allowed",
+            opacity: convertingToNote ? 0.6 : 1,
+            fontFamily: "inherit", flexShrink: 0, marginRight: 6,
+          }}
+        >
+          <FileText size={11} strokeWidth={1.75} />
+          {convertingToNote ? "Creating…" : "→ Note"}
+        </button>
+      )}
       {onGenerateTasks && (
         <button type="button" onClick={onGenerateTasks} disabled={suggesting} title="Generate tasks from this note" style={{
           display: "flex", alignItems: "center", gap: 5, padding: "3px 10px",
