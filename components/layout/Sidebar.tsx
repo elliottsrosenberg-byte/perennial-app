@@ -121,6 +121,16 @@ export default function Sidebar() {
     document.documentElement.dataset.theme = saved;
   }, []);
 
+  // Expose the current sidebar width as a CSS variable so fixed-position
+  // overlays (detail panels, modals) can lay out relative to it without
+  // hardcoding values that drift when the sidebar collapses.
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--sidebar-width",
+      expanded ? "200px" : "52px",
+    );
+  }, [expanded]);
+
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getUser().then(async ({ data }) => {
