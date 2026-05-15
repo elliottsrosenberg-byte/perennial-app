@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Contact, ContactStatus } from "@/types/database";
 import ContactDetailPanel from "./ContactDetailPanel";
@@ -8,6 +9,8 @@ import NewContactModal from "./NewContactModal";
 import Button from "@/components/ui/Button";
 import Topbar from "@/components/layout/Topbar";
 import EmptyState from "@/components/ui/EmptyState";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import ImportContactsModal from "./ImportContactsModal";
 import ContactsIntroModal from "@/components/tour/contacts/ContactsIntroModal";
 import ContactsTooltipTour from "@/components/tour/contacts/ContactsTooltipTour";
 
@@ -71,6 +74,25 @@ export default function ContactsClient({ initialContacts }: Props) {
   const [selected, setSelected]       = useState<Set<string>>(new Set());
   const [openContact, setOpenContact] = useState<Contact | null>(null);
   const [showModal, setShowModal]     = useState(false);
+  const [confirmBulkArchive, setConfirmBulkArchive] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+
+  // Deep links from the home dashboard: /contacts?new=1 opens the new-contact
+  // modal, /contacts?import=1 opens the CSV importer. We clean the URL after
+  // so a refresh doesn't re-trigger.
+  const searchParams = useSearchParams();
+  const router       = useRouter();
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      setShowModal(true);
+      window.dispatchEvent(new Event("contacts:modal-opened"));
+      router.replace("/contacts");
+    } else if (searchParams.get("import") === "1") {
+      setShowImport(true);
+      router.replace("/contacts");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const allTags = useMemo(() => {
     const set = new Set<string>();
@@ -143,12 +165,12 @@ export default function ContactsClient({ initialContacts }: Props) {
     if (openContact?.id === id) setOpenContact(null);
   }
 
-  async function bulkArchive() {
-    if (!confirm(`Archive ${selected.size} contact${selected.size > 1 ? "s" : ""}?`)) return;
+  async function performBulkArchive() {
     const ids = Array.from(selected);
     await createClient().from("contacts").update({ archived: true }).in("id", ids);
     setContacts(prev => prev.filter(c => !selected.has(c.id)));
     setSelected(new Set());
+    setConfirmBulkArchive(false);
   }
 
   const allChecked = visible.length > 0 && selected.size === visible.length;
@@ -180,7 +202,9 @@ export default function ContactsClient({ initialContacts }: Props) {
         title="Contacts"
         actions={
           <span data-tour-target="contacts.new-button">
-            <Button onClick={openNewContactModal}>+ Contact</Button>
+            <Button variant="primary" size="sm" onClick={openNewContactModal}>
+              + New contact
+            </Button>
           </span>
         }
       />
@@ -218,6 +242,7 @@ export default function ContactsClient({ initialContacts }: Props) {
         {leadCount > 0 && (
           <button
             onClick={() => { setShowLeads(v => !v); if (showLeads) setTagFilter(null); }}
+            title="Leads are people you're pursuing (lives in Outreach). Convert to a contact once the relationship starts."
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-medium transition-colors"
             style={{
               background: showLeads ? "rgba(184,134,11,0.10)" : "transparent",
@@ -255,8 +280,8 @@ export default function ContactsClient({ initialContacts }: Props) {
             Export
           </button>
           <button
-            onClick={() => window.dispatchEvent(new CustomEvent("open-ash", { detail: { message: "I want to import contacts into Perennial. Can you help me think through the best way to add multiple contacts at once?" } }))}
-            title="Import contacts — ask Ash"
+            onClick={() => setShowImport(true)}
+            title="Import contacts from CSV"
             className="px-2.5 py-1.5 text-[10px] font-medium rounded-lg transition-colors"
             style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
             onMouseEnter={e => { e.currentTarget.style.background = "var(--color-cream)"; e.currentTarget.style.color = "var(--color-charcoal)"; }}
@@ -407,7 +432,7 @@ export default function ContactsClient({ initialContacts }: Props) {
             style={{ color: "rgba(255,255,255,0.7)" }}
             onMouseEnter={e => { e.currentTarget.style.background = "rgba(184,134,11,0.25)"; e.currentTarget.style.color = "#f5d478"; }}
             onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; }}
-            onClick={bulkArchive}>Archive</button>
+            onClick={() => setConfirmBulkArchive(true)}>Archive</button>
           <button className="px-2.5 py-1.5 rounded-lg text-[12px] ml-1" style={{ color: "rgba(255,255,255,0.5)" }}
             onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
             onMouseLeave={e => e.currentTarget.style.background = "transparent"}
@@ -428,6 +453,24 @@ export default function ContactsClient({ initialContacts }: Props) {
           onArchived={handleArchived}
         />
       )}
+
+      {showImport && (
+        <ImportContactsModal
+          onClose={() => setShowImport(false)}
+          onImported={(imported) => setContacts(prev => [...imported, ...prev])}
+        />
+      )}
+
+      <ConfirmDialog
+        open={confirmBulkArchive}
+        title={`Archive ${selected.size} contact${selected.size > 1 ? "s" : ""}?`}
+        body="Archived contacts are removed from your active list. Their activity, notes, and linked projects stay — you can restore them later from settings if needed."
+        confirmLabel={`Archive ${selected.size > 1 ? `${selected.size} contacts` : "contact"}`}
+        cancelLabel="Keep"
+        tone="danger"
+        onConfirm={performBulkArchive}
+        onCancel={() => setConfirmBulkArchive(false)}
+      />
 
       <ContactsIntroModal />
       <ContactsTooltipTour />

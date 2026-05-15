@@ -55,6 +55,7 @@ export default async function HomePage() {
     { data: rawExpenses },
     { data: rawProjects },
     { data: rawContacts },
+    { count: contactsTotalCount },
     { data: rawActiveTimer },
     { data: rawTimerProjects },
   ] = await Promise.all([
@@ -94,6 +95,9 @@ export default async function HomePage() {
       .or(`last_contacted_at.is.null,last_contacted_at.lt.${thirtyDaysAgo}`)
       .order("last_contacted_at", { ascending: true, nullsFirst: true })
       .limit(4),
+    supabase
+      .from("contacts")
+      .select("id", { count: "exact", head: true }),
     supabase
       .from("active_timers")
       .select("*, project:projects(id, title, type, rate)")
@@ -200,7 +204,10 @@ export default async function HomePage() {
               expensesTotal={expensesTotal}
             />
             <ProjectsCard projects={projectsTyped} />
-            <ContactsCard contacts={(rawContacts ?? []) as unknown as HomeContact[]} />
+            <ContactsCard
+              contacts={(rawContacts ?? []) as unknown as HomeContact[]}
+              totalCount={contactsTotalCount ?? 0}
+            />
           </div>
         </div>
         <DashboardTour />

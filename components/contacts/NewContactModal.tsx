@@ -152,22 +152,32 @@ export default function NewContactModal({ onClose, onCreated, isLead = false }: 
         style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-          {/* Type toggle */}
-          <div style={{ display: "flex", gap: 2, background: "var(--color-cream)", borderRadius: 8, padding: 2 }}>
-            {(["contact", "lead"] as const).map(t => (
-              <button key={t} type="button" onClick={() => setType(t)}
-                style={{ padding: "4px 14px", borderRadius: 6, fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer", fontFamily: "inherit", background: type === t ? (t === "contact" ? "var(--color-sage)" : "#b8860b") : "transparent", color: type === t ? "white" : "#9a9690", transition: "all 0.1s ease" }}>
-                {t.charAt(0).toUpperCase() + t.slice(1)}
-              </button>
-            ))}
+        <div style={{ borderBottom: "0.5px solid var(--color-border)" }}>
+          <div className="flex items-center justify-between px-6 pt-4 pb-2">
+            {/* Type toggle */}
+            <div style={{ display: "flex", gap: 2, background: "var(--color-cream)", borderRadius: 8, padding: 2 }}>
+              {(["contact", "lead"] as const).map(t => (
+                <button key={t} type="button" onClick={() => setType(t)}
+                  style={{ padding: "4px 14px", borderRadius: 6, fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer", fontFamily: "inherit", background: type === t ? (t === "contact" ? "var(--color-sage)" : "#b8860b") : "transparent", color: type === t ? "white" : "#9a9690", transition: "all 0.1s ease" }}>
+                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                </button>
+              ))}
+            </div>
+            <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
+              style={{ color: "var(--color-grey)" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+              <X size={14} />
+            </button>
           </div>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
-            style={{ color: "var(--color-grey)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-            <X size={14} />
-          </button>
+          {/* Quick definition under the toggle. Lead vs. contact is the most
+              confused distinction in this module — surface it inline so the
+              user never has to ask. */}
+          <p style={{ padding: "0 24px 12px", fontSize: 11, color: "var(--color-grey)", lineHeight: 1.5 }}>
+            {type === "contact"
+              ? "A person you already have a relationship with — clients, galleries, collaborators, fabricators."
+              : "A person you want to pursue. Leads live in Outreach with a stage; convert them to a contact once the relationship starts."}
+          </p>
         </div>
 
         {/* Form */}
