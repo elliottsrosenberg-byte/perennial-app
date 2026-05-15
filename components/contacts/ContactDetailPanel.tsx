@@ -968,7 +968,7 @@ export default function ContactDetailPanel({ contact: initialContact, onClose, o
             </div>
 
             {/* Tags */}
-            <div style={{ marginBottom: 14 }}>
+            <div data-tour-target="contacts.detail-tags" style={{ marginBottom: 14 }}>
               <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 6 }}>Tags</p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 {contact.tags.map(tag => {
@@ -1063,16 +1063,20 @@ export default function ContactDetailPanel({ contact: initialContact, onClose, o
             )}
 
             {/* Navigation */}
-            <div style={{ marginTop: 16, borderTop: "0.5px solid var(--color-border)", paddingTop: 10 }}>
+            <div data-tour-target="contacts.detail-workspace" style={{ marginTop: 16, borderTop: "0.5px solid var(--color-border)", paddingTop: 10 }}>
               <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Workspace</p>
               {NAV_ITEMS.map(item => {
                 const active = activeTab === item.key;
                 return (
-                  <button key={item.key} onClick={() => setActiveTab(item.key)} style={{
-                    width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 8px",
-                    borderRadius: 7, border: "none", background: active ? "var(--color-surface-raised)" : "transparent",
-                    cursor: "pointer", fontFamily: "inherit", marginBottom: 1,
-                  }}
+                  <button
+                    key={item.key}
+                    onClick={() => setActiveTab(item.key)}
+                    data-tour-target={item.key === "activity" ? "contacts.detail-activity" : undefined}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 8px",
+                      borderRadius: 7, border: "none", background: active ? "var(--color-surface-raised)" : "transparent",
+                      cursor: "pointer", fontFamily: "inherit", marginBottom: 1,
+                    }}
                   onMouseEnter={e => { if (!active) e.currentTarget.style.background = "rgba(0,0,0,0.04)"; }}
                   onMouseLeave={e => { if (!active) e.currentTarget.style.background = "transparent"; }}>
                     <span style={{ color: active ? "#5a7040" : "var(--color-grey)" }}>{item.icon}</span>

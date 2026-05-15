@@ -29,6 +29,7 @@ export default function TourTracker() {
     // callout hand-off.
     if (matchKey === "home")     return;
     if (matchKey === "projects") return;
+    if (matchKey === "contacts") return;
     if (seenInSession.current.has(matchKey)) return;
     seenInSession.current.add(matchKey);
 

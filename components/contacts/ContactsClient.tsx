@@ -8,6 +8,8 @@ import NewContactModal from "./NewContactModal";
 import Button from "@/components/ui/Button";
 import Topbar from "@/components/layout/Topbar";
 import EmptyState from "@/components/ui/EmptyState";
+import ContactsIntroModal from "@/components/tour/contacts/ContactsIntroModal";
+import ContactsTooltipTour from "@/components/tour/contacts/ContactsTooltipTour";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -115,10 +117,25 @@ export default function ContactsClient({ initialContacts }: Props) {
     setSelected(selected.size === visible.length ? new Set() : new Set(visible.map(c => c.id)));
   }
 
-  function handleCreated(contact: Contact) { setContacts(prev => [contact, ...prev]); }
+  function handleCreated(contact: Contact) {
+    setContacts(prev => [contact, ...prev]);
+    // Notify the contacts tooltip tour so the "in modal" step advances.
+    window.dispatchEvent(new CustomEvent("contacts:created", {
+      detail: { id: contact.id, first_name: contact.first_name, last_name: contact.last_name },
+    }));
+  }
   function handleUpdated(contact: Contact) {
     setContacts(prev => prev.map(c => c.id === contact.id ? contact : c));
     if (openContact?.id === contact.id) setOpenContact(contact);
+  }
+
+  function openNewContactModal() {
+    setShowModal(true);
+    window.dispatchEvent(new Event("contacts:modal-opened"));
+  }
+  function openDetail(contact: Contact) {
+    setOpenContact(contact);
+    window.dispatchEvent(new Event("contacts:detail-opened"));
   }
   function handleArchived(id: string) {
     setContacts(prev => prev.filter(c => c.id !== id));
@@ -159,7 +176,14 @@ export default function ContactsClient({ initialContacts }: Props) {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <Topbar title="Contacts" actions={<Button onClick={() => setShowModal(true)}>+ Contact</Button>} />
+      <Topbar
+        title="Contacts"
+        actions={
+          <span data-tour-target="contacts.new-button">
+            <Button onClick={openNewContactModal}>+ Contact</Button>
+          </span>
+        }
+      />
 
       {/* ── Action bar ── */}
       <div className="flex items-center gap-2 px-6 py-2 shrink-0"
@@ -288,7 +312,7 @@ export default function ContactsClient({ initialContacts }: Props) {
               icon="👥"
               heading="Build your network"
               body="Contacts holds your full relationship graph — galleries, collectors, press, clients, fabricators, and collaborators. Knowing who you know and how recently you've connected is one of the most undertracked assets in a creative practice."
-              action={{ label: "+ New contact", onClick: () => setShowModal(true) }}
+              action={{ label: "+ New contact", onClick: openNewContactModal }}
               ashPrompt="I'm starting to build my contacts in Perennial. How should I think about organizing my network — who should I add first, and what tags make sense for a designer?"
               tips={[
                 "Add galleries, collectors, press contacts, clients, and suppliers — anyone relevant to your practice.",
@@ -301,19 +325,20 @@ export default function ContactsClient({ initialContacts }: Props) {
               <p className="text-[13px] font-medium" style={{ color: "var(--color-charcoal)" }}>No contacts match this filter</p>
             </div>
           )
-        ) : visible.map(c => {
+        ) : visible.map((c, idx) => {
           const isSelected = selected.has(c.id);
           const status = STATUS_CONFIG[c.status];
           const lc = lastContactedDisplay(c.last_contacted_at);
           return (
             <div key={c.id} className="group grid items-center px-6 cursor-pointer transition-colors"
+              data-tour-target={idx === 0 ? "contacts.first-row" : undefined}
               style={{
                 gridTemplateColumns: GRID, borderBottom: "0.5px solid var(--color-border)",
                 background: isSelected ? "rgba(61,107,79,0.06)" : "var(--color-off-white)", minHeight: "48px",
               }}
               onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = "var(--color-warm-white)"; }}
               onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = "var(--color-off-white)"; }}
-              onClick={e => { if ((e.target as HTMLElement).closest("[data-checkbox]")) return; setOpenContact(c); }}
+              onClick={e => { if ((e.target as HTMLElement).closest("[data-checkbox]")) return; openDetail(c); }}
             >
               <div data-checkbox onClick={e => { e.stopPropagation(); toggleSelect(c.id); }}>
                 <Checkbox checked={isSelected} onChange={() => toggleSelect(c.id)} />
@@ -391,7 +416,9 @@ export default function ContactsClient({ initialContacts }: Props) {
       )}
 
       {showModal && (
-        <NewContactModal isLead={false} onClose={() => setShowModal(false)} onCreated={handleCreated} />
+        <div data-tour-target="contacts.new-modal">
+          <NewContactModal isLead={false} onClose={() => setShowModal(false)} onCreated={handleCreated} />
+        </div>
       )}
       {openContact && (
         <ContactDetailPanel
@@ -401,6 +428,9 @@ export default function ContactsClient({ initialContacts }: Props) {
           onArchived={handleArchived}
         />
       )}
+
+      <ContactsIntroModal />
+      <ContactsTooltipTour />
     </div>
   );
 }
