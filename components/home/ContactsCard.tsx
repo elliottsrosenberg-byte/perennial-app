@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { UserPlus, Upload } from "lucide-react";
 import VisitButton from "@/components/ui/VisitButton";
 
 interface HomeContact {
@@ -25,7 +26,19 @@ function initials(first: string, last: string) {
   return ((first[0] ?? "") + (last[0] ?? "")).toUpperCase();
 }
 
-export default function ContactsCard({ contacts }: { contacts: HomeContact[] }) {
+interface Props {
+  contacts:   HomeContact[];
+  /** Total contact rows in the user's account — not just the stale ones in
+   *  `contacts`. Used to differentiate "empty network" from "all up to date." */
+  totalCount?: number;
+}
+
+export default function ContactsCard({ contacts, totalCount }: Props) {
+  // First-time empty state: no contacts at all. Add a contact is the primary
+  // ask, but importing a CSV is the other big way users seed a network, so
+  // we surface both side-by-side instead of burying Import behind a menu.
+  const isEmptyNetwork = (totalCount ?? contacts.length) === 0;
+
   return (
     <div
       className="flex flex-col rounded-xl overflow-hidden"
@@ -54,14 +67,43 @@ export default function ContactsCard({ contacts }: { contacts: HomeContact[] }) 
       </div>
 
       {contacts.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-7 px-4 text-center flex-1">
-          <p className="text-[12px] font-medium mb-0.5" style={{ color: "var(--color-charcoal)" }}>
-            All contacts up to date
-          </p>
-          <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>
-            You&apos;re on top of your relationships.
-          </p>
-        </div>
+        isEmptyNetwork ? (
+          <div className="flex flex-col items-center justify-center flex-1 py-6 px-5 text-center">
+            <p className="text-[12px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>
+              Build your network
+            </p>
+            <p className="text-[11px] mb-4" style={{ color: "var(--color-grey)", maxWidth: 220, lineHeight: 1.5 }}>
+              Add the people you work with — or import a CSV from Google Contacts in a couple of clicks.
+            </p>
+            <div className="flex gap-1.5">
+              <Link
+                href="/contacts?new=1"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium text-white"
+                style={{ background: "var(--color-sage)" }}
+              >
+                <UserPlus size={11} strokeWidth={2} />
+                New contact
+              </Link>
+              <Link
+                href="/contacts?import=1"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium"
+                style={{ background: "transparent", color: "#6b6860", border: "0.5px solid var(--color-border)" }}
+              >
+                <Upload size={11} strokeWidth={2} />
+                Import CSV
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-7 px-4 text-center flex-1">
+            <p className="text-[12px] font-medium mb-0.5" style={{ color: "var(--color-charcoal)" }}>
+              All contacts up to date
+            </p>
+            <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>
+              You&apos;re on top of your relationships.
+            </p>
+          </div>
+        )
       ) : (
         contacts.map((c) => {
           const lc = lastContactedLabel(c.last_contacted_at);

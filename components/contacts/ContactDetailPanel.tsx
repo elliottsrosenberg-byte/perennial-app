@@ -8,6 +8,7 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import { getRichExtensions, RichToolbar, InlineAshPopover, SelectionBubble } from "@/components/ui/RichEditor";
 import type { AshPromptState } from "@/components/ui/RichEditor";
 import CanvasAshHint from "@/components/ui/CanvasAshHint";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -817,17 +818,23 @@ export default function ContactDetailPanel({ contact: initialContact, onClose, o
 
   // ── Archive / Convert ───────────────────────────────────────────────────────
 
-  async function handleArchive() {
-    if (!confirm(`Archive ${contact.first_name} ${contact.last_name}?`)) return;
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [confirmConvert, setConfirmConvert] = useState(false);
+
+  async function performArchive() {
     await supabase.from("contacts").update({ archived: true }).eq("id", contact.id);
+    setConfirmArchive(false);
     onArchived(contact.id); onClose();
   }
 
-  async function convertToContact() {
-    if (!confirm(`Convert ${contact.first_name} ${contact.last_name} to a contact?`)) return;
+  async function performConvertToContact() {
     const { data } = await supabase.from("contacts").update({ is_lead: false, status: "active", lead_stage: null }).eq("id", contact.id).select("*, company:companies(*)").single();
     if (data) { setContact(data as Contact); onUpdated(data as Contact); }
+    setConfirmConvert(false);
   }
+
+  function handleArchive() { setConfirmArchive(true); }
+  function convertToContact() { setConfirmConvert(true); }
 
   // ── Ash ─────────────────────────────────────────────────────────────────────
 
@@ -1186,6 +1193,30 @@ export default function ContactDetailPanel({ contact: initialContact, onClose, o
           {!maximized && <ContactAshStrip contact={contact} />}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmArchive}
+        title={`Archive ${contact.first_name} ${contact.last_name}?`}
+        body={contact.is_lead
+          ? `${contact.first_name} will be removed from your active leads list. Any activity and notes you've logged stay attached if you restore them later.`
+          : `${contact.first_name} ${contact.last_name} will be removed from your active contacts. Their activity, notes, and linked projects stay — restore them later from settings if needed.`}
+        confirmLabel="Archive"
+        cancelLabel="Keep"
+        tone="danger"
+        onConfirm={performArchive}
+        onCancel={() => setConfirmArchive(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmConvert}
+        title={`Convert ${contact.first_name} to a contact?`}
+        body={`${contact.first_name} ${contact.last_name} will move out of your leads pipeline and into your active contacts. Their stage history stays in their activity log so you don't lose the context of how the relationship started.`}
+        confirmLabel="Convert to contact"
+        cancelLabel="Keep as lead"
+        tone="primary"
+        onConfirm={performConvertToContact}
+        onCancel={() => setConfirmConvert(false)}
+      />
     </>
   );
 }

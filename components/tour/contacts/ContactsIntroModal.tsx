@@ -33,7 +33,7 @@ const SLIDES: Slide[] = [
   },
   {
     title: "Tag your world.",
-    body:  "Tags — gallery, press, collector, client, supplier — make a 500-person network filterable in seconds. Click a tag to slice the list; clear it to see all. Leads sit in their own pill, separate from the contacts you've already met.",
+    body:  "Tags — gallery, press, collector, client, supplier — make a 500-person network filterable in seconds. Click a tag to slice the list; clear it to see all. Leads (people you're still pursuing) sit in their own pill, separate from the contacts you've actually met. They live in Outreach, with a stage; convert one to a contact the moment the relationship starts.",
     Anim:  TagFilter,
   },
   {
