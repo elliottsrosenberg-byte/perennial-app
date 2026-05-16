@@ -102,13 +102,17 @@ function EditableField({ label, value, placeholder = "—", onSave }: {
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center", padding: "4px 0", borderBottom: "0.5px solid var(--color-border)" }}>
+    <div style={{ display: "flex", alignItems: "center", padding: "4px 0", borderBottom: "0.5px solid var(--color-border)", minWidth: 0 }}>
       <span style={{ fontSize: 11, color: "var(--color-grey)", width: 68, flexShrink: 0 }}>{label}</span>
       {editing
-        ? <input value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit}
+        ? // minWidth: 0 + width: 0 lets the input shrink to fit the available
+          // flex space. Without it, the browser's intrinsic input width
+          // (defaults to size=20 chars) pushes the row wider than its parent
+          // and triggers horizontal scroll on long names.
+          <input value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit}
             onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); commit(); } if (e.key === "Escape") { setDraft(value ?? ""); setEditing(false); } }}
-            autoFocus style={{ flex: 1, fontSize: 12, background: "transparent", border: "none", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit", borderBottom: "1px solid var(--color-sage)" }} />
-        : <span onClick={() => setEditing(true)} style={{ flex: 1, fontSize: 12, color: value ? "#6b6860" : "var(--color-grey)", cursor: "text" }} title="Click to edit">
+            autoFocus style={{ flex: 1, minWidth: 0, width: 0, fontSize: 12, background: "transparent", border: "none", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit", borderBottom: "1px solid var(--color-sage)" }} />
+        : <span onClick={() => setEditing(true)} style={{ flex: 1, minWidth: 0, fontSize: 12, color: value ? "#6b6860" : "var(--color-grey)", cursor: "text", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title="Click to edit">
             {value || placeholder}
           </span>
       }
@@ -1178,8 +1182,11 @@ export default function ContactDetailPanel({
           borderRight: "0.5px solid var(--color-border)", background: "var(--color-warm-white)",
           borderRadius: maximized ? 0 : "12px 0 0 12px",
         }}>
-          {/* Scrollable top */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "18px 16px 12px" }}>
+          {/* Scrollable top. overflowX is locked to hidden — when only
+              overflowY is set to "auto", browsers resolve overflowX to "auto"
+              too, which exposes horizontal scroll the moment any child
+              (e.g. an EditableField input) overflows. */}
+          <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "18px 16px 12px" }}>
 
             {/* Identity */}
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
