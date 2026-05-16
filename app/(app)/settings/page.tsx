@@ -978,6 +978,9 @@ export default function SettingsPage() {
                             <>
                               <SyncNowButton          provider={intg.provider} onDone={reloadIntegrations} />
                               <ImportContactsButton   provider={intg.provider} />
+                              {intg.provider === "google" && (
+                                <BrowseDriveButton />
+                              )}
                             </>
                           )}
                           {intg.status === "error" ? (
@@ -1687,6 +1690,292 @@ function ImportContactsButton({ provider }: { provider: "google" | "microsoft" }
       >
         Import contacts
       </button>
+    </div>
+  );
+}
+
+// ─── BrowseDriveButton + DrivePickerModal ─────────────────────────────────────
+
+function BrowseDriveButton() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        style={{
+          padding: "4px 9px", fontSize: 10, fontWeight: 500,
+          background: "var(--color-warm-white)", color: "var(--color-charcoal)",
+          border: "0.5px solid var(--color-border)", borderRadius: 6,
+          cursor: "pointer", fontFamily: "inherit",
+        }}
+        className="shrink-0"
+      >
+        Browse Drive
+      </button>
+      {open && <DrivePickerModal onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+interface DriveFile {
+  id:             string;
+  name:           string;
+  mimeType?:      string;
+  iconLink?:      string;
+  webViewLink?:   string;
+  modifiedTime?:  string;
+}
+
+function DrivePickerModal({ onClose }: { onClose: () => void }) {
+  const [search,      setSearch]      = useState("");
+  const [files,       setFiles]       = useState<DriveFile[]>([]);
+  const [pageToken,   setPageToken]   = useState<string | null>(null);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState<string | null>(null);
+  const [selected,    setSelected]    = useState<Set<string>>(new Set());
+  const [category,    setCategory]    = useState<"operations" | "brand" | "press" | "design">("brand");
+  const [linking,     setLinking]     = useState(false);
+  const [linkResult,  setLinkResult]  = useState<string | null>(null);
+
+  // Debounced search — refetch when the query stabilizes for 300ms.
+  useEffect(() => {
+    const t = setTimeout(() => fetchPage(true), 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  async function fetchPage(reset: boolean) {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (search.trim()) params.set("q", `name contains '${search.trim().replace(/'/g, "\\'")}'`);
+      if (!reset && pageToken) params.set("pageToken", pageToken);
+      const res  = await fetch(`/api/integrations/google/drive/files?${params.toString()}`);
+      const json = await res.json() as { files?: DriveFile[]; nextPageToken?: string | null; error?: string; hint?: string };
+      if (!res.ok) {
+        setError(json.hint ?? json.error ?? "Drive request failed");
+        if (reset) setFiles([]);
+      } else {
+        setFiles(reset ? (json.files ?? []) : [...files, ...(json.files ?? [])]);
+        setPageToken(json.nextPageToken ?? null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Drive request failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleLink() {
+    if (selected.size === 0) return;
+    setLinking(true);
+    setLinkResult(null);
+    try {
+      const payload = {
+        category,
+        files: files.filter((f) => selected.has(f.id)).map((f) => ({
+          id:          f.id,
+          name:        f.name,
+          mimeType:    f.mimeType,
+          webViewLink: f.webViewLink,
+          iconLink:    f.iconLink,
+        })),
+      };
+      const res  = await fetch("/api/integrations/google/drive/link", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(payload),
+      });
+      const json = await res.json() as { linked?: number; skipped?: number; error?: string };
+      if (!res.ok) {
+        setLinkResult(json.error ?? "Link failed");
+      } else {
+        setLinkResult(
+          `Linked ${json.linked ?? 0}` +
+          ((json.skipped ?? 0) > 0 ? ` (${json.skipped} already in Resources)` : "")
+        );
+        setSelected(new Set());
+      }
+    } catch (err) {
+      setLinkResult(err instanceof Error ? err.message : "Link failed");
+    } finally {
+      setLinking(false);
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 200,
+        background: "rgba(31,33,26,0.55)", backdropFilter: "blur(4px)",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+      }}
+    >
+      <div style={{
+        width: "100%", maxWidth: 560, maxHeight: "82vh",
+        background: "var(--color-warm-white)",
+        borderRadius: 14, border: "0.5px solid var(--color-border)",
+        boxShadow: "0 24px 64px rgba(31,33,26,0.32), 0 4px 12px rgba(31,33,26,0.16)",
+        display: "flex", flexDirection: "column", overflow: "hidden",
+      }}>
+        <div style={{ padding: "16px 20px 12px", borderBottom: "0.5px solid var(--color-border)" }}>
+          <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 4 }}>
+            Browse Google Drive
+          </h3>
+          <p style={{ fontSize: 11, color: "var(--color-grey)", marginBottom: 10 }}>
+            Pick files to link as Resources. Perennial only stores the link + metadata — not the file contents.
+          </p>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name…"
+            style={{
+              width: "100%", padding: "7px 10px", fontSize: 12,
+              background: "var(--color-off-white)",
+              border: "0.5px solid var(--color-border)", borderRadius: 7,
+              color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none",
+            }}
+          />
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px" }}>
+          {error && (
+            <div style={{ padding: "10px 12px", fontSize: 11, color: "var(--color-red-orange)", background: "rgba(220,62,13,0.08)", borderRadius: 7, marginBottom: 8 }}>
+              {error}
+            </div>
+          )}
+          {files.length === 0 && !loading && !error && (
+            <p style={{ padding: "24px 8px", fontSize: 12, color: "var(--color-grey)", textAlign: "center" }}>
+              No files found.
+            </p>
+          )}
+          {files.map((f) => {
+            const isSel = selected.has(f.id);
+            return (
+              <label
+                key={f.id}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "8px 10px", borderRadius: 7, cursor: "pointer",
+                  background: isSel ? "rgba(155,163,122,0.10)" : "transparent",
+                }}
+                onMouseEnter={(e) => { if (!isSel) e.currentTarget.style.background = "var(--color-cream)"; }}
+                onMouseLeave={(e) => { if (!isSel) e.currentTarget.style.background = "transparent"; }}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSel}
+                  onChange={() => toggle(f.id)}
+                  style={{ width: 13, height: 13, flexShrink: 0, accentColor: "var(--color-sage)" }}
+                />
+                {f.iconLink && (
+                  <img src={f.iconLink} alt="" style={{ width: 14, height: 14, flexShrink: 0 }} />
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 12, color: "var(--color-charcoal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {f.name}
+                  </p>
+                  {f.modifiedTime && (
+                    <p style={{ fontSize: 10, color: "var(--color-text-tertiary)", marginTop: 1 }}>
+                      Modified {new Date(f.modifiedTime).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+              </label>
+            );
+          })}
+          {loading && (
+            <p style={{ padding: "12px 8px", fontSize: 11, color: "var(--color-text-tertiary)", textAlign: "center" }}>
+              Loading…
+            </p>
+          )}
+          {pageToken && !loading && (
+            <button
+              type="button"
+              onClick={() => fetchPage(false)}
+              style={{
+                display: "block", width: "100%",
+                padding: "8px 0", marginTop: 4,
+                background: "transparent", border: "0.5px dashed var(--color-border)",
+                borderRadius: 7, fontSize: 11, color: "var(--color-text-secondary)",
+                cursor: "pointer", fontFamily: "inherit",
+              }}
+            >
+              Load more
+            </button>
+          )}
+        </div>
+
+        <div style={{
+          padding: "12px 20px 14px", borderTop: "0.5px solid var(--color-border)",
+          display: "flex", alignItems: "center", gap: 10,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+            <span style={{ fontSize: 11, color: "var(--color-grey)" }}>Save to:</span>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value as typeof category)}
+              style={{
+                fontSize: 11, padding: "4px 6px", borderRadius: 6,
+                background: "var(--color-off-white)",
+                border: "0.5px solid var(--color-border)",
+                color: "var(--color-charcoal)", fontFamily: "inherit",
+              }}
+            >
+              <option value="brand">Brand</option>
+              <option value="operations">Operations</option>
+              <option value="press">Press</option>
+              <option value="design">Design</option>
+            </select>
+            {linkResult && (
+              <span style={{ fontSize: 11, color: "var(--color-text-secondary)", marginLeft: 6 }}>
+                {linkResult}
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              padding: "6px 12px", fontSize: 11,
+              background: "transparent", color: "var(--color-text-secondary)",
+              border: "0.5px solid var(--color-border)", borderRadius: 7,
+              cursor: "pointer", fontFamily: "inherit",
+            }}
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            onClick={handleLink}
+            disabled={selected.size === 0 || linking}
+            style={{
+              padding: "6px 14px", fontSize: 11, fontWeight: 600,
+              background: selected.size === 0 || linking ? "var(--color-surface-sunken)" : "var(--color-sage)",
+              color: selected.size === 0 || linking ? "var(--color-grey)" : "white",
+              border: "none", borderRadius: 7,
+              cursor: selected.size === 0 || linking ? "default" : "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            {linking ? "Linking…" : `Link ${selected.size || ""} as Resources`}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
