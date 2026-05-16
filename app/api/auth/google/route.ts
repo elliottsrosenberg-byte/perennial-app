@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { googleAdapter } from "@/lib/integrations/google";
 import { resolveUpstreamScopes } from "@/lib/integrations/registry";
+import { appOrigin } from "@/lib/url";
 
 // Explicit Node.js runtime — matches the project convention for routes
 // that touch the database, and avoids any Edge-runtime ambiguity that
@@ -36,7 +37,11 @@ function generateState(): string {
 }
 
 export async function GET(req: Request) {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
+  // appOrigin() normalizes a few env-var foot-guns (missing scheme,
+  // trailing slash). Without this, a NEXT_PUBLIC_APP_URL of
+  // "app.perennial.design" produces an unscheme'd redirect_uri that
+  // Google rejects with invalid_request.
+  const appUrl = appOrigin(req);
 
   try {
     // Fail-fast with a readable redirect if the OAuth credentials aren't
