@@ -72,6 +72,7 @@ export async function GET(req: Request) {
       gmail:    true,
       calendar: true,
       contacts: true,
+      drive:    true,
     });
 
     const state = generateState();

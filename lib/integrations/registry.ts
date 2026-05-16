@@ -71,6 +71,12 @@ export const PROVIDERS: Record<string, ProviderDefinition> = {
         description:    "Import your Google contacts into the People module.",
         upstreamScopes: ["https://www.googleapis.com/auth/contacts.readonly"],
       },
+      {
+        key:            "drive",
+        label:          "Drive (metadata)",
+        description:    "Browse your Google Drive files (names, types, dates only — never file contents) so you can link them as Resources without re-uploading.",
+        upstreamScopes: ["https://www.googleapis.com/auth/drive.metadata.readonly"],
+      },
     ],
     appOptions: [
       {
