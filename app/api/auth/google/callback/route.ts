@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { googleAdapter } from "@/lib/integrations/google";
 import { upsertIntegrationRow, writeTokens } from "@/lib/integrations/storage";
+import { appOrigin } from "@/lib/url";
 
 export const runtime = "nodejs";
 
@@ -21,7 +22,10 @@ function settingsUrl(origin: string, params: Record<string, string>): string {
 
 export async function GET(req: Request) {
   const url    = new URL(req.url);
-  const origin = process.env.NEXT_PUBLIC_APP_URL ?? url.origin;
+  // appOrigin() normalizes a few env-var foot-guns so the redirect_uri
+  // we send to Google during the code exchange matches *exactly* what
+  // was registered (scheme included).
+  const origin = appOrigin(req);
 
   try {
     return await handle(req, url, origin);
