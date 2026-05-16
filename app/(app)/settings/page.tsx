@@ -236,6 +236,19 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
   const [integrations, setIntegrations] = useState<IntegrationRow[]>([]);
 
+  // Refetch just the integrations list — used after the "Sync now" button
+  // completes so the user sees the updated last_synced_at and status.
+  async function reloadIntegrations() {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from("integrations")
+      .select("id, provider, account_name, connected_at, last_synced_at, status, last_error")
+      .eq("user_id", user.id);
+    if (data) setIntegrations(data as IntegrationRow[]);
+  }
+
   // Load profile + integrations on mount
   useEffect(() => {
     async function load() {
@@ -915,12 +928,24 @@ export default function SettingsPage() {
                             {intg.account_name && (
                               <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>{intg.account_name}</p>
                             )}
+                            {intg.last_synced_at && (
+                              <p className="text-[10px] mt-0.5" style={{ color: "var(--color-text-tertiary)" }}>
+                                Last sync {new Date(intg.last_synced_at).toLocaleString()}
+                              </p>
+                            )}
                             {intg.status === "error" && intg.last_error && (
                               <p className="text-[10px] mt-1" style={{ color: "var(--color-red-orange)" }} title={intg.last_error}>
                                 Sync error — see Settings → Integrations
                               </p>
                             )}
                           </div>
+                          {/* Sync now — for providers that support it. Currently
+                              just google; the others (GA / Calendar / Instagram /
+                              Teller) sync via their own buttons inside their
+                              respective modules. */}
+                          {intg.provider === "google" && intg.status !== "disconnected" && (
+                            <SyncNowButton onDone={reloadIntegrations} />
+                          )}
                           {intg.status === "error" ? (
                             <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(220,62,13,0.12)", color: "var(--color-red-orange)" }}>
                               Error
@@ -1022,6 +1047,65 @@ export default function SettingsPage() {
           </div>
         </main>
       </div>
+    </div>
+  );
+}
+
+// ─── Small components ──────────────────────────────────────────────────────────
+
+/** Triggers an on-demand Google sync and surfaces the result inline. The
+ *  parent passes `onDone` so it can refresh the integration row to show
+ *  the new last_synced_at + status. */
+function SyncNowButton({ onDone }: { onDone: () => void | Promise<void> }) {
+  const [busy,    setBusy]    = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function handleClick() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res  = await fetch("/api/integrations/google/sync", { method: "POST" });
+      const json = await res.json() as { results?: { ok: boolean; result?: { messagesScanned: number; activitiesCreated: number; contactsMatched: number }; error?: string }[] };
+      if (!res.ok || !json.results) {
+        setMessage("Sync failed");
+      } else {
+        const created = json.results.reduce((sum, r) => sum + (r.ok && r.result ? r.result.activitiesCreated : 0), 0);
+        const scanned = json.results.reduce((sum, r) => sum + (r.ok && r.result ? r.result.messagesScanned : 0), 0);
+        const anyError = json.results.find((r) => !r.ok);
+        if (anyError) setMessage(anyError.error ?? "Sync error");
+        else setMessage(`${created} new from ${scanned} scanned`);
+      }
+      await onDone();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setBusy(false);
+      // Clear the inline message after a few seconds so it doesn't linger.
+      setTimeout(() => setMessage(null), 5000);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2 shrink-0">
+      {message && (
+        <span className="text-[10px]" style={{ color: "var(--color-text-secondary)" }}>
+          {message}
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={busy}
+        className="px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors"
+        style={{
+          background: busy ? "var(--color-surface-sunken)" : "var(--color-warm-white)",
+          color:      busy ? "var(--color-grey)" : "var(--color-charcoal)",
+          border:     "0.5px solid var(--color-border)",
+          cursor:     busy ? "default" : "pointer",
+        }}
+      >
+        {busy ? "Syncing…" : "Sync now"}
+      </button>
     </div>
   );
 }
