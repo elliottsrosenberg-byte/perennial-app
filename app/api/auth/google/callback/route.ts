@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 import { googleAdapter } from "@/lib/integrations/google";
 import { upsertIntegrationRow, writeTokens } from "@/lib/integrations/storage";
 
+export const runtime = "nodejs";
+
 const STATE_COOKIE = "pn_oauth_state_google";
 const NEXT_COOKIE  = "pn_oauth_next_google";
 
@@ -19,10 +21,26 @@ function settingsUrl(origin: string, params: Record<string, string>): string {
 
 export async function GET(req: Request) {
   const url    = new URL(req.url);
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? url.origin;
+
+  try {
+    return await handle(req, url, origin);
+  } catch (err) {
+    // Last-resort safety net so the user gets a readable error in the
+    // Settings UI instead of a generic 500. Logged for Vercel function
+    // logs to debug.
+    console.error("[/api/auth/google/callback] unexpected error:", err);
+    return NextResponse.redirect(settingsUrl(origin, {
+      provider: "google",
+      error:    "callback_failed",
+    }));
+  }
+}
+
+async function handle(req: Request, url: URL, origin: string) {
   const code   = url.searchParams.get("code");
   const state  = url.searchParams.get("state");
   const error  = url.searchParams.get("error");
-  const origin = process.env.NEXT_PUBLIC_APP_URL ?? url.origin;
 
   // ── Provider-side error (user denied, scope rejected, …) ──────────
   if (error) {
