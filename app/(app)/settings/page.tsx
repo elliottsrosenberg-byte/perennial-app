@@ -911,6 +911,11 @@ export default function SettingsPage() {
                   Connect the tools you already use.
                 </p>
 
+                {/* OAuth result toast — picks up ?provider=X&connected=1
+                    or ?provider=X&error=Y from any OAuth callback. */}
+                <OAuthResultToast />
+
+
                 {/* Active integrations */}
                 {integrations.length > 0 && (
                   <>
@@ -982,13 +987,6 @@ export default function SettingsPage() {
                       desc: "Auto-log Outlook emails and meetings against your contacts, and import your Outlook contacts. Works with personal and work accounts.",
                       icon: "📧", iconBg: "rgba(0,120,212,0.10)",
                       href: "/api/auth/microsoft",
-                    },
-                    {
-                      provider: "apple_icloud",
-                      name: "Apple iCloud",
-                      desc: "Auto-log iCloud mail and calendar events against your contacts. Uses an app-specific password — no Apple login required.",
-                      icon: "🍎", iconBg: "rgba(50,50,50,0.08)",
-                      modal: "apple_icloud",
                     },
                     {
                       provider: "mailchimp",
@@ -1374,6 +1372,109 @@ function ConnectFormModal({ formKey, onClose, onConnected }: {
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+// ─── OAuthResultToast ─────────────────────────────────────────────────────────
+
+// Friendly messages for the error codes our OAuth start/callback routes
+// emit when they redirect back to /settings. Keep this list in sync with
+// the redirect() calls in app/api/auth/*/{route,callback/route}.ts.
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  client_id_not_configured:     "This integration isn't configured for this environment. The CLIENT_ID env var is missing in Vercel.",
+  client_secret_not_configured: "This integration isn't configured for this environment. The CLIENT_SECRET env var is missing in Vercel.",
+  state_mismatch:               "Security check failed — please try connecting again.",
+  missing_code_or_state:        "The provider returned an incomplete response. Try again, or start a fresh browser session.",
+  exchange_failed:              "The provider rejected the authorization. Common cause: redirect URI in the provider's console doesn't exactly match this app's URL.",
+  storage_failed:               "Couldn't save the connection. Try again — if this persists it's a database error.",
+  start_failed:                 "Something went wrong starting the connection flow. Check the function logs.",
+  callback_failed:              "Something went wrong completing the connection flow.",
+  access_denied:                "You declined the consent screen. No connection was made.",
+};
+
+const PROVIDER_FRIENDLY: Record<string, string> = {
+  google:           "Google",
+  microsoft:        "Microsoft 365",
+  google_analytics: "Google Analytics",
+  google_calendar:  "Google Calendar",
+  instagram:        "Instagram",
+};
+
+function OAuthResultToast() {
+  const router = useRouter();
+  const [params, setParams] = useState<{ provider: string; error?: string; connected?: string } | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const provider = sp.get("provider");
+    if (!provider) return;
+    setParams({
+      provider,
+      error:     sp.get("error")     ?? undefined,
+      connected: sp.get("connected") ?? undefined,
+    });
+    // Strip the OAuth result params from the URL so they don't linger on
+    // refresh, but keep ?section=integrations so the user stays on this tab.
+    const stripped = new URLSearchParams();
+    if (sp.get("section")) stripped.set("section", sp.get("section")!);
+    const newUrl = `${window.location.pathname}${stripped.toString() ? "?" + stripped.toString() : ""}`;
+    window.history.replaceState({}, "", newUrl);
+  }, [router]);
+
+  if (!params) return null;
+
+  const friendly  = PROVIDER_FRIENDLY[params.provider] ?? params.provider;
+  const isSuccess = params.connected === "1" && !params.error;
+  const message   = isSuccess
+    ? `${friendly} connected — your account shows up below under "Connected".`
+    : (params.error && OAUTH_ERROR_MESSAGES[params.error]) ??
+      `${friendly} couldn't connect (code: ${params.error}).`;
+
+  return (
+    <div
+      className="flex items-start gap-3 p-4 rounded-xl mb-6"
+      style={{
+        background: isSuccess ? "rgba(141,208,71,0.12)" : "rgba(220,62,13,0.08)",
+        border:     isSuccess ? "0.5px solid rgba(141,208,71,0.32)" : "0.5px solid rgba(220,62,13,0.24)",
+      }}
+    >
+      <div
+        style={{
+          width: 22, height: 22, borderRadius: 99, flexShrink: 0,
+          background: isSuccess ? "rgba(141,208,71,0.22)" : "rgba(220,62,13,0.16)",
+          color:      isSuccess ? "#3d6b4f"               : "var(--color-red-orange)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 13, fontWeight: 700,
+        }}
+      >
+        {isSuccess ? "✓" : "!"}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-charcoal)" }}>
+          {isSuccess ? `${friendly} connected` : `${friendly} couldn't connect`}
+        </p>
+        <p style={{ fontSize: 11, color: "#6b6860", marginTop: 2, lineHeight: 1.55 }}>
+          {message}
+        </p>
+        {params.error && (
+          <p style={{ fontSize: 10, color: "var(--color-text-tertiary)", marginTop: 4, fontFamily: "monospace" }}>
+            {params.error}
+          </p>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={() => setParams(null)}
+        aria-label="Dismiss"
+        style={{
+          background: "transparent", border: "none", padding: 4,
+          color: "var(--color-grey)", cursor: "pointer", fontSize: 14,
+        }}
+      >
+        ✕
+      </button>
     </div>
   );
 }
