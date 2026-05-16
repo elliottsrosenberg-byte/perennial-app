@@ -292,16 +292,25 @@ export default function PrivacyPolicyPage() {
                   <code>gmail.readonly</code>
                 </td>
                 <td style={{ padding: "10px 12px", borderBottom: "0.5px solid #e3dccb", verticalAlign: "top" }}>
-                  Metadata of messages in your Gmail account (sender, recipients,
-                  subject, date) and a short snippet (~200 characters).
+                  Metadata of messages in your Gmail account (sender,
+                  recipients, subject, date) and a short snippet (~200
+                  characters). If you opt in to <em>Store linked email bodies</em>
+                  in Settings &rarr; Integrations, we additionally store the
+                  full body of any email whose sender or recipient matches a
+                  contact in your Perennial People module &mdash; never of
+                  emails that do not match a contact. Stored bodies are
+                  encrypted at rest, isolated to your account, and deleted
+                  within 24 hours if you disable the setting, disconnect
+                  Gmail, or remove the matching contact.
                 </td>
                 <td style={{ padding: "10px 12px", borderBottom: "0.5px solid #e3dccb", verticalAlign: "top" }}>
                   Automatically log a corresponding activity entry against any
-                  contact in your Perennial People module whose email address
-                  matches a sender or recipient. We do not store full email
-                  bodies; if you open an activity row and request the full
-                  message, we fetch it from Gmail in real time and discard it
-                  after display.
+                  matched contact, with the subject and snippet visible inline.
+                  If full-body storage is enabled, the body is available offline
+                  inside the activity row and may be used by the Ash assistant
+                  to answer your questions about the relationship. If not, we
+                  fetch the body from Gmail in real time when you open the row
+                  and discard it after display.
                 </td>
               </tr>
               <tr>
