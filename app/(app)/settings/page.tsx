@@ -235,6 +235,7 @@ export default function SettingsPage() {
   const [email,   setEmail]   = useState<string>("");
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
   const [integrations, setIntegrations] = useState<IntegrationRow[]>([]);
+  const [activeModal,  setActiveModal]  = useState<string | null>(null);
 
   // Refetch just the integrations list — used after the "Sync now" button
   // completes so the user sees the updated last_synced_at and status.
@@ -983,6 +984,27 @@ export default function SettingsPage() {
                       href: "/api/auth/microsoft",
                     },
                     {
+                      provider: "apple_icloud",
+                      name: "Apple iCloud",
+                      desc: "Auto-log iCloud mail and calendar events against your contacts. Uses an app-specific password — no Apple login required.",
+                      icon: "🍎", iconBg: "rgba(50,50,50,0.08)",
+                      modal: "apple_icloud",
+                    },
+                    {
+                      provider: "mailchimp",
+                      name: "Mailchimp",
+                      desc: "Show your newsletter list size and recent campaign performance in Presence.",
+                      icon: "🐵", iconBg: "rgba(255,224,0,0.16)",
+                      modal: "mailchimp",
+                    },
+                    {
+                      provider: "beehiiv",
+                      name: "Beehiiv",
+                      desc: "Show your publication's subscriber count and recent post stats in Presence.",
+                      icon: "🐝", iconBg: "rgba(255,200,40,0.16)",
+                      modal: "beehiiv",
+                    },
+                    {
                       provider: "instagram",
                       name: "Instagram",
                       desc: "View follower growth and engagement stats in Presence.",
@@ -1011,7 +1033,7 @@ export default function SettingsPage() {
                       icon: "💳", iconBg: "rgba(109,79,163,0.10)",
                       soon: true,
                     },
-                  ].map(({ provider, name, desc, icon, iconBg, href, note, soon }) => {
+                  ].map(({ provider, name, desc, icon, iconBg, href, note, soon, modal }: { provider: string; name: string; desc: string; icon: string; iconBg: string; href?: string | null; note?: string; soon?: boolean; modal?: string }) => {
                     const connected = !!getIntegration(provider);
                     if (connected) return null;
                     return (
@@ -1033,6 +1055,17 @@ export default function SettingsPage() {
                           </span>
                         ) : note ? (
                           <span className="text-[10px] shrink-0" style={{ color: "var(--color-grey)" }}>{note}</span>
+                        ) : modal ? (
+                          <button
+                            type="button"
+                            onClick={() => setActiveModal(modal)}
+                            className="px-3 py-[6px] text-[11px] font-medium rounded-lg shrink-0 transition-opacity"
+                            style={{ background: "var(--color-charcoal)", color: "var(--color-warm-white)", border: "none", cursor: "pointer" }}
+                            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+                            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+                          >
+                            Connect
+                          </button>
                         ) : href ? (
                           <a
                             href={href}
@@ -1054,6 +1087,18 @@ export default function SettingsPage() {
           </div>
         </main>
       </div>
+
+      {/* API-key / app-password connect modal (Mailchimp, Beehiiv, iCloud) */}
+      {activeModal && (
+        <ConnectFormModal
+          formKey={activeModal}
+          onClose={() => setActiveModal(null)}
+          onConnected={async () => {
+            setActiveModal(null);
+            await reloadIntegrations();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1138,6 +1183,197 @@ function SyncNowButton({ provider, onDone }: { provider: "google" | "microsoft";
       >
         {busy ? "Syncing…" : "Sync now"}
       </button>
+    </div>
+  );
+}
+
+// ─── ConnectFormModal ──────────────────────────────────────────────────────────
+
+interface ConnectField {
+  key:          string;
+  label:        string;
+  placeholder?: string;
+  type?:        "text" | "password";
+  required?:    boolean;
+}
+interface ConnectFormConfig {
+  title:        string;
+  description?: string;
+  endpoint:     string;
+  fields:       ConnectField[];
+  helpUrl?:     { label: string; href: string };
+}
+
+const CONNECT_FORMS: Record<string, ConnectFormConfig> = {
+  mailchimp: {
+    title:       "Connect Mailchimp",
+    description: "Find your API key under your Mailchimp account → Extras → API keys.",
+    endpoint:    "/api/integrations/mailchimp/connect",
+    fields: [
+      { key: "api_key", label: "API key", placeholder: "abc123def456-us21", type: "password", required: true },
+      { key: "list_id", label: "Audience / list ID (optional)", placeholder: "abc123" },
+    ],
+    helpUrl: { label: "Mailchimp API keys page", href: "https://us1.admin.mailchimp.com/account/api/" },
+  },
+  beehiiv: {
+    title:       "Connect Beehiiv",
+    description: "Generate an API key at Beehiiv → Settings → Integrations → API.",
+    endpoint:    "/api/integrations/beehiiv/connect",
+    fields: [
+      { key: "api_key",        label: "API key",        type: "password", required: true },
+      { key: "publication_id", label: "Publication ID", placeholder: "pub_abc123", required: true },
+    ],
+    helpUrl: { label: "Beehiiv API docs", href: "https://developers.beehiiv.com/docs/v2/3oo3izy3rqfjy-introduction-to-the-beehiiv-api" },
+  },
+  apple_icloud: {
+    title:       "Connect iCloud",
+    description: "Generate an app-specific password for Perennial — it never sees your Apple ID password.",
+    endpoint:    "/api/integrations/apple-icloud/connect",
+    fields: [
+      { key: "email",        label: "iCloud email",        placeholder: "you@icloud.com", required: true },
+      { key: "app_password", label: "App-specific password", placeholder: "xxxx-xxxx-xxxx-xxxx", type: "password", required: true },
+    ],
+    helpUrl: { label: "Generate one at appleid.apple.com", href: "https://account.apple.com/account/manage/section/security" },
+  },
+};
+
+function ConnectFormModal({ formKey, onClose, onConnected }: {
+  formKey: string;
+  onClose: () => void;
+  onConnected: () => void | Promise<void>;
+}) {
+  const config = CONNECT_FORMS[formKey];
+  const [values, setValues]   = useState<Record<string, string>>({});
+  const [busy,   setBusy]     = useState(false);
+  const [error,  setError]    = useState<string | null>(null);
+
+  if (!config) return null;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const res  = await fetch(config.endpoint, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(values),
+      });
+      const json = await res.json() as { ok?: boolean; error?: string };
+      if (!res.ok || !json.ok) {
+        setError(json.error ?? "Connection failed");
+        setBusy(false);
+        return;
+      }
+      await onConnected();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Connection failed");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 200,
+        background: "rgba(31,33,26,0.55)", backdropFilter: "blur(4px)",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+      }}
+    >
+      <form
+        onSubmit={handleSubmit}
+        style={{
+          width: "100%", maxWidth: 440,
+          background: "var(--color-warm-white)",
+          borderRadius: 14,
+          border: "0.5px solid var(--color-border)",
+          boxShadow: "0 24px 64px rgba(31,33,26,0.32), 0 4px 12px rgba(31,33,26,0.16)",
+        }}
+      >
+        <div style={{ padding: "18px 20px 12px", borderBottom: "0.5px solid var(--color-border)" }}>
+          <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 4 }}>
+            {config.title}
+          </h3>
+          {config.description && (
+            <p style={{ fontSize: 12, color: "var(--color-grey)", lineHeight: 1.5 }}>{config.description}</p>
+          )}
+          {config.helpUrl && (
+            <p style={{ fontSize: 11, marginTop: 6 }}>
+              <a href={config.helpUrl.href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-sage)" }}>
+                {config.helpUrl.label} ↗
+              </a>
+            </p>
+          )}
+        </div>
+
+        <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+          {config.fields.map((f) => (
+            <label key={f.key} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              <span style={{ fontSize: 11, fontWeight: 500, color: "var(--color-charcoal)" }}>
+                {f.label}
+                {f.required && <span style={{ color: "var(--color-red-orange)", marginLeft: 3 }}>*</span>}
+              </span>
+              <input
+                type={f.type ?? "text"}
+                value={values[f.key] ?? ""}
+                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                placeholder={f.placeholder}
+                required={f.required}
+                autoComplete="off"
+                style={{
+                  padding: "8px 10px", fontSize: 13,
+                  background: "var(--color-off-white)",
+                  border: "0.5px solid var(--color-border)",
+                  borderRadius: 7,
+                  color: "var(--color-charcoal)",
+                  outline: "none",
+                  fontFamily: "inherit",
+                }}
+              />
+            </label>
+          ))}
+          {error && (
+            <p style={{ fontSize: 11, color: "var(--color-red-orange)" }}>
+              {error}
+            </p>
+          )}
+        </div>
+
+        <div style={{
+          display: "flex", justifyContent: "flex-end", gap: 8,
+          padding: "12px 20px 16px", borderTop: "0.5px solid var(--color-border)",
+        }}>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            style={{
+              padding: "7px 14px", fontSize: 12, fontWeight: 500,
+              background: "transparent", color: "var(--color-text-secondary)",
+              border: "0.5px solid var(--color-border)", borderRadius: 7,
+              cursor: busy ? "default" : "pointer", fontFamily: "inherit",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={busy}
+            style={{
+              padding: "7px 16px", fontSize: 12, fontWeight: 600,
+              background: busy ? "var(--color-surface-sunken)" : "var(--color-sage)",
+              color: busy ? "var(--color-grey)" : "white",
+              border: "none", borderRadius: 7,
+              cursor: busy ? "default" : "pointer", fontFamily: "inherit",
+            }}
+          >
+            {busy ? "Connecting…" : "Connect"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
