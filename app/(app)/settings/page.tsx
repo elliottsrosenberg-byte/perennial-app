@@ -943,8 +943,8 @@ export default function SettingsPage() {
                               just google; the others (GA / Calendar / Instagram /
                               Teller) sync via their own buttons inside their
                               respective modules. */}
-                          {intg.provider === "google" && intg.status !== "disconnected" && (
-                            <SyncNowButton onDone={reloadIntegrations} />
+                          {(intg.provider === "google" || intg.provider === "microsoft") && intg.status !== "disconnected" && (
+                            <SyncNowButton provider={intg.provider} onDone={reloadIntegrations} />
                           )}
                           {intg.status === "error" ? (
                             <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(220,62,13,0.12)", color: "var(--color-red-orange)" }}>
@@ -974,6 +974,13 @@ export default function SettingsPage() {
                       desc: "Auto-log emails and meetings against your contacts, and import your Google contacts. Covers Gmail, Calendar, and Contacts.",
                       icon: "🔗", iconBg: "rgba(37,99,171,0.10)",
                       href: "/api/auth/google",
+                    },
+                    {
+                      provider: "microsoft",
+                      name: "Microsoft 365",
+                      desc: "Auto-log Outlook emails and meetings against your contacts, and import your Outlook contacts. Works with personal and work accounts.",
+                      icon: "📧", iconBg: "rgba(0,120,212,0.10)",
+                      href: "/api/auth/microsoft",
                     },
                     {
                       provider: "instagram",
@@ -1053,10 +1060,10 @@ export default function SettingsPage() {
 
 // ─── Small components ──────────────────────────────────────────────────────────
 
-/** Triggers an on-demand Google sync and surfaces the result inline. The
- *  parent passes `onDone` so it can refresh the integration row to show
- *  the new last_synced_at + status. */
-function SyncNowButton({ onDone }: { onDone: () => void | Promise<void> }) {
+/** Triggers an on-demand mail+calendar sync for the given provider and
+ *  surfaces the result inline. The parent passes `onDone` so it can
+ *  refresh the integration row to show the new last_synced_at + status. */
+function SyncNowButton({ provider, onDone }: { provider: "google" | "microsoft"; onDone: () => void | Promise<void> }) {
   const [busy,    setBusy]    = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -1064,23 +1071,48 @@ function SyncNowButton({ onDone }: { onDone: () => void | Promise<void> }) {
     setBusy(true);
     setMessage(null);
     try {
-      const res  = await fetch("/api/integrations/google/sync", { method: "POST" });
-      const json = await res.json() as { results?: { ok: boolean; result?: { messagesScanned: number; activitiesCreated: number; contactsMatched: number }; error?: string }[] };
+      type SubResult = { ok: boolean; result?: { activitiesCreated: number }; error?: string };
+      // Google response keys mail under `gmail`, Microsoft under `mail`.
+      // We normalize at read time so the rest of the function is uniform.
+      type AccountResult = {
+        integration_id: string;
+        account_name:   string | null;
+        gmail?:         SubResult;
+        mail?:          SubResult;
+        calendar:       SubResult;
+      };
+      const endpoint = provider === "google"
+        ? "/api/integrations/google/sync"
+        : "/api/integrations/microsoft/sync";
+      const res  = await fetch(endpoint, { method: "POST" });
+      const json = await res.json() as { results?: AccountResult[]; error?: string };
       if (!res.ok || !json.results) {
-        setMessage("Sync failed");
+        setMessage(json.error ?? "Sync failed");
       } else {
-        const created = json.results.reduce((sum, r) => sum + (r.ok && r.result ? r.result.activitiesCreated : 0), 0);
-        const scanned = json.results.reduce((sum, r) => sum + (r.ok && r.result ? r.result.messagesScanned : 0), 0);
-        const anyError = json.results.find((r) => !r.ok);
-        if (anyError) setMessage(anyError.error ?? "Sync error");
-        else setMessage(`${created} new from ${scanned} scanned`);
+        let emailCount = 0;
+        let meetingCount = 0;
+        let errorMsg: string | null = null;
+        for (const r of json.results) {
+          const mailRes = r.gmail ?? r.mail;
+          if (mailRes?.ok && mailRes.result) emailCount += mailRes.result.activitiesCreated;
+          if (r.calendar.ok && r.calendar.result) meetingCount += r.calendar.result.activitiesCreated;
+          if (mailRes && !mailRes.ok && mailRes.error) errorMsg = mailRes.error;
+          if (!r.calendar.ok && r.calendar.error)    errorMsg = r.calendar.error;
+        }
+        if (errorMsg) {
+          setMessage(errorMsg.slice(0, 80));
+        } else {
+          const parts: string[] = [];
+          if (emailCount)   parts.push(`${emailCount} email${emailCount === 1 ? "" : "s"}`);
+          if (meetingCount) parts.push(`${meetingCount} meeting${meetingCount === 1 ? "" : "s"}`);
+          setMessage(parts.length ? `+${parts.join(", ")}` : "Up to date");
+        }
       }
       await onDone();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Sync failed");
     } finally {
       setBusy(false);
-      // Clear the inline message after a few seconds so it doesn't linger.
       setTimeout(() => setMessage(null), 5000);
     }
   }
