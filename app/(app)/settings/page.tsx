@@ -38,7 +38,26 @@ interface IntegrationRow {
   account_name:   string | null;
   connected_at:   string;
   last_synced_at: string | null;
+  status?:        string;
+  last_error?:    string | null;
 }
+
+// Friendly display names for connected providers — the DB stores
+// machine slugs like "google" or "google_analytics".
+const PROVIDER_DISPLAY: Record<string, string> = {
+  google:           "Google",
+  google_calendar:  "Google Calendar (legacy)",
+  google_analytics: "Google Analytics",
+  microsoft:        "Microsoft 365",
+  apple_icloud:     "Apple iCloud",
+  instagram:        "Instagram",
+  plausible:        "Plausible",
+  mailchimp:        "Mailchimp",
+  beehiiv:          "Beehiiv",
+  substack:         "Substack",
+  teller:           "Bank account",
+  stripe:           "Stripe",
+};
 
 const DEFAULT_PROFILE: Profile = {
   display_name: "", studio_name: "", tagline: "", location: "", website: "",
@@ -229,7 +248,7 @@ export default function SettingsPage() {
 
       const [{ data: prof }, { data: intgs }] = await Promise.all([
         supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle(),
-        supabase.from("integrations").select("id, provider, account_name, connected_at, last_synced_at").eq("user_id", user.id),
+        supabase.from("integrations").select("id, provider, account_name, connected_at, last_synced_at, status, last_error").eq("user_id", user.id),
       ]);
 
       if (prof) {
@@ -890,16 +909,31 @@ export default function SettingsPage() {
                           style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}
                         >
                           <div className="flex-1 min-w-0">
-                            <p className="text-[13px] font-medium capitalize" style={{ color: "var(--color-charcoal)" }}>
-                              {intg.provider.replace(/_/g, " ")}
+                            <p className="text-[13px] font-medium" style={{ color: "var(--color-charcoal)" }}>
+                              {PROVIDER_DISPLAY[intg.provider] ?? intg.provider.replace(/_/g, " ")}
                             </p>
                             {intg.account_name && (
                               <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>{intg.account_name}</p>
                             )}
+                            {intg.status === "error" && intg.last_error && (
+                              <p className="text-[10px] mt-1" style={{ color: "var(--color-red-orange)" }} title={intg.last_error}>
+                                Sync error — see Settings → Integrations
+                              </p>
+                            )}
                           </div>
-                          <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(141,208,71,0.15)", color: "#3d6b4f" }}>
-                            Connected
-                          </span>
+                          {intg.status === "error" ? (
+                            <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(220,62,13,0.12)", color: "var(--color-red-orange)" }}>
+                              Error
+                            </span>
+                          ) : intg.status === "disconnected" ? (
+                            <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "var(--color-cream)", color: "var(--color-grey)" }}>
+                              Disconnected
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(141,208,71,0.15)", color: "#3d6b4f" }}>
+                              Connected
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -910,11 +944,11 @@ export default function SettingsPage() {
                 <div className="space-y-3">
                   {[
                     {
-                      provider: "google_calendar",
-                      name: "Google Calendar",
-                      desc: "Sync project deadlines and reminders with your Google Calendar.",
-                      icon: "🗓", iconBg: "rgba(37,99,171,0.10)",
-                      href: "/api/auth/google-calendar",
+                      provider: "google",
+                      name: "Google",
+                      desc: "Auto-log emails and meetings against your contacts, and import your Google contacts. Covers Gmail, Calendar, and Contacts.",
+                      icon: "🔗", iconBg: "rgba(37,99,171,0.10)",
+                      href: "/api/auth/google",
                     },
                     {
                       provider: "instagram",
