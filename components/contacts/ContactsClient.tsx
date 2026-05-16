@@ -153,6 +153,15 @@ export default function ContactsClient({ initialContacts }: Props) {
     return Array.from(set).sort();
   }, [contacts]);
 
+  // Whether the active view (contacts vs leads) has ANY rows ignoring search
+  // / tag / stage filters. Drives the rich vs. terse empty-state branch
+  // below: "you have nothing yet" deserves the full EmptyState; "your filter
+  // matched nothing" just needs a one-liner.
+  const viewHasAnyRows = useMemo(() => {
+    const wantLead = view === "leads";
+    return contacts.some(c => c.is_lead === wantLead && (showArchived || !c.archived));
+  }, [contacts, view, showArchived]);
+
   // Stage counts for the Leads view — used by the stage filter pill row.
   const stageCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -281,48 +290,7 @@ export default function ContactsClient({ initialContacts }: Props) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <Topbar
-        title={
-          // Segmented Contacts/Leads toggle — the People module's primary
-          // navigation. Same data underneath, different lens on top.
-          <div
-            role="tablist"
-            aria-label="People view"
-            style={{
-              display: "inline-flex",
-              padding: 3,
-              background: "var(--color-surface-sunken)",
-              border: "0.5px solid var(--color-border)",
-              borderRadius: 8,
-            }}
-          >
-            {(["contacts", "leads"] as const).map((v) => {
-              const active = view === v;
-              const tint = v === "leads"
-                ? { fg: "#b8860b", ringBg: "var(--color-surface-raised)" }
-                : { fg: "#3d6b4f", ringBg: "var(--color-surface-raised)" };
-              return (
-                <button
-                  key={v}
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => { setView(v); setSelected(new Set()); setStageFilter(null); setTagFilter(null); }}
-                  style={{
-                    padding: "4px 12px", borderRadius: 6,
-                    fontSize: 12, fontWeight: 600,
-                    background: active ? tint.ringBg : "transparent",
-                    color: active ? tint.fg : "var(--color-text-tertiary)",
-                    border: "none", cursor: "pointer", fontFamily: "inherit",
-                    transition: "background 0.12s ease, color 0.12s ease",
-                    boxShadow: active ? "var(--shadow-sm)" : "none",
-                    textTransform: "capitalize",
-                  }}
-                >
-                  {v}
-                </button>
-              );
-            })}
-          </div>
-        }
+        title="People"
         actions={
           <>
             {/* 3-dot options menu — list-wide preferences + bulk actions. */}
@@ -374,6 +342,54 @@ export default function ContactsClient({ initialContacts }: Props) {
           </>
         }
       />
+
+      {/* ── Contacts / Leads view toggle (sits under the People title) ── */}
+      <div
+        style={{
+          display: "flex", alignItems: "center",
+          padding: "10px 24px", borderBottom: "0.5px solid var(--color-border)",
+          background: "var(--color-off-white)", flexShrink: 0,
+        }}
+      >
+        <div
+          role="tablist"
+          aria-label="People view"
+          style={{
+            display: "inline-flex",
+            padding: 3,
+            background: "var(--color-surface-sunken)",
+            border: "0.5px solid var(--color-border)",
+            borderRadius: 8,
+          }}
+        >
+          {(["contacts", "leads"] as const).map((v) => {
+            const active = view === v;
+            const tint = v === "leads"
+              ? { fg: "#b8860b", ringBg: "var(--color-surface-raised)" }
+              : { fg: "#3d6b4f", ringBg: "var(--color-surface-raised)" };
+            return (
+              <button
+                key={v}
+                role="tab"
+                aria-selected={active}
+                onClick={() => { setView(v); setSelected(new Set()); setStageFilter(null); setTagFilter(null); }}
+                style={{
+                  padding: "5px 16px", borderRadius: 6,
+                  fontSize: 12, fontWeight: 600,
+                  background: active ? tint.ringBg : "transparent",
+                  color: active ? tint.fg : "var(--color-text-tertiary)",
+                  border: "none", cursor: "pointer", fontFamily: "inherit",
+                  transition: "background 0.12s ease, color 0.12s ease",
+                  boxShadow: active ? "var(--shadow-sm)" : "none",
+                  textTransform: "capitalize",
+                }}
+              >
+                {v}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* ── Sort + filter bar (matches the Projects topbar visual language) ── */}
       <div
@@ -528,59 +544,50 @@ export default function ContactsClient({ initialContacts }: Props) {
           ))}
         </div>
 
-        {/* Empty state */}
+        {/* Empty state — keyed off the active view. When the current view
+            (contacts or leads) has no rows at all, show the rich EmptyState
+            with icon + copy + CTAs. When the view has rows but they're
+            filtered out by search / tag / stage, show a smaller "No matches"
+            message so we don't pretend the user has no data. */}
         {visible.length === 0 ? (
-          search || tagFilter ? (
-            <div className="flex flex-col items-center justify-center h-48 text-center">
-              <p className="text-[13px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>No matches</p>
-              <p className="text-[12px]" style={{ color: "var(--color-grey)" }}>Try adjusting your search or filters.</p>
-            </div>
-          ) : contacts.length === 0 ? (
-            isLeads ? (
-              <EmptyState
-                icon={<Users size={24} strokeWidth={1.5} color="#b8860b" />}
-                heading="Start your pipeline"
-                body="Leads are the people you're pursuing — galleries you want to show with, press you want covering you, collectors you're warming up. Add them with a stage so you can see at a glance who's at the top of the funnel and who's almost across the line."
-                action={{ label: "+ New lead", onClick: openNewContactModal }}
-                tips={[
-                  "New leads start in 'New'; move them along as you make contact.",
-                  "Once a lead replies and you start a real relationship, hit Convert in their panel — they move into Contacts with their history intact.",
-                  "The same pipeline shows up in the Outreach module as a kanban for drag-and-drop.",
-                ]}
-              />
-            ) : (
-              <EmptyState
-                icon={<Users size={24} strokeWidth={1.5} color="var(--color-sage)" />}
-                heading="Build your network"
-                body="Contacts holds your full relationship graph — galleries, collectors, press, clients, fabricators, and collaborators. Knowing who you know and how recently you've connected is one of the most undertracked assets in a creative practice."
-                action={{ label: "+ Add contact", onClick: openNewContactModal }}
-                secondaryAction={{
-                  label:   "Import contacts",
-                  onClick: () => setShowImport(true),
-                  icon:    <Upload size={11} strokeWidth={2} />,
-                }}
-                tips={[
-                  "Add galleries, collectors, press contacts, clients, and suppliers — anyone relevant to your practice.",
-                  "Tag contacts (e.g. 'gallery', 'press', 'client') to filter and segment your network quickly.",
-                  "Perennial tracks when you last connected with each person and surfaces who needs a follow-up.",
-                ]}
-              />
-            )
-          ) : (
+          viewHasAnyRows ? (
             <div className="flex flex-col items-center justify-center h-48 text-center px-6">
               <p className="text-[13px] font-medium" style={{ color: "var(--color-charcoal)" }}>
-                {isLeads ? "No leads in this stage" : "No contacts match this filter"}
+                {isLeads ? "No leads in this stage" : "No matches"}
               </p>
-              {isLeads && (
-                <button
-                  onClick={openNewContactModal}
-                  className="mt-3 text-[11px] font-semibold px-3 py-1 rounded-md text-white"
-                  style={{ background: "#b8860b", border: "none", cursor: "pointer", fontFamily: "inherit" }}
-                >
-                  + New lead
-                </button>
-              )}
+              <p className="text-[12px]" style={{ color: "var(--color-grey)" }}>
+                Try adjusting your search or filters.
+              </p>
             </div>
+          ) : isLeads ? (
+            <EmptyState
+              icon={<Users size={24} strokeWidth={1.5} color="#b8860b" />}
+              heading="Start your pipeline"
+              body="Leads are the people you're pursuing — galleries you want to show with, press you want covering you, collectors you're warming up. Add them with a stage so you can see at a glance who's at the top of the funnel and who's almost across the line."
+              action={{ label: "+ New lead", onClick: openNewContactModal }}
+              tips={[
+                "New leads start in 'New'; move them along as you make contact.",
+                "Once a lead replies and you start a real relationship, hit Convert in their panel — they move into Contacts with their history intact.",
+                "The same pipeline shows up in the Outreach module as a kanban for drag-and-drop.",
+              ]}
+            />
+          ) : (
+            <EmptyState
+              icon={<Users size={24} strokeWidth={1.5} color="var(--color-sage)" />}
+              heading="Build your network"
+              body="Contacts holds your full relationship graph — galleries, collectors, press, clients, fabricators, and collaborators. Knowing who you know and how recently you've connected is one of the most undertracked assets in a creative practice."
+              action={{ label: "+ Add contact", onClick: openNewContactModal }}
+              secondaryAction={{
+                label:   "Import contacts",
+                onClick: () => setShowImport(true),
+                icon:    <Upload size={11} strokeWidth={2} />,
+              }}
+              tips={[
+                "Add galleries, collectors, press contacts, clients, and suppliers — anyone relevant to your practice.",
+                "Tag contacts (e.g. 'gallery', 'press', 'client') to filter and segment your network quickly.",
+                "Perennial tracks when you last connected with each person and surfaces who needs a follow-up.",
+              ]}
+            />
           )
         ) : visible.map((c, idx) => {
           const isSelected = selected.has(c.id);
