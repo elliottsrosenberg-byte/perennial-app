@@ -53,8 +53,9 @@ export async function proxy(request: NextRequest) {
     "/signup",
     "/forgot-password",
     "/reset-password",
-    "/auth",   // OAuth + magic-link callback
-    "/share",  // public note-share pages
+    "/auth",    // OAuth + magic-link callback
+    "/share",   // public note-share pages
+    "/legal",   // privacy policy / terms — must be reachable to Google's OAuth verification crawler
   ];
   const isPublic = PUBLIC_PREFIXES.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`)

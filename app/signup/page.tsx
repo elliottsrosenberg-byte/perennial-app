@@ -301,6 +301,18 @@ export default function SignupPage() {
               Sign in
             </Link>
           </p>
+
+          {/* Legal links — required to be reachable from the app homepage for
+              Google OAuth verification of restricted scopes (Gmail, etc.). */}
+          <p style={{ marginTop: 24, textAlign: "center", fontSize: 11, color: "var(--color-text-tertiary)", letterSpacing: "0.02em" }}>
+            <Link href="/legal/privacy" style={{ color: "inherit", textDecoration: "none" }}>
+              Privacy
+            </Link>
+            <span style={{ margin: "0 8px", opacity: 0.5 }}>·</span>
+            <Link href="/legal/terms" style={{ color: "inherit", textDecoration: "none" }}>
+              Terms
+            </Link>
+          </p>
         </div>
       </div>
     </div>
