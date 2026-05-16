@@ -6,8 +6,9 @@ interface EmptyStateProps {
   icon: React.ReactNode;
   heading: string;
   body: string;
-  /** Primary CTA — rendered as a sage button */
-  action?: { label: string; onClick: () => void };
+  /** Primary CTA — sage by default; pass background/backgroundHover to
+   *  override (e.g. amber for the Leads view). */
+  action?: { label: string; onClick: () => void; background?: string; backgroundHover?: string };
   /** Optional secondary CTA — rendered as an outlined button alongside the
    *  primary action. Useful when there are two equal-weight on-ramps
    *  (e.g. "Add contact" + "Import contacts"). */
@@ -96,21 +97,25 @@ export default function EmptyState({
 
       {/* Actions row */}
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
-        {action && (
-          <button
-            onClick={action.onClick}
-            style={{
-              padding: "8px 18px", fontSize: 12, fontWeight: 500,
-              background: "var(--color-sage)", color: "white",
-              border: "none", borderRadius: 8, cursor: "pointer",
-              fontFamily: "inherit", transition: "background 0.12s ease",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-sage-hover)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-sage)")}
-          >
-            {action.label}
-          </button>
-        )}
+        {action && (() => {
+          const bg     = action.background      ?? "var(--color-sage)";
+          const bgHover = action.backgroundHover ?? "var(--color-sage-hover)";
+          return (
+            <button
+              onClick={action.onClick}
+              style={{
+                padding: "8px 18px", fontSize: 12, fontWeight: 500,
+                background: bg, color: "white",
+                border: "none", borderRadius: 8, cursor: "pointer",
+                fontFamily: "inherit", transition: "background 0.12s ease",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = bgHover)}
+              onMouseLeave={(e) => (e.currentTarget.style.background = bg)}
+            >
+              {action.label}
+            </button>
+          );
+        })()}
         {secondaryAction && (
           <button
             onClick={secondaryAction.onClick}

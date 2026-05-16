@@ -71,7 +71,7 @@ const STEPS: Step[] = [
     id:       "explore",
     anchor:   null,
     title:    "Take it in.",
-    body:     "This is the person's full file. Left rail holds their identity, status, tags, and any linked projects. The main pane defaults to Canvas — your private thinking about this relationship. Tabs along the top jump to Activity, Tasks, Notes, and Files. Take a look around. Hit Next when you want a guided pass.",
+    body:     "This is the person's full file. The left rail holds identity, status, tags, linked projects, and a Workspace switcher for Canvas, Activity, Tasks, Notes, and Files. The main pane defaults to Canvas — your private thinking about this relationship. Take a look around. Hit Next when you want a guided pass.",
     advance:  "next",
     freeRoam: true,
   },
@@ -83,17 +83,17 @@ const STEPS: Step[] = [
     advance: "next",
   },
   {
-    id:      "activity",
-    anchor:  '[data-tour-target="contacts.detail-activity"]',
-    title:   "Log every touch",
-    body:    "Calls, emails, meetings, studio visits — every logged activity updates the last-contact date. Skip a few weeks and they'll surface as needing a follow-up.",
-    advance: "next",
-  },
-  {
     id:      "workspace",
     anchor:  '[data-tour-target="contacts.detail-workspace"]',
     title:   "One file per person",
     body:    "Canvas is your private thinking — collector preferences, gallery dynamics, the awkward thing they said last summer. Tasks, Notes, Files sit alongside. Linked projects appear in the sidebar.",
+    advance: "next",
+  },
+  {
+    id:      "activity",
+    anchor:  '[data-tour-target="contacts.detail-activity"]',
+    title:   "Log every touch",
+    body:    "Calls, emails, meetings, studio visits — every logged activity updates the last-contact date. Skip a few weeks and they'll surface as needing a follow-up.",
     advance: "next",
   },
   {
@@ -111,27 +111,40 @@ interface Highlight { top: number; left: number; w: number; h: number; radius: n
 interface CalloutPos { top: number; left: number; }
 
 function ringRadiusFor(el: HTMLElement, pad: number): number {
+  const parentRect = el.getBoundingClientRect();
+
   function readRadius(node: HTMLElement): number {
     const parts = window.getComputedStyle(node)
       .borderRadius.split(/\s+/)
       .map((p) => parseFloat(p) || 0);
     return Math.max(0, ...parts);
   }
-  function findRadius(node: HTMLElement, depth: number): number {
+  function findRadius(node: HTMLElement, depth: number): { radius: number; rect: DOMRect } | null {
     const own = readRadius(node);
-    if (own > 0) return own;
-    if (depth <= 0) return 0;
+    if (own > 0) return { radius: own, rect: node.getBoundingClientRect() };
+    if (depth <= 0) return null;
     for (let i = 0; i < node.children.length; i++) {
       const child = node.children[i] as HTMLElement;
       const found = findRadius(child, depth - 1);
-      if (found > 0) return found;
+      if (found) return found;
     }
-    return 0;
+    return null;
   }
-  const raw = findRadius(el, 3);
-  const r = el.getBoundingClientRect();
-  const isPill = raw >= Math.min(r.width, r.height) / 2 - 0.5;
-  if (isPill) return Math.min(r.width, r.height) / 2 + pad;
+
+  const found = findRadius(el, 3);
+  if (!found) return pad;
+  const { radius: raw, rect: srcRect } = found;
+
+  // Only inherit a child's radius if that child roughly fills the parent —
+  // otherwise a small pill chip (e.g. a tag) inside a normal block would
+  // round the whole ring into a giant blob.
+  const sourceFillsParent =
+    srcRect.width  >= parentRect.width  * 0.8 &&
+    srcRect.height >= parentRect.height * 0.8;
+  if (!sourceFillsParent) return pad;
+
+  const isPill = raw >= Math.min(srcRect.width, srcRect.height) / 2 - 0.5;
+  if (isPill) return Math.min(parentRect.width, parentRect.height) / 2 + pad;
   return raw + pad;
 }
 

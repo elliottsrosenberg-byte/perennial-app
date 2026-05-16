@@ -564,7 +564,12 @@ export default function ContactsClient({ initialContacts }: Props) {
               icon={<Users size={24} strokeWidth={1.5} color="#b8860b" />}
               heading="Start your pipeline"
               body="Leads are the people you're pursuing — galleries you want to show with, press you want covering you, collectors you're warming up. Add them with a stage so you can see at a glance who's at the top of the funnel and who's almost across the line."
-              action={{ label: "+ New lead", onClick: openNewContactModal }}
+              action={{
+                label:           "+ New lead",
+                onClick:         openNewContactModal,
+                background:      accent.primary,
+                backgroundHover: accent.primaryHover,
+              }}
               tips={[
                 "New leads start in 'New'; move them along as you make contact.",
                 "Once a lead replies and you start a real relationship, hit Convert in their panel — they move into Contacts with their history intact.",

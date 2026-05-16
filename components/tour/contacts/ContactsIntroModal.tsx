@@ -22,22 +22,22 @@ interface Slide {
 
 const SLIDES: Slide[] = [
   {
-    title: "Your network, alive.",
+    title: "Your network",
     body:  "People holds everyone connected to your studio — galleries, collectors, press, clients, fabricators, plus the leads you're still chasing. Each row carries status, tags, and when you last connected, so the list reads like a living map of your practice.",
     Anim:  NetworkMaterialize,
   },
   {
-    title: "Surface who's gone cold.",
+    title: "Last contact",
     body:  "Every contact tracks last contact. The pill ages on its own — today is green, two weeks slips to neutral, a month turns amber, longer goes red. Stale relationships rise to the top so important ties don't quietly fade.",
     Anim:  StaleSurface,
   },
   {
-    title: "Two views, one record.",
+    title: "Contacts and Leads",
     body:  "Toggle between Contacts (relationships you've started) and Leads (the pipeline you're working) at the top. Same person record, different lens — convert a lead to a contact the moment the relationship begins, and their history follows. Tags slice your network in seconds; stages keep the pipeline honest.",
     Anim:  TagFilter,
   },
   {
-    title: "Every person, a relationship file.",
+    title: "The relationship file",
     body:  "Open a row and you get its full file — Canvas for your thinking, Activity for every logged touchpoint, Tasks, Notes, Files. Linked projects show in the sidebar. One scrim, everything you know about this person.",
     Anim:  RelationshipFile,
   },
@@ -141,6 +141,10 @@ export default function ContactsIntroModal() {
       <div
         style={{
           width: "100%", maxWidth: 480,
+          // Locked height: every slide renders in the same card so clicking
+          // through the walkthrough never shifts the modal. Copy region (flex
+          // 1) absorbs differences in body length between slides.
+          height: 560,
           maxHeight: "90vh",
           background: "var(--color-warm-white)",
           borderRadius: 16,
