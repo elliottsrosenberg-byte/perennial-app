@@ -390,10 +390,20 @@ export default function SettingsPage() {
   const currencySymbol = profile.currency === "EUR" ? "€" : profile.currency === "GBP" ? "£" : "$";
   const initials = (profile.display_name || email).slice(0, 2).toUpperCase() || "—";
 
-  // Connected integrations lookup
+  // Connected integrations lookup — used to hide the Available tile
+  // for providers the user has actively connected. Disconnected rows
+  // are ignored so the tile reappears in Available after the user
+  // hits the × Disconnect button.
   function getIntegration(provider: string) {
-    return integrations.find((i) => i.provider === provider) ?? null;
+    return integrations.find(
+      (i) => i.provider === provider && i.status !== "disconnected",
+    ) ?? null;
   }
+
+  // Hide disconnected rows from the Connected list. They stay in the
+  // DB so historical contact_activities keep their integration_id
+  // reference, but the user shouldn't see them under "Connected".
+  const visibleIntegrations = integrations.filter((i) => i.status !== "disconnected");
 
   if (loading) {
     return (
@@ -932,11 +942,11 @@ export default function SettingsPage() {
 
 
                 {/* Active integrations */}
-                {integrations.length > 0 && (
+                {visibleIntegrations.length > 0 && (
                   <>
                     <GroupTitle>Connected</GroupTitle>
                     <div className="space-y-3 mb-6">
-                      {integrations.map((intg) => (
+                      {visibleIntegrations.map((intg) => (
                         <div
                           key={intg.id}
                           className="flex items-center gap-4 p-4 rounded-xl"
