@@ -11,7 +11,7 @@ import AshMark from "@/components/ui/AshMark";
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 const ASH_GRADIENT = "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)";
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 9;
 
 const PRACTICE_OPTIONS = [
   "Furniture", "Objects & lighting", "Ceramics & glass", "Textiles",
@@ -137,7 +137,7 @@ const GOAL_OPTIONS: { id: string; label: string; Icon: LucideIcon | null }[] = [
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
 interface StagedFile {
   id:          string;
@@ -316,7 +316,22 @@ function TextInput({
 
 export default function OnboardingClient({ userId }: { userId: string }) {
   const router = useRouter();
-  const [step, setStep]     = useState<Step>(1);
+  // Step state mirrors a ?step= query param so users coming back from an
+  // OAuth round-trip (Google / Microsoft → /onboarding) land back on the
+  // integrations step instead of step 1.
+  const [step, _setStep] = useState<Step>(() => {
+    if (typeof window === "undefined") return 1;
+    const n = parseInt(new URLSearchParams(window.location.search).get("step") ?? "1", 10);
+    return (n >= 1 && n <= TOTAL_STEPS ? n : 1) as Step;
+  });
+  function setStep(next: Step) {
+    _setStep(next);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("step", String(next));
+      window.history.replaceState({}, "", url.toString());
+    }
+  }
   const [saving, setSaving] = useState(false);
 
   const [data, setData] = useState<OnboardingData>({
@@ -1000,6 +1015,34 @@ export default function OnboardingClient({ userId }: { userId: string }) {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 8, borderTop: "0.5px solid var(--color-border)", marginTop: 16 }}>
                 <button onClick={() => setStep(7)} style={backLinkStyle}>← Back</button>
                 <button
+                  onClick={() => setStep(9)}
+                  style={{
+                    padding: "10px 24px", fontSize: 13, fontWeight: 600,
+                    background: "var(--color-sage)", color: "white",
+                    border: "none", borderRadius: 10, cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = "0.88"}
+                  onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 9 && (
+            <div style={panelStyle}>
+              <h2 style={titleStyle}>Auto-fill your activity log</h2>
+              <p style={subtitleStyle}>
+                Connect email and calendar to let Perennial log emails and meetings against your contacts automatically. Skippable — you can connect any time from Settings.
+              </p>
+
+              <IntegrationConnectStep />
+
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 8, borderTop: "0.5px solid var(--color-border)", marginTop: 16 }}>
+                <button onClick={() => setStep(8)} style={backLinkStyle}>← Back</button>
+                <button
                   onClick={handleFinish}
                   disabled={saving}
                   style={{
@@ -1021,6 +1064,86 @@ export default function OnboardingClient({ userId }: { userId: string }) {
 
         </div>
       </main>
+    </div>
+  );
+}
+
+// ─── Integration connect step ────────────────────────────────────────────────
+
+function IntegrationConnectStep() {
+  // Loaded from /api/integrations/connect-status so we can show which
+  // providers are already connected (lets the user tell at a glance
+  // whether they need to do anything). The endpoint is cheap — just
+  // reads the integrations table for the calling user.
+  const [connected, setConnected] = useState<Set<string>>(new Set());
+  const [loading,   setLoading]   = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res  = await fetch("/api/integrations/connect-status");
+        if (!res.ok) return;
+        const json = await res.json() as { providers?: string[] };
+        if (json.providers) setConnected(new Set(json.providers));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  // OAuth redirects to ?next=/onboarding?step=9 so the user lands back
+  // on this exact step instead of step 1. The step state hook reads
+  // ?step= on mount.
+  const next = "/onboarding?step=9";
+
+  const tiles = [
+    { id: "google",    name: "Google",         desc: "Gmail + Calendar + Contacts + Drive",  href: `/api/auth/google?next=${encodeURIComponent(next)}` },
+    { id: "microsoft", name: "Microsoft 365",  desc: "Outlook Mail + Calendar + Contacts",   href: `/api/auth/microsoft?next=${encodeURIComponent(next)}` },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8, marginBottom: 16 }}>
+      {tiles.map((t) => {
+        const isConnected = connected.has(t.id);
+        return (
+          <div
+            key={t.id}
+            style={{
+              display: "flex", alignItems: "center", gap: 12,
+              padding: "14px 16px",
+              background: isConnected ? "rgba(141,208,71,0.10)" : "var(--color-off-white)",
+              border:     isConnected ? "0.5px solid rgba(141,208,71,0.32)" : "0.5px solid var(--color-border)",
+              borderRadius: 12,
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-charcoal)" }}>{t.name}</p>
+              <p style={{ fontSize: 11, color: "var(--color-grey)", marginTop: 2 }}>{t.desc}</p>
+            </div>
+            {isConnected ? (
+              <span style={{
+                fontSize: 11, fontWeight: 600, color: "#3d6b4f",
+                background: "rgba(141,208,71,0.18)",
+                padding: "4px 10px", borderRadius: 99,
+              }}>
+                Connected ✓
+              </span>
+            ) : (
+              <a
+                href={t.href}
+                style={{
+                  padding: "7px 14px", fontSize: 12, fontWeight: 500,
+                  background: "var(--color-charcoal)", color: "var(--color-warm-white)",
+                  border: "none", borderRadius: 8, textDecoration: "none",
+                }}
+              >
+                Connect
+              </a>
+            )}
+          </div>
+        );
+      })}
+      {loading && <p style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>Checking your connections…</p>}
     </div>
   );
 }

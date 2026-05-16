@@ -110,6 +110,7 @@ async function handle(req: Request, url: URL, origin: string) {
     gmail:    has("https://www.googleapis.com/auth/gmail.readonly"),
     calendar: has("https://www.googleapis.com/auth/calendar.readonly"),
     contacts: has("https://www.googleapis.com/auth/contacts.readonly"),
+    drive:    has("https://www.googleapis.com/auth/drive.metadata.readonly"),
     // App-level: opt-in to full-body storage is OFF by default, user
     // turns it on from Settings after connecting.
     store_email_bodies: false,
