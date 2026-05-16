@@ -965,7 +965,10 @@ export default function SettingsPage() {
                               Teller) sync via their own buttons inside their
                               respective modules. */}
                           {(intg.provider === "google" || intg.provider === "microsoft") && intg.status !== "disconnected" && (
-                            <SyncNowButton provider={intg.provider} onDone={reloadIntegrations} />
+                            <>
+                              <SyncNowButton          provider={intg.provider} onDone={reloadIntegrations} />
+                              <ImportContactsButton   provider={intg.provider} />
+                            </>
                           )}
                           {intg.status === "error" ? (
                             <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(220,62,13,0.12)", color: "var(--color-red-orange)" }}>
@@ -1582,5 +1585,98 @@ function DisconnectButton({ integrationId, providerLabel, onDone }: {
     >
       ✕
     </button>
+  );
+}
+
+// ─── ImportContactsButton ─────────────────────────────────────────────────────
+
+/** One-shot batch import from the provider's address book into Perennial
+ *  People. Confirms inline before firing, then surfaces the result count. */
+function ImportContactsButton({ provider }: { provider: "google" | "microsoft" }) {
+  const [busy,       setBusy]       = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [message,    setMessage]    = useState<string | null>(null);
+
+  async function handleConfirm() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const endpoint = provider === "google"
+        ? "/api/integrations/google/contacts/import"
+        : "/api/integrations/microsoft/contacts/import";
+      const res = await fetch(endpoint, { method: "POST" });
+      type R = { ok: boolean; result?: { fetched: number; imported: number; skipped: number }; error?: string };
+      const json = await res.json() as { results?: R[] };
+      if (!res.ok || !json.results) {
+        setMessage("Import failed");
+      } else {
+        const totals = json.results.reduce(
+          (sum, r) => r.ok && r.result
+            ? { imported: sum.imported + r.result.imported, fetched: sum.fetched + r.result.fetched, err: sum.err }
+            : { imported: sum.imported, fetched: sum.fetched, err: r.error ?? sum.err },
+          { imported: 0, fetched: 0, err: null as string | null },
+        );
+        if (totals.err) {
+          setMessage(totals.err.slice(0, 80));
+        } else if (totals.imported === 0 && totals.fetched > 0) {
+          setMessage(`No new contacts — all ${totals.fetched} already in People`);
+        } else {
+          setMessage(`Imported ${totals.imported} from ${totals.fetched}`);
+        }
+      }
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setBusy(false);
+      setConfirming(false);
+      setTimeout(() => setMessage(null), 8000);
+    }
+  }
+
+  if (confirming) {
+    return (
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span style={{ fontSize: 10, color: "var(--color-grey)" }}>
+          Import all into People?
+        </span>
+        <button
+          type="button"
+          onClick={() => setConfirming(false)}
+          disabled={busy}
+          style={{ fontSize: 10, padding: "3px 8px", borderRadius: 5, background: "transparent", border: "0.5px solid var(--color-border)", color: "var(--color-text-secondary)", cursor: busy ? "default" : "pointer", fontFamily: "inherit" }}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleConfirm}
+          disabled={busy}
+          style={{ fontSize: 10, padding: "3px 8px", borderRadius: 5, background: "var(--color-sage)", border: "none", color: "white", cursor: busy ? "default" : "pointer", fontFamily: "inherit" }}
+        >
+          {busy ? "…" : "Import"}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 shrink-0">
+      {message && (
+        <span style={{ fontSize: 10, color: "var(--color-text-secondary)" }}>{message}</span>
+      )}
+      <button
+        type="button"
+        onClick={() => setConfirming(true)}
+        className="shrink-0"
+        style={{
+          padding: "4px 9px", fontSize: 10, fontWeight: 500,
+          background: "var(--color-warm-white)", color: "var(--color-charcoal)",
+          border: "0.5px solid var(--color-border)", borderRadius: 6,
+          cursor: "pointer", fontFamily: "inherit",
+        }}
+      >
+        Import contacts
+      </button>
+    </div>
   );
 }
