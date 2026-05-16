@@ -1070,11 +1070,55 @@ export default function OnboardingClient({ userId }: { userId: string }) {
 
 // ─── Integration connect step ────────────────────────────────────────────────
 
+// Organized by module so the user can see *why* each connection
+// matters. OAuth providers redirect straight to the connect URL with
+// ?next=/onboarding?step=9 so they come back here. API-key /
+// app-password providers redirect to Settings → Integrations with
+// ?openModal=X so the modal opens automatically — keeping the
+// connect-form UI in one place rather than duplicating it here.
+const CONNECT_NEXT = "/onboarding?step=9";
+
+interface ConnectTile {
+  id:    string;     // matches integrations.provider
+  name:  string;
+  desc:  string;
+  href:  string;
+}
+interface ConnectCategory {
+  title: string;
+  hint:  string;
+  tiles: ConnectTile[];
+}
+
+const ONBOARDING_CATEGORIES: ConnectCategory[] = [
+  {
+    title: "Communication",
+    hint:  "Auto-log emails and meetings against your People contacts.",
+    tiles: [
+      { id: "google",    name: "Google",        desc: "Gmail + Calendar + Contacts + Drive",  href: `/api/auth/google?next=${encodeURIComponent(CONNECT_NEXT)}` },
+      { id: "microsoft", name: "Microsoft 365", desc: "Outlook Mail + Calendar + Contacts",   href: `/api/auth/microsoft?next=${encodeURIComponent(CONNECT_NEXT)}` },
+    ],
+  },
+  {
+    title: "Presence",
+    hint:  "Track newsletter and social stats inside the Presence module.",
+    tiles: [
+      { id: "mailchimp",        name: "Mailchimp",        desc: "Newsletter list size + recent campaigns", href: "/settings?section=integrations&openModal=mailchimp" },
+      { id: "beehiiv",          name: "Beehiiv",          desc: "Subscriber count + recent posts",         href: "/settings?section=integrations&openModal=beehiiv" },
+      { id: "instagram",        name: "Instagram",        desc: "Follower growth + engagement",            href: `/api/auth/instagram?next=${encodeURIComponent(CONNECT_NEXT)}` },
+      { id: "google_analytics", name: "Google Analytics", desc: "Website traffic + top pages",             href: `/api/auth/google-analytics?next=${encodeURIComponent(CONNECT_NEXT)}` },
+    ],
+  },
+  {
+    title: "Finance",
+    hint:  "See live transactions and cash flow in the Finance module.",
+    tiles: [
+      { id: "teller", name: "Bank account", desc: "Connect via Teller (Plaid-style flow)", href: "/finance" },
+    ],
+  },
+];
+
 function IntegrationConnectStep() {
-  // Loaded from /api/integrations/connect-status so we can show which
-  // providers are already connected (lets the user tell at a glance
-  // whether they need to do anything). The endpoint is cheap — just
-  // reads the integrations table for the calling user.
   const [connected, setConnected] = useState<Set<string>>(new Set());
   const [loading,   setLoading]   = useState(true);
 
@@ -1091,58 +1135,58 @@ function IntegrationConnectStep() {
     })();
   }, []);
 
-  // OAuth redirects to ?next=/onboarding?step=9 so the user lands back
-  // on this exact step instead of step 1. The step state hook reads
-  // ?step= on mount.
-  const next = "/onboarding?step=9";
-
-  const tiles = [
-    { id: "google",    name: "Google",         desc: "Gmail + Calendar + Contacts + Drive",  href: `/api/auth/google?next=${encodeURIComponent(next)}` },
-    { id: "microsoft", name: "Microsoft 365",  desc: "Outlook Mail + Calendar + Contacts",   href: `/api/auth/microsoft?next=${encodeURIComponent(next)}` },
-  ];
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8, marginBottom: 16 }}>
-      {tiles.map((t) => {
-        const isConnected = connected.has(t.id);
-        return (
-          <div
-            key={t.id}
-            style={{
-              display: "flex", alignItems: "center", gap: 12,
-              padding: "14px 16px",
-              background: isConnected ? "rgba(141,208,71,0.10)" : "var(--color-off-white)",
-              border:     isConnected ? "0.5px solid rgba(141,208,71,0.32)" : "0.5px solid var(--color-border)",
-              borderRadius: 12,
-            }}
-          >
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-charcoal)" }}>{t.name}</p>
-              <p style={{ fontSize: 11, color: "var(--color-grey)", marginTop: 2 }}>{t.desc}</p>
-            </div>
-            {isConnected ? (
-              <span style={{
-                fontSize: 11, fontWeight: 600, color: "#3d6b4f",
-                background: "rgba(141,208,71,0.18)",
-                padding: "4px 10px", borderRadius: 99,
-              }}>
-                Connected ✓
-              </span>
-            ) : (
-              <a
-                href={t.href}
-                style={{
-                  padding: "7px 14px", fontSize: 12, fontWeight: 500,
-                  background: "var(--color-charcoal)", color: "var(--color-warm-white)",
-                  border: "none", borderRadius: 8, textDecoration: "none",
-                }}
-              >
-                Connect
-              </a>
-            )}
+    <div style={{ display: "flex", flexDirection: "column", gap: 22, marginTop: 8, marginBottom: 16 }}>
+      {ONBOARDING_CATEGORIES.map((cat) => (
+        <div key={cat.title}>
+          <div style={{ marginBottom: 8 }}>
+            <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)" }}>
+              {cat.title}
+            </p>
+            <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 2 }}>
+              {cat.hint}
+            </p>
           </div>
-        );
-      })}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {cat.tiles.map((t) => {
+              const isConnected = connected.has(t.id);
+              return (
+                <div
+                  key={t.id}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: "11px 14px",
+                    background: isConnected ? "rgba(141,208,71,0.10)" : "var(--color-off-white)",
+                    border:     isConnected ? "0.5px solid rgba(141,208,71,0.32)" : "0.5px solid var(--color-border)",
+                    borderRadius: 10,
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 12.5, fontWeight: 600, color: "var(--color-charcoal)" }}>{t.name}</p>
+                    <p style={{ fontSize: 11, color: "var(--color-grey)", marginTop: 1 }}>{t.desc}</p>
+                  </div>
+                  {isConnected ? (
+                    <span style={{ fontSize: 10, fontWeight: 600, color: "#3d6b4f", background: "rgba(141,208,71,0.18)", padding: "3px 8px", borderRadius: 99 }}>
+                      Connected ✓
+                    </span>
+                  ) : (
+                    <a
+                      href={t.href}
+                      style={{
+                        padding: "6px 12px", fontSize: 11, fontWeight: 500,
+                        background: "var(--color-charcoal)", color: "var(--color-warm-white)",
+                        border: "none", borderRadius: 7, textDecoration: "none",
+                      }}
+                    >
+                      Connect
+                    </a>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
       {loading && <p style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>Checking your connections…</p>}
     </div>
   );

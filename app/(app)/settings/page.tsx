@@ -237,6 +237,21 @@ export default function SettingsPage() {
   const [integrations, setIntegrations] = useState<IntegrationRow[]>([]);
   const [activeModal,  setActiveModal]  = useState<string | null>(null);
 
+  // Open a modal automatically when redirected with ?openModal=X (used
+  // by the onboarding step's Mailchimp / Beehiiv tiles so the user
+  // lands on Settings with the right form already open instead of
+  // hunting through the list).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const modal = new URLSearchParams(window.location.search).get("openModal");
+    if (modal) {
+      setActiveModal(modal);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("openModal");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
+
   // Refetch just the integrations list — used after the "Sync now" button
   // completes so the user sees the updated last_synced_at and status.
   async function reloadIntegrations() {
@@ -965,6 +980,11 @@ export default function SettingsPage() {
                               Connected
                             </span>
                           )}
+                          <DisconnectButton
+                            integrationId={intg.id}
+                            providerLabel={PROVIDER_DISPLAY[intg.provider] ?? intg.provider}
+                            onDone={reloadIntegrations}
+                          />
                         </div>
                       ))}
                     </div>
@@ -1476,5 +1496,91 @@ function OAuthResultToast() {
         ✕
       </button>
     </div>
+  );
+}
+
+// ─── DisconnectButton ─────────────────────────────────────────────────────────
+
+function DisconnectButton({ integrationId, providerLabel, onDone }: {
+  integrationId: string;
+  providerLabel: string;
+  onDone: () => void | Promise<void>;
+}) {
+  const [busy,      setBusy]      = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  async function handleConfirm() {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/integrations/${integrationId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        alert(`Couldn't disconnect: ${j.error ?? res.statusText}`);
+        setBusy(false);
+        setConfirming(false);
+        return;
+      }
+      await onDone();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Couldn't disconnect");
+      setBusy(false);
+      setConfirming(false);
+    }
+  }
+
+  if (confirming) {
+    return (
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span style={{ fontSize: 10, color: "var(--color-grey)" }}>
+          Disconnect {providerLabel}?
+        </span>
+        <button
+          type="button"
+          onClick={() => setConfirming(false)}
+          disabled={busy}
+          style={{
+            fontSize: 10, padding: "3px 8px", borderRadius: 5,
+            background: "transparent",
+            border: "0.5px solid var(--color-border)",
+            color: "var(--color-text-secondary)",
+            cursor: busy ? "default" : "pointer", fontFamily: "inherit",
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleConfirm}
+          disabled={busy}
+          style={{
+            fontSize: 10, padding: "3px 8px", borderRadius: 5,
+            background: "var(--color-red-orange)",
+            border: "none", color: "white",
+            cursor: busy ? "default" : "pointer", fontFamily: "inherit",
+          }}
+        >
+          {busy ? "…" : "Disconnect"}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setConfirming(true)}
+      aria-label={`Disconnect ${providerLabel}`}
+      title="Disconnect"
+      className="shrink-0"
+      style={{
+        background: "transparent", border: "none", padding: 4,
+        color: "var(--color-text-tertiary)", cursor: "pointer",
+        fontSize: 14, lineHeight: 1,
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.color = "var(--color-red-orange)")}
+      onMouseLeave={(e) => (e.currentTarget.style.color = "var(--color-text-tertiary)")}
+    >
+      ✕
+    </button>
   );
 }
