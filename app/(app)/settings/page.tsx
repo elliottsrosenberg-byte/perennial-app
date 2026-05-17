@@ -1104,9 +1104,9 @@ export default function SettingsPage() {
                     {
                       provider: "stripe",
                       name: "Stripe",
-                      desc: "See your Stripe balance and recent payouts in Finance. Read-only for now — accepting payments lands next.",
+                      desc: "See your Stripe balance, recent charges, and payouts in Finance. Paste a restricted API key — no Stripe platform setup required.",
                       iconBg: "rgba(99,91,255,0.10)",
-                      href: "/api/auth/stripe",
+                      modal: "stripe",
                     },
                   ].map(({ provider, name, desc, iconBg, href, note, soon, modal }: { provider: string; name: string; desc: string; iconBg: string; href?: string | null; note?: string; soon?: boolean; modal?: string }) => {
                     const connected = !!getIntegration(provider);
@@ -1309,6 +1309,15 @@ const CONNECT_FORMS: Record<string, ConnectFormConfig> = {
       { key: "app_password", label: "App-specific password", placeholder: "xxxx-xxxx-xxxx-xxxx", type: "password", required: true },
     ],
     helpUrl: { label: "Generate one at appleid.apple.com", href: "https://account.apple.com/account/manage/section/security" },
+  },
+  stripe: {
+    title:       "Connect Stripe",
+    description: "Paste a Stripe Restricted API key. We recommend Restricted (rk_…) over Secret (sk_…) — you get to choose exactly which permissions Perennial has. Read-only for v1 (balance, charges, payouts).",
+    endpoint:    "/api/integrations/stripe/connect",
+    fields: [
+      { key: "api_key", label: "Stripe API key", placeholder: "rk_live_… or rk_test_…", type: "password", required: true },
+    ],
+    helpUrl: { label: "Create a restricted key at dashboard.stripe.com/apikeys", href: "https://dashboard.stripe.com/apikeys/create" },
   },
 };
 
