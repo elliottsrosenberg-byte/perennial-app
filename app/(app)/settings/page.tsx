@@ -1097,17 +1097,16 @@ export default function SettingsPage() {
                     {
                       provider: "teller",
                       name: "Bank account",
-                      desc: "Connect your bank to see transactions and cash flow in Finance.",
+                      desc: "Connect your bank to see transactions and cash flow in Finance. Powered by Teller.",
                       iconBg: "rgba(37,99,171,0.08)",
-                      href: null,
-                      note: "Connect from Finance → Banking",
+                      href: "/finance",
                     },
                     {
                       provider: "stripe",
                       name: "Stripe",
-                      desc: "Accept payments and mark invoices paid automatically.",
+                      desc: "See your Stripe balance and recent payouts in Finance. Read-only for now — accepting payments lands next.",
                       iconBg: "rgba(99,91,255,0.10)",
-                      soon: true,
+                      href: "/api/auth/stripe",
                     },
                   ].map(({ provider, name, desc, iconBg, href, note, soon, modal }: { provider: string; name: string; desc: string; iconBg: string; href?: string | null; note?: string; soon?: boolean; modal?: string }) => {
                     const connected = !!getIntegration(provider);
@@ -2214,6 +2213,12 @@ function AddWebsiteModal({ onClose, onCreated }: {
           <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--color-charcoal)" }}>Add website</h3>
           <p style={{ fontSize: 11, color: "var(--color-grey)", marginTop: 4 }}>
             Register a site, then paste the tracking snippet into your site&apos;s HTML.
+          </p>
+          <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 6, lineHeight: 1.5 }}>
+            <strong style={{ color: "var(--color-charcoal)" }}>Already use Google Analytics?</strong> We recommend connecting that
+            instead (Settings → Integrations → Google Analytics). It&apos;s
+            more comprehensive. This is a privacy-first lite alternative
+            for users who&apos;d rather avoid Google.
           </p>
         </div>
         <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
