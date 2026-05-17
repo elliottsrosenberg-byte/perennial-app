@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Topbar from "@/components/layout/Topbar";
+import ProviderIcon from "@/components/integrations/ProviderIcon";
 import { createClient } from "@/lib/supabase/client";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -50,7 +51,9 @@ const PROVIDER_DISPLAY: Record<string, string> = {
   google_analytics: "Google Analytics",
   microsoft:        "Microsoft 365",
   apple_icloud:     "Apple iCloud",
-  instagram:        "Instagram",
+  meta:             "Meta Business Suite",
+  instagram:        "Instagram (legacy)",
+  tiktok:           "TikTok",
   plausible:        "Plausible",
   mailchimp:        "Mailchimp",
   beehiiv:          "Beehiiv",
@@ -952,6 +955,9 @@ export default function SettingsPage() {
                           className="flex items-center gap-4 p-4 rounded-xl"
                           style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}
                         >
+                          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: "var(--color-cream)" }}>
+                            <ProviderIcon provider={intg.provider} size={18} />
+                          </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-[13px] font-medium" style={{ color: "var(--color-charcoal)" }}>
                               {PROVIDER_DISPLAY[intg.provider] ?? intg.provider.replace(/_/g, " ")}
@@ -1013,50 +1019,57 @@ export default function SettingsPage() {
                     {
                       provider: "google",
                       name: "Google",
-                      desc: "Auto-log emails and meetings against your contacts, and import your Google contacts. Covers Gmail, Calendar, and Contacts.",
-                      icon: "🔗", iconBg: "rgba(37,99,171,0.10)",
+                      desc: "Auto-log emails and meetings against your contacts, and import your Google contacts. Covers Gmail, Calendar, Contacts, and Drive.",
+                      iconBg: "rgba(66,133,244,0.08)",
                       href: "/api/auth/google",
                     },
                     {
                       provider: "microsoft",
                       name: "Microsoft 365",
                       desc: "Auto-log Outlook emails and meetings against your contacts, and import your Outlook contacts. Works with personal and work accounts.",
-                      icon: "📧", iconBg: "rgba(0,120,212,0.10)",
+                      iconBg: "rgba(0,164,239,0.08)",
                       href: "/api/auth/microsoft",
                     },
                     {
                       provider: "mailchimp",
                       name: "Mailchimp",
                       desc: "Show your newsletter list size and recent campaign performance in Presence.",
-                      icon: "🐵", iconBg: "rgba(255,224,0,0.16)",
+                      iconBg: "rgba(255,224,27,0.18)",
                       modal: "mailchimp",
                     },
                     {
                       provider: "beehiiv",
                       name: "Beehiiv",
                       desc: "Show your publication's subscriber count and recent post stats in Presence.",
-                      icon: "🐝", iconBg: "rgba(255,200,40,0.16)",
+                      iconBg: "rgba(248,231,60,0.20)",
                       modal: "beehiiv",
                     },
                     {
-                      provider: "instagram",
-                      name: "Instagram",
-                      desc: "View follower growth and engagement stats in Presence.",
-                      icon: "📸", iconBg: "rgba(131,58,180,0.10)",
-                      href: "/api/auth/instagram",
+                      provider: "meta",
+                      name: "Meta Business Suite",
+                      desc: "Pull follower growth, post engagement, and audience insights from your Facebook Pages and Instagram Business accounts.",
+                      iconBg: "rgba(8,102,255,0.10)",
+                      href: "/api/auth/meta",
+                    },
+                    {
+                      provider: "tiktok",
+                      name: "TikTok",
+                      desc: "Show your video performance and follower stats in Presence.",
+                      iconBg: "rgba(0,0,0,0.06)",
+                      href: "/api/auth/tiktok",
                     },
                     {
                       provider: "google_analytics",
                       name: "Google Analytics",
                       desc: "Track website traffic and top pages in the Presence module.",
-                      icon: "📈", iconBg: "rgba(234,88,12,0.10)",
+                      iconBg: "rgba(227,116,0,0.10)",
                       href: "/api/auth/google-analytics",
                     },
                     {
                       provider: "teller",
                       name: "Bank account",
                       desc: "Connect your bank to see transactions and cash flow in Finance.",
-                      icon: "🏦", iconBg: "rgba(37,99,171,0.08)",
+                      iconBg: "rgba(37,99,171,0.08)",
                       href: null,
                       note: "Connect from Finance → Banking",
                     },
@@ -1064,10 +1077,10 @@ export default function SettingsPage() {
                       provider: "stripe",
                       name: "Stripe",
                       desc: "Accept payments and mark invoices paid automatically.",
-                      icon: "💳", iconBg: "rgba(109,79,163,0.10)",
+                      iconBg: "rgba(99,91,255,0.10)",
                       soon: true,
                     },
-                  ].map(({ provider, name, desc, icon, iconBg, href, note, soon, modal }: { provider: string; name: string; desc: string; icon: string; iconBg: string; href?: string | null; note?: string; soon?: boolean; modal?: string }) => {
+                  ].map(({ provider, name, desc, iconBg, href, note, soon, modal }: { provider: string; name: string; desc: string; iconBg: string; href?: string | null; note?: string; soon?: boolean; modal?: string }) => {
                     const connected = !!getIntegration(provider);
                     if (connected) return null;
                     return (
@@ -1076,8 +1089,8 @@ export default function SettingsPage() {
                         className="flex items-center gap-4 p-4 rounded-xl"
                         style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}
                       >
-                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-[20px] shrink-0" style={{ background: iconBg }}>
-                          {icon}
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: iconBg }}>
+                          <ProviderIcon provider={provider} size={20} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-[13px] font-medium" style={{ color: "var(--color-charcoal)" }}>{name}</p>
@@ -1432,6 +1445,8 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
 const PROVIDER_FRIENDLY: Record<string, string> = {
   google:           "Google",
   microsoft:        "Microsoft 365",
+  meta:             "Meta Business Suite",
+  tiktok:           "TikTok",
   google_analytics: "Google Analytics",
   google_calendar:  "Google Calendar",
   instagram:        "Instagram",
