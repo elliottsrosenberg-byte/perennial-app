@@ -51,8 +51,8 @@ const PROVIDER_DISPLAY: Record<string, string> = {
   google_analytics: "Google Analytics",
   microsoft:        "Microsoft 365",
   apple_icloud:     "Apple iCloud",
-  meta:             "Meta Business Suite",
-  instagram:        "Instagram (legacy)",
+  instagram:        "Instagram",
+  meta:             "Meta",
   tiktok:           "TikTok",
   plausible:        "Plausible",
   mailchimp:        "Mailchimp",
@@ -76,6 +76,19 @@ const PRACTICE_OPTIONS = [
   "Furniture", "Objects & lighting", "Ceramics & glass", "Textiles",
   "Jewelry", "Painting", "Sculpture", "Printmaking", "Client-based work",
 ];
+
+/** Compact relative-time formatter for "Synced X" lines on integration
+ *  rows. Falls back to a short M/D format for older entries so the row
+ *  doesn't wrap into 3 lines on narrow viewports. */
+function formatRelative(iso: string): string {
+  const t = new Date(iso).getTime();
+  const diff = Date.now() - t;
+  if (diff < 60_000)          return "just now";
+  if (diff < 3_600_000)       return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 24 * 3_600_000)  return `${Math.floor(diff / 3_600_000)}h ago`;
+  if (diff < 7 * 24 * 3_600_000) return `${Math.floor(diff / (24 * 3_600_000))}d ago`;
+  return new Date(iso).toLocaleDateString("en-US", { month: "numeric", day: "numeric" });
+}
 
 // ─── Sub-components ─────────────────────────────────────────────────────────────
 
@@ -229,7 +242,15 @@ function SaveBar({ saving, saved, onSave }: { saving: boolean; saved: boolean; o
 // ─── Main ───────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const [active,  setActive]  = useState<Section>("account");
+  // Initial active tab honors ?section=... so OAuth callbacks (which
+  // redirect to /settings?section=integrations) land the user on the
+  // right tab instead of Account.
+  const [active,  setActive]  = useState<Section>(() => {
+    if (typeof window === "undefined") return "account";
+    const s = new URLSearchParams(window.location.search).get("section");
+    const allowed: Section[] = ["account", "studio", "preferences", "notifications", "billing", "integrations"];
+    return (allowed as string[]).includes(s ?? "") ? (s as Section) : "account";
+  });
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
   const [saved,   setSaved]   = useState(false);
@@ -959,36 +980,37 @@ export default function SettingsPage() {
                             <ProviderIcon provider={intg.provider} size={18} />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-[13px] font-medium" style={{ color: "var(--color-charcoal)" }}>
+                            <p className="text-[13px] font-medium truncate" style={{ color: "var(--color-charcoal)" }}>
                               {PROVIDER_DISPLAY[intg.provider] ?? intg.provider.replace(/_/g, " ")}
                             </p>
                             {intg.account_name && (
-                              <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>{intg.account_name}</p>
+                              <p className="text-[11px] truncate" style={{ color: "var(--color-grey)" }}>{intg.account_name}</p>
                             )}
                             {intg.last_synced_at && (
-                              <p className="text-[10px] mt-0.5" style={{ color: "var(--color-text-tertiary)" }}>
-                                Last sync {new Date(intg.last_synced_at).toLocaleString()}
+                              <p className="text-[10px] mt-0.5 truncate" style={{ color: "var(--color-text-tertiary)" }}>
+                                Synced {formatRelative(intg.last_synced_at)}
                               </p>
                             )}
                             {intg.status === "error" && intg.last_error && (
-                              <p className="text-[10px] mt-1" style={{ color: "var(--color-red-orange)" }} title={intg.last_error}>
-                                Sync error — see Settings → Integrations
+                              <p className="text-[10px] mt-1 truncate" style={{ color: "var(--color-red-orange)" }} title={intg.last_error}>
+                                Sync error — see logs
                               </p>
                             )}
                           </div>
-                          {/* Sync now — for providers that support it. Currently
-                              just google; the others (GA / Calendar / Instagram /
-                              Teller) sync via their own buttons inside their
-                              respective modules. */}
-                          {(intg.provider === "google" || intg.provider === "microsoft") && intg.status !== "disconnected" && (
-                            <>
-                              <SyncNowButton          provider={intg.provider} onDone={reloadIntegrations} />
-                              <ImportContactsButton   provider={intg.provider} />
-                              {intg.provider === "google" && (
-                                <BrowseDriveButton />
-                              )}
-                            </>
-                          )}
+                          {/* Action group — shrink-0 wrapper keeps all the
+                              buttons together on the right and prevents the
+                              text column from wrapping the date awkwardly
+                              when the row gets tight. */}
+                          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                            {(intg.provider === "google" || intg.provider === "microsoft") && intg.status !== "disconnected" && (
+                              <>
+                                <SyncNowButton          provider={intg.provider} onDone={reloadIntegrations} />
+                                <ImportContactsButton   provider={intg.provider} />
+                                {intg.provider === "google" && (
+                                  <BrowseDriveButton />
+                                )}
+                              </>
+                            )}
                           {intg.status === "error" ? (
                             <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(220,62,13,0.12)", color: "var(--color-red-orange)" }}>
                               Error
@@ -1007,6 +1029,7 @@ export default function SettingsPage() {
                             providerLabel={PROVIDER_DISPLAY[intg.provider] ?? intg.provider}
                             onDone={reloadIntegrations}
                           />
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1045,11 +1068,11 @@ export default function SettingsPage() {
                       modal: "beehiiv",
                     },
                     {
-                      provider: "meta",
-                      name: "Meta Business Suite",
-                      desc: "Pull follower growth, post engagement, and audience insights from your Facebook Pages and Instagram Business accounts.",
-                      iconBg: "rgba(8,102,255,0.10)",
-                      href: "/api/auth/meta",
+                      provider: "instagram",
+                      name: "Instagram",
+                      desc: "Pull follower growth and post insights from your Instagram Business or Creator account. Uses Instagram Business Login — no Facebook Page required.",
+                      iconBg: "rgba(228,64,95,0.10)",
+                      href: "/api/auth/instagram",
                     },
                     {
                       provider: "tiktok",
