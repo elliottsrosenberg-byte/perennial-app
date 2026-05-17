@@ -1104,7 +1104,7 @@ export default function SettingsPage() {
                     {
                       provider: "stripe",
                       name: "Stripe",
-                      desc: "See your Stripe balance, recent charges, and payouts in Finance. Paste a restricted API key — no Stripe platform setup required.",
+                      desc: "Optional. Add a \"Pay online\" button to invoices you send, auto-mark them paid when payment lands, and see Stripe balance + payouts in Finance. Invoicing works without it.",
                       iconBg: "rgba(99,91,255,0.10)",
                       modal: "stripe",
                     },
