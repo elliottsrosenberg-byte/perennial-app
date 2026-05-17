@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { OutreachPipeline, PipelineStage, OutreachTarget, Contact } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
 import Topbar from "@/components/layout/Topbar";
@@ -14,6 +14,8 @@ import NewContactModal from "@/components/contacts/NewContactModal";
 import ContactDetailPanel from "@/components/contacts/ContactDetailPanel";
 import { Plus } from "lucide-react";
 import AshMark from "@/components/ui/AshMark";
+import OutreachIntroModal from "@/components/tour/outreach/OutreachIntroModal";
+import OutreachTooltipTour from "@/components/tour/outreach/OutreachTooltipTour";
 
 type ActiveSection = "leads" | "followups" | "pipeline";
 
@@ -48,6 +50,10 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
   const [targets, setTargets]     = useState(initialTargets);
   const [contacts, setContacts]   = useState(initialContacts);
 
+  // Freeze "had pipelines at tour-start?" — passed to the tooltip tour so it
+  // can skip the pipeline-creation steps for users with seed pipelines.
+  const [hadPipelinesAtMount] = useState(initialPipelines.length > 0);
+
   const [activeSection, setActiveSection]           = useState<ActiveSection>("pipeline");
   const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null);
   const [selectedTargetId, setSelectedTargetId]     = useState<string | null>(null);
@@ -76,6 +82,18 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
     setShowNewTarget(true);
   }
 
+  // Notify the tooltip tour when the new-pipeline / new-target modals open
+  // and when the target detail panel opens.
+  useEffect(() => {
+    if (showNewPipeline) window.dispatchEvent(new Event("outreach:new-pipeline-opened"));
+  }, [showNewPipeline]);
+  useEffect(() => {
+    if (showNewTarget) window.dispatchEvent(new Event("outreach:new-target-opened"));
+  }, [showNewTarget]);
+  useEffect(() => {
+    if (selectedTargetId) window.dispatchEvent(new Event("outreach:target-detail-opened"));
+  }, [selectedTargetId]);
+
   function switchSection(section: ActiveSection) {
     setActiveSection(section);
     if (section !== "pipeline") setSelectedPipelineId(null);
@@ -89,10 +107,17 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
   function handlePipelineCreated(pipeline: OutreachPipeline & { stages: PipelineStage[] }) {
     setPipelines((prev) => [...prev, pipeline]);
     selectPipeline(pipeline.id);
+    window.dispatchEvent(new CustomEvent("outreach:pipeline-created", {
+      detail: { id: pipeline.id, name: pipeline.name },
+    }));
   }
 
   function handleTargetCreated(target: OutreachTarget) {
     setTargets((prev) => [...prev, target]);
+    const pipelineName = pipelines.find(p => p.id === target.pipeline_id)?.name ?? null;
+    window.dispatchEvent(new CustomEvent("outreach:target-created", {
+      detail: { id: target.id, name: target.name, pipeline_name: pipelineName },
+    }));
   }
 
   function handleTargetUpdated(updated: OutreachTarget) {
@@ -161,6 +186,7 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
     <>
       <AshBtn message="How is my outreach going? Which pipelines need attention and what should I prioritize?" />
       <button
+        data-tour-target="outreach.new-target-button"
         type="button"
         onClick={() => openNewTarget()}
         style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 14px", fontSize: 11, fontWeight: 500, borderRadius: 6, background: "var(--color-sage)", color: "white", border: "none", cursor: "pointer", fontFamily: "inherit", transition: "background 0.12s ease" }}
@@ -228,6 +254,7 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
         ))}
 
         <button
+          data-tour-target="outreach.new-pipeline-button"
           type="button"
           onClick={() => setShowNewPipeline(true)}
           className="mt-2 mx-3 flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] transition-colors"
@@ -265,16 +292,20 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
 
       {/* ── Modals ── */}
       {showNewPipeline && (
-        <NewPipelineModal onClose={() => setShowNewPipeline(false)} onCreated={handlePipelineCreated} />
+        <div data-tour-target="outreach.new-pipeline-modal">
+          <NewPipelineModal onClose={() => setShowNewPipeline(false)} onCreated={handlePipelineCreated} />
+        </div>
       )}
       {showNewTarget && pipelines.length > 0 && (
-        <NewTargetModal
-          pipelines={pipelines}
-          defaultPipelineId={newTargetDefaults.pipelineId}
-          defaultStageId={newTargetDefaults.stageId}
-          onClose={() => setShowNewTarget(false)}
-          onCreated={handleTargetCreated}
-        />
+        <div data-tour-target="outreach.new-target-modal">
+          <NewTargetModal
+            pipelines={pipelines}
+            defaultPipelineId={newTargetDefaults.pipelineId}
+            defaultStageId={newTargetDefaults.stageId}
+            onClose={() => setShowNewTarget(false)}
+            onCreated={handleTargetCreated}
+          />
+        </div>
       )}
       {showNewTarget && pipelines.length === 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -320,6 +351,10 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
           onArchived={handleContactArchived}
         />
       )}
+
+      {/* ── Walkthrough: intro modal first, then progressive tooltips ── */}
+      <OutreachIntroModal />
+      <OutreachTooltipTour hasPipelinesAtStart={hadPipelinesAtMount} />
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { OutreachPipeline, PipelineStage, OutreachTarget, MetaStage, ContactActivityType } from "@/types/database";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Send } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
 
 // ── Follow-up modal ───────────────────────────────────────────────────────────
@@ -369,6 +369,7 @@ function DroppableColumn({
                       ref={dragProvided.innerRef}
                       {...dragProvided.draggableProps}
                       {...dragProvided.dragHandleProps}
+                      data-tour-target={index === 0 ? "outreach.first-card" : undefined}
                       style={{
                         ...dragProvided.draggableProps.style,
                         cursor: dragSnapshot.isDragging ? "grabbing" : "grab",
@@ -438,18 +439,19 @@ function StaticColumn({
         </button>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {targets.map(t => {
+        {targets.map((t, index) => {
           const tp = allPipelines.find(p => p.id === t.pipeline_id);
           return (
-            <TargetCard
-              key={t.id}
-              target={t}
-              pipelineBadge={showPipelineBadge && tp ? { name: tp.name, color: tp.color } : undefined}
-              isDragging={false}
-              isOutcome={false}
-              isFollowedUp={false}
-              onClick={() => onTargetClick(t)}
-            />
+            <div key={t.id} data-tour-target={index === 0 ? "outreach.first-card" : undefined}>
+              <TargetCard
+                target={t}
+                pipelineBadge={showPipelineBadge && tp ? { name: tp.name, color: tp.color } : undefined}
+                isDragging={false}
+                isOutcome={false}
+                isFollowedUp={false}
+                onClick={() => onTargetClick(t)}
+              />
+            </div>
           );
         })}
         {targets.length === 0 && (
@@ -554,7 +556,7 @@ export default function PipelineBoard({ pipelines, selectedPipeline, targets, on
     return (
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <EmptyState
-          icon="📬"
+          icon={<Send size={22} strokeWidth={1.5} color="var(--color-sage)" />}
           heading="Create your first pipeline"
           body="Outreach pipelines track your gallery submissions, press pitches, fair applications, and client pursuits — from first contact to closed deal. Each pipeline has its own stages you define."
           ashPrompt="I'm setting up outreach in Perennial. What pipelines should a furniture/object designer have? Walk me through how to set up a gallery outreach pipeline."

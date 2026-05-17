@@ -361,7 +361,7 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
             </div>
 
             {/* Stage */}
-            <div style={{ marginBottom: 12 }}>
+            <div data-tour-target="outreach.detail-stages" style={{ marginBottom: 12 }}>
               <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 6 }}>Stage</p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 {activeStages.map(s => (
