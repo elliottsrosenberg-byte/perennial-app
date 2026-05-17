@@ -50,7 +50,7 @@ export async function GET() {
     .from("integrations")
     .select("*")
     .eq("user_id", user.id)
-    .eq("provider", "ga4")
+    .eq("provider", "google_analytics")
     .maybeSingle();
 
   if (!integration?.access_token) return NextResponse.json({ connected: false });

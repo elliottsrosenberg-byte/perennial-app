@@ -956,6 +956,12 @@ export default function SettingsPage() {
             {active === "integrations" && (
               <>
                 <h2 className="text-[15px] font-semibold mb-1" style={{ color: "var(--color-charcoal)" }}>Integrations</h2>
+
+                {/* Websites — own subsection because users can register
+                    multiple sites and each one has its own snippet to
+                    display, unlike the single-account OAuth providers. */}
+                <WebsiteSection />
+
                 <p className="text-[12px] mb-7" style={{ color: "var(--color-grey)" }}>
                   Connect the tools you already use.
                 </p>
@@ -2011,6 +2017,304 @@ function DrivePickerModal({ onClose }: { onClose: () => void }) {
             }}
           >
             {linking ? "Linking…" : `Link ${selected.size || ""} as Resources`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── WebsiteSection ───────────────────────────────────────────────────────────
+
+interface WebsiteSite {
+  id:             string;
+  url:            string;
+  display_name:   string | null;
+  platform:       "manual" | "webflow" | "wix" | "squarespace" | "wordpress" | "other";
+  site_token:     string;
+  status:         "pending" | "active" | "disconnected";
+  first_event_at: string | null;
+  last_event_at:  string | null;
+}
+
+const PLATFORM_LABEL: Record<WebsiteSite["platform"], string> = {
+  manual:      "Manual / other",
+  webflow:     "Webflow",
+  wix:         "Wix",
+  squarespace: "Squarespace",
+  wordpress:   "WordPress",
+  other:       "Other",
+};
+
+function WebsiteSection() {
+  const [sites,           setSites]           = useState<WebsiteSite[]>([]);
+  const [loading,         setLoading]         = useState(true);
+  const [showAddModal,    setShowAddModal]    = useState(false);
+  const [snippetForSite,  setSnippetForSite]  = useState<WebsiteSite | null>(null);
+
+  async function load() {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setLoading(false); return; }
+    const { data } = await supabase
+      .from("website_sites")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true });
+    setSites((data as WebsiteSite[] | null) ?? []);
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function handleDelete(id: string, label: string) {
+    if (!confirm(`Remove ${label}? Its tracking snippet will stop working.`)) return;
+    const res = await fetch(`/api/integrations/website/connect?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!res.ok) { alert("Couldn't remove site"); return; }
+    await load();
+  }
+
+  return (
+    <div className="mb-8">
+      <div className="flex items-center justify-between mb-3">
+        <GroupTitle>Websites</GroupTitle>
+        <button
+          type="button"
+          onClick={() => setShowAddModal(true)}
+          style={{
+            padding: "4px 10px", fontSize: 11, fontWeight: 500,
+            background: "var(--color-warm-white)", color: "var(--color-charcoal)",
+            border: "0.5px solid var(--color-border)", borderRadius: 6,
+            cursor: "pointer", fontFamily: "inherit", marginBottom: 12,
+          }}
+        >
+          + Add website
+        </button>
+      </div>
+      {loading ? (
+        <p style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>Loading…</p>
+      ) : sites.length === 0 ? (
+        <p style={{ fontSize: 12, color: "var(--color-grey)" }}>
+          Track pageviews and traffic on your studio site by registering it here, then pasting the tracking snippet into your site&apos;s HTML.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {sites.map((s) => (
+            <div
+              key={s.id}
+              className="flex items-center gap-3 p-3 rounded-xl"
+              style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-medium truncate" style={{ color: "var(--color-charcoal)" }}>
+                  {s.display_name ?? s.url}
+                </p>
+                <p className="text-[11px] truncate" style={{ color: "var(--color-grey)" }}>
+                  {s.url} · {PLATFORM_LABEL[s.platform]}
+                </p>
+                {s.last_event_at && (
+                  <p className="text-[10px] mt-0.5" style={{ color: "var(--color-text-tertiary)" }}>
+                    Last event {formatRelative(s.last_event_at)}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSnippetForSite(s)}
+                style={{
+                  padding: "4px 10px", fontSize: 10, fontWeight: 500,
+                  background: "var(--color-warm-white)", color: "var(--color-charcoal)",
+                  border: "0.5px solid var(--color-border)", borderRadius: 6,
+                  cursor: "pointer", fontFamily: "inherit",
+                }}
+              >
+                Snippet
+              </button>
+              {s.status === "active" ? (
+                <span style={{ fontSize: 10, fontWeight: 600, color: "#3d6b4f", background: "rgba(141,208,71,0.18)", padding: "3px 8px", borderRadius: 99 }}>
+                  Active
+                </span>
+              ) : (
+                <span style={{ fontSize: 10, fontWeight: 600, color: "var(--color-text-tertiary)", background: "var(--color-cream)", padding: "3px 8px", borderRadius: 99 }}>
+                  Waiting…
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => handleDelete(s.id, s.display_name ?? s.url)}
+                aria-label={`Remove ${s.url}`}
+                style={{ background: "transparent", border: "none", padding: 4, color: "var(--color-text-tertiary)", cursor: "pointer", fontSize: 14 }}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {showAddModal && (
+        <AddWebsiteModal
+          onClose={() => setShowAddModal(false)}
+          onCreated={async (site) => {
+            setShowAddModal(false);
+            await load();
+            setSnippetForSite(site);
+          }}
+        />
+      )}
+      {snippetForSite && (
+        <SnippetModal site={snippetForSite} onClose={() => setSnippetForSite(null)} />
+      )}
+    </div>
+  );
+}
+
+function AddWebsiteModal({ onClose, onCreated }: {
+  onClose:   () => void;
+  onCreated: (site: WebsiteSite) => void;
+}) {
+  const [url,      setUrl]      = useState("");
+  const [platform, setPlatform] = useState<WebsiteSite["platform"]>("manual");
+  const [busy,     setBusy]     = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/integrations/website/connect", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ url, platform }),
+      });
+      const json = await res.json() as { site?: WebsiteSite; error?: string };
+      if (!res.ok || !json.site) {
+        setError(json.error ?? "Couldn't add site");
+        setBusy(false);
+        return;
+      }
+      onCreated(json.site);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't add site");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      role="dialog" aria-modal="true"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(31,33,26,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+    >
+      <form
+        onSubmit={handleSubmit}
+        style={{ width: "100%", maxWidth: 440, background: "var(--color-warm-white)", borderRadius: 14, border: "0.5px solid var(--color-border)", boxShadow: "0 24px 64px rgba(31,33,26,0.32)" }}
+      >
+        <div style={{ padding: "16px 20px 10px", borderBottom: "0.5px solid var(--color-border)" }}>
+          <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--color-charcoal)" }}>Add website</h3>
+          <p style={{ fontSize: 11, color: "var(--color-grey)", marginTop: 4 }}>
+            Register a site, then paste the tracking snippet into your site&apos;s HTML.
+          </p>
+        </div>
+        <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <span style={{ fontSize: 11, fontWeight: 500, color: "var(--color-charcoal)" }}>Website URL *</span>
+            <input
+              type="text" required value={url} onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://yourstudio.com"
+              autoComplete="off"
+              style={{ padding: "8px 10px", fontSize: 13, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 7, color: "var(--color-charcoal)", outline: "none", fontFamily: "inherit" }}
+            />
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <span style={{ fontSize: 11, fontWeight: 500, color: "var(--color-charcoal)" }}>Platform</span>
+            <select
+              value={platform}
+              onChange={(e) => setPlatform(e.target.value as WebsiteSite["platform"])}
+              style={{ padding: "8px 10px", fontSize: 13, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 7, color: "var(--color-charcoal)", fontFamily: "inherit" }}
+            >
+              <option value="manual">Manual / other</option>
+              <option value="webflow">Webflow</option>
+              <option value="wix">Wix</option>
+              <option value="squarespace">Squarespace</option>
+              <option value="wordpress">WordPress</option>
+            </select>
+          </label>
+          {error && <p style={{ fontSize: 11, color: "var(--color-red-orange)" }}>{error}</p>}
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, padding: "12px 20px 14px", borderTop: "0.5px solid var(--color-border)" }}>
+          <button type="button" onClick={onClose} disabled={busy} style={{ padding: "7px 14px", fontSize: 12, fontWeight: 500, background: "transparent", color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)", borderRadius: 7, cursor: busy ? "default" : "pointer", fontFamily: "inherit" }}>
+            Cancel
+          </button>
+          <button type="submit" disabled={busy} style={{ padding: "7px 16px", fontSize: 12, fontWeight: 600, background: busy ? "var(--color-surface-sunken)" : "var(--color-sage)", color: busy ? "var(--color-grey)" : "white", border: "none", borderRadius: 7, cursor: busy ? "default" : "pointer", fontFamily: "inherit" }}>
+            {busy ? "Adding…" : "Add site"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+const PLATFORM_INSTRUCTIONS: Record<WebsiteSite["platform"], string> = {
+  manual:      "Paste the snippet anywhere inside the <head> or before </body> on every page you want to track.",
+  webflow:     "In Webflow: Site Settings → Custom Code → Footer Code (before </body>). Paste, then Publish your site.",
+  wix:         "In Wix: Settings → Custom Code → + Add Custom Code → paste in the code box, set to Body - End, apply to All pages.",
+  squarespace: "In Squarespace: Settings → Advanced → Code Injection → paste into the Footer field. Save.",
+  wordpress:   "In WordPress: use a plugin like \"Insert Headers and Footers\" (or your theme's Code Injection) → paste into the Footer section.",
+  other:       "Paste the snippet anywhere inside the <head> or before </body> on every page you want to track.",
+};
+
+function SnippetModal({ site, onClose }: { site: WebsiteSite; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://app.perennial.design";
+  const snippet = `<script async src="${origin}/api/track/script/${encodeURIComponent(site.site_token)}"></script>`;
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(snippet);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      alert("Couldn't copy to clipboard");
+    }
+  }
+
+  return (
+    <div
+      role="dialog" aria-modal="true"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(31,33,26,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+    >
+      <div style={{ width: "100%", maxWidth: 520, background: "var(--color-warm-white)", borderRadius: 14, border: "0.5px solid var(--color-border)", boxShadow: "0 24px 64px rgba(31,33,26,0.32)" }}>
+        <div style={{ padding: "16px 20px 10px", borderBottom: "0.5px solid var(--color-border)" }}>
+          <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--color-charcoal)" }}>Tracking snippet</h3>
+          <p style={{ fontSize: 11, color: "var(--color-grey)", marginTop: 4 }}>
+            For <strong style={{ color: "var(--color-charcoal)" }}>{site.display_name ?? site.url}</strong>
+          </p>
+        </div>
+        <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+          <p style={{ fontSize: 12, color: "var(--color-grey)", lineHeight: 1.55 }}>
+            {PLATFORM_INSTRUCTIONS[site.platform]}
+          </p>
+          <div style={{ position: "relative" }}>
+            <pre style={{ margin: 0, padding: "12px 14px", background: "var(--color-charcoal)", color: "#e3e0d6", borderRadius: 7, fontSize: 11, lineHeight: 1.5, overflowX: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
+              {snippet}
+            </pre>
+            <button
+              type="button" onClick={handleCopy}
+              style={{ position: "absolute", top: 8, right: 8, padding: "4px 10px", fontSize: 10, fontWeight: 500, background: copied ? "var(--color-sage)" : "rgba(245,241,233,0.12)", color: copied ? "white" : "#e3e0d6", border: "none", borderRadius: 5, cursor: "pointer", fontFamily: "inherit" }}
+            >
+              {copied ? "Copied ✓" : "Copy"}
+            </button>
+          </div>
+          <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", lineHeight: 1.5 }}>
+            Once you&apos;ve embedded the snippet and visited any page, the site will flip from <em>Waiting…</em> to <em>Active</em> here.
+          </p>
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", padding: "12px 20px 14px", borderTop: "0.5px solid var(--color-border)" }}>
+          <button type="button" onClick={onClose} style={{ padding: "7px 14px", fontSize: 12, fontWeight: 500, background: "var(--color-sage)", color: "white", border: "none", borderRadius: 7, cursor: "pointer", fontFamily: "inherit" }}>
+            Done
           </button>
         </div>
       </div>

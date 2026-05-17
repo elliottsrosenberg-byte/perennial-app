@@ -45,7 +45,7 @@ export async function GET() {
     .from("integrations")
     .select("*")
     .eq("user_id", user.id)
-    .eq("provider", "ga4")
+    .eq("provider", "google_analytics")
     .maybeSingle();
 
   if (!integration?.access_token) {
@@ -101,7 +101,7 @@ export async function POST(req: Request) {
     .from("integrations")
     .select("id, metadata")
     .eq("user_id", user.id)
-    .eq("provider", "ga4")
+    .eq("provider", "google_analytics")
     .maybeSingle();
 
   if (!existing) return NextResponse.json({ error: "No GA4 integration found" }, { status: 404 });
