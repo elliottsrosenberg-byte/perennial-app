@@ -51,7 +51,7 @@ export async function GET(req: Request) {
   // Store with a placeholder account_id — will be updated when user selects a property
   await supabase.from("integrations").upsert({
     user_id:          user.id,
-    provider:         "ga4",
+    provider:         "google_analytics",
     account_id:       "pending_property_selection",
     account_name:     "Google Analytics",
     access_token:     tokens.access_token,
