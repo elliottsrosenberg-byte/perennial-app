@@ -1312,7 +1312,7 @@ const CONNECT_FORMS: Record<string, ConnectFormConfig> = {
   },
   stripe: {
     title:       "Connect Stripe",
-    description: "Paste a Stripe Restricted API key. We recommend Restricted (rk_…) over Secret (sk_…) — you get to choose exactly which permissions Perennial has. Read-only for v1 (balance, charges, payouts).",
+    description: "Paste a Restricted API key (rk_…). For just viewing your data, set Read on: Balance, Charges, Payouts, Invoices, Customers. For sending invoices through Perennial later, also grant Write on: Invoices, Customers, Products, Prices.",
     endpoint:    "/api/integrations/stripe/connect",
     fields: [
       { key: "api_key", label: "Stripe API key", placeholder: "rk_live_… or rk_test_…", type: "password", required: true },
