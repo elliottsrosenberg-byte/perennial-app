@@ -118,7 +118,7 @@ export const updateProjectStatusTool: AshToolDefinition = {
 // ─── add_task ─────────────────────────────────────────────────────────────────
 
 async function add_task(
-  input: { title: string; project_id?: string; contact_id?: string; due_date?: string; priority?: string; notes?: string },
+  input: { title: string; project_id?: string; contact_id?: string; target_id?: string; due_date?: string; priority?: string; notes?: string },
   { supabase, userId }: ToolContext
 ): Promise<string> {
   const { data, error } = await supabase
@@ -128,6 +128,7 @@ async function add_task(
       title:      input.title,
       project_id: input.project_id ?? null,
       contact_id: input.contact_id ?? null,
+      target_id:  input.target_id ?? null,
       due_date:   input.due_date ?? null,
       priority:   input.priority ?? null,
       notes:      input.notes ?? null,
@@ -137,14 +138,20 @@ async function add_task(
     .single();
 
   if (error) return `Failed to create task: ${error.message}`;
-  const ctx = input.project_id ? " linked to project" : input.contact_id ? " linked to contact" : "";
+  const ctx = input.project_id
+    ? " linked to project"
+    : input.contact_id
+      ? " linked to contact"
+      : input.target_id
+        ? " linked to outreach target"
+        : "";
   return `Task created: "${data.title}"${ctx} (id: ${data.id}). It will appear in the Tasks module.`;
 }
 
 export const addTaskTool: AshToolDefinition = {
   name: "add_task",
   description:
-    "Create a task. Can be standalone or linked to a project or contact. " +
+    "Create a task. Can be standalone or linked to a project, contact, or outreach target. " +
     "Use when the user asks to add an action item, to-do, or follow-up step.",
   input_schema: {
     type: "object",
@@ -152,6 +159,7 @@ export const addTaskTool: AshToolDefinition = {
       title:      { type: "string", description: "Task description" },
       project_id: { type: "string", description: "Optional project UUID to link this task to" },
       contact_id: { type: "string", description: "Optional contact UUID to link this task to" },
+      target_id:  { type: "string", description: "Optional outreach target UUID to link this task to" },
       due_date:   { type: "string", description: "Due date in YYYY-MM-DD format" },
       priority:   { type: "string", enum: ["high", "medium", "low"] },
       notes:      { type: "string", description: "Additional notes or context" },
