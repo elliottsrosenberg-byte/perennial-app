@@ -18,7 +18,7 @@ import OutreachIntroModal from "@/components/tour/outreach/OutreachIntroModal";
 import OutreachTooltipTour from "@/components/tour/outreach/OutreachTooltipTour";
 import OutreachOptionsMenu from "./OutreachOptionsMenu";
 
-type ActiveSection = "leads" | "followups" | "pipeline";
+type ActiveSection = "leads" | "followups" | "pipeline" | "all-ether";
 
 interface Props {
   initialPipelines: (OutreachPipeline & { stages: PipelineStage[] })[];
@@ -96,6 +96,7 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
   function switchSection(section: ActiveSection) {
     setActiveSection(section);
     if (section !== "pipeline") setSelectedPipelineId(null);
+    if (section !== "pipeline" && section !== "all-ether") setSelectedTargetId(null);
   }
 
   function selectPipeline(id: string | null) {
@@ -161,6 +162,29 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
     await createClient().from("contacts").update({ lead_stage: newStage }).eq("id", contactId);
   }
 
+  async function handleEtherToggle(targetId: string, ether: boolean, newStageId?: string) {
+    const now = new Date().toISOString();
+    // Optimistic local update — Supabase round-trip lands underneath.
+    setTargets(prev => prev.map(t => t.id === targetId
+      ? {
+          ...t,
+          ether,
+          stage_id: newStageId ?? t.stage_id,
+          last_touched_at: now,
+          // Un-ethering into a new stage is a fresh chapter — drop any old
+          // follow-up state, mirroring how a normal stage-change behaves.
+          last_followup_at: newStageId ? null : t.last_followup_at,
+        }
+      : t,
+    ));
+    const update: Record<string, unknown> = { ether, last_touched_at: now };
+    if (newStageId) {
+      update.stage_id = newStageId;
+      update.last_followup_at = null;
+    }
+    await createClient().from("outreach_targets").update(update).eq("id", targetId);
+  }
+
   async function handleFollowUp(targetId: string) {
     const now = new Date().toISOString();
     // Bump BOTH last_touched_at (general staleness) and last_followup_at
@@ -177,9 +201,16 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
 
   // Outcome / closed filters are applied here so the toggles in the options
   // menu visibly affect the board without each board having to know about them.
-  const boardTargets = (selectedPipeline
-    ? targets.filter((t) => t.pipeline_id === selectedPipeline.id)
-    : targets
+  // - In the All Ether view, surface only ether targets across all pipelines.
+  // - In a specific pipeline, pass all that pipeline's targets (the board
+  //   splits them into stage columns vs the Ether section internally).
+  // - In the meta-stage "All" view, hide ether targets — they're "paused",
+  //   not part of any active funnel.
+  const boardTargets = (activeSection === "all-ether"
+    ? targets.filter(t => t.ether)
+    : selectedPipeline
+      ? targets.filter(t => t.pipeline_id === selectedPipeline.id)
+      : targets.filter(t => !t.ether)
   ).filter((t) => {
     if (showClosed) return true;
     const tp = pipelines.find(p => p.id === t.pipeline_id);
@@ -196,7 +227,13 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
   const topbarTitle =
     activeSection === "leads"     ? "Leads"
     : activeSection === "followups" ? "Follow-ups"
+    : activeSection === "all-ether" ? "All Ether"
     : selectedPipeline?.name ?? "Outreach";
+
+  // Active (non-ether) target counts feed the left-rail counts so "ICFF · 12"
+  // means 12 active, not 12 including parked.
+  const activeTargets = targets.filter(t => !t.ether);
+  const etherCount    = targets.length - activeTargets.length;
 
   // Count of closed/outcome targets across all pipelines — feeds the options
   // menu subtitle so "Show closed targets" reads as a real toggle.
@@ -308,7 +345,7 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
 
         <NavItem
           label="All"
-          count={targets.length}
+          count={activeTargets.length}
           dot="var(--color-charcoal)"
           active={activeSection === "pipeline" && selectedPipelineId === null}
           onClick={() => selectPipeline(null)}
@@ -318,12 +355,25 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
           <NavItem
             key={p.id}
             label={p.name}
-            count={targets.filter((t) => t.pipeline_id === p.id).length}
+            count={activeTargets.filter((t) => t.pipeline_id === p.id).length}
             dot={p.color}
             active={activeSection === "pipeline" && selectedPipelineId === p.id}
             onClick={() => selectPipeline(p.id)}
           />
         ))}
+
+        {/* All Ether — cross-pipeline cleanup view. Hidden when zero parked
+            targets exist, to keep the rail uncluttered for users not using
+            the feature yet. */}
+        {etherCount > 0 && (
+          <NavItem
+            label="All Ether"
+            count={etherCount}
+            dot="#5386c4"
+            active={activeSection === "all-ether"}
+            onClick={() => { setActiveSection("all-ether"); setSelectedPipelineId(null); }}
+          />
+        )}
 
         <button
           data-tour-target="outreach.new-pipeline-button"
@@ -363,6 +413,21 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
               onNewPipeline={() => setShowNewPipeline(true)}
               onStageChange={handleStageChange}
               onFollowUp={handleFollowUp}
+              onEtherToggle={handleEtherToggle}
+            />
+          )}
+          {activeSection === "all-ether" && (
+            <PipelineBoard
+              pipelines={pipelines}
+              selectedPipeline={null}
+              targets={boardTargets}
+              onTargetClick={(t) => setSelectedTargetId(t.id)}
+              onNewTarget={openNewTarget}
+              onNewPipeline={() => setShowNewPipeline(true)}
+              onStageChange={handleStageChange}
+              onFollowUp={handleFollowUp}
+              onEtherToggle={handleEtherToggle}
+              etherView
             />
           )}
         </div>
