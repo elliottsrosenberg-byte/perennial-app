@@ -23,6 +23,8 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
   const [name, setName]             = useState("");
   const [location, setLocation]     = useState("");
   const [description, setDescription] = useState("");
+  const [link, setLink]             = useState("");
+  const [resultsDeadline, setResultsDeadline] = useState(""); // yyyy-mm-dd
 
   // Contact/company search
   const [search, setSearch]             = useState("");
@@ -108,6 +110,8 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
       name:         name.trim(),
       location:     location.trim()     || null,
       description:  description.trim()  || null,
+      link:         link.trim()         || null,
+      results_deadline: resultsDeadline ? new Date(`${resultsDeadline}T12:00:00`).toISOString() : null,
       contact_id:   linkedContact?.id   ?? null,
       company_id:   linkedCompany?.id   ?? null,
       last_touched_at: new Date().toISOString(),
@@ -144,6 +148,15 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
         </div>
 
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+          {/* Name — first thing the user types. */}
+          <div>
+            <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>
+              Target name * {linked ? <span className="font-normal" style={{ color: "var(--color-grey)" }}>(auto-filled)</span> : null}
+            </label>
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+              required autoFocus placeholder="e.g. The Parlour Gallery" className={inputCls} style={inputStyle} />
+          </div>
+
           {/* Pipeline + Stage */}
           {!defaultPipelineId && (
             <div>
@@ -231,20 +244,25 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
             )}
           </div>
 
-          {/* Name */}
-          <div>
-            <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>
-              Target name * {linked ? <span className="font-normal" style={{ color: "var(--color-grey)" }}>(auto-filled)</span> : null}
-            </label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-              required placeholder="e.g. The Parlour Gallery" className={inputCls} style={inputStyle} />
-          </div>
-
           {/* Location + Description */}
           <div>
             <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Location</label>
             <input type="text" value={location} onChange={(e) => setLocation(e.target.value)}
               placeholder="New York, NY" className={inputCls} style={inputStyle} />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>
+              Link <span className="font-normal" style={{ color: "var(--color-grey)" }}>(submission form, listing, press page…)</span>
+            </label>
+            <input type="url" value={link} onChange={(e) => setLink(e.target.value)}
+              placeholder="https://" className={inputCls} style={inputStyle} />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>
+              Results deadline <span className="font-normal" style={{ color: "var(--color-grey)" }}>(when you expect to hear back)</span>
+            </label>
+            <input type="date" value={resultsDeadline} onChange={(e) => setResultsDeadline(e.target.value)}
+              className={inputCls} style={inputStyle} />
           </div>
           <div>
             <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Notes</label>
