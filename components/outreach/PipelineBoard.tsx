@@ -4,8 +4,17 @@ import { useState, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { OutreachPipeline, PipelineStage, OutreachTarget, MetaStage, ContactActivityType } from "@/types/database";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
-import { Plus, Send, Check, Clock } from "lucide-react";
+import { Plus, Send, Check, Clock, Search, Moon } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
+
+// The Ether — a per-pipeline "parking lot" for paused targets. Visually
+// distinct via a light-blue tint so cards inside it read as "set down, not
+// thrown away". A special droppable id lets one DragDropContext handle drags
+// between stage columns and the Ether without extra plumbing.
+const ETHER_DROPPABLE_ID = "__ether__";
+const ETHER_BG           = "rgba(83, 134, 196, 0.06)";
+const ETHER_BG_HOVER     = "rgba(83, 134, 196, 0.16)";
+const ETHER_BLUE         = "#5386c4";
 
 // Distinct follow-up colour. Intentionally NOT sage (overloaded with "healthy
 // project" semantics) and NOT amber/red-orange (already used for lead/stale
@@ -35,6 +44,13 @@ interface Props {
    *  general "anything happened" marker). The board uses this for the "I've
    *  been followed up today" treatment. */
   onFollowUp: (targetId: string) => void;
+  /** Sets `ether` on the target. When un-ethering AND a new stage is
+   *  provided, also updates stage_id (so dragging from the Ether into a
+   *  stage column flips both flags atomically). */
+  onEtherToggle: (targetId: string, ether: boolean, newStageId?: string) => void;
+  /** When true, render the cross-pipeline "All Ether" view instead of any
+   *  pipeline / meta-stage board. */
+  etherView?: boolean;
 }
 
 const META_LABELS: Record<MetaStage, string> = {
@@ -643,27 +659,177 @@ function EmptyIllustration() {
   );
 }
 
+// ── The Ether ────────────────────────────────────────────────────────────────
+// A per-pipeline (or global) parking lot for paused targets. Renders as a
+// single wrapping drop zone — intentionally looser than the strict stage
+// columns above it.
+
+function EtherSection({
+  cards, search, onSearch, onTargetClick, onLogFollowUp, followedUpIds,
+  allPipelines, showPipelineBadge, label,
+}: {
+  cards: OutreachTarget[];
+  search: string;
+  onSearch: (q: string) => void;
+  onTargetClick: (t: OutreachTarget) => void;
+  onLogFollowUp: (t: OutreachTarget, type: ContactActivityType, note: string) => Promise<void>;
+  followedUpIds: Set<string>;
+  allPipelines: (OutreachPipeline & { stages: PipelineStage[] })[];
+  showPipelineBadge: boolean;
+  label: string;
+}) {
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? cards.filter(t => {
+        const linked = t.contact ? `${t.contact.first_name} ${t.contact.last_name}` : "";
+        return t.name.toLowerCase().includes(q)
+          || (t.location ?? "").toLowerCase().includes(q)
+          || linked.toLowerCase().includes(q)
+          || (t.company?.name ?? "").toLowerCase().includes(q);
+      })
+    : cards;
+
+  return (
+    <Droppable droppableId={ETHER_DROPPABLE_ID}>
+      {(provided, snapshot) => (
+        <div
+          ref={provided.innerRef}
+          {...provided.droppableProps}
+          style={{
+            background: snapshot.isDraggingOver ? ETHER_BG_HOVER : ETHER_BG,
+            border: `0.5px solid ${snapshot.isDraggingOver ? ETHER_BLUE + "55" : "rgba(83, 134, 196, 0.18)"}`,
+            borderRadius: 12,
+            padding: "14px 16px 16px",
+            transition: "background 0.18s ease, border-color 0.18s ease",
+            minHeight: 140,
+          }}
+        >
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <Moon size={11} strokeWidth={1.75} style={{ color: ETHER_BLUE }} />
+            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: ETHER_BLUE }}>
+              {label}
+            </span>
+            <span style={{ fontSize: 10, color: "var(--color-grey)" }}>
+              {cards.length} paused
+            </span>
+            <div style={{ marginLeft: "auto", position: "relative", width: 200 }}>
+              <Search size={11} strokeWidth={1.75} style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "var(--color-grey)", pointerEvents: "none" }} />
+              <input
+                type="text"
+                value={search}
+                onChange={e => onSearch(e.target.value)}
+                placeholder="Search the ether…"
+                style={{
+                  width: "100%",
+                  padding: "4px 8px 4px 26px",
+                  fontSize: 11,
+                  borderRadius: 7,
+                  background: "var(--color-warm-white)",
+                  border: "0.5px solid var(--color-border)",
+                  color: "var(--color-charcoal)",
+                  fontFamily: "inherit",
+                  outline: "none",
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Cards — wrapping flex, intentionally looser than stage columns */}
+          {cards.length === 0 ? (
+            <div style={{ padding: "18px 12px", textAlign: "center", fontSize: 11, color: "var(--color-grey)" }}>
+              Drag a card here to pause it. The Ether is for targets you&apos;re not actively working but don&apos;t want to archive.
+            </div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: "18px 12px", textAlign: "center", fontSize: 11, color: "var(--color-grey)" }}>
+              No matches for &ldquo;{search}&rdquo;.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              {filtered.map((t, index) => {
+                const tp = allPipelines.find(p => p.id === t.pipeline_id);
+                return (
+                  <Draggable key={t.id} draggableId={t.id} index={index}>
+                    {(dragProvided, dragSnapshot) => (
+                      <div
+                        ref={dragProvided.innerRef}
+                        {...dragProvided.draggableProps}
+                        {...dragProvided.dragHandleProps}
+                        style={{
+                          ...dragProvided.draggableProps.style,
+                          cursor: dragSnapshot.isDragging ? "grabbing" : "grab",
+                          width: 210,
+                        }}
+                      >
+                        <TargetCard
+                          target={t}
+                          pipelineBadge={showPipelineBadge && tp ? { name: tp.name, color: tp.color } : undefined}
+                          isDragging={dragSnapshot.isDragging}
+                          isOutcome={true /* suppresses the follow-up handle — Ether cards are paused */}
+                          isFollowedUp={followedUpIds.has(t.id)}
+                          onClick={() => onTargetClick(t)}
+                        />
+                      </div>
+                    )}
+                  </Draggable>
+                );
+              })}
+            </div>
+          )}
+          {provided.placeholder}
+        </div>
+      )}
+    </Droppable>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export default function PipelineBoard({ pipelines, selectedPipeline, targets, onTargetClick, onNewTarget, onNewPipeline, onStageChange, onFollowUp }: Props) {
+export default function PipelineBoard({ pipelines, selectedPipeline, targets, onTargetClick, onNewTarget, onNewPipeline, onStageChange, onFollowUp, onEtherToggle, etherView }: Props) {
   const [followedUpIds, setFollowedUpIds] = useState<Set<string>>(new Set());
+  const [etherSearch,   setEtherSearch]   = useState("");
+
+  function clearFollowupMarker(id: string) {
+    setFollowedUpIds(prev => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
 
   function handleDragEnd(result: DropResult) {
     if (!result.destination) return;
-    const { draggableId, destination } = result;
-    const newStageId = destination.droppableId;
+    const { draggableId, destination, source } = result;
     const target = targets.find(t => t.id === draggableId);
-    if (!target || target.stage_id === newStageId) return;
+    if (!target) return;
+
+    const destId = destination.droppableId;
+    const srcId  = source.droppableId;
+
+    // Drop INTO the Ether — pause the card. Keep stage_id intact so it
+    // remembers where to return.
+    if (destId === ETHER_DROPPABLE_ID) {
+      if (target.ether) return;
+      clearFollowupMarker(draggableId);
+      onEtherToggle(draggableId, true);
+      return;
+    }
+    // Drop FROM the Ether into a stage column — un-ether AND set the new
+    // stage in one atomic update.
+    if (srcId === ETHER_DROPPABLE_ID && destId !== ETHER_DROPPABLE_ID) {
+      clearFollowupMarker(draggableId);
+      onEtherToggle(draggableId, false, destId);
+      return;
+    }
+
+    // Regular stage-to-stage move.
+    if (target.stage_id === destId) return;
     // Moving to a new column is the new "touch" — the old column's follow-up
     // is no longer current. Drop the in-memory marker; the server-side clear
     // happens inside the OutreachClient `onStageChange` handler.
-    setFollowedUpIds(prev => {
-      if (!prev.has(draggableId)) return prev;
-      const next = new Set(prev);
-      next.delete(draggableId);
-      return next;
-    });
-    onStageChange(draggableId, newStageId);
+    clearFollowupMarker(draggableId);
+    onStageChange(draggableId, destId);
   }
 
   async function handleLogFollowUp(target: OutreachTarget, type: ContactActivityType, note: string) {
@@ -686,19 +852,44 @@ export default function PipelineBoard({ pipelines, selectedPipeline, targets, on
     window.dispatchEvent(new CustomEvent("outreach:followup-logged", { detail: { id: target.id, name: target.name } }));
   }
 
+  // Global "All Ether" view — every paused target across pipelines in one
+  // grid with the same search affordance. The cleanup view.
+  if (etherView) {
+    return (
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "20px" }}>
+          <EtherSection
+            cards={targets}
+            search={etherSearch}
+            onSearch={setEtherSearch}
+            onTargetClick={onTargetClick}
+            onLogFollowUp={handleLogFollowUp}
+            followedUpIds={followedUpIds}
+            allPipelines={pipelines}
+            showPipelineBadge
+            label="All ether — paused"
+          />
+        </div>
+      </DragDropContext>
+    );
+  }
+
   if (selectedPipeline) {
     const activeStages  = selectedPipeline.stages.filter(s => !s.is_outcome);
     const outcomeStages = selectedPipeline.stages.filter(s =>  s.is_outcome);
+    const stageTargets  = targets.filter(t => !t.ether);
+    const etherTargets  = targets.filter(t =>  t.ether);
 
     // Per-pipeline view always shows the stage columns — even with zero
     // targets — so the user can see the structure of their pipeline. Empty
     // columns reveal a hover dropzone (see DroppableColumn) inviting them to
-    // add a target right where it belongs.
+    // add a target right where it belongs. The Ether sits below as a single
+    // wrapping drop zone.
 
     return (
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div style={{ flex: 1, overflowX: "auto", overflowY: "auto" }}>
-          <div style={{ display: "flex", gap: 0, padding: "20px", minHeight: "100%", minWidth: "max-content", alignItems: "flex-start" }}>
+        <div style={{ flex: 1, overflowX: "auto", overflowY: "auto", display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", gap: 0, padding: "20px 20px 8px", minWidth: "max-content", alignItems: "flex-start" }}>
 
             {/* Active stage columns */}
             <div style={{ display: "flex", gap: 14 }}>
@@ -706,7 +897,7 @@ export default function PipelineBoard({ pipelines, selectedPipeline, targets, on
                 <DroppableColumn
                   key={stage.id}
                   stage={stage}
-                  targets={targets.filter(t => t.stage_id === stage.id)}
+                  targets={stageTargets.filter(t => t.stage_id === stage.id)}
                   pipelineColor={selectedPipeline.color}
                   isOutcome={false}
                   showPipelineBadge={false}
@@ -728,7 +919,7 @@ export default function PipelineBoard({ pipelines, selectedPipeline, targets, on
                     <DroppableColumn
                       key={stage.id}
                       stage={stage}
-                      targets={targets.filter(t => t.stage_id === stage.id)}
+                      targets={stageTargets.filter(t => t.stage_id === stage.id)}
                       pipelineColor={selectedPipeline.color}
                       isOutcome={true}
                       showPipelineBadge={false}
@@ -742,6 +933,22 @@ export default function PipelineBoard({ pipelines, selectedPipeline, targets, on
                 </div>
               </>
             )}
+          </div>
+
+          {/* The Ether — always rendered so users can drag cards in even when
+              there's nothing parked yet. */}
+          <div style={{ padding: "8px 20px 20px" }}>
+            <EtherSection
+              cards={etherTargets}
+              search={etherSearch}
+              onSearch={setEtherSearch}
+              onTargetClick={onTargetClick}
+              onLogFollowUp={handleLogFollowUp}
+              followedUpIds={followedUpIds}
+              allPipelines={pipelines}
+              showPipelineBadge={false}
+              label="The Ether — paused"
+            />
           </div>
         </div>
       </DragDropContext>
