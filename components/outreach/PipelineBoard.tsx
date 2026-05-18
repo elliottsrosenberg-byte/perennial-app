@@ -31,6 +31,9 @@ interface Props {
   onNewTarget: (pipelineId?: string, stageId?: string) => void;
   onNewPipeline?: () => void;
   onStageChange: (targetId: string, newStageId: string) => void;
+  /** Bumps last_followup_at on the target (NOT last_touched_at — that's a
+   *  general "anything happened" marker). The board uses this for the "I've
+   *  been followed up today" treatment. */
   onFollowUp: (targetId: string) => void;
 }
 
@@ -111,13 +114,15 @@ function TargetCard({
     ? `${target.contact.first_name} ${target.contact.last_name}`
     : target.company?.name ?? null;
 
-  // Memoised against last_touched_at so the impure Date.now read happens once
-  // per render that actually depends on it (not on every drag-state update).
-  const recentlyTouched = useMemo(
-    () => Math.floor((Date.now() - new Date(target.last_touched_at).getTime()) / 86400000) === 0,
-    [target.last_touched_at],
-  );
-  const showLogged = isFollowedUp || recentlyTouched || justLogged;
+  // "Logged" is keyed off the dedicated `last_followup_at` timestamp — NOT
+  // `last_touched_at`. Brand-new targets get last_touched_at set on insert,
+  // which previously made every new card look "followed up" the moment it
+  // landed. Follow-up is a specific action; the touch is general.
+  const recentlyFollowedUp = useMemo(() => {
+    if (!target.last_followup_at) return false;
+    return Math.floor((Date.now() - new Date(target.last_followup_at).getTime()) / 86400000) === 0;
+  }, [target.last_followup_at]);
+  const showLogged = isFollowedUp || recentlyFollowedUp || justLogged;
 
   // The compressed "I've been touched" treatment — narrow + right-aligned —
   // only applies to active (non-outcome) cards. Outcome cards stay full
@@ -600,6 +605,15 @@ export default function PipelineBoard({ pipelines, selectedPipeline, targets, on
     const newStageId = destination.droppableId;
     const target = targets.find(t => t.id === draggableId);
     if (!target || target.stage_id === newStageId) return;
+    // Moving to a new column is the new "touch" — the old column's follow-up
+    // is no longer current. Drop the in-memory marker; the server-side clear
+    // happens inside the OutreachClient `onStageChange` handler.
+    setFollowedUpIds(prev => {
+      if (!prev.has(draggableId)) return prev;
+      const next = new Set(prev);
+      next.delete(draggableId);
+      return next;
+    });
     onStageChange(draggableId, newStageId);
   }
 

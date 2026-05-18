@@ -144,8 +144,16 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
 
   async function handleStageChange(targetId: string, newStageId: string) {
     const now = new Date().toISOString();
-    setTargets(prev => prev.map(t => t.id === targetId ? { ...t, stage_id: newStageId, last_touched_at: now } : t));
-    await createClient().from("outreach_targets").update({ stage_id: newStageId, last_touched_at: now }).eq("id", targetId);
+    // Moving to a new column counts as a touch, and clears any follow-up the
+    // user logged in the prior stage (a stage advance is a fresh chapter).
+    setTargets(prev => prev.map(t => t.id === targetId
+      ? { ...t, stage_id: newStageId, last_touched_at: now, last_followup_at: null }
+      : t,
+    ));
+    await createClient()
+      .from("outreach_targets")
+      .update({ stage_id: newStageId, last_touched_at: now, last_followup_at: null })
+      .eq("id", targetId);
   }
 
   async function handleLeadStageChange(contactId: string, newStage: import("@/types/database").LeadStage) {
@@ -155,8 +163,16 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
 
   async function handleFollowUp(targetId: string) {
     const now = new Date().toISOString();
-    setTargets(prev => prev.map(t => t.id === targetId ? { ...t, last_touched_at: now } : t));
-    await createClient().from("outreach_targets").update({ last_touched_at: now }).eq("id", targetId);
+    // Bump BOTH last_touched_at (general staleness) and last_followup_at
+    // (specific action — drives the "logged today" treatment on the card).
+    setTargets(prev => prev.map(t => t.id === targetId
+      ? { ...t, last_touched_at: now, last_followup_at: now }
+      : t,
+    ));
+    await createClient()
+      .from("outreach_targets")
+      .update({ last_touched_at: now, last_followup_at: now })
+      .eq("id", targetId);
   }
 
   // Outcome / closed filters are applied here so the toggles in the options
