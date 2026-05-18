@@ -1,9 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
 import OutreachClient from "@/components/outreach/OutreachClient";
+import { ensureSeedPipelines } from "@/lib/outreach/seed-pipelines";
 import type { OutreachPipeline, PipelineStage, OutreachTarget, Contact } from "@/types/database";
 
 export default async function OutreachPage() {
   const supabase = await createClient();
+
+  // Auto-seed two pipelines tuned to the user's onboarding answers if their
+  // account has none yet. Idempotent — short-circuits when any pipeline
+  // already exists, so this is cheap on every load.
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    await ensureSeedPipelines(user.id);
+  }
 
   const [{ data: pipelines }, { data: targets }, { data: contacts }] = await Promise.all([
     supabase
