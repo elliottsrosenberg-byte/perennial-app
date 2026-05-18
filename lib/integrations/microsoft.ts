@@ -50,7 +50,7 @@ export const microsoftAdapter: OAuthProviderAdapter = {
   async exchangeCode({ code, redirectUri }) {
     const body = new URLSearchParams({
       client_id:     clientId(),
-      scope:         "openid email profile offline_access User.Read Mail.Read Calendars.Read Contacts.Read",
+      scope:         "openid email profile offline_access User.Read Mail.Read Calendars.ReadWrite Contacts.Read",
       code,
       redirect_uri:  redirectUri,
       grant_type:    "authorization_code",
@@ -91,7 +91,7 @@ export const microsoftAdapter: OAuthProviderAdapter = {
       client_id:     clientId(),
       // Microsoft requires `scope` on refresh; pass the same string we
       // used for the initial exchange so the new token carries them.
-      scope:         "openid email profile offline_access User.Read Mail.Read Calendars.Read Contacts.Read",
+      scope:         "openid email profile offline_access User.Read Mail.Read Calendars.ReadWrite Contacts.Read",
       refresh_token: refreshToken,
       grant_type:    "refresh_token",
       client_secret: clientSecret(),

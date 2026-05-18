@@ -70,11 +70,18 @@ async function handle(req: Request, url: URL, origin: string) {
   // sub-scope flags so the sync workers honor the user's choices.
   const grantedScopes = (tokens.scope ?? "").split(" ").filter(Boolean);
   const has = (s: string) => grantedScopes.includes(s);
+  // Calendar is granted if *either* Calendars.Read or Calendars.ReadWrite
+  // came back. Write capability is tracked separately so users who
+  // consented before the write scope shipped degrade to read-only and
+  // can be prompted to reconnect from the Calendar UI.
+  const hasCalRead  = has("Calendars.Read")      || has("https://graph.microsoft.com/Calendars.Read");
+  const hasCalWrite = has("Calendars.ReadWrite") || has("https://graph.microsoft.com/Calendars.ReadWrite");
   const enabledSubScopes: Record<string, boolean> = {
-    identity: true,
-    mail:     has("Mail.Read")      || has("https://graph.microsoft.com/Mail.Read"),
-    calendar: has("Calendars.Read") || has("https://graph.microsoft.com/Calendars.Read"),
-    contacts: has("Contacts.Read")  || has("https://graph.microsoft.com/Contacts.Read"),
+    identity:       true,
+    mail:           has("Mail.Read")      || has("https://graph.microsoft.com/Mail.Read"),
+    calendar:       hasCalRead || hasCalWrite,
+    calendar_write: hasCalWrite,
+    contacts:       has("Contacts.Read")  || has("https://graph.microsoft.com/Contacts.Read"),
     store_email_bodies: false,
   };
 

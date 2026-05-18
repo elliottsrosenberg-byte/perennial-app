@@ -62,8 +62,11 @@ export const PROVIDERS: Record<string, ProviderDefinition> = {
       {
         key:            "calendar",
         label:          "Calendar",
-        description:    "Surface calendar events in Perennial and log meeting activities for matched contacts.",
-        upstreamScopes: ["https://www.googleapis.com/auth/calendar.readonly"],
+        description:    "Surface calendar events in Perennial, create and edit events, and log meeting activities for matched contacts.",
+        upstreamScopes: [
+          "https://www.googleapis.com/auth/calendar.readonly",
+          "https://www.googleapis.com/auth/calendar.events",
+        ],
       },
       {
         key:            "contacts",
@@ -108,8 +111,8 @@ export const PROVIDERS: Record<string, ProviderDefinition> = {
       {
         key:            "calendar",
         label:          "Outlook Calendar",
-        description:    "Surface calendar events and log meeting activities for matched contacts.",
-        upstreamScopes: ["Calendars.Read"],
+        description:    "Surface calendar events, create and edit events, and log meeting activities for matched contacts.",
+        upstreamScopes: ["Calendars.ReadWrite"],
       },
       {
         key:            "contacts",

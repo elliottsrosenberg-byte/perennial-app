@@ -109,7 +109,13 @@ async function handle(req: Request, url: URL, origin: string) {
   const enabledSubScopes: Record<string, boolean> = {
     identity: true,
     gmail:    has("https://www.googleapis.com/auth/gmail.readonly"),
-    calendar: has("https://www.googleapis.com/auth/calendar.readonly"),
+    // Calendar is enabled if the user granted *either* the readonly or
+    // the read+write events scope. We track write capability separately
+    // on calendar_write so the UI can render read-only state for users
+    // who connected before the write scope shipped.
+    calendar:       has("https://www.googleapis.com/auth/calendar.readonly")
+                 || has("https://www.googleapis.com/auth/calendar.events"),
+    calendar_write: has("https://www.googleapis.com/auth/calendar.events"),
     contacts: has("https://www.googleapis.com/auth/contacts.readonly"),
     drive:    has("https://www.googleapis.com/auth/drive.metadata.readonly"),
     // App-level: opt-in to full-body storage is OFF by default, user
