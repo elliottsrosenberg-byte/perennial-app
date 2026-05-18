@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { OutreachPipeline, PipelineStage, OutreachTarget, Contact, Company } from "@/types/database";
-import { X } from "lucide-react";
+import { X, UserPlus } from "lucide-react";
 
 interface Props {
   pipelines: OutreachPipeline[];
@@ -33,6 +33,14 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
   const [linkedCompany, setLinkedCompany] = useState<Company | null>(null);
   const [searching, setSearching]       = useState(false);
   const [showSearch, setShowSearch]     = useState(false);
+
+  // Inline "create new contact" flow — surfaces when the search query has no
+  // contact match. The optional fields expand once the user commits to
+  // creating; we keep them out of the way until then so the modal doesn't
+  // grow for the common case.
+  const [creatingContact,    setCreatingContact]    = useState(false);
+  const [newContactEmail,    setNewContactEmail]    = useState("");
+  const [newContactCompany,  setNewContactCompany]  = useState("");
 
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
@@ -91,6 +99,9 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
     setLinkedContact(null);
     setLinkedCompany(null);
     setName("");
+    setCreatingContact(false);
+    setNewContactEmail("");
+    setNewContactCompany("");
   }
 
   async function handleSubmit(e: React.FormEvent) {

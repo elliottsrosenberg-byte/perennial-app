@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Task, Contact } from "@/types/database";
 import { ChevronLeft, ChevronRight, Plus, CheckSquare, MoreHorizontal, CalendarClock, ChevronDown } from "lucide-react";
@@ -11,6 +11,7 @@ import CalendarOptionsMenu from "./CalendarOptionsMenu";
 import CalendarSourcesPanel from "./CalendarSourcesPanel";
 import EventDetailPanel, { type CalendarEventLite } from "./EventDetailPanel";
 import NewEventModal from "./NewEventModal";
+import TaskQuickEditPopover from "./TaskQuickEditPopover";
 import CalendarIntroModal from "@/components/tour/calendar/CalendarIntroModal";
 import CalendarTooltipTour from "@/components/tour/calendar/CalendarTooltipTour";
 
@@ -29,6 +30,18 @@ const GRID_HEIGHT  = GRID_HOURS * PX_PER_HOUR;
 const DAY_HDR_H    = 64;   // fixed height used for sticky top offsets
 
 const DOW_SHORT   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+// Color palette for task pills in the tasks ribbon. Mirrors the
+// priority chips used in TasksClient so the visual language is
+// consistent across modules.
+const PRIORITY_PALETTE: Record<string, { bg: string; fg: string; border: string }> = {
+  high:     { bg: "rgba(220,62,13,0.10)",  fg: "var(--color-red-orange)", border: "rgba(220,62,13,0.28)" },
+  medium:   { bg: "rgba(160,120,0,0.12)",  fg: "#7a5a00",                border: "rgba(160,120,0,0.28)" },
+  low:      { bg: "rgba(155,163,122,0.14)",fg: "#4a5630",                border: "rgba(155,163,122,0.28)" },
+  _default: { bg: "rgba(120,120,120,0.10)",fg: "#5a564f",                border: "rgba(120,120,120,0.22)" },
+};
+
+function pad2(n: number): string { return n.toString().padStart(2, "0"); }
 const MONTH_NAMES = [
   "January","February","March","April","May","June",
   "July","August","September","October","November","December",
@@ -250,106 +263,8 @@ function MiniCalendar({ selectedDate, onSelect }: {
   );
 }
 
-// ── TaskPopover ────────────────────────────────────────────────────────────────
-
-function TaskPopover({ task, x, y, onMarkComplete, onUndo, onClose }: {
-  task: Task;
-  x: number;
-  y: number;
-  onMarkComplete: () => void;
-  onUndo?: () => void;
-  onClose: () => void;
-}) {
-  const ref    = useRef<HTMLDivElement>(null);
-  const parsed = task.due_date ? parseTaskDueDate(task.due_date) : null;
-
-  useEffect(() => {
-    function onMouse(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("mousedown", onMouse);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onMouse);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [onClose]);
-
-  const linkedProject = (task.project as unknown as { title: string } | null | undefined)?.title;
-  const linkedContact = (() => {
-    const c = task.contact as unknown as { first_name: string; last_name: string } | null | undefined;
-    return c ? `${c.first_name} ${c.last_name}`.trim() : null;
-  })();
-
-  return (
-    <div
-      ref={ref}
-      style={{
-        position: "fixed",
-        top: `${y}px`,
-        left: `${x}px`,
-        zIndex: 60,
-        width: "240px",
-        background: "var(--color-off-white)",
-        border: "0.5px solid var(--color-border)",
-        borderRadius: "12px",
-        boxShadow: "0 6px 28px rgba(0,0,0,0.13)",
-        padding: "14px",
-      }}
-    >
-      <p className="text-[13px] font-semibold leading-snug mb-[5px]" style={{ color: "var(--color-charcoal)" }}>
-        {task.title}
-      </p>
-      {parsed && (
-        <p className="text-[11px] mb-1" style={{ color: "var(--color-grey)" }}>
-          {parsed.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-        </p>
-      )}
-      {(linkedProject || linkedContact) && (
-        <p className="text-[10px] mb-3" style={{ color: "var(--color-grey)" }}>
-          {[linkedProject && `📁 ${linkedProject}`, linkedContact && `👤 ${linkedContact}`].filter(Boolean).join(" · ")}
-        </p>
-      )}
-
-      {task.completed ? (
-        <div className="flex gap-2">
-          <button
-            onClick={() => { onUndo?.(); onClose(); }}
-            className="flex-1 text-[12px] font-medium py-[6px] rounded-lg transition-opacity hover:opacity-80"
-            style={{ background: "var(--color-cream)", color: "var(--color-charcoal)", border: "0.5px solid var(--color-border)" }}
-          >
-            Undo complete
-          </button>
-          <button onClick={onClose}
-            className="text-[12px] py-[6px] px-3 rounded-lg transition-colors"
-            style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
-            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-          >Dismiss</button>
-        </div>
-      ) : (
-        <div className="flex gap-2">
-          <button
-            onClick={() => { onMarkComplete(); onClose(); }}
-            className="flex-1 text-[12px] font-medium py-[6px] rounded-lg text-white transition-opacity hover:opacity-90"
-            style={{ background: "var(--color-sage)" }}
-          >
-            ✓ Mark complete
-          </button>
-          <button onClick={onClose}
-            className="text-[12px] py-[6px] px-3 rounded-lg transition-colors"
-            style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
-            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-          >Dismiss</button>
-        </div>
-      )}
-    </div>
-  );
-}
+// (Legacy TaskPopover removed — Calendar v3 uses TaskQuickEditPopover
+// from ./TaskQuickEditPopover for inline task editing.)
 
 // ── NewTaskModal ───────────────────────────────────────────────────────────────
 
@@ -546,8 +461,6 @@ interface Props {
   outlookAccountName?: string | null;
 }
 
-interface PopoverState { task: Task; x: number; y: number }
-
 export default function CalendarClient({
   initialTasks, initialProjects, initialContacts,
   googleConnected = false, googleAccountName,
@@ -556,7 +469,6 @@ export default function CalendarClient({
   const [viewDate,        setViewDate]        = useState(new Date());
   const [tasks,           setTasks]           = useState<Task[]>(initialTasks);
   const [newTaskOpen,     setNewTaskOpen]     = useState(false);
-  const [popover,         setPopover]         = useState<PopoverState | null>(null);
   const [nowY,            setNowY]            = useState<number | null>(null);
   const [gcalEvents,      setGcalEvents]      = useState<CalEvent[]>([]);
   const [gcalLoading,     setGcalLoading]     = useState(false);
@@ -568,6 +480,18 @@ export default function CalendarClient({
   const [newEventOpen,    setNewEventOpen]    = useState(false);
   const [newEventPrefill, setNewEventPrefill] = useState<{ start?: Date; end?: Date; allDay?: boolean } | null>(null);
   const [newMenuOpen,     setNewMenuOpen]     = useState(false);
+  const [quickTask,       setQuickTask]       = useState<{ task: Task; x: number; y: number } | null>(null);
+
+  // Drag-to-reschedule task pills. Tracks the in-flight drag so we can
+  // hide the source pill slightly while it follows the cursor.
+  const [taskDrag, setTaskDrag] = useState<{ task: Task; x: number; y: number } | null>(null);
+  function openQuickTask(e: React.MouseEvent, task: Task) {
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = rect.right + 8 + 280 > window.innerWidth ? rect.left - 288 : rect.right + 8;
+    const y = Math.min(rect.top, window.innerHeight - 280);
+    setQuickTask({ task, x, y });
+  }
 
   // Drag-to-create on the time grid. We track the column the drag started
   // in (so a horizontal wiggle doesn't bleed into the next day) and the
@@ -762,6 +686,13 @@ export default function CalendarClient({
     undoTimers.current.set(id, t);
   }
 
+  // ── Drag-to-reschedule: drop a task pill in a different day cell. We
+  // optimistically write the new due_date and persist in the background.
+  async function rescheduleTask(id: string, dueDateIso: string | null) {
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, due_date: dueDateIso } as Task : t)));
+    await supabase.from("tasks").update({ due_date: dueDateIso }).eq("id", id);
+  }
+
   async function markComplete(id: string) {
     setTasks(prev => prev.map(r => r.id === id ? { ...r, completed: true } : r));
     await supabase.from("tasks").update({ completed: true }).eq("id", id);
@@ -774,15 +705,6 @@ export default function CalendarClient({
     setTasks(prev => prev.map(r => r.id === id ? { ...r, completed: false } : r));
     await supabase.from("tasks").update({ completed: false }).eq("id", id);
   }
-
-  // ── Popover
-  const openPopover = useCallback((e: React.MouseEvent, task: Task) => {
-    e.stopPropagation();
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = rect.right + 8 + 240 > window.innerWidth ? rect.left - 248 : rect.right + 8;
-    const y = Math.min(rect.top, window.innerHeight - 200);
-    setPopover({ task, x, y });
-  }, []);
 
   // ── CRUD
   // Defensive throughout: before this we were happily pushing `null` into
@@ -911,14 +833,15 @@ export default function CalendarClient({
             return (
               <div
                 key={t.id}
-                className="flex items-start gap-2 px-3 py-[8px] transition-colors"
+                onClick={(e) => openQuickTask(e, t)}
+                className="flex items-start gap-2 px-3 py-[8px] transition-colors cursor-pointer"
                 style={{ borderBottom: "0.5px solid var(--color-border)" }}
                 onMouseEnter={e => { if (!t.completed) e.currentTarget.style.background = "var(--color-cream)"; }}
                 onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
               >
                 {/* Check square — direct action */}
                 <div
-                  onClick={() => t.completed ? undoComplete(t.id) : markComplete(t.id)}
+                  onClick={(e) => { e.stopPropagation(); t.completed ? undoComplete(t.id) : markComplete(t.id); }}
                   className="flex items-center justify-center cursor-pointer shrink-0 mt-[1px] transition-colors"
                   style={{
                     width: "16px", height: "16px", borderRadius: 4,
@@ -947,7 +870,7 @@ export default function CalendarClient({
                 {/* Undo link — only when completed/lingering */}
                 {t.completed && (
                   <button
-                    onClick={() => undoComplete(t.id)}
+                    onClick={(e) => { e.stopPropagation(); undoComplete(t.id); }}
                     className="text-[10px] font-medium shrink-0 transition-opacity hover:opacity-70"
                     style={{ color: "var(--color-sage)" }}
                   >
@@ -967,13 +890,14 @@ export default function CalendarClient({
               {unscheduledTasks.map(t => (
                 <div
                   key={t.id}
-                  className="flex items-start gap-2 px-3 py-[8px] transition-colors"
+                  onClick={(e) => openQuickTask(e, t)}
+                  className="flex items-start gap-2 px-3 py-[8px] transition-colors cursor-pointer"
                   style={{ borderBottom: "0.5px solid var(--color-border)" }}
                   onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                 >
                   <div
-                    onClick={() => t.completed ? undoComplete(t.id) : markComplete(t.id)}
+                    onClick={(e) => { e.stopPropagation(); t.completed ? undoComplete(t.id) : markComplete(t.id); }}
                     className="flex items-center justify-center cursor-pointer shrink-0 mt-[1px]"
                     style={{ width: "16px", height: "16px", borderRadius: 4, border: "1.5px solid var(--color-border)", background: "transparent" }}
                   />
@@ -1320,7 +1244,7 @@ export default function CalendarClient({
                 return (
                   <button
                     key={t.id}
-                    onClick={(e) => openPopover(e, t)}
+                    onClick={(e) => openQuickTask(e, t)}
                     className="flex items-center gap-1.5 px-2.5 py-[4px] rounded-full shrink-0 transition-colors"
                     style={{
                       background: overdue ? "rgba(220,62,13,0.10)" : "rgba(155,163,122,0.14)",
@@ -1449,19 +1373,12 @@ export default function CalendarClient({
               All day
             </div>
             {weekDays.map((day, i) => {
-              const dayTasks      = scheduledTasks.filter(t => {
-                const d = parseTaskDueDate(t.due_date!);
-                return d ? isSameDay(d, day) : false;
-              });
               const dayProjects   = initialProjects.filter(p => p.due_date && isSameDay(new Date(p.due_date + "T00:00:00"), day));
               const dayGcalAllDay = gcalEvents.filter(e => e.allDay && isSameDay(new Date(e.start), day));
               return (
                 <div
                   key={i}
                   onClick={(e) => {
-                    // Click on the empty all-day cell creates an all-day event
-                    // on this date. Clicks on child chips have their own
-                    // handlers; we bail if the event target isn't us.
                     if (e.target !== e.currentTarget) return;
                     const start = new Date(day); start.setHours(0, 0, 0, 0);
                     const end   = new Date(start); end.setDate(end.getDate() + 1);
@@ -1491,27 +1408,100 @@ export default function CalendarClient({
                       </button>
                     );
                   })}
-                  {dayTasks.map(t => (
-                    <button
-                      key={t.id}
-                      onClick={(e) => openPopover(e, t)}
-                      className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate text-left"
-                      style={{
-                        background: "rgba(37,99,171,0.09)", color: "#2563ab",
-                        border: "0.5px solid rgba(37,99,171,0.18)",
-                        cursor: "pointer", fontFamily: "inherit",
-                        opacity: t.completed ? 0.45 : 1,
-                        textDecoration: t.completed ? "line-through" : "none",
-                      }}
-                    >
-                      ☐ {t.title}
-                    </button>
-                  ))}
                   {dayProjects.map(p => (
                     <div key={p.id} className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate"
                       style={{ background: "rgba(155,163,122,0.14)", color: "#5a7040", border: "0.5px solid rgba(155,163,122,0.25)" }}
                     >{p.title} due</div>
                   ))}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Tasks ribbon — dedicated row below all-day, holds task pills
+              by due date. Drag-and-drop between cells reschedules. Sticky
+              so it stays visible when the time grid scrolls underneath. */}
+          <div
+            style={{
+              position: "sticky",
+              top: `${DAY_HDR_H + 30}px`,
+              zIndex: 18,
+              display: "flex",
+              background: "var(--color-warm-white)",
+              borderBottom: "0.5px solid var(--color-border)",
+              minHeight: 26,
+            }}
+          >
+            <div
+              style={{
+                width: 52, flexShrink: 0,
+                display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
+                paddingRight: 8, paddingTop: 6,
+                fontSize: 9, color: "var(--color-grey)",
+                textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600,
+              }}
+            >
+              Tasks
+            </div>
+            {weekDays.map((day, i) => {
+              const dayTasks = scheduledTasks.filter((t) => {
+                const d = parseTaskDueDate(t.due_date!);
+                return d ? isSameDay(d, day) : false;
+              });
+              return (
+                <div
+                  key={i}
+                  onDragOver={(e) => {
+                    if (taskDrag) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }
+                  }}
+                  onDrop={(e) => {
+                    if (!taskDrag) return;
+                    e.preventDefault();
+                    const iso = `${day.getFullYear()}-${pad2(day.getMonth() + 1)}-${pad2(day.getDate())}`;
+                    if (taskDrag.task.due_date !== iso) rescheduleTask(taskDrag.task.id, iso);
+                    setTaskDrag(null);
+                  }}
+                  style={{
+                    flex: 1, borderLeft: "0.5px solid var(--color-border)",
+                    padding: "3px 3px", display: "flex", flexDirection: "column", gap: 2,
+                    background: taskDrag ? "rgba(155,163,122,0.04)" : "transparent",
+                  }}
+                >
+                  {dayTasks.map((t) => {
+                    const palette = PRIORITY_PALETTE[t.priority ?? "_default"];
+                    return (
+                      <button
+                        key={t.id}
+                        draggable
+                        onDragStart={(e) => {
+                          setTaskDrag({ task: t, x: e.clientX, y: e.clientY });
+                          e.dataTransfer.effectAllowed = "move";
+                          // Firefox refuses to fire drop events unless setData
+                          // is called during dragstart. Empty payload is fine.
+                          e.dataTransfer.setData("text/plain", t.id);
+                        }}
+                        onDragEnd={() => setTaskDrag(null)}
+                        onClick={(e) => { e.stopPropagation(); openQuickTask(e, t); }}
+                        style={{
+                          background: palette.bg,
+                          color: palette.fg,
+                          border: `0.5px solid ${palette.border}`,
+                          borderRadius: 4,
+                          padding: "1px 6px",
+                          fontSize: 10, fontWeight: 500,
+                          textAlign: "left",
+                          cursor: "grab",
+                          fontFamily: "inherit",
+                          opacity: t.completed ? 0.45 : (taskDrag?.task.id === t.id ? 0.4 : 1),
+                          textDecoration: t.completed ? "line-through" : "none",
+                          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                        }}
+                        title={t.title}
+                      >
+                        ☐ {t.title}
+                      </button>
+                    );
+                  })}
                 </div>
               );
             })}
@@ -1704,15 +1694,21 @@ export default function CalendarClient({
         )}
       </div>
 
-      {/* Task popover */}
-      {popover && (
-        <TaskPopover
-          task={popover.task}
-          x={popover.x}
-          y={popover.y}
-          onMarkComplete={() => markComplete(popover.task.id)}
-          onUndo={() => undoComplete(popover.task.id)}
-          onClose={() => setPopover(null)}
+      {/* Quick-edit task popover (rail + ribbon + topbar) */}
+      {quickTask && (
+        <TaskQuickEditPopover
+          task={quickTask.task}
+          x={quickTask.x}
+          y={quickTask.y}
+          onClose={() => setQuickTask(null)}
+          onUpdated={(t) => setTasks((prev) => prev.map((p) => (p.id === t.id ? t : p)))}
+          onCompleted={(id, completed) => {
+            // mark/undo flow handles linger; we mirror the immediate state
+            // change here so the rail badge updates without re-fetching.
+            setTasks((prev) => prev.map((p) => (p.id === id ? { ...p, completed } : p)));
+            if (completed) scheduleRemoval(id);
+          }}
+          onDeleted={(id) => setTasks((prev) => prev.filter((p) => p.id !== id))}
         />
       )}
 
