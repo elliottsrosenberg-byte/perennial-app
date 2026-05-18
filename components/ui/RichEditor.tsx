@@ -219,20 +219,6 @@ function markPlaceholderError(editor: Editor, id: string, message: string) {
   editor.view.dispatch(editor.state.tr.replaceWith(t.from, t.from + t.node.nodeSize, node));
 }
 
-function removePlaceholderById(editor: Editor, id: string) {
-  let target: { from: number; to: number } | null = null;
-  editor.state.doc.descendants((n, p) => {
-    if (n.type.name === "imageUploadPlaceholder" && n.attrs.id === id) {
-      target = { from: p, to: p + n.nodeSize };
-      return false;
-    }
-    return true;
-  });
-  if (!target) return;
-  const t = target as { from: number; to: number };
-  editor.view.dispatch(editor.state.tr.delete(t.from, t.to));
-}
-
 async function processImageFile(editor: Editor, uploader: EditorImageUploader, file: File, insertAt: number) {
   if (!isUploadableImageType(file.type)) {
     // Skip silently — paste/drop events often include non-image attachments
@@ -515,7 +501,25 @@ export function RichToolbar({
         false, "Toggle block",
       )}
       {sep()}
-      {btn(<ImageIcon size={12} />, () => imageInputRef.current?.click(), false, "Insert image")}
+      <button
+        type="button"
+        title="Insert image"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          const input = imageInputRef.current;
+          if (input) input.click();
+        }}
+        style={{
+          width: 26, height: 26, borderRadius: 5, border: "none", display: "flex",
+          alignItems: "center", justifyContent: "center",
+          background: "transparent", color: "var(--color-text-secondary)",
+          cursor: "pointer", flexShrink: 0,
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+      >
+        <ImageIcon size={12} />
+      </button>
       <input
         ref={imageInputRef}
         type="file"
