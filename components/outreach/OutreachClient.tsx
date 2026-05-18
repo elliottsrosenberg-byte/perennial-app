@@ -81,6 +81,24 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
     setShowNewTarget(true);
   }
 
+  // Open a specific target from anywhere in the module (e.g. lead card chip
+  // → "in {pipeline}" → opens the linked target). The event is fired by
+  // LeadsBoard's pipeline chip; we switch to the pipeline section and pop
+  // the detail panel.
+  useEffect(() => {
+    function onOpenTarget(e: Event) {
+      const detail = (e as CustomEvent<{ target_id?: string; pipeline_id?: string }>).detail;
+      if (!detail?.target_id) return;
+      if (detail.pipeline_id) {
+        setActiveSection("pipeline");
+        setSelectedPipelineId(detail.pipeline_id);
+      }
+      setSelectedTargetId(detail.target_id);
+    }
+    window.addEventListener("outreach:open-target", onOpenTarget);
+    return () => window.removeEventListener("outreach:open-target", onOpenTarget);
+  }, []);
+
   // Notify the tooltip tour when the new-pipeline / new-target modals open
   // and when the target detail panel opens.
   useEffect(() => {
