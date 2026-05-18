@@ -10,10 +10,18 @@ import type { NodeViewProps } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
+import Image from "@tiptap/extension-image";
 import { Node as TiptapNode, mergeAttributes } from "@tiptap/core";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { DOMSerializer } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/core";
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, FileText } from "lucide-react";
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, FileText, Image as ImageIcon } from "lucide-react";
+import {
+  uploadEditorImage,
+  isUploadableImageType,
+  type EditorImageUploader,
+  type UploadedEditorImage,
+} from "@/lib/uploads/editor-image";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -151,17 +159,278 @@ export const InlineAsh = Extension.create<{
   },
 });
 
+// ─── Image upload (paste / drop) ──────────────────────────────────────────────
+//
+// Adds a ProseMirror plugin to the editor that intercepts paste + drop of
+// image files, inserts a tiny placeholder where the cursor / drop point is,
+// uploads each file through `uploadEditorImage` (override-able for tests),
+// then swaps the placeholder for a real <img> on success — or an error chip
+// on failure that the user can click to dismiss.
+
+type UploadStatus = "uploading" | "error";
+
+interface ImageUploadPluginState {
+  placeholders: Map<string, { from: number; status: UploadStatus; message?: string }>;
+}
+
+const imageUploadPluginKey = new PluginKey<ImageUploadPluginState>("perennialImageUpload");
+
+function nextPlaceholderId(): string {
+  return `pl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function insertPlaceholderNode(editor: Editor, pos: number, id: string, status: UploadStatus, message?: string) {
+  const node = editor.schema.nodes.imageUploadPlaceholder?.create({ id, status, message });
+  if (!node) return;
+  editor.view.dispatch(editor.state.tr.insert(pos, node));
+}
+
+function replacePlaceholderWithImage(editor: Editor, id: string, attrs: { src: string; width?: number; height?: number }) {
+  let target: { from: number; to: number } | null = null;
+  editor.state.doc.descendants((n, p) => {
+    if (n.type.name === "imageUploadPlaceholder" && n.attrs.id === id) {
+      target = { from: p, to: p + n.nodeSize };
+      return false;
+    }
+    return true;
+  });
+  if (!target) return;
+  const t = target as { from: number; to: number };
+  const imageNode = editor.schema.nodes.image?.create(attrs);
+  if (!imageNode) return;
+  editor.view.dispatch(editor.state.tr.replaceWith(t.from, t.to, imageNode));
+}
+
+function markPlaceholderError(editor: Editor, id: string, message: string) {
+  let target: { from: number; node: { nodeSize: number; attrs: Record<string, unknown> } } | null = null;
+  editor.state.doc.descendants((n, p) => {
+    if (n.type.name === "imageUploadPlaceholder" && n.attrs.id === id) {
+      target = { from: p, node: { nodeSize: n.nodeSize, attrs: n.attrs as Record<string, unknown> } };
+      return false;
+    }
+    return true;
+  });
+  if (!target) return;
+  const t = target as { from: number; node: { nodeSize: number; attrs: Record<string, unknown> } };
+  const node = editor.schema.nodes.imageUploadPlaceholder?.create({
+    ...t.node.attrs, status: "error", message,
+  });
+  if (!node) return;
+  editor.view.dispatch(editor.state.tr.replaceWith(t.from, t.from + t.node.nodeSize, node));
+}
+
+function removePlaceholderById(editor: Editor, id: string) {
+  let target: { from: number; to: number } | null = null;
+  editor.state.doc.descendants((n, p) => {
+    if (n.type.name === "imageUploadPlaceholder" && n.attrs.id === id) {
+      target = { from: p, to: p + n.nodeSize };
+      return false;
+    }
+    return true;
+  });
+  if (!target) return;
+  const t = target as { from: number; to: number };
+  editor.view.dispatch(editor.state.tr.delete(t.from, t.to));
+}
+
+async function processImageFile(editor: Editor, uploader: EditorImageUploader, file: File, insertAt: number) {
+  if (!isUploadableImageType(file.type)) {
+    // Skip silently — paste/drop events often include non-image attachments
+    // we don't want to noisily reject. Toolbar button surfaces errors.
+    return;
+  }
+  const id = nextPlaceholderId();
+  insertPlaceholderNode(editor, insertAt, id, "uploading");
+  try {
+    const result: UploadedEditorImage = await uploader(file);
+    replacePlaceholderWithImage(editor, id, {
+      src: result.url, width: result.width, height: result.height,
+    });
+  } catch (err) {
+    markPlaceholderError(editor, id, err instanceof Error ? err.message : "Upload failed.");
+  }
+}
+
+function ImagePlaceholderView({ node, getPos, editor }: NodeViewProps) {
+  const id      = node.attrs.id      as string;
+  const status  = node.attrs.status  as UploadStatus;
+  const message = node.attrs.message as string | undefined;
+  const isError = status === "error";
+
+  function dismiss() {
+    const pos = getPos();
+    if (typeof pos !== "number") return;
+    editor.view.dispatch(editor.state.tr.delete(pos, pos + node.nodeSize));
+  }
+
+  return (
+    <NodeViewWrapper as="div" data-image-upload-placeholder={id} style={{ margin: "8px 0" }}>
+      <div
+        contentEditable={false}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 8,
+          padding: "8px 12px", borderRadius: 8,
+          border: `1px dashed ${isError ? "var(--color-red-orange)" : "var(--color-border-strong)"}`,
+          background: isError ? "rgba(220,90,60,0.06)" : "var(--color-surface-sunken)",
+          color: isError ? "var(--color-red-orange)" : "var(--color-text-tertiary)",
+          fontSize: 11, fontFamily: "inherit",
+        }}
+      >
+        {isError ? (
+          <>
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+              <circle cx="8" cy="8" r="6.5"/><path d="M8 5v3.5"/><circle cx="8" cy="11" r="0.5" fill="currentColor"/>
+            </svg>
+            <span>{message ?? "Upload failed."}</span>
+            <button
+              type="button"
+              onClick={dismiss}
+              style={{
+                marginLeft: 4, border: "none", background: "transparent",
+                color: "inherit", cursor: "pointer", fontFamily: "inherit",
+                fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 4,
+              }}
+            >
+              Dismiss
+            </button>
+          </>
+        ) : (
+          <>
+            <span
+              style={{
+                width: 11, height: 11, borderRadius: "50%",
+                border: "1.5px solid currentColor", borderTopColor: "transparent",
+                display: "inline-block",
+                animation: "perennial-img-upload-spin 0.8s linear infinite",
+              }}
+            />
+            <style>{`@keyframes perennial-img-upload-spin { to { transform: rotate(360deg); } }`}</style>
+            <span>Uploading image…</span>
+          </>
+        )}
+      </div>
+    </NodeViewWrapper>
+  );
+}
+
+export const ImageUploadPlaceholder = TiptapNode.create({
+  name: "imageUploadPlaceholder",
+  group: "block",
+  atom: true,
+  selectable: false,
+  // These are transient — never persisted. parseHTML left out on purpose so
+  // a stale placeholder never round-trips back into a saved doc.
+  addAttributes() {
+    return {
+      id:      { default: "" },
+      status:  { default: "uploading" },
+      message: { default: "" },
+    };
+  },
+  renderHTML() { return ["div", { "data-type": "image-upload-placeholder" }]; },
+  addNodeView() { return ReactNodeViewRenderer(ImagePlaceholderView); },
+});
+
+function createImageUploadExtension(uploader: EditorImageUploader) {
+  return Extension.create({
+    name: "perennialImageUpload",
+    addProseMirrorPlugins() {
+      const editorRef = this.editor as Editor;
+      return [
+        new Plugin({
+          key: imageUploadPluginKey,
+          props: {
+            handlePaste(view, event) {
+              const items = event.clipboardData?.items;
+              if (!items || items.length === 0) return false;
+              const files: File[] = [];
+              for (const item of Array.from(items)) {
+                if (item.kind === "file") {
+                  const f = item.getAsFile();
+                  if (f && isUploadableImageType(f.type)) files.push(f);
+                }
+              }
+              if (files.length === 0) return false;
+              event.preventDefault();
+              const insertAt = view.state.selection.from;
+              // Insert sequentially so order of pasted screenshots is
+              // preserved.
+              (async () => {
+                for (let i = 0; i < files.length; i++) {
+                  await processImageFile(editorRef, uploader, files[i], insertAt + i);
+                }
+              })();
+              return true;
+            },
+            handleDrop(view, event) {
+              const dt = (event as DragEvent).dataTransfer;
+              if (!dt || !dt.files || dt.files.length === 0) return false;
+              const files = Array.from(dt.files).filter(f => isUploadableImageType(f.type));
+              if (files.length === 0) return false;
+              event.preventDefault();
+              const coords = { left: (event as DragEvent).clientX, top: (event as DragEvent).clientY };
+              const posAt = view.posAtCoords(coords);
+              const insertAt = posAt?.pos ?? view.state.selection.from;
+              (async () => {
+                for (let i = 0; i < files.length; i++) {
+                  await processImageFile(editorRef, uploader, files[i], insertAt + i);
+                }
+              })();
+              return true;
+            },
+          },
+        }),
+      ];
+    },
+  });
+}
+
+/** Exposed so non-paste/drop callers (toolbar picker, future drag-from-explorer
+ *  flows) can run the exact same placeholder → upload → swap pipeline. */
+export async function insertEditorImageFromFile(
+  editor: Editor,
+  file: File,
+  uploader: EditorImageUploader = uploadEditorImage,
+) {
+  const pos = editor.state.selection.from;
+  await processImageFile(editor, uploader, file, pos);
+}
+
 // ─── Extension factory ────────────────────────────────────────────────────────
 
 export function getRichExtensions(opts: {
   placeholder?: string;
   onAshTrigger?: (pos: number, coords: { top: number; left: number; bottom: number }) => void;
+  /** Override for tests. Defaults to the Supabase-backed `uploadEditorImage`. */
+  imageUploadHandler?: EditorImageUploader;
 } = {}) {
+  const uploader = opts.imageUploadHandler ?? uploadEditorImage;
   return [
     StarterKit,
     Underline,
     Placeholder.configure({ placeholder: opts.placeholder ?? "Start writing…" }),
     ToggleBlock,
+    Image.configure({
+      inline:      false,
+      allowBase64: false,
+      // Built-in resize was added to @tiptap/extension-image — corner +
+      // edge drag handles, with aspect-ratio preserved. We keep the same
+      // minWidth/Height defaults Notion-style editors use.
+      resize: {
+        enabled:                   true,
+        minWidth:                  80,
+        minHeight:                 60,
+        alwaysPreserveAspectRatio: true,
+      },
+      HTMLAttributes: {
+        // Saved content goes back through the editor on load; this class
+        // lets the editor stylesheet (or the surfaces that render saved
+        // HTML read-only) constrain images to the content column.
+        class: "perennial-editor-image",
+      },
+    }),
+    ImageUploadPlaceholder,
+    createImageUploadExtension(uploader),
     InlineAsh.configure({ onTrigger: opts.onAshTrigger ?? (() => {}) }),
   ];
 }
@@ -182,13 +451,26 @@ export function getSelectionExtract(editor: Editor): { text: string; html: strin
 }
 
 export function RichToolbar({
-  editor, onGenerateTasks, suggesting,
+  editor, onGenerateTasks, suggesting, imageUploadHandler,
 }: {
-  editor:           ReturnType<typeof useEditor> | null;
-  onGenerateTasks?: () => void;
-  suggesting?:      boolean;
+  editor:              ReturnType<typeof useEditor> | null;
+  onGenerateTasks?:    () => void;
+  suggesting?:         boolean;
+  /** Optional override; defaults to the same handler `getRichExtensions`
+   *  installs into the editor instance (Supabase upload). Lets tests + the
+   *  Notes Import preview swap in a no-op or in-memory uploader. */
+  imageUploadHandler?: EditorImageUploader;
 }) {
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
   if (!editor) return null;
+
+  async function pickImages(files: FileList | null) {
+    if (!files || files.length === 0 || !editor) return;
+    for (const f of Array.from(files)) {
+      await insertEditorImageFromFile(editor, f, imageUploadHandler);
+    }
+  }
 
   function btn(label: React.ReactNode, action: () => void, active?: boolean, title?: string) {
     return (
@@ -232,6 +514,19 @@ export function RichToolbar({
         () => editor.chain().focus().insertContent({ type: "toggleBlock", attrs: { summary: "", open: false }, content: [{ type: "paragraph" }] }).run(),
         false, "Toggle block",
       )}
+      {sep()}
+      {btn(<ImageIcon size={12} />, () => imageInputRef.current?.click(), false, "Insert image")}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+        multiple
+        style={{ display: "none" }}
+        onChange={(e) => {
+          void pickImages(e.target.files);
+          e.target.value = "";
+        }}
+      />
       <div style={{ flex: 1 }} />
       {onGenerateTasks && (
         <button type="button" onClick={onGenerateTasks} disabled={suggesting} title="Generate tasks from this note" style={{
