@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { OutreachPipeline, PipelineStage, MetaStage } from "@/types/database";
 import { X, GripVertical, Plus } from "lucide-react";
+import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 
 interface Props {
   onClose: () => void;
@@ -130,6 +131,42 @@ export default function NewPipelineModal({ onClose, onCreated }: Props) {
     setNewStage("");
   }
 
+  // Reorder within a single list (active or outcome). The two lists are
+  // logically separate but live in the same `stages` array, so we splice
+  // back into the right positions after reordering the slice.
+  function reorderList(droppableId: "active" | "outcome", srcIdx: number, dstIdx: number) {
+    setStages(prev => {
+      const want = droppableId === "outcome";
+      const slice = prev.filter(s => s.is_outcome === want);
+      const others = prev.map((s, i) => ({ s, i })).filter(x => x.s.is_outcome !== want);
+      const [moved] = slice.splice(srcIdx, 1);
+      slice.splice(dstIdx, 0, moved);
+      // Interleave: walk the original positions, preserving the "other" list
+      // order, filling the matching-kind slots with the reordered slice.
+      const result: EditableStage[] = [];
+      let sliceI = 0;
+      let otherI = 0;
+      for (let i = 0; i < prev.length; i++) {
+        if (prev[i].is_outcome === want) {
+          result.push(slice[sliceI++]);
+        } else {
+          result.push(others[otherI++].s);
+        }
+      }
+      return result;
+    });
+  }
+
+  function handleDragEnd(result: DropResult) {
+    if (!result.destination) return;
+    if (result.source.droppableId !== result.destination.droppableId) return;
+    reorderList(
+      result.source.droppableId as "active" | "outcome",
+      result.source.index,
+      result.destination.index,
+    );
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || stages.filter(s => !s.is_outcome).length === 0) return;
@@ -242,23 +279,77 @@ export default function NewPipelineModal({ onClose, onCreated }: Props) {
             <div>
               <label className="block text-[11px] font-medium mb-2" style={{ color: "var(--color-charcoal)" }}>Stages</label>
 
-              {/* Active stages */}
-              {activeStages.length > 0 && (
-                <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-grey)" }}>Pipeline</p>
-              )}
-              {stages.filter(s => !s.is_outcome).map((stage) => (
-                <StageRow key={stage.id} stage={stage} color={color}
-                  onNameChange={updateStageName} onToggleOutcome={toggleOutcome} onDelete={deleteStage} />
-              ))}
+              <DragDropContext onDragEnd={handleDragEnd}>
+                {/* Active stages — pipeline */}
+                {activeStages.length > 0 && (
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-grey)" }}>Pipeline</p>
+                )}
+                <Droppable droppableId="active">
+                  {(provided) => (
+                    <div ref={provided.innerRef} {...provided.droppableProps}>
+                      {activeStages.map((stage, index) => (
+                        <Draggable key={stage.id} draggableId={stage.id} index={index}>
+                          {(dragProvided, dragSnap) => (
+                            <div
+                              ref={dragProvided.innerRef}
+                              {...dragProvided.draggableProps}
+                              style={{
+                                ...dragProvided.draggableProps.style,
+                                opacity: dragSnap.isDragging ? 0.92 : 1,
+                              }}
+                            >
+                              <StageRow
+                                stage={stage}
+                                color={color}
+                                dragHandleProps={dragProvided.dragHandleProps}
+                                onNameChange={updateStageName}
+                                onToggleOutcome={toggleOutcome}
+                                onDelete={deleteStage}
+                              />
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                    </div>
+                  )}
+                </Droppable>
 
-              {/* Outcome stages */}
-              {outcomeStages.length > 0 && (
-                <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5 mt-3" style={{ color: "var(--color-grey)" }}>Outcomes</p>
-              )}
-              {stages.filter(s => s.is_outcome).map((stage) => (
-                <StageRow key={stage.id} stage={stage} color={color}
-                  onNameChange={updateStageName} onToggleOutcome={toggleOutcome} onDelete={deleteStage} />
-              ))}
+                {/* Outcome stages */}
+                {outcomeStages.length > 0 && (
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5 mt-3" style={{ color: "var(--color-grey)" }}>Outcomes</p>
+                )}
+                <Droppable droppableId="outcome">
+                  {(provided) => (
+                    <div ref={provided.innerRef} {...provided.droppableProps}>
+                      {outcomeStages.map((stage, index) => (
+                        <Draggable key={stage.id} draggableId={stage.id} index={index}>
+                          {(dragProvided, dragSnap) => (
+                            <div
+                              ref={dragProvided.innerRef}
+                              {...dragProvided.draggableProps}
+                              style={{
+                                ...dragProvided.draggableProps.style,
+                                opacity: dragSnap.isDragging ? 0.92 : 1,
+                              }}
+                            >
+                              <StageRow
+                                stage={stage}
+                                color={color}
+                                dragHandleProps={dragProvided.dragHandleProps}
+                                onNameChange={updateStageName}
+                                onToggleOutcome={toggleOutcome}
+                                onDelete={deleteStage}
+                              />
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                    </div>
+                  )}
+                </Droppable>
+              </DragDropContext>
 
               {/* Add stage */}
               <div className="flex items-center gap-2 mt-2">
@@ -306,16 +397,17 @@ export default function NewPipelineModal({ onClose, onCreated }: Props) {
 
 // ── Stage row ─────────────────────────────────────────────────────────────────
 
-function StageRow({ stage, color, onNameChange, onToggleOutcome, onDelete }: {
+function StageRow({ stage, color, dragHandleProps, onNameChange, onToggleOutcome, onDelete }: {
   stage: EditableStage;
   color: string;
+  dragHandleProps?: React.HTMLAttributes<HTMLDivElement> | null;
   onNameChange: (id: string, val: string) => void;
   onToggleOutcome: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
   return (
     <div className="flex items-center gap-2 mb-1.5">
-      <div style={{ color: "var(--color-grey)", cursor: "grab", flexShrink: 0, opacity: 0.4 }}>
+      <div {...(dragHandleProps ?? {})} style={{ color: "var(--color-grey)", cursor: "grab", flexShrink: 0, opacity: 0.55, display: "flex", alignItems: "center" }} title="Drag to reorder">
         <GripVertical size={13} />
       </div>
       <input
