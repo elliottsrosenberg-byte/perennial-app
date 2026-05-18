@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { OutreachPipeline, PipelineStage, OutreachTarget, Contact } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
 import Topbar from "@/components/layout/Topbar";
@@ -12,32 +12,13 @@ import NewTargetModal from "./NewTargetModal";
 import TargetDetailPanel from "./TargetDetailPanel";
 import NewContactModal from "@/components/contacts/NewContactModal";
 import ContactDetailPanel from "@/components/contacts/ContactDetailPanel";
-import { Plus } from "lucide-react";
-import AshMark from "@/components/ui/AshMark";
+import { Plus, MoreHorizontal } from "lucide-react";
+import Button from "@/components/ui/Button";
 import OutreachIntroModal from "@/components/tour/outreach/OutreachIntroModal";
 import OutreachTooltipTour from "@/components/tour/outreach/OutreachTooltipTour";
+import OutreachOptionsMenu from "./OutreachOptionsMenu";
 
 type ActiveSection = "leads" | "followups" | "pipeline";
-
-const ASH_GRADIENT = "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)";
-function openAsh(message: string) {
-  window.dispatchEvent(new CustomEvent("open-ash", { detail: { message } }));
-}
-function AshBtn({ message }: { message: string }) {
-  return (
-    <button
-      onClick={() => openAsh(message)}
-      style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", fontSize: 11, fontWeight: 500, borderRadius: 6, background: "transparent", color: "var(--color-ash-dark)", border: "0.5px solid var(--color-border)", cursor: "pointer", fontFamily: "inherit", transition: "background 0.1s ease" }}
-      onMouseEnter={e => (e.currentTarget.style.background = "var(--color-ash-tint)")}
-      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-    >
-      <div style={{ width: 16, height: 16, borderRadius: "50%", background: ASH_GRADIENT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-        <AshMark size={9} variant="on-dark" />
-      </div>
-      Ask Ash
-    </button>
-  );
-}
 
 interface Props {
   initialPipelines: (OutreachPipeline & { stages: PipelineStage[] })[];
@@ -63,6 +44,24 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
   const [showNewTarget, setShowNewTarget]       = useState(false);
   const [showNewLead, setShowNewLead]           = useState(false);
   const [newTargetDefaults, setNewTargetDefaults] = useState<{ pipelineId?: string; stageId?: string }>({});
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  // Display preferences (currently UI-only — wired through to the board's
+  // `selectedPipeline` filter below). Future commits can persist these in
+  // profiles.outreach_preferences without changing the surface.
+  const [showOutcomes, setShowOutcomes] = useState(true);
+  const [showClosed,   setShowClosed]   = useState(true);
+  const optionsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!optionsOpen) return;
+    function handler(e: MouseEvent) {
+      if (optionsRef.current && !optionsRef.current.contains(e.target as Node)) {
+        setOptionsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [optionsOpen]);
 
   const selectedPipeline = pipelines.find((p) => p.id === selectedPipelineId) ?? null;
   const selectedTarget   = targets.find((t) => t.id === selectedTargetId) ?? null;
@@ -160,44 +159,101 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
     await createClient().from("outreach_targets").update({ last_touched_at: now }).eq("id", targetId);
   }
 
-  const boardTargets = selectedPipeline
+  // Outcome / closed filters are applied here so the toggles in the options
+  // menu visibly affect the board without each board having to know about them.
+  const boardTargets = (selectedPipeline
     ? targets.filter((t) => t.pipeline_id === selectedPipeline.id)
-    : targets;
+    : targets
+  ).filter((t) => {
+    if (showClosed) return true;
+    const tp = pipelines.find(p => p.id === t.pipeline_id);
+    const stage = tp?.stages.find(s => s.id === t.stage_id);
+    return !stage?.is_outcome;
+  });
+
+  // Hide outcome columns themselves when the toggle is off — done by passing
+  // a "stripped" pipeline down so the board renders just the active stages.
+  const boardPipeline = selectedPipeline && !showOutcomes
+    ? { ...selectedPipeline, stages: selectedPipeline.stages.filter(s => !s.is_outcome) }
+    : selectedPipeline;
 
   const topbarTitle =
     activeSection === "leads"     ? "Leads"
     : activeSection === "followups" ? "Follow-ups"
     : selectedPipeline?.name ?? "Outreach";
 
-  const topbarActions = activeSection === "leads" ? (
-    <>
-      <AshBtn message="Who are my strongest leads right now and who should I follow up with?" />
+  // Count of closed/outcome targets across all pipelines — feeds the options
+  // menu subtitle so "Show closed targets" reads as a real toggle.
+  const closedCount = targets.filter(t => {
+    const tp = pipelines.find(p => p.id === t.pipeline_id);
+    const stage = tp?.stages.find(s => s.id === t.stage_id);
+    return stage?.is_outcome === true;
+  }).length;
+
+  // Settings-menu button — appears on every section so the structural
+  // placeholder is consistent. The Ash inline button has been removed; the
+  // floating Ash FAB remains for general "ask anything" access.
+  const optionsButton = (
+    <div ref={optionsRef} style={{ position: "relative" }}>
       <button
         type="button"
-        onClick={() => setShowNewLead(true)}
-        style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 14px", fontSize: 11, fontWeight: 500, borderRadius: 6, background: "rgba(184,134,11,0.10)", color: "#b8860b", border: "0.5px solid rgba(184,134,11,0.35)", cursor: "pointer", fontFamily: "inherit", transition: "background 0.12s ease" }}
-        onMouseEnter={e => (e.currentTarget.style.background = "rgba(184,134,11,0.18)")}
-        onMouseLeave={e => (e.currentTarget.style.background = "rgba(184,134,11,0.10)")}>
-        <Plus size={12} />
-        New lead
+        onClick={() => setOptionsOpen(v => !v)}
+        aria-label="Outreach options"
+        title="Outreach options"
+        style={{
+          width: 28, height: 28, borderRadius: 7,
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          background: optionsOpen ? "var(--color-surface-sunken)" : "transparent",
+          border: "none", cursor: "pointer",
+          color: "var(--color-text-secondary)",
+          transition: "background 0.12s ease",
+        }}
+        onMouseEnter={e => { if (!optionsOpen) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+        onMouseLeave={e => { if (!optionsOpen) e.currentTarget.style.background = "transparent"; }}
+      >
+        <MoreHorizontal size={16} strokeWidth={2} />
       </button>
-    </>
-  ) : activeSection === "pipeline" ? (
+      {optionsOpen && (
+        <OutreachOptionsMenu
+          showOutcomes={showOutcomes}
+          onToggleShowOutcomes={() => setShowOutcomes(v => !v)}
+          showClosed={showClosed}
+          onToggleShowClosed={() => setShowClosed(v => !v)}
+          closedCount={closedCount}
+          onClose={() => setOptionsOpen(false)}
+        />
+      )}
+    </div>
+  );
+
+  const topbarActions = (
     <>
-      <AshBtn message="How is my outreach going? Which pipelines need attention and what should I prioritize?" />
-      <button
-        data-tour-target="outreach.new-target-button"
-        type="button"
-        onClick={() => openNewTarget()}
-        style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 14px", fontSize: 11, fontWeight: 500, borderRadius: 6, background: "var(--color-sage)", color: "white", border: "none", cursor: "pointer", fontFamily: "inherit", transition: "background 0.12s ease" }}
-        onMouseEnter={e => (e.currentTarget.style.background = "var(--color-sage-hover)")}
-        onMouseLeave={e => (e.currentTarget.style.background = "var(--color-sage)")}>
-        <Plus size={12} />
-        New target
-      </button>
+      {optionsButton}
+      {activeSection === "leads" && (
+        <span data-tour-target="outreach.new-lead-button">
+          <button
+            type="button"
+            onClick={() => setShowNewLead(true)}
+            style={{
+              padding: "7px 20px", fontSize: 12, fontWeight: 500,
+              borderRadius: 8, border: "none", cursor: "pointer",
+              background: "#b8860b", color: "white",
+              fontFamily: "inherit",
+              transition: "background 0.12s ease",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#a07800")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "#b8860b")}
+          >
+            + New lead
+          </button>
+        </span>
+      )}
+      {activeSection === "pipeline" && (
+        <span data-tour-target="outreach.new-target-button">
+          <Button onClick={() => openNewTarget()}>+ New target</Button>
+        </span>
+      )}
     </>
-  ) : (
-    <AshBtn message="Who in my network needs a follow-up? Who have I not reached out to in a while?" />
   );
 
   return (
@@ -271,7 +327,12 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
         <Topbar title={topbarTitle} actions={topbarActions} />
         <div className="flex-1 flex overflow-hidden">
           {activeSection === "leads" && (
-            <LeadsBoard contacts={leads} onOpen={setOpenContact} onStageChange={handleLeadStageChange} />
+            <LeadsBoard
+              contacts={leads}
+              onOpen={setOpenContact}
+              onStageChange={handleLeadStageChange}
+              onNewLead={() => setShowNewLead(true)}
+            />
           )}
           {activeSection === "followups" && (
             <FollowUpsBoard contacts={followUps} onOpen={setOpenContact} />
@@ -279,10 +340,11 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
           {activeSection === "pipeline" && (
             <PipelineBoard
               pipelines={pipelines}
-              selectedPipeline={selectedPipeline}
+              selectedPipeline={boardPipeline}
               targets={boardTargets}
               onTargetClick={(t) => setSelectedTargetId(t.id)}
               onNewTarget={openNewTarget}
+              onNewPipeline={() => setShowNewPipeline(true)}
               onStageChange={handleStageChange}
               onFollowUp={handleFollowUp}
             />
