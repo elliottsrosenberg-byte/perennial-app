@@ -901,6 +901,37 @@ export default function CalendarClient({
     return () => { cancelled = true; };
   }, [viewDate, viewMode, anyConnected, refreshNonce]);
 
+  // ── Deep link: ?eventId=<encoded provider:external_id> opens the
+  // EventDetailPanel for that event once it lands in gcalEvents. Used
+  // by Ash references and shareable calendar links. We strip the query
+  // immediately so refreshes don't re-fire on a stale id.
+  const [pendingDeepLinkId, setPendingDeepLinkId] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const enc = url.searchParams.get("eventId");
+    if (!enc) return;
+    setPendingDeepLinkId(decodeURIComponent(enc));
+    url.searchParams.delete("eventId");
+    window.history.replaceState({}, "", url.toString());
+  }, []);
+
+  useEffect(() => {
+    if (!pendingDeepLinkId) return;
+    // Format: "<provider>:<external_id>" — match either by that composite
+    // or by external_id alone if the caller forgot the provider prefix.
+    const ix       = pendingDeepLinkId.indexOf(":");
+    const provider = ix > 0 ? pendingDeepLinkId.slice(0, ix) : null;
+    const extId    = ix > 0 ? pendingDeepLinkId.slice(ix + 1) : pendingDeepLinkId;
+    const match = gcalEvents.find((e) =>
+      e.id === extId && (provider ? e.source === provider : true),
+    );
+    if (match) {
+      setOpenEvent(match);
+      setPendingDeepLinkId(null);
+    }
+  }, [pendingDeepLinkId, gcalEvents]);
+
   // ── On mount: if we just returned from an OAuth callback, fire the
   // event the tour listens for, then strip the query so refreshes don't
   // re-fire it.
