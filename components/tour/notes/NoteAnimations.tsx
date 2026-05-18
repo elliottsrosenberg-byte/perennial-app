@@ -2,11 +2,11 @@
 
 // Lightweight CSS animations for the Notes intro modal slides. Same scale
 // and visual language as ProjectAnimations / ContactAnimations so the three
-// walkthroughs feel like one family. Each loop demonstrates a distinct
-// affordance of the Notes module: free-form writing, pin + filter, linking
-// to projects/people/opportunities, and turning a note into tasks via Ash.
+// walkthroughs feel like one family. Each loop demonstrates an affordance
+// of the Notes module: free-form writing, calling Ash inline, and turning
+// a note into tasks.
 
-import { Pin, Search, Link2, Sparkles, CheckSquare } from "lucide-react";
+import { Sparkles, CheckSquare } from "lucide-react";
 
 const animationFrame: React.CSSProperties = {
   width: "100%", height: 200,
@@ -17,64 +17,7 @@ const animationFrame: React.CSSProperties = {
   position: "relative",
 };
 
-// ─── Mini note row matching the real NotesClient sidebar layout ─────────────
-function MiniNoteRow({
-  title, snippet, when, pinned = false, active = false, dim = false, hidden = false, style = {},
-}: {
-  title:    string;
-  snippet?: string;
-  when:     string;
-  pinned?:  boolean;
-  active?:  boolean;
-  dim?:     boolean;
-  hidden?:  boolean;
-  style?:   React.CSSProperties;
-}) {
-  return (
-    <div
-      style={{
-        position: "relative",
-        padding: "5px 7px 5px 8px",
-        borderRadius: 5,
-        borderLeft: `2px solid ${active ? "var(--color-sage)" : "transparent"}`,
-        background: active
-          ? "rgba(155,163,122,0.12)"
-          : "var(--color-off-white)",
-        border: active ? "0.5px solid rgba(155,163,122,0.3)" : "0.5px solid var(--color-border)",
-        opacity: hidden ? 0 : dim ? 0.4 : 1,
-        transition: "opacity 0.25s ease, background 0.25s ease",
-        ...style,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 1 }}>
-        {pinned && (
-          <svg width="6" height="6" viewBox="0 0 16 16" fill="var(--color-sage)" style={{ flexShrink: 0 }}>
-            <path d="M9.5 1.5L14.5 6.5L10 11L9 14L6 11L2 7L5 6L9.5 1.5Z" />
-          </svg>
-        )}
-        <span style={{
-          fontSize: 8.5, fontWeight: 600,
-          color: active ? "#4a6232" : "var(--color-charcoal)",
-          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        }}>
-          {title}
-        </span>
-      </div>
-      {snippet && (
-        <div style={{
-          fontSize: 7, color: "var(--color-grey)",
-          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-          marginBottom: 1,
-        }}>
-          {snippet}
-        </div>
-      )}
-      <div style={{ fontSize: 6.5, color: "var(--color-grey)" }}>{when}</div>
-    </div>
-  );
-}
-
-// ─── Slide 1: a writing surface — title types in, paragraph lines flow in ───
+// ─── Slide 1 + 2: a writing surface — title types in, paragraph lines flow in ───
 export function WritingSurface() {
   return (
     <div style={animationFrame}>
@@ -188,257 +131,97 @@ export function WritingSurface() {
   );
 }
 
-// ─── Slide 2: pin + search/filter — list reflows as the user pins a note ───
-export function PinAndFilter() {
+// ─── Slide 3: inline Ash tease — user types space, Ash popover appears,
+// streams a sentence into the line ───────────────────────────────────────────
+export function InlineAshTease() {
   return (
     <div style={animationFrame}>
       <style>{`
-        /* Loop: list at rest → pin lights up on "Vidal" → it floats up under
-         * Pinned, then search "vid" filters everything else out. */
-        @keyframes nt-pin-icon {
-          0%, 18%   { opacity: 0; transform: scale(0.6); }
-          22%, 50%  { opacity: 1; transform: scale(1.15); color: var(--color-sage); }
-          55%, 100% { opacity: 1; transform: scale(1); color: var(--color-sage); }
+        @keyframes nt-ia-prompt {
+          0%, 18%   { opacity: 0; transform: translateY(-4px); }
+          24%, 56%  { opacity: 1; transform: translateY(0); }
+          62%, 100% { opacity: 0; transform: translateY(-4px); }
         }
-        @keyframes nt-show-pinned {
-          0%, 18%   { opacity: 0; transform: translateY(-3px); max-height: 0; margin-bottom: 0; }
-          24%, 100% { opacity: 1; transform: translateY(0); max-height: 30px; margin-bottom: 4px; }
+        @keyframes nt-ia-prompt-text {
+          0%, 28%   { width: 0; }
+          50%, 100% { width: 138px; }
         }
-        @keyframes nt-row-pinned {
-          0%, 18%   { opacity: 1; transform: translateY(0); }
-          22%, 26%  { opacity: 0.3; }
-          30%, 100% { opacity: 0; max-height: 0; padding: 0; margin: 0; }
+        @keyframes nt-ia-line {
+          0%, 60%   { opacity: 0; transform: translateY(3px); }
+          66%, 100% { opacity: 1; transform: translateY(0); }
         }
-        @keyframes nt-pinned-card {
-          0%, 24%   { opacity: 0; transform: translateY(-4px); }
-          30%, 100% { opacity: 1; transform: translateY(0); }
+        @keyframes nt-ia-line2 {
+          0%, 72%   { opacity: 0; transform: translateY(3px); }
+          78%, 100% { opacity: 1; transform: translateY(0); }
         }
-        @keyframes nt-search-text {
-          0%, 60%   { width: 0; }
-          66%, 100% { width: 22px; }
+        @keyframes nt-ia-line3 {
+          0%, 84%   { opacity: 0; transform: translateY(3px); }
+          90%, 100% { opacity: 1; transform: translateY(0); }
         }
-        @keyframes nt-show-match {
-          0%, 60%   { opacity: 1; }
-          66%, 100% { opacity: 1; }
-        }
-        @keyframes nt-hide-nonmatch {
-          0%, 60%   { opacity: 1; }
-          66%, 100% { opacity: 0.18; }
-        }
-        .nt-pin-icon     { animation: nt-pin-icon     6.4s ease-in-out infinite; }
-        .nt-show-pinned  { animation: nt-show-pinned  6.4s ease-in-out infinite; }
-        .nt-row-pinned   { animation: nt-row-pinned   6.4s ease-in-out infinite; }
-        .nt-pinned-card  { animation: nt-pinned-card  6.4s ease-in-out infinite; }
-        .nt-search-text  { animation: nt-search-text  6.4s steps(3, end) infinite; overflow: hidden; }
-        .nt-hide-nonmatch { animation: nt-hide-nonmatch 6.4s ease-in-out infinite; }
-      `}</style>
-
-      <div style={{ width: 240, display: "flex", flexDirection: "column", gap: 5 }}>
-        {/* Search bar */}
-        <div style={{
-          display: "flex", alignItems: "center", gap: 5,
-          padding: "4px 7px",
-          background: "var(--color-warm-white)",
-          border: "0.5px solid var(--color-border)",
-          borderRadius: 5,
-        }}>
-          <Search size={9} strokeWidth={1.75} style={{ color: "var(--color-grey)", flexShrink: 0 }} />
-          <div style={{
-            fontSize: 8, color: "var(--color-charcoal)",
-            display: "flex", alignItems: "center", height: 9,
-          }}>
-            <span className="nt-search-text" style={{ display: "inline-block", whiteSpace: "nowrap" }}>vid</span>
-          </div>
-        </div>
-
-        {/* Pinned section header */}
-        <div className="nt-show-pinned" style={{ overflow: "hidden" }}>
-          <div style={{
-            padding: "2px 6px",
-            background: "var(--color-surface-sunken)",
-            borderRadius: 3,
-            fontSize: 6.5, fontWeight: 700,
-            textTransform: "uppercase", letterSpacing: "0.06em",
-            color: "var(--color-grey)",
-          }}>
-            Pinned
-          </div>
-        </div>
-
-        {/* Pinned card slot — appears mid-loop */}
-        <div className="nt-pinned-card" style={{ marginBottom: 2 }}>
-          <MiniNoteRow
-            title="Studio visit — Vidal" snippet="Brass finishes, lead time 6w…"
-            when="2m ago" pinned active
-          />
-        </div>
-
-        {/* Original list (un-pinned position) — fades out after pin */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          <div className="nt-row-pinned" style={{ overflow: "hidden", position: "relative" }}>
-            <MiniNoteRow
-              title="Studio visit — Vidal" snippet="Brass finishes, lead time 6w…"
-              when="2m ago"
-            />
-            <div className="nt-pin-icon" style={{
-              position: "absolute", top: 5, right: 6,
-              color: "var(--color-grey)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <Pin size={9} strokeWidth={1.8} fill="currentColor" />
-            </div>
-          </div>
-          <div className="nt-hide-nonmatch">
-            <MiniNoteRow title="Press list for Q3" snippet="Studio Mag, Sight Unseen, T-Magazine" when="Today" />
-          </div>
-          <div className="nt-hide-nonmatch">
-            <MiniNoteRow title="Foster console — pricing" snippet="Materials breakdown vs studio rate" when="Yesterday" />
-          </div>
-          <div className="nt-hide-nonmatch">
-            <MiniNoteRow title="Open call ideas" snippet="Hand-drawn vs printed proposal" when="Jul 24" />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Slide 3: link a note to a project / contact / opportunity ──────────────
-export function LinkBack() {
-  return (
-    <div style={animationFrame}>
-      <style>{`
-        /* Loop: empty pill → opens dropdown → "Brass console" selected → pill
-         * fills sage, dropdown collapses. */
-        @keyframes nt-pill-fill {
-          0%, 38%   { background: transparent; color: var(--color-grey); border-color: var(--color-border); }
-          44%, 100% { background: rgba(155,163,122,0.16); color: #4a6232; border-color: rgba(155,163,122,0.42); }
-        }
-        @keyframes nt-pill-label {
-          0%, 38%   { opacity: 1; }
-          42%, 100% { opacity: 0; }
-        }
-        @keyframes nt-pill-result {
-          0%, 38%   { opacity: 0; }
-          44%, 100% { opacity: 1; }
-        }
-        @keyframes nt-dropdown {
-          0%, 14%   { opacity: 0; transform: translateY(-3px); max-height: 0; }
-          20%, 36%  { opacity: 1; transform: translateY(0); max-height: 90px; }
-          42%, 100% { opacity: 0; transform: translateY(-3px); max-height: 0; }
-        }
-        @keyframes nt-row-highlight {
-          0%, 24%   { background: transparent; }
-          28%, 36%  { background: rgba(155,163,122,0.14); }
-          40%, 100% { background: transparent; }
-        }
-        .nt-pill-fill     { animation: nt-pill-fill     5.6s ease-in-out infinite; }
-        .nt-pill-label    { animation: nt-pill-label    5.6s ease-in-out infinite; }
-        .nt-pill-result   { animation: nt-pill-result   5.6s ease-in-out infinite; }
-        .nt-dropdown      { animation: nt-dropdown      5.6s ease-in-out infinite; overflow: hidden; }
-        .nt-row-highlight { animation: nt-row-highlight 5.6s ease-in-out infinite; }
+        .nt-ia-prompt        { animation: nt-ia-prompt        6.4s ease-in-out infinite; }
+        .nt-ia-prompt-text   { animation: nt-ia-prompt-text   6.4s steps(18, end) infinite; overflow: hidden; white-space: nowrap; display: inline-block; }
+        .nt-ia-line          { animation: nt-ia-line          6.4s ease-out infinite; }
+        .nt-ia-line2         { animation: nt-ia-line2         6.4s ease-out infinite; }
+        .nt-ia-line3         { animation: nt-ia-line3         6.4s ease-out infinite; }
       `}</style>
 
       <div style={{
-        width: 300, padding: 12,
+        width: 296, height: 168,
         background: "var(--color-off-white)",
         border: "0.5px solid var(--color-border)",
         borderRadius: 10,
-        display: "flex", flexDirection: "column", gap: 6,
+        boxShadow: "0 4px 16px rgba(0,0,0,0.06)",
+        display: "flex", flexDirection: "column", overflow: "hidden",
         position: "relative",
       }}>
-        <div style={{
-          fontSize: 11, fontWeight: 700, color: "var(--color-charcoal)",
-          letterSpacing: "-0.01em",
-        }}>
-          Studio visit — Vidal
-        </div>
-
-        {/* Link pill */}
-        <div style={{ position: "relative", display: "flex" }}>
-          <div className="nt-pill-fill" style={{
-            display: "inline-flex", alignItems: "center", gap: 4,
-            fontSize: 8.5,
-            padding: "2px 7px", borderRadius: 9999,
-            border: "0.5px solid var(--color-border)",
-            background: "transparent", color: "var(--color-grey)",
-            transition: "all 0.2s ease",
-            position: "relative",
-            minWidth: 92,
-          }}>
-            <Link2 size={8} strokeWidth={1.75} />
-            <span style={{ position: "relative", display: "inline-block" }}>
-              <span className="nt-pill-label" style={{ position: "absolute", inset: 0, whiteSpace: "nowrap" }}>Link to…</span>
-              <span className="nt-pill-result" style={{ display: "inline-block", whiteSpace: "nowrap" }}>Brass console — Foster</span>
-            </span>
-          </div>
-        </div>
-
-        {/* Dropdown */}
-        <div className="nt-dropdown" style={{
-          position: "absolute", top: 52, left: 12,
-          width: 200,
-          background: "var(--color-warm-white)",
-          border: "0.5px solid var(--color-border)",
-          borderRadius: 7,
-          boxShadow: "0 6px 18px rgba(0,0,0,0.10)",
-          padding: 3,
-          zIndex: 2,
-        }}>
-          {/* Tabs strip */}
+        {/* Page */}
+        <div style={{ padding: "12px 14px", flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{
-            display: "flex", gap: 4,
-            padding: "2px 4px 4px",
-            borderBottom: "0.5px solid var(--color-border)", marginBottom: 3,
+            fontSize: 11, fontWeight: 700, color: "var(--color-charcoal)",
+            letterSpacing: "-0.01em",
           }}>
-            <span style={{
-              fontSize: 7, fontWeight: 700,
-              color: "var(--color-charcoal)",
-              borderBottom: "1.5px solid var(--color-sage)",
-              padding: "0 1px 2px",
-            }}>Projects</span>
-            <span style={{ fontSize: 7, color: "var(--color-grey)", padding: "0 1px 2px" }}>Contacts</span>
-            <span style={{ fontSize: 7, color: "var(--color-grey)", padding: "0 1px 2px" }}>Opportunities</span>
+            Press kit — fall release
           </div>
-          {[
-            { t: "Brass console — Foster",      hl: true },
-            { t: "Editions vol. 4",             hl: false },
-            { t: "Press kit refresh",           hl: false },
-          ].map((r) => (
-            <div
-              key={r.t}
-              className={r.hl ? "nt-row-highlight" : ""}
-              style={{
-                padding: "3px 6px", borderRadius: 4,
-                fontSize: 8, color: "var(--color-charcoal)",
-                fontWeight: r.hl ? 600 : 400,
-                display: "flex", alignItems: "center", gap: 5,
-              }}
-            >
-              {r.hl ? (
-                <svg width="7" height="6" viewBox="0 0 10 8" fill="none">
-                  <path d="M1 4l2.5 2.5L9 1" stroke="#5a7040" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              ) : (
-                <div style={{ width: 7 }} />
-              )}
-              {r.t}
-            </div>
-          ))}
-        </div>
 
-        {/* Sample lines under the title — gives the note context */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 4 }}>
-          <div style={textLine(100)} />
-          <div style={textLine(86)} />
-          <div style={textLine(68)} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4, position: "relative" }}>
+            <div style={textLine(96)} />
+            <div style={textLine(82)} />
+
+            {/* Inline Ash popover floating over the empty line */}
+            <div className="nt-ia-prompt" style={{
+              position: "absolute", top: 22, left: 0,
+              display: "flex", alignItems: "center", gap: 5,
+              padding: "4px 9px",
+              background: "linear-gradient(#1f211a, #1f211a) padding-box, linear-gradient(135deg, #a8b886 0%, #4a6232 100%) border-box",
+              border: "1px solid transparent",
+              borderRadius: 999,
+              boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
+              zIndex: 2,
+            }}>
+              <div style={{
+                width: 11, height: 11, borderRadius: "50%",
+                background: "linear-gradient(135deg, #a8b886 0%, #4a6232 100%)",
+                flexShrink: 0,
+              }} />
+              <span style={{
+                fontSize: 8, color: "rgba(245,241,233,0.92)",
+                fontFamily: "inherit",
+              }}>
+                <span className="nt-ia-prompt-text">Draft the opener…</span>
+              </span>
+            </div>
+
+            <div className="nt-ia-line" style={{ ...textLine(92), marginTop: 4, background: "var(--color-sage)" }} />
+            <div className="nt-ia-line2" style={{ ...textLine(78), background: "var(--color-sage)" }} />
+            <div className="nt-ia-line3" style={{ ...textLine(64), background: "var(--color-sage)" }} />
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Slide 4: Generate tasks — Ash reads a note and drafts tasks ────────────
+// ─── Slide: Generate tasks — Ash reads a note and drafts tasks ──────────────
 export function NoteToTasks() {
   return (
     <div style={animationFrame}>

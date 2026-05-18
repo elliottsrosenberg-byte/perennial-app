@@ -1,6 +1,6 @@
 "use client";
 
-// Tier 1: full-screen modal that introduces the Notes module with 4
+// Tier 1: full-screen modal that introduces the Notes module with 3
 // animated slides. Closing it (Skip OR Get started) marks
 // profiles.tour_visited.notes_intro so it won't re-show. "Get started"
 // also fires window event "notes-tooltips-start" which the tooltip tour
@@ -10,9 +10,7 @@ import { useState, useEffect } from "react";
 import { X as XIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { type TourVisited } from "@/lib/tour";
-import {
-  WritingSurface, PinAndFilter, LinkBack, NoteToTasks,
-} from "./NoteAnimations";
+import { WritingSurface, NoteToTasks, InlineAshTease } from "./NoteAnimations";
 
 interface Slide {
   title: string;
@@ -23,23 +21,18 @@ interface Slide {
 const SLIDES: Slide[] = [
   {
     title: "Capture the thinking.",
-    body:  "Notes are your studio's open page — meeting notes, sketches in words, half-formed pitches, lists, drafts. Plain writing surface, rich formatting when you want it, auto-saved as you type.",
+    body:  "Notes are your studio's open page — meeting recaps, sketches in words, half-formed pitches, drafts. A plain writing surface with rich formatting when you want it, linkable to projects, contacts, and opportunities.",
     Anim:  WritingSurface,
   },
   {
-    title: "Pin what matters, find anything.",
-    body:  "Pin the few notes you keep coming back to so they float to the top. Search the title and body of every note from one box. Sidebar filters slice your list by project, person, or opportunity.",
-    Anim:  PinAndFilter,
+    title: "Write freely. We save as you go.",
+    body:  "There's no Save button — every keystroke is persisted. Walk away, close the tab, come back tomorrow. Your draft is exactly where you left it.",
+    Anim:  WritingSurface,
   },
   {
-    title: "Link a note to the work.",
-    body:  "Drop a note onto a project, a contact, or an opportunity and it shows up everywhere that thing lives. One note can link to all three — the visit notes for a client commission carry the whole context with them.",
-    Anim:  LinkBack,
-  },
-  {
-    title: "From notes to motion.",
-    body:  "Type Space anywhere to ask Ash to write inline, or hit Generate tasks and Ash will read the note and propose what to do next. Pick the ones that fit, set due dates, ship them to your task list.",
-    Anim:  NoteToTasks,
+    title: "Three power moves to know.",
+    body:  "Generate tasks turns a note into actionable to-dos. Share gets you a public link or a Markdown export. And typing a space at the start of any new line calls Ash inline — ask for a draft, a rewrite, a summary.",
+    Anim:  InlineAshTease,
   },
 ];
 
