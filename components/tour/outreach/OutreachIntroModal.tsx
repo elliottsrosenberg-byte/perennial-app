@@ -32,8 +32,8 @@ const SLIDES: Slide[] = [
     Anim:  DragStage,
   },
   {
-    title: "Follow up before it slips.",
-    body:  "Every target tracks last touched. The right-edge bar is a one-click follow-up log — pick the type, leave a note, and the date snaps back to today. Targets that go quiet age amber, then red, so nothing important quietly dies.",
+    title: "Pull right to follow up.",
+    body:  "Every target tracks last touched. Grab the copper handle on the right and pull the card to log a follow-up — fast, tactile, no modal. Want to add a note or pick the type? Just tap the handle. Targets that go quiet age amber then red, so nothing important quietly dies.",
     Anim:  FollowUpBar,
   },
   {

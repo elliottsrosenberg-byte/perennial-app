@@ -96,10 +96,17 @@ const STEPS: Step[] = [
     spotlight: false,
   },
   {
+    id:      "swipe-followup",
+    anchor:  '[data-tour-target="outreach.first-card"]',
+    title:   "Pull right to follow up",
+    body:    "See the copper handle on the right edge? Grab it and drag the card to the right to log a quick follow-up — no modal, no fuss. Click the handle instead if you want to add a note or pick the type.",
+    advance: "next",
+  },
+  {
     id:      "first-card",
     anchor:  '[data-tour-target="outreach.first-card"]',
     title:   "Open the target",
-    body:    "Click the card. The detail panel slides open — Canvas for your thinking, plus the full target file.",
+    body:    "Click the card body. The detail panel slides open — Canvas for your thinking, plus the full target file.",
     hint:    "Waiting for you to open it…",
     advance: "open-target",
   },
