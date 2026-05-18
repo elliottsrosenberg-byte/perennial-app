@@ -132,7 +132,14 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
 
   function handleTargetCreated(target: OutreachTarget) {
     setTargets((prev) => [...prev, target]);
-    const pipelineName = pipelines.find(p => p.id === target.pipeline_id)?.name ?? null;
+    const pipeline     = pipelines.find(p => p.id === target.pipeline_id);
+    const pipelineName = pipeline?.name ?? null;
+    // First target landing in a seeded pipeline → clear the seeded flag so
+    // the "Suggested" pill goes away (and stays away across reloads).
+    if (pipeline?.seeded) {
+      setPipelines(prev => prev.map(p => p.id === pipeline.id ? { ...p, seeded: false } : p));
+      createClient().from("outreach_pipelines").update({ seeded: false }).eq("id", pipeline.id);
+    }
     window.dispatchEvent(new CustomEvent("outreach:target-created", {
       detail: { id: target.id, name: target.name, pipeline_name: pipelineName },
     }));
@@ -369,16 +376,20 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
           onClick={() => selectPipeline(null)}
         />
 
-        {pipelines.map((p) => (
-          <NavItem
-            key={p.id}
-            label={p.name}
-            count={activeTargets.filter((t) => t.pipeline_id === p.id).length}
-            dot={p.color}
-            active={activeSection === "pipeline" && selectedPipelineId === p.id}
-            onClick={() => selectPipeline(p.id)}
-          />
-        ))}
+        {pipelines.map((p) => {
+          const pipelineTargets = targets.filter(t => t.pipeline_id === p.id);
+          return (
+            <NavItem
+              key={p.id}
+              label={p.name}
+              count={activeTargets.filter((t) => t.pipeline_id === p.id).length}
+              dot={p.color}
+              active={activeSection === "pipeline" && selectedPipelineId === p.id}
+              onClick={() => selectPipeline(p.id)}
+              suggestedPill={p.seeded && pipelineTargets.length === 0}
+            />
+          );
+        })}
 
         {/* All Ether — cross-pipeline cleanup view. Hidden when zero parked
             targets exist, to keep the rail uncluttered for users not using
@@ -522,8 +533,11 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
 
 // ── Nav item ──────────────────────────────────────────────────────────────────
 
-function NavItem({ label, count, dot, active, onClick }: {
+function NavItem({ label, count, dot, active, onClick, suggestedPill }: {
   label: string; count: number; dot: string; active: boolean; onClick: () => void;
+  /** Small "Suggested" indicator for seed pipelines that haven't yet been
+   *  populated with a target. Disappears as soon as the user adds one. */
+  suggestedPill?: boolean;
 }) {
   return (
     <button
@@ -542,6 +556,19 @@ function NavItem({ label, count, dot, active, onClick }: {
       onMouseLeave={e => { if (!active) e.currentTarget.style.background = "transparent"; }}>
       <div className="w-2 h-2 rounded-full shrink-0" style={{ background: dot }} />
       <span className="flex-1 truncate">{label}</span>
+      {suggestedPill && (
+        <span
+          title="Auto-suggested from your onboarding answers — disappears once you add a target."
+          style={{
+            fontSize: 8, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em",
+            padding: "1px 5px", borderRadius: 9999,
+            background: "rgba(125,148,86,0.16)", color: "#5a7040",
+            border: "0.5px solid rgba(125,148,86,0.35)",
+            flexShrink: 0,
+          }}>
+          Sug
+        </span>
+      )}
       <span className="text-[10px] shrink-0" style={{ color: "var(--color-grey)" }}>{count}</span>
     </button>
   );

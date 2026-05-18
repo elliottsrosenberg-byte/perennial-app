@@ -150,6 +150,10 @@ export interface OutreachPipeline {
   name: string;
   color: string;
   position: number;
+  /** True when the pipeline was auto-seeded from onboarding answers. Drives
+   *  the "Suggested" pill on the left rail; cleared by the UI once the user
+   *  adds a target to the pipeline. */
+  seeded: boolean;
   created_at: string;
   updated_at: string;
   stages?: PipelineStage[];
