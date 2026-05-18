@@ -208,95 +208,77 @@ export function DragStage() {
   );
 }
 
-// ─── Slide 3: target ages → swipe-right gesture → fresh + logged ───────────
-// Mirrors the real PipelineBoard interaction: the card has a copper-coloured
-// swipe handle on the right edge. Grab it and pull the card to the right —
-// a copper reveal band appears behind, and at threshold the follow-up
-// commits. We loop the gesture so the slide reads as one continuous motion.
+// ─── Slide 3: hover the right of a card → inline insert → compressed logged
+// Mirrors the real PipelineBoard interaction. The right edge handle expands
+// on hover into a real click target; clicking opens the follow-up form inline
+// under the card; after logging, the card compresses to 80% width and tucks
+// right so a glance shows what's still owed.
 export function FollowUpBar() {
   return (
     <div style={animationFrame}>
       <style>{`
-        /* Card translateX loop: aging → grab → pull → release → settle.
-           Copper colour throughout — distinct from sage, amber, red-orange. */
-        @keyframes ot-card-pull {
-          0%, 28%    { transform: translateX(0); box-shadow: 0 1px 3px rgba(0,0,0,0.07); }
-          38%        { transform: translateX(14px); box-shadow: 0 4px 12px rgba(201,122,74,0.18); }
-          58%, 64%   { transform: translateX(78px); box-shadow: 0 8px 22px rgba(201,122,74,0.30); }
-          76%        { transform: translateX(96px); box-shadow: 0 8px 22px rgba(201,122,74,0.30); }
-          86%        { transform: translateX(20px); box-shadow: 0 2px 8px rgba(201,122,74,0.15); }
-          100%       { transform: translateX(0); box-shadow: 0 1px 3px rgba(0,0,0,0.07); }
+        /* Handle width — thin at rest, expands when the pointer enters
+           the right ~25% of the card. */
+        @keyframes ot-handle-w {
+          0%, 18%    { width: 6px;  background: rgba(201,122,74,0.20); }
+          24%, 44%   { width: 44px; background: #c97a4a; }
+          /* After click the inline insert opens; handle stays expanded */
+          50%, 70%   { width: 44px; background: #c97a4a; }
+          /* Once logged the card compresses; handle stays as a slim copper marker */
+          76%, 100%  { width: 6px;  background: rgba(201,122,74,0.40); }
         }
-        @keyframes ot-reveal-opacity {
-          0%, 30%    { opacity: 0; }
-          40%, 86%   { opacity: 1; }
-          100%       { opacity: 0; }
+        /* Inline insert reveal — opens after the user clicks the handle. */
+        @keyframes ot-insert {
+          0%, 44%    { max-height: 0; opacity: 0; margin-top: 0; }
+          50%, 70%   { max-height: 110px; opacity: 1; margin-top: 6px; }
+          74%, 100%  { max-height: 0; opacity: 0; margin-top: 0; }
         }
-        @keyframes ot-reveal-label {
-          0%, 56%    { opacity: 0; }
-          62%, 80%   { opacity: 1; }
-          84%, 100%  { opacity: 0; }
+        /* Card compresses to 80% and right-justifies after logging. */
+        @keyframes ot-card-compress {
+          0%, 70%    { width: 100%; margin-left: 0; background: var(--color-warm-white); border-color: var(--color-border); }
+          76%, 100%  { width: 80%; margin-left: auto; background: rgba(201,122,74,0.06); border-color: rgba(201,122,74,0.40); }
         }
+        /* Handle label "Log follow-up" — visible while the handle is open. */
+        @keyframes ot-handle-label {
+          0%, 22%   { opacity: 0; }
+          26%, 48%  { opacity: 1; }
+          52%, 100% { opacity: 0; }
+        }
+        /* Logged check appears as the card compresses. */
+        @keyframes ot-handle-check {
+          0%, 72%   { opacity: 0; }
+          76%, 100% { opacity: 1; }
+        }
+        /* "Followed up · today" line replaces the stale timestamp. */
+        @keyframes ot-age-stale   { 0%, 70% { opacity: 1; color: var(--color-red-orange); } 74%, 100% { opacity: 0; } }
+        @keyframes ot-age-logged  { 0%, 72% { opacity: 0; } 76%, 100% { opacity: 1; color: #c97a4a; font-weight: 700; } }
 
-        /* Ageing labels — cycle: Today → 5d → 3w → 5w → Today */
-        @keyframes ot-age-fresh   { 0%, 8% { opacity: 1; color: var(--color-grey); } 12%, 100% { opacity: 0; } }
-        @keyframes ot-age-mid     { 0%, 8% { opacity: 0; } 12%, 18% { opacity: 1; color: var(--color-grey); } 22%, 100% { opacity: 0; } }
-        @keyframes ot-age-amber   { 0%, 18% { opacity: 0; } 22%, 26% { opacity: 1; color: #b8860b; } 30%, 100% { opacity: 0; } }
-        @keyframes ot-age-stale   { 0%, 26% { opacity: 0; } 30%, 80% { opacity: 1; color: var(--color-red-orange); } 84%, 100% { opacity: 0; } }
-        @keyframes ot-age-reset   { 0%, 84% { opacity: 0; } 88%, 100% { opacity: 1; color: #c97a4a; font-weight: 700; } }
-
-        /* Pointer (the user's fingertip on the handle) */
+        /* Pointer (fingertip) — enters from the right, dwells on handle, then
+           drifts down to click the Log button in the inline insert. */
         @keyframes ot-pointer {
-          0%, 24%    { opacity: 0; transform: translate(0,0); }
-          30%        { opacity: 1; transform: translate(0,0); }
-          58%, 64%   { opacity: 1; transform: translate(78px, 0); }
-          76%        { opacity: 1; transform: translate(96px, 0); }
-          80%        { opacity: 0; transform: translate(96px, 0); }
-          100%       { opacity: 0; transform: translate(0,0); }
+          0%, 14%   { opacity: 0; transform: translate(0px, 0px); }
+          22%       { opacity: 1; transform: translate(-12px, 0px); }
+          44%, 48%  { opacity: 1; transform: translate(-12px, 0px); }
+          58%       { opacity: 1; transform: translate(-50px, 70px); }
+          68%, 70%  { opacity: 1; transform: translate(-50px, 70px); }
+          75%       { opacity: 0; transform: translate(-50px, 70px); }
+          100%      { opacity: 0; transform: translate(0px, 0px); }
         }
 
-        /* Handle width — slightly bigger when actively grabbed */
-        @keyframes ot-handle {
-          0%, 24%   { width: 6px; background: rgba(201,122,74,0.18); }
-          28%, 30%  { width: 12px; background: #c97a4a; }
-          86%, 100% { width: 6px; background: rgba(201,122,74,0.28); }
-        }
-
-        .ot-card-pull     { animation: ot-card-pull 6.5s cubic-bezier(0.34, 1.4, 0.5, 1) infinite; }
-        .ot-reveal        { animation: ot-reveal-opacity 6.5s ease-in-out infinite; }
-        .ot-reveal-label  { animation: ot-reveal-label 6.5s ease-in-out infinite; }
-        .ot-age-fresh     { animation: ot-age-fresh 6.5s ease-in-out infinite; position: absolute; inset: 0; }
-        .ot-age-mid       { animation: ot-age-mid 6.5s ease-in-out infinite; position: absolute; inset: 0; }
-        .ot-age-amber     { animation: ot-age-amber 6.5s ease-in-out infinite; position: absolute; inset: 0; }
-        .ot-age-stale     { animation: ot-age-stale 6.5s ease-in-out infinite; position: absolute; inset: 0; }
-        .ot-age-reset     { animation: ot-age-reset 6.5s ease-in-out infinite; position: absolute; inset: 0; }
-        .ot-pointer-anim  { animation: ot-pointer 6.5s ease-in-out infinite; }
-        .ot-handle-anim   { animation: ot-handle 6.5s ease-in-out infinite; }
+        .ot-card-compress  { animation: ot-card-compress 7s ease-in-out infinite; }
+        .ot-handle-w       { animation: ot-handle-w 7s ease-in-out infinite; }
+        .ot-handle-label   { animation: ot-handle-label 7s ease-in-out infinite; }
+        .ot-handle-check   { animation: ot-handle-check 7s ease-in-out infinite; }
+        .ot-insert         { animation: ot-insert 7s ease-in-out infinite; }
+        .ot-age-stale      { animation: ot-age-stale 7s ease-in-out infinite; position: absolute; inset: 0; }
+        .ot-age-logged     { animation: ot-age-logged 7s ease-in-out infinite; position: absolute; inset: 0; display: inline-flex; align-items: center; gap: 3px; }
+        .ot-pointer-anim   { animation: ot-pointer 7s ease-in-out infinite; }
       `}</style>
 
       <div style={{ width: 260, position: "relative" }}>
-        {/* Reveal layer (sits behind the card) */}
-        <div className="ot-reveal" style={{
-          position: "absolute", inset: 0,
-          borderRadius: 8,
-          background: "linear-gradient(90deg, rgba(201,122,74,0.18) 0%, rgba(201,122,74,0.30) 70%, #c97a4a 100%)",
-          display: "flex", alignItems: "center", paddingLeft: 14,
-        }}>
-          <span className="ot-reveal-label" style={{
-            display: "inline-flex", alignItems: "center", gap: 5,
-            fontSize: 9, fontWeight: 700, color: "white", letterSpacing: "0.02em",
-          }}>
-            <svg width="9" height="7" viewBox="0 0 8 6" fill="none">
-              <path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Release to log
-          </span>
-        </div>
-
-        {/* Card */}
-        <div className="ot-card-pull" style={{
+        {/* Card — width animates to 80% + margin-left auto after the log */}
+        <div className="ot-card-compress" style={{
           position: "relative",
-          background: "var(--color-warm-white)",
           border: "0.5px solid var(--color-border)",
           borderRadius: 8,
           padding: "10px 12px",
@@ -311,33 +293,77 @@ export function FollowUpBar() {
           </div>
           <p style={{ fontSize: 9, color: "var(--color-grey)", marginBottom: 1 }}>Casey Lurie · NYC</p>
           <div style={{ position: "relative", height: 12, marginTop: 5 }}>
-            <span className="ot-age-fresh" style={{ fontSize: 9 }}>Today</span>
-            <span className="ot-age-mid"   style={{ fontSize: 9 }}>5d ago</span>
-            <span className="ot-age-amber" style={{ fontSize: 9 }}>3w ago</span>
             <span className="ot-age-stale" style={{ fontSize: 9 }}>5w ago</span>
-            <span className="ot-age-reset" style={{ fontSize: 9 }}>Today</span>
+            <span className="ot-age-logged" style={{ fontSize: 9 }}>
+              <svg width="7" height="6" viewBox="0 0 8 6" fill="none">
+                <path d="M1 3L3 5L7 1" stroke="#c97a4a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Followed up · today
+            </span>
           </div>
 
-          {/* Swipe handle */}
-          <div className="ot-handle-anim" style={{
+          {/* Right-edge handle — width and content animate together */}
+          <div className="ot-handle-w" style={{
             position: "absolute",
             right: 0, top: 0, bottom: 0,
             borderRadius: "0 8px 8px 0",
             display: "flex", alignItems: "center", justifyContent: "center",
-            gap: 1,
+            color: "white", fontSize: 8, fontWeight: 700,
+            letterSpacing: "0.03em",
+            overflow: "hidden",
           }}>
-            <span aria-hidden style={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-              <span style={{ width: 1.5, height: 1.5, borderRadius: 1, background: "white" }} />
-              <span style={{ width: 1.5, height: 1.5, borderRadius: 1, background: "white" }} />
-              <span style={{ width: 1.5, height: 1.5, borderRadius: 1, background: "white" }} />
+            <span className="ot-handle-label" style={{ paddingInline: 4 }}>Log follow-up</span>
+            <span className="ot-handle-check" style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="7" height="6" viewBox="0 0 8 6" fill="none">
+                <path d="M1 3L3 5L7 1" stroke="#c97a4a" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
             </span>
           </div>
         </div>
 
-        {/* Pointer ring — follows the handle as it pulls right */}
+        {/* Inline insert — opens under the card on click */}
+        <div className="ot-insert" style={{
+          overflow: "hidden",
+          maxHeight: 0,
+          opacity: 0,
+        }}>
+          <div style={{
+            background: "var(--color-off-white)",
+            border: "0.5px solid rgba(201,122,74,0.40)",
+            borderRadius: 7,
+            padding: 7,
+            display: "flex", flexDirection: "column", gap: 5,
+          }}>
+            <div style={{ display: "flex", gap: 3 }}>
+              {["Email", "Call", "Meeting", "Note"].map((label, i) => (
+                <span key={label} style={{
+                  fontSize: 7, fontWeight: 600,
+                  padding: "1.5px 6px", borderRadius: 99,
+                  background: i === 0 ? "#c97a4a" : "var(--color-cream)",
+                  color:      i === 0 ? "white" : "#6b6860",
+                  border: `0.5px solid ${i === 0 ? "#c97a4a" : "var(--color-border)"}`,
+                }}>{label}</span>
+              ))}
+            </div>
+            <div style={{
+              height: 16, borderRadius: 4,
+              background: "var(--color-warm-white)",
+              border: "0.5px solid var(--color-border)",
+            }} />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 4 }}>
+              <span style={{
+                fontSize: 7, fontWeight: 700,
+                padding: "2px 8px", borderRadius: 4,
+                background: "#c97a4a", color: "white",
+              }}>Log follow-up</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Pointer ring — enters at handle, then moves to the inline Log button */}
         <div className="ot-pointer-anim" aria-hidden style={{
-          position: "absolute", right: -8, top: "50%",
-          marginTop: -7,
+          position: "absolute",
+          right: -8, top: 18,
           width: 14, height: 14, borderRadius: 99,
           background: "rgba(31,33,26,0.78)",
           border: "1.5px solid white",

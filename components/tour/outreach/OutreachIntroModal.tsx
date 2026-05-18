@@ -32,8 +32,8 @@ const SLIDES: Slide[] = [
     Anim:  DragStage,
   },
   {
-    title: "Pull right to follow up.",
-    body:  "Every target tracks last touched. Grab the copper handle on the right and pull the card to log a follow-up — fast, tactile, no modal. Want to add a note or pick the type? Just tap the handle. Targets that go quiet age amber then red, so nothing important quietly dies.",
+    title: "Hover the right to follow up.",
+    body:  "Hover the right side of any card; click to log a follow-up — opens inline, no modal jump. Logged cards tuck right so a glance shows what's still owed. Targets that go quiet age amber then red, so nothing important quietly dies.",
     Anim:  FollowUpBar,
   },
   {

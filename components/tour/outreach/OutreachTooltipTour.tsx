@@ -63,20 +63,18 @@ const STEPS: Step[] = [
     id:      "new-pipeline-button",
     anchor:  '[data-tour-target="outreach.new-pipeline-button"]',
     title:   "Start with a pipeline",
-    body:    "A pipeline is a kind of outreach — gallery submissions, press pitches, fair applications. Each has stages you define. Create one to begin.",
+    body:    "A pipeline is a kind of outreach — gallery submissions, press pitches, fair applications. Each has stages you define. Even if seed pipelines came preloaded, the action that makes Outreach yours is creating one.",
     hint:    "Waiting for you to click + New pipeline…",
     advance: "click-new-pipeline",
-    requiresEmpty: true,
   },
   {
     id:      "in-pipeline-modal",
     anchor:  '[data-tour-target="outreach.new-pipeline-modal"]',
-    title:   "Name it. Pick stages.",
-    body:    "Default stages — Identify, Submit, Discuss, Make it happen, Closed — work for most outreach. You can rename, reorder, or add your own later.",
+    title:   "Name it. Drag to order stages.",
+    body:    "Default stages — Identify, Submit, Discuss, Make it happen, Closed — work for most outreach. Rename them, drag the grip handle to reorder, mark any as an Outcome, or add your own.",
     hint:    "Waiting for the pipeline to be created…",
     advance: "create-pipeline",
     spotlight: false,
-    requiresEmpty: true,
   },
   {
     id:      "new-target-button",
@@ -96,10 +94,10 @@ const STEPS: Step[] = [
     spotlight: false,
   },
   {
-    id:      "swipe-followup",
+    id:      "followups",
     anchor:  '[data-tour-target="outreach.first-card"]',
-    title:   "Pull right to follow up",
-    body:    "See the copper handle on the right edge? Grab it and drag the card to the right to log a quick follow-up — no modal, no fuss. Click the handle instead if you want to add a note or pick the type.",
+    title:   "Hover the right to follow up",
+    body:    "Hover the right side of any card — the thin copper handle expands into a real click target. Click to log a follow-up inline, right on the card, no modal jump. Logged cards tuck right to 80% width so a glance shows what's still owed.",
     advance: "next",
   },
   {
@@ -178,13 +176,14 @@ function ringRadiusFor(el: HTMLElement, pad: number): number {
 }
 
 interface Props {
-  /** If the user already has at least one pipeline at tour-start, the
-   *  pipeline-creation steps are filtered out and the tour jumps straight
-   *  to "+ New target". */
-  hasPipelinesAtStart: boolean;
+  /** Retained for backwards compat with OutreachClient — no longer affects
+   *  step filtering. Even users with seed pipelines should learn how to make
+   *  their own, so the create-pipeline steps now always run. */
+  hasPipelinesAtStart?: boolean;
 }
 
-export default function OutreachTooltipTour({ hasPipelinesAtStart }: Props) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export default function OutreachTooltipTour(_props: Props) {
   const [active,   setActive]   = useState(false);
   const [stepIdx,  setStepIdx]  = useState(0);
   const [highlight, setHighlight] = useState<Highlight | null>(null);
@@ -192,12 +191,9 @@ export default function OutreachTooltipTour({ hasPipelinesAtStart }: Props) {
   const [hidden,   setHidden]   = useState(false);
   const targetRef = useRef<{ id: string; name: string; pipeline_name: string | null } | null>(null);
 
-  // Filtered steps — drop pipeline-creation steps if the user already has at
-  // least one pipeline. Frozen at tour-start so the index stays stable across
-  // re-renders.
-  const [steps] = useState<Step[]>(() =>
-    hasPipelinesAtStart ? STEPS.filter((s) => !s.requiresEmpty) : STEPS
-  );
+  // Always run the full sequence — the create-pipeline steps are a core part
+  // of the walkthrough now that users can iterate on their own pipelines.
+  const [steps] = useState<Step[]>(() => STEPS);
 
   // Init: only start if not yet done AND a session event fires from the intro modal.
   useEffect(() => {
