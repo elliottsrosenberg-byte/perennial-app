@@ -3,8 +3,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Task, Contact } from "@/types/database";
-import { ChevronLeft, ChevronRight, Plus, CheckSquare } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, CheckSquare, MoreHorizontal, CalendarClock } from "lucide-react";
 import AshMark from "@/components/ui/AshMark";
+import DatePicker from "@/components/ui/DatePicker";
+import EmptyState from "@/components/ui/EmptyState";
+import CalendarOptionsMenu from "./CalendarOptionsMenu";
+import EventDetailPanel, { type CalendarEventLite } from "./EventDetailPanel";
 import CalendarIntroModal from "@/components/tour/calendar/CalendarIntroModal";
 import CalendarTooltipTour from "@/components/tour/calendar/CalendarTooltipTour";
 
@@ -149,6 +153,22 @@ function MiniCalendar({ selectedDate, onSelect }: {
   const [month, setMonth] = useState(() => {
     const d = new Date(selectedDate); d.setDate(1); d.setHours(0,0,0,0); return d;
   });
+
+  // Mini calendar tracks the primary view: when the user pages weeks
+  // forward/back in the main grid (which advances selectedDate to a new
+  // month), follow it so the mini stays oriented to whatever's on
+  // screen. The user can still page the mini independently — that just
+  // overrides until the next selectedDate change crosses a month boundary.
+  useEffect(() => {
+    setMonth((prev) => {
+      if (selectedDate.getFullYear() === prev.getFullYear()
+       && selectedDate.getMonth()    === prev.getMonth()) return prev;
+      const next = new Date(selectedDate);
+      next.setDate(1);
+      next.setHours(0, 0, 0, 0);
+      return next;
+    });
+  }, [selectedDate]);
 
   const weekDays    = getWeekDays(selectedDate);
   const today       = new Date(); today.setHours(0,0,0,0);
@@ -374,9 +394,15 @@ function NewTaskModal({ projects, contacts, defaultDate, onClose, onCreate }: {
 
         <div className="flex flex-col gap-1">
           <label className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--color-grey)" }}>Due date</label>
-          <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
-            className="text-[12px] bg-transparent focus:outline-none"
-            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)", borderRadius: "6px", padding: "5px 9px" }}
+          <DatePicker
+            value={dueDate ? new Date(dueDate + "T00:00:00") : null}
+            onChange={(d) => {
+              const y = d.getFullYear();
+              const m = String(d.getMonth() + 1).padStart(2, "0");
+              const day = String(d.getDate()).padStart(2, "0");
+              setDueDate(`${y}-${m}-${day}`);
+            }}
+            placeholder="No due date"
           />
         </div>
 
@@ -513,6 +539,11 @@ export default function CalendarClient({
   const [nowY,            setNowY]            = useState<number | null>(null);
   const [gcalEvents,      setGcalEvents]      = useState<CalEvent[]>([]);
   const [gcalLoading,     setGcalLoading]     = useState(false);
+  const [optionsOpen,     setOptionsOpen]     = useState(false);
+  const [showWeekends,    setShowWeekends]    = useState(true);
+  const [showDeclined,    setShowDeclined]    = useState(true);
+  const [openEvent,       setOpenEvent]       = useState<CalEvent | null>(null);
+  const [createError,     setCreateError]     = useState<string | null>(null);
 
   // Freeze "did this user have any calendar connected at mount?" so the
   // tooltip tour can drop the connect-integration steps if so (mirrors the
@@ -524,10 +555,20 @@ export default function CalendarClient({
   const undoTimers   = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const supabase     = createClient();
 
-  const weekDays = getWeekDays(viewDate);
+  const allWeekDays = getWeekDays(viewDate);
+  const weekDays    = showWeekends
+    ? allWeekDays
+    : allWeekDays.filter((d) => d.getDay() !== 0 && d.getDay() !== 6);
 
   // ── Timers cleanup
   useEffect(() => () => { undoTimers.current.forEach(clearTimeout); }, []);
+
+  // ── Auto-dismiss the create-task error banner after a few seconds.
+  useEffect(() => {
+    if (!createError) return;
+    const id = setTimeout(() => setCreateError(null), 5000);
+    return () => clearTimeout(id);
+  }, [createError]);
 
   // ── Current-time line
   useEffect(() => {
@@ -550,18 +591,31 @@ export default function CalendarClient({
 
   // ── Fetch calendar events (Google + Outlook) when week changes. The
   // aggregator route hits every connected provider in parallel and
-  // returns one merged list.
+  // returns one merged list. Also re-fires when the options-menu
+  // "Refresh calendars" dispatches `calendar:refresh-events`.
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  useEffect(() => {
+    function onRefresh() { setRefreshNonce((n) => n + 1); }
+    window.addEventListener("calendar:refresh-events", onRefresh);
+    return () => window.removeEventListener("calendar:refresh-events", onRefresh);
+  }, []);
   useEffect(() => {
     if (!anyConnected) return;
     const days  = getWeekDays(viewDate);
     const start = days[0].toISOString().split("T")[0];
     const end   = days[6].toISOString().split("T")[0];
     setGcalLoading(true);
+    let cancelled = false;
     fetch(`/api/integrations/calendar/events?startDate=${start}&endDate=${end}`)
       .then(r => r.json())
-      .then((d: { events?: CalEvent[] }) => { setGcalEvents(d.events ?? []); setGcalLoading(false); })
-      .catch(() => setGcalLoading(false));
-  }, [viewDate, anyConnected]);
+      .then((d: { events?: CalEvent[] }) => {
+        if (cancelled) return;
+        setGcalEvents(d.events ?? []);
+        setGcalLoading(false);
+      })
+      .catch(() => { if (!cancelled) setGcalLoading(false); });
+    return () => { cancelled = true; };
+  }, [viewDate, anyConnected, refreshNonce]);
 
   // ── On mount: if we just returned from an OAuth callback, fire the
   // event the tour listens for, then strip the query so refreshes don't
@@ -582,9 +636,11 @@ export default function CalendarClient({
   function nextWeek() { setViewDate(d => { const n = new Date(d); n.setDate(n.getDate() + 7); return n; }); }
   function goToday()  { setViewDate(new Date()); }
 
-  // ── Week label
-  const ws = weekDays[0];
-  const we = weekDays[6];
+  // ── Week label uses the full Sun-Sat span even when weekends are
+  // hidden — the label describes the whole week the user is paging
+  // through, not just the visible columns.
+  const ws = allWeekDays[0];
+  const we = allWeekDays[6];
   const weekLabel =
     ws.getMonth() === we.getMonth()
       ? `${MONTH_NAMES[ws.getMonth()]} ${ws.getDate()}–${we.getDate()}, ${ws.getFullYear()}`
@@ -624,27 +680,44 @@ export default function CalendarClient({
   }, []);
 
   // ── CRUD
+  // Defensive throughout: before this we were happily pushing `null` into
+  // the tasks array when the insert errored (RLS reject, network, schema
+  // drift), and the next render crashed the whole page tree. Catch the
+  // throw, log it, and surface a single transient hint instead.
   async function createTask(input: NewTaskInput) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const payload: Record<string, unknown> = {
-      user_id:    user.id,
-      title:      input.title,
-      completed:  false,
-      due_date:   input.dueDate,
-      project_id: input.projectId,
-      contact_id: input.contactId,
-    };
-    const { data } = await supabase
-      .from("tasks")
-      .insert(payload)
-      .select("*, project:projects(id, title), contact:contacts(id, first_name, last_name)")
-      .single();
-    if (data) {
-      setTasks(prev => [data as Task, ...prev]);
+    try {
+      const { data: { user }, error: userErr } = await supabase.auth.getUser();
+      if (userErr || !user) {
+        console.error("[calendar.createTask] no user:", userErr);
+        setCreateError("Couldn't save — you may need to sign in again.");
+        return;
+      }
+      const payload: Record<string, unknown> = {
+        user_id:    user.id,
+        title:      input.title,
+        completed:  false,
+        due_date:   input.dueDate,
+        project_id: input.projectId,
+        contact_id: input.contactId,
+      };
+      const { data, error } = await supabase
+        .from("tasks")
+        .insert(payload)
+        .select("*, project:projects(id, title), contact:contacts(id, first_name, last_name)")
+        .single();
+      if (error || !data) {
+        console.error("[calendar.createTask] insert failed:", error);
+        setCreateError("Couldn't save that task. Try again — if it keeps failing, refresh the page.");
+        return;
+      }
+      const created = data as Task;
+      setTasks(prev => [created, ...prev]);
       window.dispatchEvent(new CustomEvent("calendar:task-created", {
-        detail: { id: (data as Task).id, title: (data as Task).title },
+        detail: { id: created.id, title: created.title },
       }));
+    } catch (err) {
+      console.error("[calendar.createTask] unexpected error:", err);
+      setCreateError("Something went wrong saving that task.");
     }
   }
 
@@ -892,75 +965,167 @@ export default function CalendarClient({
       {/* ── Main calendar ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col flex-1 overflow-hidden">
 
-        {/* Topbar — outside scroll, always visible */}
-        <div
-          className="flex items-center gap-2 px-4 shrink-0"
-          style={{ height: "48px", background: "var(--color-off-white)", borderBottom: "0.5px solid var(--color-border)" }}
+        {/* Topbar — matches Projects/People standard: title left, date
+            label after it, then nav + view toggle + Ash + 3-dot + primary
+            CTA on the right. */}
+        <header
+          className="flex items-center justify-between px-6 shrink-0"
+          style={{
+            height: "52px",
+            background: "var(--color-off-white)",
+            borderBottom: "0.5px solid var(--color-border)",
+          }}
         >
-          <span
-            className="flex-1"
-            style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)", fontSize: "17px", fontWeight: 500, letterSpacing: "-0.015em" }}
-          >
-            {weekLabel}
-          </span>
-
-          <button onClick={goToday}
-            className="text-[11px] px-3 py-[5px] rounded-md transition-colors"
-            style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
-            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-          >Today</button>
-
-          <button onClick={prevWeek}
-            className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
-            style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
-            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-          ><ChevronLeft size={13} /></button>
-
-          <button onClick={nextWeek}
-            className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
-            style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
-            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-          ><ChevronRight size={13} /></button>
-
-          <div className="flex rounded-md overflow-hidden" style={{ border: "0.5px solid var(--color-border)", background: "var(--color-cream)" }}>
-            {(["Week","Month"] as const).map(v => (
-              <button key={v} className="px-3 py-[5px] text-[11px]"
-                style={{
-                  background: v === "Week" ? "var(--color-off-white)" : "transparent",
-                  color: v === "Week" ? "var(--color-charcoal)" : "var(--color-grey)",
-                  fontWeight: v === "Week" ? 600 : 400,
-                  opacity: v === "Month" ? 0.45 : 1,
-                }}
-              >{v}</button>
-            ))}
+          <div className="flex items-center gap-3 min-w-0">
+            <h1 className="font-semibold" style={{ fontSize: 14, color: "var(--color-charcoal)" }}>Calendar</h1>
+            <span style={{ color: "var(--color-border-strong)", fontSize: 12 }}>·</span>
+            <span
+              style={{
+                color: "var(--color-text-secondary)",
+                fontFamily: "var(--font-display)",
+                fontSize: 14, fontWeight: 500, letterSpacing: "-0.01em",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}
+            >
+              {weekLabel}
+            </span>
           </div>
 
-          <button
-            onClick={() => openAshCal("What's coming up in my calendar this week? Any tasks or deadlines I should know about?")}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", fontSize: 11, fontWeight: 500, borderRadius: 6, background: "transparent", color: "var(--color-ash-dark)", border: "0.5px solid var(--color-border)", cursor: "pointer", fontFamily: "inherit", transition: "background 0.1s ease" }}
-            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-ash-tint)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-          >
-            <div style={{ width: 16, height: 16, borderRadius: "50%", background: ASH_GRADIENT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <AshMark size={9} variant="on-dark" />
-            </div>
-            Ask Ash
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={goToday}
+              className="text-[11px] px-3 py-[5px] rounded-md transition-colors"
+              style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+            >Today</button>
 
-          <span data-tour-target="calendar.new-task-button">
+            <div className="flex items-center gap-1">
+              <button onClick={prevWeek}
+                aria-label="Previous week"
+                className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
+                style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+              ><ChevronLeft size={13} /></button>
+
+              <button onClick={nextWeek}
+                aria-label="Next week"
+                className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
+                style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+              ><ChevronRight size={13} /></button>
+            </div>
+
+            <div className="flex rounded-md overflow-hidden" style={{ border: "0.5px solid var(--color-border)", background: "var(--color-cream)" }}>
+              {(["Week","Month"] as const).map(v => (
+                <button key={v}
+                  title={v === "Month" ? "Month view — coming in a follow-up" : "Week view"}
+                  disabled={v === "Month"}
+                  className="px-3 py-[5px] text-[11px]"
+                  style={{
+                    background: v === "Week" ? "var(--color-off-white)" : "transparent",
+                    color: v === "Week" ? "var(--color-charcoal)" : "var(--color-grey)",
+                    fontWeight: v === "Week" ? 600 : 400,
+                    opacity: v === "Month" ? 0.45 : 1,
+                    cursor: v === "Month" ? "not-allowed" : "pointer",
+                    border: "none", fontFamily: "inherit",
+                  }}
+                >{v}</button>
+              ))}
+            </div>
+
             <button
-              onClick={openNewTask}
-              className="flex items-center gap-1.5 px-3 py-[5px] text-[11px] font-medium rounded-md text-white transition-opacity hover:opacity-90"
-              style={{ background: "var(--color-sage)" }}
+              onClick={() => openAshCal("What's coming up in my calendar this week? Any tasks or deadlines I should know about?")}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", fontSize: 11, fontWeight: 500, borderRadius: 6, background: "transparent", color: "var(--color-ash-dark)", border: "0.5px solid var(--color-border)", cursor: "pointer", fontFamily: "inherit", transition: "background 0.1s ease" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--color-ash-tint)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
             >
-              <Plus size={11} />
-              Task
+              <div style={{ width: 16, height: 16, borderRadius: "50%", background: ASH_GRADIENT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <AshMark size={9} variant="on-dark" />
+              </div>
+              Ask Ash
             </button>
-          </span>
-        </div>
+
+            {/* 3-dot options menu */}
+            <div style={{ position: "relative" }}>
+              <button
+                type="button"
+                onClick={() => setOptionsOpen(v => !v)}
+                aria-label="Calendar options"
+                title="Calendar options"
+                style={{
+                  width: 28, height: 28, borderRadius: 7,
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  background: optionsOpen ? "var(--color-surface-sunken)" : "transparent",
+                  border: "none", cursor: "pointer",
+                  color: "var(--color-text-secondary)",
+                  transition: "background 0.12s ease",
+                }}
+                onMouseEnter={e => { if (!optionsOpen) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+                onMouseLeave={e => { if (!optionsOpen) e.currentTarget.style.background = "transparent"; }}
+              >
+                <MoreHorizontal size={16} strokeWidth={2} />
+              </button>
+              {optionsOpen && (
+                <CalendarOptionsMenu
+                  showWeekends={showWeekends}
+                  onToggleShowWeekends={() => setShowWeekends(v => !v)}
+                  showDeclined={showDeclined}
+                  onToggleShowDeclined={() => setShowDeclined(v => !v)}
+                  onClose={() => setOptionsOpen(false)}
+                />
+              )}
+            </div>
+
+            <span data-tour-target="calendar.new-task-button">
+              <button
+                onClick={openNewTask}
+                style={{
+                  padding: "7px 16px", fontSize: 12, fontWeight: 500,
+                  borderRadius: 8, border: "none", cursor: "pointer",
+                  background: "var(--color-sage)", color: "white",
+                  fontFamily: "inherit",
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  transition: "background 0.12s ease",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-sage-hover)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-sage)")}
+              >
+                <Plus size={12} />
+                New task
+              </button>
+            </span>
+          </div>
+        </header>
+
+        {/* ── Cold-start empty state ─────────────────────────────────────────
+            Nothing connected AND zero tasks → render the EmptyState in
+            place of the grid. The very next user action (connecting a
+            provider or adding a task) flips this off. */}
+        {!anyConnected && tasks.length === 0 ? (
+          <div style={{ flex: 1, overflow: "auto", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <EmptyState
+              icon={<CalendarClock size={26} strokeWidth={1.5} style={{ color: "var(--color-sage)" }} />}
+              heading="Your week, in one place"
+              body="Bring your real calendar in and add tasks for anything you don't want to forget. Perennial keeps both side-by-side, so the next thing to do is always in sight."
+              action={{
+                label: "Connect Google Calendar",
+                onClick: () => { window.location.href = "/api/auth/google-calendar"; },
+              }}
+              secondaryAction={{
+                label: "Connect Outlook",
+                onClick: () => { window.location.href = "/api/auth/microsoft?next=/calendar"; },
+              }}
+              tips={[
+                "Connections are read-only — events show up here but stay editable in Google or Outlook.",
+                "Add a task to drop a check-box on any day; tasks live independently of your synced calendar.",
+                "Ask Ash to plan your week once a few things are in — it sees tasks, deadlines, and events together.",
+              ]}
+            />
+          </div>
+        ) : (
+        <>
 
         {/* ── Today + overdue rail ────────────────────────────────────────────
             User-facing "tasks at the top" section. Anything due today or
@@ -1130,13 +1295,20 @@ export default function CalendarClient({
                   style={{ flex: 1, borderLeft: "0.5px solid var(--color-border)", padding: "3px 3px", display: "flex", flexDirection: "column", gap: "2px" }}
                 >
                   {dayGcalAllDay.map(e => {
-                    const color = e.colorId ? GCAL_COLORS[e.colorId] : "#039BE5";
+                    const color = e.colorId ? GCAL_COLORS[e.colorId] : (e.source === "microsoft" ? "#0078d4" : "#039BE5");
                     return (
-                      <a key={e.id} href={e.htmlLink ?? "#"} target="_blank" rel="noreferrer"
-                        className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate"
-                        style={{ background: `${color}18`, color, border: `0.5px solid ${color}44`, textDecoration: "none" }}>
+                      <button
+                        key={e.id}
+                        onClick={() => setOpenEvent(e)}
+                        className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate text-left"
+                        style={{
+                          background: `${color}18`, color,
+                          border: `0.5px solid ${color}44`,
+                          cursor: "pointer", fontFamily: "inherit",
+                        }}
+                      >
                         {e.title}
-                      </a>
+                      </button>
                     );
                   })}
                   {dayTasks.map(t => (
@@ -1238,14 +1410,12 @@ export default function CalendarClient({
                         const y     = timeToY(start.getHours(), start.getMinutes());
                         const endY  = timeToY(end.getHours(), end.getMinutes());
                         const h     = Math.max(24, endY - y);
-                        const color = e.colorId ? GCAL_COLORS[e.colorId] : "#039BE5";
+                        const color = e.colorId ? GCAL_COLORS[e.colorId] : (e.source === "microsoft" ? "#0078d4" : "#039BE5");
                         if (y < 0 || y > GRID_HEIGHT) return null;
                         return (
-                          <a
+                          <button
                             key={e.id}
-                            href={e.htmlLink ?? "#"}
-                            target="_blank"
-                            rel="noreferrer"
+                            onClick={() => setOpenEvent(e)}
                             style={{
                               position: "absolute",
                               top:    `${y}px`,
@@ -1254,12 +1424,16 @@ export default function CalendarClient({
                               height: `${h}px`,
                               borderRadius: "4px",
                               borderLeft:   `2.5px solid ${color}`,
+                              borderTop:    "none",
+                              borderRight:  "none",
+                              borderBottom: "none",
                               background:   `${color}18`,
                               padding:      "3px 6px",
                               cursor:       "pointer",
                               zIndex:       2 + ei,
                               overflow:     "hidden",
-                              textDecoration: "none",
+                              textAlign:    "left",
+                              fontFamily:   "inherit",
                             }}
                             title={`${e.title}${e.location ? ` · ${e.location}` : ""}`}
                           >
@@ -1270,7 +1444,7 @@ export default function CalendarClient({
                               {start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
                               {e.location ? ` · ${e.location}` : ""}
                             </p>
-                          </a>
+                          </button>
                         );
                       })
                     }
@@ -1284,6 +1458,8 @@ export default function CalendarClient({
           </div>
 
         </div>{/* /scroll container */}
+        </>
+        )}
       </div>
 
       {/* Task popover */}
@@ -1308,6 +1484,42 @@ export default function CalendarClient({
             onClose={() => setNewTaskOpen(false)}
             onCreate={createTask}
           />
+        </div>
+      )}
+
+      {/* Read-only event detail popup (Phase D1). Write-back lands in a
+          follow-up — for now the panel surfaces all the metadata and
+          links out to the provider for edits. */}
+      {openEvent && (
+        <EventDetailPanel
+          event={openEvent as unknown as CalendarEventLite}
+          color={openEvent.colorId ? GCAL_COLORS[openEvent.colorId] : (openEvent.source === "microsoft" ? "#0078d4" : "#039BE5")}
+          onClose={() => setOpenEvent(null)}
+        />
+      )}
+
+      {/* Transient create-task error banner. The wrapped try/catch in
+          createTask routes failures here instead of letting an unhandled
+          throw take down the page tree. */}
+      {createError && (
+        <div
+          role="status"
+          onClick={() => setCreateError(null)}
+          style={{
+            position: "fixed", bottom: 18, left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 80,
+            padding: "10px 16px",
+            borderRadius: 10,
+            background: "var(--color-charcoal)",
+            color: "var(--color-warm-white)",
+            fontSize: 12, fontWeight: 500,
+            boxShadow: "0 8px 28px rgba(0,0,0,0.25)",
+            cursor: "pointer",
+            maxWidth: 480,
+          }}
+        >
+          {createError}
         </div>
       )}
 
