@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import type { Task, Contact } from "@/types/database";
 import { ChevronLeft, ChevronRight, Plus, CheckSquare } from "lucide-react";
 import AshMark from "@/components/ui/AshMark";
+import CalendarIntroModal from "@/components/tour/calendar/CalendarIntroModal";
+import CalendarTooltipTour from "@/components/tour/calendar/CalendarTooltipTour";
 
 const ASH_GRADIENT = "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)";
 function openAshCal(message: string) {
@@ -466,7 +468,7 @@ function ContactPicker({
 
 // ── CalendarClient ─────────────────────────────────────────────────────────────
 
-interface GCalEvent {
+interface CalEvent {
   id: string;
   title: string;
   start: string;
@@ -476,6 +478,8 @@ interface GCalEvent {
   location: string | null;
   htmlLink: string | null;
   colorId: string | null;
+  source?: "google" | "microsoft";
+  accountName?: string | null;
 }
 
 // Google Calendar event colors (colorId → hex)
@@ -489,20 +493,32 @@ interface Props {
   initialTasks:    Task[];
   initialProjects: { id: string; title: string; due_date: string | null; status: string }[];
   initialContacts: Pick<Contact, "id" | "first_name" | "last_name">[];
-  gcalConnected?:  boolean;
-  gcalAccountName?: string | null;
+  googleConnected?:    boolean;
+  googleAccountName?:  string | null;
+  outlookConnected?:   boolean;
+  outlookAccountName?: string | null;
 }
 
 interface PopoverState { task: Task; x: number; y: number }
 
-export default function CalendarClient({ initialTasks, initialProjects, initialContacts, gcalConnected = false, gcalAccountName }: Props) {
+export default function CalendarClient({
+  initialTasks, initialProjects, initialContacts,
+  googleConnected = false, googleAccountName,
+  outlookConnected = false, outlookAccountName,
+}: Props) {
   const [viewDate,        setViewDate]        = useState(new Date());
   const [tasks,           setTasks]           = useState<Task[]>(initialTasks);
   const [newTaskOpen,     setNewTaskOpen]     = useState(false);
   const [popover,         setPopover]         = useState<PopoverState | null>(null);
   const [nowY,            setNowY]            = useState<number | null>(null);
-  const [gcalEvents,      setGcalEvents]      = useState<GCalEvent[]>([]);
+  const [gcalEvents,      setGcalEvents]      = useState<CalEvent[]>([]);
   const [gcalLoading,     setGcalLoading]     = useState(false);
+
+  // Freeze "did this user have any calendar connected at mount?" so the
+  // tooltip tour can drop the connect-integration steps if so (mirrors the
+  // hasPipelinesAtStart trick in OutreachTooltipTour).
+  const [hadIntegrationAtMount] = useState(googleConnected || outlookConnected);
+  const anyConnected = googleConnected || outlookConnected;
 
   const gridWrapRef  = useRef<HTMLDivElement>(null);
   const undoTimers   = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -532,18 +548,34 @@ export default function CalendarClient({ initialTasks, initialProjects, initialC
     gridWrapRef.current?.scrollTo({ top: Math.max(0, y - 160) });
   }, []);
 
-  // ── Fetch Google Calendar events when week changes
+  // ── Fetch calendar events (Google + Outlook) when week changes. The
+  // aggregator route hits every connected provider in parallel and
+  // returns one merged list.
   useEffect(() => {
-    if (!gcalConnected) return;
+    if (!anyConnected) return;
     const days  = getWeekDays(viewDate);
     const start = days[0].toISOString().split("T")[0];
     const end   = days[6].toISOString().split("T")[0];
     setGcalLoading(true);
-    fetch(`/api/integrations/google-calendar/events?startDate=${start}&endDate=${end}`)
+    fetch(`/api/integrations/calendar/events?startDate=${start}&endDate=${end}`)
       .then(r => r.json())
-      .then((d: { events?: GCalEvent[] }) => { setGcalEvents(d.events ?? []); setGcalLoading(false); })
+      .then((d: { events?: CalEvent[] }) => { setGcalEvents(d.events ?? []); setGcalLoading(false); })
       .catch(() => setGcalLoading(false));
-  }, [viewDate, gcalConnected]);
+  }, [viewDate, anyConnected]);
+
+  // ── On mount: if we just returned from an OAuth callback, fire the
+  // event the tour listens for, then strip the query so refreshes don't
+  // re-fire it.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const c = url.searchParams.get("connected");
+    if (c === "gcal" || c === "google" || c === "microsoft" || c === "outlook") {
+      window.dispatchEvent(new CustomEvent("calendar:integration-connected", { detail: { provider: c } }));
+      url.searchParams.delete("connected");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
 
   // ── Navigation
   function prevWeek() { setViewDate(d => { const n = new Date(d); n.setDate(n.getDate() - 7); return n; }); }
@@ -608,7 +640,17 @@ export default function CalendarClient({ initialTasks, initialProjects, initialC
       .insert(payload)
       .select("*, project:projects(id, title), contact:contacts(id, first_name, last_name)")
       .single();
-    if (data) setTasks(prev => [data as Task, ...prev]);
+    if (data) {
+      setTasks(prev => [data as Task, ...prev]);
+      window.dispatchEvent(new CustomEvent("calendar:task-created", {
+        detail: { id: (data as Task).id, title: (data as Task).title },
+      }));
+    }
+  }
+
+  function openNewTask() {
+    setNewTaskOpen(true);
+    window.dispatchEvent(new Event("calendar:new-task-opened"));
   }
 
   // ── Derived lists ────────────────────────────────────────────────────────────
@@ -765,25 +807,23 @@ export default function CalendarClient({ initialTasks, initialProjects, initialC
             </>
           )}
 
-          {/* Google Calendar connection */}
-          {gcalConnected ? (
-            <div className="mx-3 mt-5 mb-3 p-3 rounded-lg" style={{ background: "rgba(155,163,122,0.1)", border: "0.5px solid rgba(155,163,122,0.25)" }}>
-              <div className="flex items-center gap-2 mb-1.5">
-                <div className="w-2 h-2 rounded-full shrink-0" style={{ background: "var(--color-sage)" }} />
-                <p className="text-[11px] font-medium" style={{ color: "var(--color-charcoal)" }}>Google Calendar</p>
-                {gcalLoading && <span className="text-[9px] ml-auto" style={{ color: "var(--color-grey)" }}>Syncing…</span>}
+          {/* Calendar integrations panel — covers Google + Outlook. The
+              tour anchors its first step to this whole block so the user
+              sees both options at once. */}
+          <div data-tour-target="calendar.integrations" className="mx-3 mt-5 mb-3 flex flex-col gap-2">
+            {googleConnected ? (
+              <div className="p-3 rounded-lg" style={{ background: "rgba(155,163,122,0.1)", border: "0.5px solid rgba(155,163,122,0.25)" }}>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <div className="w-2 h-2 rounded-full shrink-0" style={{ background: "var(--color-sage)" }} />
+                  <p className="text-[11px] font-medium" style={{ color: "var(--color-charcoal)" }}>Google Calendar</p>
+                  {gcalLoading && <span className="text-[9px] ml-auto" style={{ color: "var(--color-grey)" }}>Syncing…</span>}
+                </div>
+                <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>
+                  {googleAccountName ?? "Connected"} · {gcalEvents.filter(e => e.source !== "microsoft").length} event{gcalEvents.filter(e => e.source !== "microsoft").length !== 1 ? "s" : ""} this week
+                </p>
+                <a href="/settings?section=integrations&provider=google" className="text-[10px] mt-2 inline-block" style={{ color: "var(--color-grey)" }}>Manage</a>
               </div>
-              <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>
-                {gcalAccountName ?? "Connected"} · {gcalEvents.length} event{gcalEvents.length !== 1 ? "s" : ""} this week
-              </p>
-              <button
-                onClick={async () => { await fetch("/api/integrations/google-calendar/events", { method: "DELETE" }); window.location.reload(); }}
-                className="text-[10px] mt-2"
-                style={{ color: "var(--color-grey)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
-              >Disconnect</button>
-            </div>
-          ) : (
-            <div className="mx-3 mt-5 mb-3">
+            ) : (
               <button
                 onClick={() => window.location.href = "/api/auth/google-calendar"}
                 className="w-full flex items-center gap-2 p-3 rounded-lg transition-colors text-left"
@@ -796,17 +836,49 @@ export default function CalendarClient({ initialTasks, initialProjects, initialC
                 </svg>
                 <div>
                   <p className="text-[11px] font-medium" style={{ color: "var(--color-charcoal)" }}>Connect Google Calendar</p>
-                  <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>See your events alongside tasks</p>
+                  <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>Read-only · events alongside tasks</p>
                 </div>
               </button>
-            </div>
-          )}
+            )}
+
+            {outlookConnected ? (
+              <div className="p-3 rounded-lg" style={{ background: "rgba(0,120,212,0.08)", border: "0.5px solid rgba(0,120,212,0.22)" }}>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <div className="w-2 h-2 rounded-full shrink-0" style={{ background: "#0078d4" }} />
+                  <p className="text-[11px] font-medium" style={{ color: "var(--color-charcoal)" }}>Outlook Calendar</p>
+                </div>
+                <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>
+                  {outlookAccountName ?? "Connected"} · {gcalEvents.filter(e => e.source === "microsoft").length} event{gcalEvents.filter(e => e.source === "microsoft").length !== 1 ? "s" : ""} this week
+                </p>
+                <a href="/settings?section=integrations&provider=microsoft" className="text-[10px] mt-2 inline-block" style={{ color: "var(--color-grey)" }}>Manage</a>
+              </div>
+            ) : (
+              <button
+                onClick={() => window.location.href = "/api/auth/microsoft?next=/calendar"}
+                className="w-full flex items-center gap-2 p-3 rounded-lg transition-colors text-left"
+                style={{ background: "var(--color-cream)", border: "0.5px solid var(--color-border)" }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = "#0078d4"}
+                onMouseLeave={e => e.currentTarget.style.borderColor = "var(--color-border)"}
+              >
+                <svg width="14" height="14" viewBox="0 0 32 32" fill="none" style={{ flexShrink: 0 }}>
+                  <path d="M15 4H4v11h11V4z" fill="#F25022"/>
+                  <path d="M28 4H17v11h11V4z" fill="#7FBA00"/>
+                  <path d="M15 17H4v11h11V17z" fill="#00A4EF"/>
+                  <path d="M28 17H17v11h11V17z" fill="#FFB900"/>
+                </svg>
+                <div>
+                  <p className="text-[11px] font-medium" style={{ color: "var(--color-charcoal)" }}>Connect Outlook Calendar</p>
+                  <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>Read-only · events alongside tasks</p>
+                </div>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Add task */}
         <div className="px-3 py-3 shrink-0" style={{ borderTop: "0.5px solid var(--color-border)" }}>
           <button
-            onClick={() => setNewTaskOpen(true)}
+            onClick={openNewTask}
             className="w-full text-[11px] py-[7px] rounded-lg transition-colors"
             style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", background: "transparent" }}
             onMouseEnter={e => { e.currentTarget.style.background = "var(--color-off-white)"; e.currentTarget.style.color = "#6b6860"; }}
@@ -878,14 +950,16 @@ export default function CalendarClient({ initialTasks, initialProjects, initialC
             Ask Ash
           </button>
 
-          <button
-            onClick={() => setNewTaskOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-[5px] text-[11px] font-medium rounded-md text-white transition-opacity hover:opacity-90"
-            style={{ background: "var(--color-sage)" }}
-          >
-            <Plus size={11} />
-            Task
-          </button>
+          <span data-tour-target="calendar.new-task-button">
+            <button
+              onClick={openNewTask}
+              className="flex items-center gap-1.5 px-3 py-[5px] text-[11px] font-medium rounded-md text-white transition-opacity hover:opacity-90"
+              style={{ background: "var(--color-sage)" }}
+            >
+              <Plus size={11} />
+              Task
+            </button>
+          </span>
         </div>
 
         {/* ── Today + overdue rail ────────────────────────────────────────────
@@ -894,6 +968,7 @@ export default function CalendarClient({ initialTasks, initialProjects, initialC
             punch-list, regardless of which week is in view. */}
         {topRailTasks.length > 0 && (
           <div
+            data-tour-target="calendar.today-rail"
             className="flex items-center gap-2 px-4 py-[8px] shrink-0 overflow-x-auto"
             style={{
               background: "var(--color-warm-white)",
@@ -1225,14 +1300,19 @@ export default function CalendarClient({ initialTasks, initialProjects, initialC
 
       {/* New task modal */}
       {newTaskOpen && (
-        <NewTaskModal
-          projects={initialProjects}
-          contacts={initialContacts}
-          defaultDate={defaultNewDate}
-          onClose={() => setNewTaskOpen(false)}
-          onCreate={createTask}
-        />
+        <div data-tour-target="calendar.new-task-modal">
+          <NewTaskModal
+            projects={initialProjects}
+            contacts={initialContacts}
+            defaultDate={defaultNewDate}
+            onClose={() => setNewTaskOpen(false)}
+            onCreate={createTask}
+          />
+        </div>
       )}
+
+      <CalendarIntroModal />
+      <CalendarTooltipTour hasIntegrationAtStart={hadIntegrationAtMount} />
     </div>
   );
 }
