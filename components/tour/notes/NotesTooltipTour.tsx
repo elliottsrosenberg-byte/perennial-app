@@ -5,20 +5,16 @@
 // tours so the flows feel like one experience.
 //
 // Action steps wait for a real user event (no Next button); guided steps
-// have a Next. The final step hands off to Ash with a notes-specific
-// CTA — Ash takes the user's new note (or the first thing they jot
-// down) and turns it into starter tasks.
+// have a Next.
 //
 // Triggers (window events fired from NotesClient):
-//   notes:create-clicked → step 0 → 1 (a click-new heartbeat for parity)
-//   notes:created        → step 0 → 1 (real advance; carries id + title)
+//   notes:created → step 0 → 1 (carries id + title)
 //
 // Persistence: profiles.tour_visited.notes_tour set when the tour ends.
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { X as XIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import AshMark from "@/components/ui/AshMark";
 import { type TourVisited } from "@/lib/tour";
 
 type AdvanceMode = "create" | "next";
@@ -31,11 +27,6 @@ interface Step {
   hint?:       string;
   advance:     AdvanceMode;
   spotlight?:  boolean;
-  /** Free-roam step: nothing dimmed, nothing spotlit. Callout pins to the
-   *  bottom-right corner so the user can scan the whole panel before we
-   *  start pointing at specific affordances. */
-  freeRoam?:   boolean;
-  finalCta?:   { label: string; action: "ash-draft-from-note" };
 }
 
 const W = 300;
@@ -48,35 +39,6 @@ const STEPS: Step[] = [
     body:    "A meeting recap, a half-formed pitch, a list of materials — anything you want to capture. Click + New note and a blank page opens.",
     hint:    "Waiting for you to click + New note…",
     advance: "create",
-  },
-  {
-    id:       "explore",
-    anchor:   null,
-    title:    "Take it in.",
-    body:     "This is your blank page — title at the top, body below, format toolbar above. It auto-saves as you type. Have a look around. When you're ready, hit Next and we'll point things out.",
-    advance:  "next",
-    freeRoam: true,
-  },
-  {
-    id:      "title-input",
-    anchor:  '[data-tour-target="notes.title-input"]',
-    title:   "Title is yours, never required",
-    body:    "Give the note a title if it helps you find it later. Or skip it — Perennial will list it as Untitled and you can search the body anyway.",
-    advance: "next",
-  },
-  {
-    id:      "link-picker",
-    anchor:  '[data-tour-target="notes.link-picker"]',
-    title:   "Link to the work",
-    body:    "Attach this note to a project, a contact, or an opportunity (or all three). It then appears in that project's Notes tab, on that contact's file, on that opportunity. One note can carry the full context of a job.",
-    advance: "next",
-  },
-  {
-    id:      "format-toolbar",
-    anchor:  '[data-tour-target="notes.format-toolbar"]',
-    title:   "Rich formatting, fast",
-    body:    "Headings, lists, bold, italic, toggle blocks — all here. Or hit Space on an empty line to ask Ash to write inline: \"Summarize what we discussed,\" \"Draft an email reply,\" \"Outline the next steps.\"",
-    advance: "next",
   },
   {
     id:      "generate-tasks",
@@ -93,13 +55,11 @@ const STEPS: Step[] = [
     advance: "next",
   },
   {
-    id:       "ash-handoff",
-    anchor:   null,
-    title:    "Let Ash flesh it out",
-    body:     "Your note is just a starting point. Hand it to Ash with a goal — expand the outline, draft the follow-up email, surface what's missing — and you'll have something usable in seconds.",
-    advance:  "next",
-    spotlight: false,
-    finalCta: { label: "Hand this note to Ash", action: "ash-draft-from-note" },
+    id:      "inline-ash",
+    anchor:  '[data-tour-target="notes.editor"]',
+    title:   "Call Ash inline with one keystroke",
+    body:    "Type a space at the start of any new line in the editor to call Ash inline — ask for a draft, a rewrite, a summary, or anything else. Ash writes directly into the note where your cursor is.",
+    advance: "next",
   },
 ];
 
@@ -150,7 +110,6 @@ export default function NotesTooltipTour() {
   const [highlight, setHighlight] = useState<Highlight | null>(null);
   const [pos,      setPos]      = useState<CalloutPos | null>(null);
   const [hidden,   setHidden]   = useState(false);
-  const noteRef = useRef<{ id: string; title: string } | null>(null);
 
   // Init: only start if not yet done AND a session event fires from the intro modal.
   useEffect(() => {
@@ -183,11 +142,7 @@ export default function NotesTooltipTour() {
   useEffect(() => {
     if (!active || hidden) return;
 
-    function onCreated(e: Event) {
-      const detail = (e as CustomEvent<{ id?: string; title?: string }>).detail;
-      if (detail?.id) {
-        noteRef.current = { id: detail.id, title: detail.title ?? "" };
-      }
+    function onCreated() {
       if (STEPS[stepIdx]?.advance === "create") setStepIdx((i) => i + 1);
     }
 
@@ -201,15 +156,6 @@ export default function NotesTooltipTour() {
   const reposition = useCallback(() => {
     if (!active || hidden) { setHighlight(null); setPos(null); return; }
     const step = STEPS[stepIdx];
-
-    // Free-roam step: pin to bottom-right corner, no spotlight, no dim.
-    if (step.freeRoam) {
-      setHighlight(null);
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      setPos({ top: vh - 240, left: vw - W - 24 });
-      return;
-    }
 
     if (!step.anchor) {
       setHighlight(null);
@@ -286,32 +232,11 @@ export default function NotesTooltipTour() {
     setStepIdx((i) => i + 1);
   }
 
-  function draftFromNote() {
-    const n = noteRef.current;
-    const noteLine = n
-      ? `The note I just created in Perennial:\n- Note ID: ${n.id}\n- Title: "${n.title || "Untitled"}"`
-      : "The note I just opened in Perennial (use the most recently created note as context).";
-
-    const prompt = [
-      "I just created a note in Perennial and I want your help turning it into something useful.",
-      noteLine,
-      "",
-      "Please do the following, in order:",
-      "1. Read the note content if there's any. If it's still blank or thin, ask me one short question about what I want to capture, then wait.",
-      "2. Once there's enough to work with, propose 3 ways to take this forward — e.g. expand into an outline, draft a follow-up email, extract a task list, or summarize the takeaways. Be concrete about what each output would contain.",
-      "3. Run the one I pick. If I don't pick, default to the most useful for this kind of note based on what you see.",
-    ].join("\n");
-
-    window.dispatchEvent(new CustomEvent("open-ash", { detail: { message: prompt } }));
-    dismiss();
-  }
-
   if (!active || hidden) return null;
   const step   = STEPS[stepIdx];
   if (step.anchor && !pos) return null;
-  const isLast = stepIdx === STEPS.length - 1;
   const isActionStep = step.advance !== "next";
-  const centered = !step.anchor && !step.freeRoam;
+  const centered = !step.anchor;
 
   return (
     <>
@@ -391,7 +316,7 @@ export default function NotesTooltipTour() {
           fontSize: 11.5,
           color: "rgba(245,241,233,0.78)",
           lineHeight: 1.55,
-          marginBottom: step.hint || step.finalCta || !isActionStep ? 10 : 0,
+          marginBottom: step.hint || !isActionStep ? 10 : 0,
         }}>
           {step.body}
         </p>
@@ -402,37 +327,7 @@ export default function NotesTooltipTour() {
           </p>
         )}
 
-        {isLast && step.finalCta?.action === "ash-draft-from-note" ? (
-          <>
-            <button
-              onClick={draftFromNote}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                width: "100%", padding: "8px 12px",
-                background: "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)",
-                color: "white",
-                border: "none", borderRadius: 8, cursor: "pointer",
-                fontFamily: "inherit", fontSize: 11, fontWeight: 600,
-                marginTop: 4,
-              }}
-            >
-              <AshMark size={12} variant="on-dark" />
-              {step.finalCta.label}
-            </button>
-            <button
-              onClick={dismiss}
-              style={{
-                display: "block", width: "100%",
-                marginTop: 8,
-                fontSize: 11, color: "rgba(245,241,233,0.55)",
-                background: "none", border: "none", padding: "4px 0",
-                cursor: "pointer", fontFamily: "inherit",
-              }}
-            >
-              I&apos;ll explore on my own
-            </button>
-          </>
-        ) : !isActionStep ? (
+        {!isActionStep ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 4, gap: 8 }}>
             <button
               type="button"
@@ -455,7 +350,7 @@ export default function NotesTooltipTour() {
                 fontFamily: "inherit",
               }}
             >
-              Next →
+              {stepIdx >= STEPS.length - 1 ? "Done" : "Next →"}
             </button>
           </div>
         ) : (
