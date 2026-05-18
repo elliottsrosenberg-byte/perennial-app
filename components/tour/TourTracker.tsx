@@ -30,6 +30,7 @@ export default function TourTracker() {
     if (matchKey === "home")     return;
     if (matchKey === "projects") return;
     if (matchKey === "contacts") return;
+    if (matchKey === "notes")    return;
     if (seenInSession.current.has(matchKey)) return;
     seenInSession.current.add(matchKey);
 

@@ -12,6 +12,8 @@ import {
   InlineAshPopover,
   submitInlineAsh,
 } from "@/components/ui/RichEditor";
+import NotesIntroModal from "@/components/tour/notes/NotesIntroModal";
+import NotesTooltipTour from "@/components/tour/notes/NotesTooltipTour";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -313,7 +315,7 @@ function FormatToolbar({
   }
 
   return (
-    <div style={{
+    <div data-tour-target="notes.format-toolbar" style={{
       display: "flex", alignItems: "center", gap: 2, padding: "6px 20px", flexShrink: 0,
       borderBottom: "0.5px solid var(--color-border)", background: "var(--color-surface-raised)",
     }}>
@@ -348,6 +350,7 @@ function FormatToolbar({
       {onGenerateTasks && (
         <button
           type="button"
+          data-tour-target="notes.generate-tasks"
           onClick={onGenerateTasks}
           disabled={suggesting}
           title="Generate tasks from this note"
@@ -620,12 +623,13 @@ function NoteEditor({
   }
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+    <div data-tour-target="notes.editor" style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
       <FormatToolbar editor={editor ?? null} onGenerateTasks={onGenerateTasks} suggesting={suggesting} />
 
       <div style={{ flex: 1, overflowY: "auto", background: "var(--color-off-white)" }}>
         <div style={{ maxWidth: 720, padding: "40px 64px 80px", margin: "0 auto" }}>
           <input
+            data-tour-target="notes.title-input"
             autoFocus value={title} onChange={e => setTitle(e.target.value)}
             placeholder="Untitled"
             style={{
@@ -635,7 +639,7 @@ function NoteEditor({
             }}
           />
 
-          <div style={{ marginBottom: 12 }}>
+          <div data-tour-target="notes.link-picker" style={{ marginBottom: 12 }}>
             <InlineLinkPicker
               links={{ projectId: note.project_id, contactId: note.contact_id, opportunityId: note.opportunity_id }}
               projects={projects}
@@ -806,6 +810,9 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
   // ── CRUD ────────────────────────────────────────────────────────────────────
 
   async function createNote() {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("notes:create-clicked"));
+    }
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -816,8 +823,14 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
       .select("*, project:projects(id,title), contact:contacts(id,first_name,last_name), opportunity:opportunities(id,title,category)")
       .single();
     if (data) {
-      setNotes(prev => [data as Note, ...prev]);
-      setSelectedNoteId((data as Note).id);
+      const created = data as Note;
+      setNotes(prev => [created, ...prev]);
+      setSelectedNoteId(created.id);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("notes:created", {
+          detail: { id: created.id, title: created.title ?? "" },
+        }));
+      }
     }
   }
 
@@ -1116,7 +1129,7 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
 
         {/* Share & Export */}
         {selectedNote && (
-          <div ref={shareRef} style={{ position: "relative" }}>
+          <div ref={shareRef} data-tour-target="notes.share-button" style={{ position: "relative" }}>
             <button
               onClick={() => setShareOpen(v => !v)}
               style={{
@@ -1187,7 +1200,9 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
           </div>
         )}
 
-        <Button onClick={createNote}>+ New note</Button>
+        <span data-tour-target="notes.new-button">
+          <Button onClick={createNote}>+ New note</Button>
+        </span>
       </div>
 
       {/* Body */}
@@ -1338,6 +1353,9 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
           boxShadow: "var(--shadow-md)", whiteSpace: "nowrap", pointerEvents: "none",
         }}>{toast}</div>
       )}
+
+      <NotesIntroModal />
+      <NotesTooltipTour />
     </div>
   );
 }
