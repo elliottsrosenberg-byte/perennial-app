@@ -65,6 +65,23 @@ function timeToY(hours: number, minutes: number): number {
   return (hours - GRID_START) * PX_PER_HOUR + (minutes / 60) * PX_PER_HOUR;
 }
 
+/** Inverse of timeToY: pixel offset within a day column → minutes-from-day-start.
+ *  Snaps to the nearest 15-min increment so drops always land on a clean
+ *  grid slot. Clamped to [0, GRID_HOURS*60]. */
+function yToMinutes(y: number): number {
+  const minsFromGridStart = (y / PX_PER_HOUR) * 60;
+  const snapped = Math.round(minsFromGridStart / 15) * 15;
+  return Math.max(0, Math.min(GRID_HOURS * 60, snapped));
+}
+
+/** Build a Date for `day` at GRID_START + `minutes` minutes. */
+function dayWithMinutes(day: Date, minutes: number): Date {
+  const out = new Date(day);
+  out.setHours(GRID_START, 0, 0, 0);
+  out.setMinutes(minutes);
+  return out;
+}
+
 function fmtDate(date: Date, opts: Intl.DateTimeFormatOptions): string {
   return date.toLocaleDateString("en-US", opts);
 }
@@ -552,6 +569,22 @@ export default function CalendarClient({
   const [newEventPrefill, setNewEventPrefill] = useState<{ start?: Date; end?: Date; allDay?: boolean } | null>(null);
   const [newMenuOpen,     setNewMenuOpen]     = useState(false);
 
+  // Drag-to-create on the time grid. We track the column the drag started
+  // in (so a horizontal wiggle doesn't bleed into the next day) and the
+  // raw start/current Y in column-local pixels. Snap-to-15-min happens
+  // on render of the ghost and at drop time.
+  const [dragCreate, setDragCreate] = useState<{
+    columnIdx: number;
+    day:       Date;
+    startY:    number;
+    currentY:  number;
+    allDay:    boolean;
+  } | null>(null);
+  // Distinguish a click on the empty grid (single-slot 30 min add) from a
+  // genuine drag — if the user releases within this px threshold of where
+  // they started, we treat it as a 30 minute create at that time.
+  const DRAG_THRESHOLD_PX = 4;
+
   // Freeze "did this user have any calendar connected at mount?" so the
   // tooltip tour can drop the connect-integration steps if so (mirrors the
   // hasPipelinesAtStart trick in OutreachTooltipTour).
@@ -569,6 +602,56 @@ export default function CalendarClient({
 
   // ── Timers cleanup
   useEffect(() => () => { undoTimers.current.forEach(clearTimeout); }, []);
+
+  // ── Drag-to-create: global mousemove/mouseup while a drag is active.
+  // We keep the per-column hit testing in the column's own mousedown so
+  // we can capture the originating column index and starting offset; the
+  // global listeners just update currentY and finalize on release.
+  useEffect(() => {
+    if (!dragCreate) return;
+
+    function onMove(e: MouseEvent) {
+      if (!dragCreate) return;
+      // The column DOM node is uniquely identified by the data attribute
+      // we set on each column root. We look up the originating column to
+      // recompute the local Y as the user moves up/down (we don't allow
+      // drag across columns — Notion Calendar doesn't either).
+      const col = document.querySelector<HTMLElement>(
+        `[data-cal-col="${dragCreate.columnIdx}"]`,
+      );
+      if (!col) return;
+      const rect = col.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      setDragCreate((prev) => (prev ? { ...prev, currentY: y } : prev));
+    }
+
+    function onUp() {
+      const drag = dragCreate;
+      if (!drag) return;
+      const dy = Math.abs(drag.currentY - drag.startY);
+
+      // Snap both endpoints to 15-min grid. If the drag was effectively
+      // a click (tiny dy), pop a 30-min default at the click point.
+      const startMin = yToMinutes(Math.min(drag.startY, drag.currentY));
+      let endMin     = yToMinutes(Math.max(drag.startY, drag.currentY));
+      if (dy < DRAG_THRESHOLD_PX) endMin = startMin + 30;
+      if (endMin <= startMin)     endMin = startMin + 15;
+
+      const startDate = dayWithMinutes(drag.day, startMin);
+      const endDate   = dayWithMinutes(drag.day, endMin);
+
+      setDragCreate(null);
+      setNewEventPrefill({ start: startDate, end: endDate, allDay: drag.allDay });
+      setNewEventOpen(true);
+    }
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup",   onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup",   onUp);
+    };
+  }, [dragCreate]);
 
   // ── Auto-dismiss the create-task error banner after a few seconds.
   useEffect(() => {
@@ -1375,7 +1458,21 @@ export default function CalendarClient({
               return (
                 <div
                   key={i}
-                  style={{ flex: 1, borderLeft: "0.5px solid var(--color-border)", padding: "3px 3px", display: "flex", flexDirection: "column", gap: "2px" }}
+                  onClick={(e) => {
+                    // Click on the empty all-day cell creates an all-day event
+                    // on this date. Clicks on child chips have their own
+                    // handlers; we bail if the event target isn't us.
+                    if (e.target !== e.currentTarget) return;
+                    const start = new Date(day); start.setHours(0, 0, 0, 0);
+                    const end   = new Date(start); end.setDate(end.getDate() + 1);
+                    setNewEventPrefill({ start, end, allDay: true });
+                    setNewEventOpen(true);
+                  }}
+                  style={{
+                    flex: 1, borderLeft: "0.5px solid var(--color-border)",
+                    padding: "3px 3px", display: "flex", flexDirection: "column", gap: "2px",
+                    cursor: "pointer",
+                  }}
                 >
                   {dayGcalAllDay.map(e => {
                     const color = e.colorId ? GCAL_COLORS[e.colorId] : (e.source === "microsoft" ? "#0078d4" : "#039BE5");
@@ -1451,15 +1548,37 @@ export default function CalendarClient({
             <div style={{ flex: 1, display: "flex", position: "relative" }}>
               {weekDays.map((day, colIdx) => {
                 const today = isToday(day);
+                const dragHere = dragCreate?.columnIdx === colIdx ? dragCreate : null;
                 return (
                   <div
                     key={colIdx}
+                    data-cal-col={colIdx}
+                    onMouseDown={(e) => {
+                      // Only start a drag on left-click of the empty column.
+                      // Clicks on event chips inside the column have their
+                      // own onClick that calls stopPropagation via setOpenEvent;
+                      // we additionally bail if the target isn't this exact
+                      // column node so descendant interactive elements win.
+                      if (e.button !== 0) return;
+                      if (e.target !== e.currentTarget) return;
+                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                      const y = e.clientY - rect.top;
+                      setDragCreate({
+                        columnIdx: colIdx,
+                        day,
+                        startY:    y,
+                        currentY:  y,
+                        allDay:    e.shiftKey,
+                      });
+                    }}
                     style={{
                       flex: 1,
                       borderLeft: "0.5px solid var(--color-border)",
                       position: "relative",
                       height: `${GRID_HEIGHT}px`,
                       background: today ? "rgba(155,163,122,0.05)" : "transparent",
+                      cursor: "crosshair",
+                      userSelect: dragCreate ? "none" : "auto",
                     }}
                   >
                     {/* Hour lines */}
@@ -1471,6 +1590,46 @@ export default function CalendarClient({
                     {Array.from({ length: GRID_HOURS }, (_, i) => (
                       <div key={`hh${i}`} style={{ position: "absolute", top: `${i * PX_PER_HOUR + PX_PER_HOUR / 2}px`, left: 0, right: 0, height: "0.5px", background: "var(--color-border)", opacity: 0.4 }} />
                     ))}
+
+                    {/* Drag-to-create ghost block */}
+                    {dragHere && (() => {
+                      const startMin = yToMinutes(Math.min(dragHere.startY, dragHere.currentY));
+                      const endMin   = Math.max(
+                        startMin + 15,
+                        yToMinutes(Math.max(dragHere.startY, dragHere.currentY)),
+                      );
+                      const topPx    = (startMin / 60) * PX_PER_HOUR;
+                      const heightPx = ((endMin - startMin) / 60) * PX_PER_HOUR;
+                      const startD   = dayWithMinutes(day, startMin);
+                      const endD     = dayWithMinutes(day, endMin);
+                      const fmt = (d: Date) => d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+                      return (
+                        <div
+                          style={{
+                            position: "absolute",
+                            top:      `${topPx}px`,
+                            left:     "2px",
+                            right:    "2px",
+                            height:   `${heightPx}px`,
+                            background:   "rgba(155,163,122,0.22)",
+                            border:       "1px solid var(--color-sage)",
+                            borderRadius: 4,
+                            zIndex:       4,
+                            pointerEvents: "none",
+                            padding:      "2px 6px",
+                            color:        "#4a5630",
+                            fontSize:     10,
+                            fontWeight:   500,
+                            overflow:     "hidden",
+                          }}
+                        >
+                          New event<br/>
+                          <span style={{ fontSize: 9, opacity: 0.85 }}>
+                            {fmt(startD)} – {fmt(endD)}
+                          </span>
+                        </div>
+                      );
+                    })()}
 
                     {/* Current time indicator */}
                     {today && nowY !== null && (

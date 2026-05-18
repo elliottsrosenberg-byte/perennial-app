@@ -157,14 +157,46 @@ export default function NewPipelineModal({ onClose, onCreated }: Props) {
     });
   }
 
+  // Cross-section drag: the item is moving from "active" ↔ "outcome". Flip
+  // is_outcome on the moved stage and place it at the destination index
+  // within the destination list, preserving the order of every other stage.
+  function moveBetweenLists(srcList: "active" | "outcome", srcIdx: number, dstIdx: number) {
+    setStages(prev => {
+      const srcWant = srcList === "outcome";
+      const sourceSlice = prev.filter(s => s.is_outcome === srcWant);
+      const movedOriginal = sourceSlice[srcIdx];
+      if (!movedOriginal) return prev;
+
+      // Apply the flip + a sensible default meta_stage for the new section.
+      const moved: EditableStage = {
+        ...movedOriginal,
+        is_outcome: !srcWant,
+        meta_stage: !srcWant ? "closed" : "submit",
+      };
+
+      // Build the two destination lists with the moved item inserted.
+      const destSlice = prev.filter(s => s.is_outcome !== srcWant && s.id !== moved.id);
+      destSlice.splice(dstIdx, 0, moved);
+      const newSourceSlice = sourceSlice.filter((_, i) => i !== srcIdx);
+
+      // Re-interleave: walk the original positions, but now item kinds may
+      // have shifted. Simpler to just concat — active first, then outcomes —
+      // which matches the UI's visual order anyway.
+      const newActive  = !srcWant ? destSlice : newSourceSlice;
+      const newOutcome =  srcWant ? destSlice : newSourceSlice;
+      return [...newActive, ...newOutcome];
+    });
+  }
+
   function handleDragEnd(result: DropResult) {
     if (!result.destination) return;
-    if (result.source.droppableId !== result.destination.droppableId) return;
-    reorderList(
-      result.source.droppableId as "active" | "outcome",
-      result.source.index,
-      result.destination.index,
-    );
+    const srcId = result.source.droppableId as "active" | "outcome";
+    const dstId = result.destination.droppableId as "active" | "outcome";
+    if (srcId === dstId) {
+      reorderList(srcId, result.source.index, result.destination.index);
+    } else {
+      moveBetweenLists(srcId, result.source.index, result.destination.index);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -280,13 +312,29 @@ export default function NewPipelineModal({ onClose, onCreated }: Props) {
               <label className="block text-[11px] font-medium mb-2" style={{ color: "var(--color-charcoal)" }}>Stages</label>
 
               <DragDropContext onDragEnd={handleDragEnd}>
-                {/* Active stages — pipeline */}
-                {activeStages.length > 0 && (
-                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-grey)" }}>Pipeline</p>
-                )}
+                {/* Active stages — pipeline. Header is always visible so the
+                    drop zone reads clearly even when the section is empty
+                    (e.g. user dragged the last stage into Outcomes). */}
+                <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-grey)" }}>Pipeline</p>
                 <Droppable droppableId="active">
-                  {(provided) => (
-                    <div ref={provided.innerRef} {...provided.droppableProps}>
+                  {(provided, snapshot) => (
+                    <div ref={provided.innerRef} {...provided.droppableProps}
+                      style={{
+                        minHeight: activeStages.length === 0 ? 36 : undefined,
+                        borderRadius: 8,
+                        border: activeStages.length === 0
+                          ? `0.5px dashed ${snapshot.isDraggingOver ? "var(--color-sage)" : "var(--color-border)"}`
+                          : "none",
+                        background: snapshot.isDraggingOver && activeStages.length === 0 ? "rgba(125,148,86,0.06)" : "transparent",
+                        display: activeStages.length === 0 ? "flex" : undefined,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginBottom: activeStages.length === 0 ? 2 : 0,
+                        transition: "background 0.15s ease, border 0.15s ease",
+                      }}>
+                      {activeStages.length === 0 && !snapshot.isDraggingOver && (
+                        <span style={{ fontSize: 10, color: "var(--color-grey)" }}>Drag an outcome here to make it an active stage</span>
+                      )}
                       {activeStages.map((stage, index) => (
                         <Draggable key={stage.id} draggableId={stage.id} index={index}>
                           {(dragProvided, dragSnap) => (
@@ -315,13 +363,28 @@ export default function NewPipelineModal({ onClose, onCreated }: Props) {
                   )}
                 </Droppable>
 
-                {/* Outcome stages */}
-                {outcomeStages.length > 0 && (
-                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5 mt-3" style={{ color: "var(--color-grey)" }}>Outcomes</p>
-                )}
+                {/* Outcome stages — header always visible so the drop zone
+                    reads clearly even when empty. */}
+                <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5 mt-3" style={{ color: "var(--color-grey)" }}>Outcomes</p>
                 <Droppable droppableId="outcome">
-                  {(provided) => (
-                    <div ref={provided.innerRef} {...provided.droppableProps}>
+                  {(provided, snapshot) => (
+                    <div ref={provided.innerRef} {...provided.droppableProps}
+                      style={{
+                        minHeight: outcomeStages.length === 0 ? 36 : undefined,
+                        borderRadius: 8,
+                        border: outcomeStages.length === 0
+                          ? `0.5px dashed ${snapshot.isDraggingOver ? "var(--color-sage)" : "var(--color-border)"}`
+                          : "none",
+                        background: snapshot.isDraggingOver && outcomeStages.length === 0 ? "rgba(125,148,86,0.06)" : "transparent",
+                        display: outcomeStages.length === 0 ? "flex" : undefined,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginBottom: outcomeStages.length === 0 ? 2 : 0,
+                        transition: "background 0.15s ease, border 0.15s ease",
+                      }}>
+                      {outcomeStages.length === 0 && !snapshot.isDraggingOver && (
+                        <span style={{ fontSize: 10, color: "var(--color-grey)" }}>Drag a stage here to mark it an outcome</span>
+                      )}
                       {outcomeStages.map((stage, index) => (
                         <Draggable key={stage.id} draggableId={stage.id} index={index}>
                           {(dragProvided, dragSnap) => (
