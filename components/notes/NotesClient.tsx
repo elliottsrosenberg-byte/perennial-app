@@ -5,8 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Note } from "@/types/database";
 import { useEditor, EditorContent } from "@tiptap/react";
-import { Pin, Search, Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered } from "lucide-react";
+import { Pin, Search, Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, MoreHorizontal, Upload, NotebookPen } from "lucide-react";
 import Button from "@/components/ui/Button";
+import EmptyState from "@/components/ui/EmptyState";
 import {
   getRichExtensions,
   InlineAshPopover,
@@ -14,6 +15,8 @@ import {
 } from "@/components/ui/RichEditor";
 import NotesIntroModal from "@/components/tour/notes/NotesIntroModal";
 import NotesTooltipTour from "@/components/tour/notes/NotesTooltipTour";
+import NotesOptionsMenu from "./NotesOptionsMenu";
+import ImportNoteModal from "./ImportNoteModal";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -737,6 +740,9 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
   const [deleteConfirm,  setDeleteConfirm]  = useState(false);
   const [shareOpen,      setShareOpen]      = useState(false);
   const [linkCopied,     setLinkCopied]     = useState(false);
+  const [optionsOpen,    setOptionsOpen]    = useState(false);
+  const [showPinnedOnly, setShowPinnedOnly] = useState(false);
+  const [showImport,     setShowImport]     = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
 
   const selectedNote = notes.find(n => n.id === selectedNoteId) ?? null;
@@ -796,13 +802,15 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
     else if (filter.startsWith("contact:"))     list = notes.filter(n => n.contact_id     === filter.slice(8));
     else if (filter.startsWith("opportunity:")) list = notes.filter(n => n.opportunity_id === filter.slice(12));
 
+    if (showPinnedOnly) list = list.filter(n => n.pinned);
+
     if (search) {
       const q = search.toLowerCase();
       list = list.filter(n => n.title?.toLowerCase().includes(q) || n.content?.toLowerCase().includes(q));
     }
 
     return [...list].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-  }, [notes, filter, search]);
+  }, [notes, filter, search, showPinnedOnly]);
 
   const pinnedNotes  = useMemo(() => filteredNotes.filter(n => n.pinned),  [filteredNotes]);
   const regularNotes = useMemo(() => filteredNotes.filter(n => !n.pinned), [filteredNotes]);
@@ -836,14 +844,19 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
 
   // Deep links — stripped from the URL after consume:
   //   ?new=1     → create a fresh note (home banner CTA)
+  //   ?import=1  → open the file-import modal
   //   ?noteId=X  → focus an existing note (Ash inline "Created note … View →")
   const router = useRouter();
   const searchParams = useSearchParams();
   useEffect(() => {
-    const newFlag = searchParams.get("new");
-    const noteId  = searchParams.get("noteId");
+    const newFlag    = searchParams.get("new");
+    const importFlag = searchParams.get("import");
+    const noteId     = searchParams.get("noteId");
     if (newFlag === "1") {
       createNote();
+      router.replace("/notes");
+    } else if (importFlag === "1") {
+      setShowImport(true);
       router.replace("/notes");
     } else if (noteId) {
       if (notes.some((n) => n.id === noteId)) setSelectedNoteId(noteId);
@@ -851,6 +864,11 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, router]);
+
+  function handleImported(note: Note) {
+    setNotes(prev => [note, ...prev]);
+    setSelectedNoteId(note.id);
+  }
 
   function handleNoteUpdate(id: string, fields: Partial<Note>) {
     setNotes(prev => prev.map(n => n.id === id ? { ...n, ...fields, updated_at: new Date().toISOString() } : n));
@@ -1071,13 +1089,13 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%", overflow: "hidden", background: "var(--color-off-white)", position: "relative" }}>
 
-      {/* Topbar */}
+      {/* Topbar — matches the 52px height / 24px gutter of Projects + People */}
       <div style={{
-        height: 44, display: "flex", alignItems: "center", flexShrink: 0,
-        borderBottom: "0.5px solid var(--color-border)", background: "var(--color-surface-raised)",
-        padding: "0 16px", gap: 8,
+        height: 52, display: "flex", alignItems: "center", flexShrink: 0,
+        borderBottom: "0.5px solid var(--color-border)", background: "var(--color-off-white)",
+        padding: "0 24px", gap: 8,
       }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", flex: 1 }}>Notes</span>
+        <h1 style={{ fontSize: 14, fontWeight: 600, color: "var(--color-charcoal)", flex: 1 }}>Notes</h1>
 
         {/* Delete — inline confirm */}
         {selectedNote && (
@@ -1200,6 +1218,43 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
           </div>
         )}
 
+        {/* Three-dot options menu — sits left of Import / New note */}
+        <div style={{ position: "relative" }}>
+          <button
+            type="button"
+            onClick={() => setOptionsOpen(v => !v)}
+            aria-label="Notes options"
+            title="Notes options"
+            style={{
+              width: 28, height: 28, borderRadius: 7,
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+              background: optionsOpen ? "var(--color-surface-sunken)" : "transparent",
+              border: "none", cursor: "pointer",
+              color: "var(--color-text-secondary)",
+              transition: "background 0.12s ease",
+            }}
+            onMouseEnter={e => { if (!optionsOpen) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+            onMouseLeave={e => { if (!optionsOpen) e.currentTarget.style.background = "transparent"; }}
+          >
+            <MoreHorizontal size={16} strokeWidth={2} />
+          </button>
+          {optionsOpen && (
+            <NotesOptionsMenu
+              showPinnedOnly={showPinnedOnly}
+              onTogglePinnedOnly={() => setShowPinnedOnly(v => !v)}
+              pinnedCount={pinnedCount}
+              onImport={() => setShowImport(true)}
+              onClose={() => setOptionsOpen(false)}
+            />
+          )}
+        </div>
+
+        {/* Import note — secondary CTA, outlined */}
+        <Button variant="secondary" size="sm" onClick={() => setShowImport(true)}>
+          <Upload size={11} strokeWidth={2} />
+          Import note
+        </Button>
+
         <span data-tour-target="notes.new-button">
           <Button onClick={createNote}>+ New note</Button>
         </span>
@@ -1267,16 +1322,9 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
                 </div>
               ) : (
                 <div style={{ padding: "20px 14px" }}>
-                  <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 6 }}>Your notes live here</p>
-                  <p style={{ fontSize: 11, lineHeight: 1.6, color: "var(--color-text-tertiary)", marginBottom: 14 }}>
-                    Use notes for anything — ideas, meeting notes, sketches, research, or drafts. Notes can be linked to projects and shared with collaborators.
+                  <p style={{ fontSize: 11, lineHeight: 1.6, color: "var(--color-text-tertiary)" }}>
+                    No notes yet — start one from the editor on the right, or import a file.
                   </p>
-                  <button
-                    onClick={createNote}
-                    style={{ fontSize: 11, padding: "6px 12px", borderRadius: 6, background: "var(--color-charcoal)", color: "var(--color-warm-white)", border: "none", cursor: "pointer", fontFamily: "inherit" }}
-                  >
-                    + New note
-                  </button>
                 </div>
               )
             )}
@@ -1324,7 +1372,32 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
             onGenerateTasks={handleGenerateTasks}
             suggesting={suggesting}
           />
+        ) : notes.length === 0 ? (
+          // Zero notes total — rich onboarding empty state, matching the
+          // Projects / People pattern.
+          <div style={{ flex: 1, overflowY: "auto", background: "var(--color-off-white)", display: "flex", alignItems: "center" }}>
+            <EmptyState
+              icon={<NotebookPen size={24} strokeWidth={1.5} color="var(--color-sage)" />}
+              heading="Start writing"
+              body="Notes are your studio's thinking space — drafts, research, reactions, voice memos transcribed, half-formed pitches, anything you want Ash to be able to reference later."
+              action={{ label: "+ New note", onClick: createNote }}
+              secondaryAction={{
+                label:   "Import note",
+                onClick: () => setShowImport(true),
+                icon:    <Upload size={11} strokeWidth={2} />,
+              }}
+              ashPrompt="Help me figure out what's worth writing down — what belongs in a note vs a task vs a calendar event?"
+              tips={[
+                "Write freely; we save as you go.",
+                "Type a space at the start of a line to call Ash inline.",
+                "Generate tasks turns any note into actionable to-dos.",
+              ]}
+            />
+          </div>
         ) : (
+          // Notes exist but none is selected (e.g. the active filter
+          // emptied the visible list). Keep this lighter — the user has
+          // notes; they just need to pick one.
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, background: "var(--color-off-white)" }}>
             <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)" }}>No note selected</p>
             <p style={{ fontSize: 12, color: "var(--color-text-tertiary)", marginBottom: 8 }}>Select a note or create a new one</p>
@@ -1352,6 +1425,13 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
           fontSize: 11, fontWeight: 500, padding: "6px 14px", borderRadius: 9999,
           boxShadow: "var(--shadow-md)", whiteSpace: "nowrap", pointerEvents: "none",
         }}>{toast}</div>
+      )}
+
+      {showImport && (
+        <ImportNoteModal
+          onClose={() => setShowImport(false)}
+          onImported={handleImported}
+        />
       )}
 
       <NotesIntroModal />
