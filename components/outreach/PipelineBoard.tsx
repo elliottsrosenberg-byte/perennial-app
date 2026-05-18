@@ -1,11 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { OutreachPipeline, PipelineStage, OutreachTarget, MetaStage, ContactActivityType } from "@/types/database";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import { Plus, X, Send } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
+
+// Distinct follow-up colour. Intentionally NOT sage (overloaded with "healthy
+// project" semantics) and NOT amber/red-orange (already used for lead/stale
+// states). A warm copper signals "outreach touch" without echoing any other
+// surface in the app.
+const FOLLOWUP_COPPER       = "#c97a4a";
+const FOLLOWUP_COPPER_TINT  = "rgba(201,122,74,0.16)";
+const FOLLOWUP_COPPER_REVEAL = "rgba(201,122,74,0.22)";
+const FOLLOWUP_COPPER_LOGGED = "rgba(201,122,74,0.28)";
 
 // ── Follow-up modal ───────────────────────────────────────────────────────────
 
@@ -157,6 +166,13 @@ function fmtLastTouch(iso: string) {
 
 // ── Target card ───────────────────────────────────────────────────────────────
 
+// Pixel thresholds for the swipe-right follow-up gesture.
+// COMMIT_AT: distance past which release fires a follow-up.
+// MAX_PULL: maximum visible offset, applied via rubber-banding so a vigorous
+//           drag still feels bounded.
+const SWIPE_COMMIT_AT = 64;
+const SWIPE_MAX_PULL  = 110;
+
 function TargetCard({
   target,
   pipelineBadge,
@@ -165,6 +181,7 @@ function TargetCard({
   isFollowedUp,
   onClick,
   onOpenFollowUp,
+  onQuickFollowUp,
 }: {
   target: OutreachTarget;
   pipelineBadge?: { name: string; color: string };
@@ -172,118 +189,294 @@ function TargetCard({
   isOutcome: boolean;
   isFollowedUp: boolean;
   onClick: () => void;
+  /** Opens the full follow-up modal (notes, type). Triggered by clicking
+   *  the right-edge handle without a drag. */
   onOpenFollowUp?: () => void;
+  /** Logs a quick follow-up (just bumps last_touched_at, no modal).
+   *  Triggered by a swipe-right gesture past the commit threshold. */
+  onQuickFollowUp?: () => void;
 }) {
   const [cardHov, setCardHov] = useState(false);
   const [barHov,  setBarHov]  = useState(false);
+
+  // ── Swipe state ─────────────────────────────────────────────────────────────
+  // `offset`: current translateX in px (rubber-banded from raw drag delta).
+  // `committed`: latched true the moment a release crosses the threshold — we
+  //   want the celebratory animation to keep playing even though offset eases
+  //   back to 0. Auto-clears after the animation window.
+  const [offset,    setOffset]    = useState(0);
+  const [committed, setCommitted] = useState(false);
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    active: boolean;        // hijacked the gesture (we own pointer capture)
+    direction: "?" | "h" | "v"; // locked once we decide what kind of drag this is
+    pointerId: number;
+  } | null>(null);
 
   const linkedLabel = target.contact
     ? `${target.contact.first_name} ${target.contact.last_name}`
     : target.company?.name ?? null;
 
   const recentlyTouched = Math.floor((Date.now() - new Date(target.last_touched_at).getTime()) / 86400000) === 0;
-  const showGreen = isFollowedUp || recentlyTouched;
+  const showLogged = isFollowedUp || recentlyTouched || committed;
 
-  // Follow-up bar colors
-  const barColor = showGreen
-    ? "rgba(61,107,79,0.22)"
-    : cardHov
-      ? barHov ? "rgba(184,134,11,0.38)" : "rgba(184,134,11,0.15)"
-      : "transparent";
-  const barWidth = barHov && !showGreen ? 12 : 6;
+  // Right-edge "swipe handle". Visible all the time on active cards so the
+  // affordance is discoverable; widens on hover to invite the gesture.
+  const barWidth = barHov && !showLogged && offset === 0 ? 14 : 8;
+  const barColor = showLogged
+    ? FOLLOWUP_COPPER_LOGGED
+    : barHov && offset === 0
+      ? FOLLOWUP_COPPER
+      : FOLLOWUP_COPPER_TINT;
+
+  // ── Drag handlers on the swipe handle ───────────────────────────────────────
+  function onHandlePointerDown(e: React.PointerEvent) {
+    if (isOutcome || !onQuickFollowUp) return;
+    e.stopPropagation();
+    // Capture so we keep receiving move events even if the pointer wanders off
+    // the handle (which happens immediately — the card slides right under it).
+    (e.target as Element).setPointerCapture(e.pointerId);
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      active: false,
+      direction: "?",
+      pointerId: e.pointerId,
+    };
+  }
+  function onHandlePointerMove(e: React.PointerEvent) {
+    const d = dragRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;
+    // Direction lock: first ~6px decides. Right-skewed → swipe gesture;
+    // anything else (left, vertical, diagonal) → cancel and let the user click.
+    if (d.direction === "?") {
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+      if (dx > 0 && dx > Math.abs(dy)) {
+        d.direction = "h";
+        d.active = true;
+      } else {
+        d.direction = "v";
+        return;
+      }
+    }
+    if (d.direction !== "h") return;
+    // Rubber-banded translation: linear up to MAX_PULL/2, then resistance.
+    const raw = Math.max(0, dx);
+    const eased = raw <= SWIPE_MAX_PULL
+      ? raw
+      : SWIPE_MAX_PULL + (raw - SWIPE_MAX_PULL) * 0.25;
+    setOffset(Math.min(eased, SWIPE_MAX_PULL + 20));
+  }
+  function endDrag(e: React.PointerEvent) {
+    const d = dragRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    try { (e.target as Element).releasePointerCapture(e.pointerId); } catch {}
+    const wasActive  = d.active;
+    const finalDelta = e.clientX - d.startX;
+    dragRef.current = null;
+
+    // Pure click (no drag past direction-lock): open the full modal.
+    if (!wasActive) {
+      if (Math.abs(finalDelta) < 4 && onOpenFollowUp) onOpenFollowUp();
+      return;
+    }
+    if (finalDelta >= SWIPE_COMMIT_AT && onQuickFollowUp) {
+      setCommitted(true);
+      onQuickFollowUp();
+      // Animate fully open for the celebratory beat, then ease back.
+      setOffset(SWIPE_MAX_PULL);
+      setTimeout(() => setOffset(0), 220);
+      // Release the "committed" latch after the colour-flash settles.
+      setTimeout(() => setCommitted(false), 1400);
+    } else {
+      setOffset(0);
+    }
+  }
+
+  // Belt-and-braces: if the gesture is cancelled by the OS / browser (alt-tab,
+  // scroll interrupt) make sure we don't strand the card mid-swipe.
+  useEffect(() => {
+    if (offset === 0) return;
+    function cancel() {
+      if (!dragRef.current) return;
+      dragRef.current = null;
+      setOffset(0);
+    }
+    window.addEventListener("pointercancel", cancel);
+    return () => window.removeEventListener("pointercancel", cancel);
+  }, [offset]);
+
+  const isPulling = offset > 0;
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => { if (!isDragging) onClick(); }}
-      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!isDragging) onClick(); } }}
-      onMouseEnter={() => setCardHov(true)}
-      onMouseLeave={() => { setCardHov(false); setBarHov(false); }}
-      style={{
-        position: "relative",
-        width: "100%",
-        textAlign: "left",
-        borderRadius: 10,
-        padding: "10px 12px",
-        paddingRight: 16,
-        marginLeft: isFollowedUp ? 20 : 0,
-        background: isDragging ? "var(--color-cream)" : "var(--color-warm-white)",
-        border: "0.5px solid var(--color-border)",
-        boxShadow: isDragging ? "0 8px 24px rgba(31,33,26,0.18)" : cardHov ? "0 2px 8px rgba(0,0,0,0.06)" : "none",
-        cursor: "inherit",
-        transition: "box-shadow 0.1s ease, background 0.1s ease, margin-left 0.25s ease",
-        userSelect: "none",
-        outline: "none",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6, marginBottom: 4 }}>
-        <p style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.35, flex: 1, color: "var(--color-charcoal)" }}>
-          {target.name}
-        </p>
-        {pipelineBadge && (
-          <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 9999, fontWeight: 500, flexShrink: 0, marginTop: 1, background: pipelineBadge.color + "20", color: pipelineBadge.color }}>
-            {pipelineBadge.name}
-          </span>
-        )}
-      </div>
-      {linkedLabel && (
-        <p style={{ fontSize: 11, color: "var(--color-grey)", marginBottom: 2 }}>{linkedLabel}</p>
-      )}
-      {target.location && (
-        <p style={{ fontSize: 11, color: "var(--color-grey)" }}>{target.location}</p>
-      )}
-      <p style={{ fontSize: 10, marginTop: 6, color: "var(--color-grey)" }}>
-        {fmtLastTouch(target.last_touched_at)}
-      </p>
-
-      {/* Follow-up bar — right edge, active stages only */}
-      {!isOutcome && onOpenFollowUp && (
+    // Outer wrapper holds the reveal layer behind the card so it appears
+    // *under* the card as the card slides right. The reveal copy lives here.
+    <div style={{ position: "relative", width: "100%" }}>
+      {/* Reveal layer (behind card) — copper wash + label that becomes visible
+          as the card slides right. Pointer events disabled so it never blocks
+          the handle. */}
+      {!isOutcome && onQuickFollowUp && (
         <div
-          onClick={e => { e.stopPropagation(); onOpenFollowUp(); }}
-          onMouseEnter={e => { e.stopPropagation(); setBarHov(true); }}
-          onMouseLeave={e => { e.stopPropagation(); setBarHov(false); }}
-          title={showGreen ? "Followed up — log another" : "Log follow-up"}
+          aria-hidden
           style={{
             position: "absolute",
-            right: 0, top: 0, bottom: 0,
-            width: barWidth,
-            borderRadius: "0 10px 10px 0",
-            background: barColor,
-            cursor: "pointer",
-            transition: "background 0.15s ease, width 0.18s ease",
-            zIndex: 2,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
+            top: 0, bottom: 0, left: 0, right: 0,
+            borderRadius: 10,
+            background: isPulling || committed
+              ? `linear-gradient(90deg, ${FOLLOWUP_COPPER_TINT} 0%, ${FOLLOWUP_COPPER_REVEAL} 70%, ${FOLLOWUP_COPPER} 100%)`
+              : "transparent",
+            display: "flex", alignItems: "center", justifyContent: "flex-start",
+            paddingLeft: 14,
+            color: "white",
+            fontSize: 11, fontWeight: 600, letterSpacing: "0.02em",
+            opacity: isPulling || committed ? 1 : 0,
+            transition: "opacity 0.15s ease",
+            pointerEvents: "none",
+            overflow: "hidden",
           }}
         >
-          {/* Tooltip */}
-          {barHov && !showGreen && (
-            <span style={{
-              position: "absolute",
-              right: "calc(100% + 8px)",
-              top: "50%",
-              transform: "translateY(-50%)",
-              background: "var(--color-charcoal)",
-              color: "var(--color-warm-white)",
-              fontSize: 10,
-              padding: "4px 8px",
-              borderRadius: 5,
-              whiteSpace: "nowrap",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
-              pointerEvents: "none",
-            }}>
-              Log follow-up
-            </span>
-          )}
-          {showGreen && (
-            <svg width="8" height="6" viewBox="0 0 8 6" fill="none" style={{ opacity: 0.7 }}>
-              <path d="M1 3L3 5L7 1" stroke="#3d6b4f" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            opacity: offset > 24 || committed ? 1 : 0,
+            transform: `translateX(${Math.min(offset - 18, 24)}px)`,
+            transition: "opacity 0.12s ease",
+          }}>
+            <svg width="10" height="8" viewBox="0 0 8 6" fill="none">
+              <path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-          )}
+            {offset >= SWIPE_COMMIT_AT || committed ? "Release to log" : "Keep pulling…"}
+          </span>
         </div>
       )}
+
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => { if (!isDragging && offset === 0) onClick(); }}
+        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!isDragging) onClick(); } }}
+        onMouseEnter={() => setCardHov(true)}
+        onMouseLeave={() => { setCardHov(false); setBarHov(false); }}
+        style={{
+          position: "relative",
+          width: "100%",
+          textAlign: "left",
+          borderRadius: 10,
+          padding: "10px 12px",
+          paddingRight: 18,
+          background: isDragging ? "var(--color-cream)" : "var(--color-warm-white)",
+          border: "0.5px solid var(--color-border)",
+          boxShadow: isDragging
+            ? "0 8px 24px rgba(31,33,26,0.18)"
+            : isPulling
+              ? "0 6px 18px rgba(201,122,74,0.22)"
+              : cardHov ? "0 2px 8px rgba(0,0,0,0.06)" : "none",
+          cursor: "inherit",
+          transform: `translateX(${offset}px)`,
+          // Snap-back gets a spring-ish ease; live drag is instant for tactility.
+          transition: isPulling
+            ? "box-shadow 0.1s ease, background 0.1s ease"
+            : "transform 0.28s cubic-bezier(0.34, 1.4, 0.5, 1), box-shadow 0.18s ease, background 0.1s ease",
+          userSelect: "none",
+          outline: "none",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6, marginBottom: 4 }}>
+          <p style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.35, flex: 1, color: "var(--color-charcoal)" }}>
+            {target.name}
+          </p>
+          {pipelineBadge && (
+            <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 9999, fontWeight: 500, flexShrink: 0, marginTop: 1, background: pipelineBadge.color + "20", color: pipelineBadge.color }}>
+              {pipelineBadge.name}
+            </span>
+          )}
+        </div>
+        {linkedLabel && (
+          <p style={{ fontSize: 11, color: "var(--color-grey)", marginBottom: 2 }}>{linkedLabel}</p>
+        )}
+        {target.location && (
+          <p style={{ fontSize: 11, color: "var(--color-grey)" }}>{target.location}</p>
+        )}
+        <p style={{
+          fontSize: 10, marginTop: 6,
+          color: showLogged ? FOLLOWUP_COPPER : "var(--color-grey)",
+          fontWeight: showLogged ? 600 : 400,
+          transition: "color 0.18s ease",
+        }}>
+          {committed ? "Followed up · today" : fmtLastTouch(target.last_touched_at)}
+        </p>
+
+        {/* Swipe handle — right edge, active stages only. Doubles as click
+            target for the detailed modal and drag origin for the quick-log
+            swipe. */}
+        {!isOutcome && onQuickFollowUp && (
+          <div
+            data-tour-target={undefined}
+            onPointerDown={onHandlePointerDown}
+            onPointerMove={onHandlePointerMove}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+            onMouseEnter={e => { e.stopPropagation(); setBarHov(true); }}
+            onMouseLeave={e => { e.stopPropagation(); setBarHov(false); }}
+            title={showLogged ? "Followed up — pull to log another" : "Pull right to log follow-up"}
+            style={{
+              position: "absolute",
+              right: 0, top: 0, bottom: 0,
+              width: barWidth,
+              borderRadius: "0 10px 10px 0",
+              background: barColor,
+              cursor: isPulling ? "grabbing" : "grab",
+              transition: isPulling
+                ? "background 0.12s ease"
+                : "background 0.15s ease, width 0.18s ease",
+              zIndex: 2,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              touchAction: "pan-y",
+            }}
+          >
+            {/* Vertical grip lines — telegraph that this is a draggable handle */}
+            {!showLogged && (
+              <span aria-hidden style={{
+                display: "flex", flexDirection: "column", gap: 2,
+                opacity: barHov ? 0.9 : 0.55,
+                transition: "opacity 0.15s ease",
+              }}>
+                <span style={{ width: 2, height: 2, borderRadius: 1, background: "white" }} />
+                <span style={{ width: 2, height: 2, borderRadius: 1, background: "white" }} />
+                <span style={{ width: 2, height: 2, borderRadius: 1, background: "white" }} />
+              </span>
+            )}
+            {showLogged && (
+              <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
+                <path d="M1 3L3 5L7 1" stroke={FOLLOWUP_COPPER} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+            {/* Hover hint tooltip — only when card is at rest and not yet logged */}
+            {barHov && !showLogged && offset === 0 && (
+              <span style={{
+                position: "absolute",
+                right: "calc(100% + 8px)",
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "var(--color-charcoal)",
+                color: "var(--color-warm-white)",
+                fontSize: 10,
+                padding: "4px 8px",
+                borderRadius: 5,
+                whiteSpace: "nowrap",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
+                pointerEvents: "none",
+              }}>
+                Swipe right · click for note
+              </span>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -300,6 +493,7 @@ function DroppableColumn({
   onTargetClick,
   onNewTarget,
   onOpenFollowUp,
+  onQuickFollowUp,
   followedUpIds,
 }: {
   stage: PipelineStage;
@@ -311,6 +505,7 @@ function DroppableColumn({
   onTargetClick: (t: OutreachTarget) => void;
   onNewTarget: () => void;
   onOpenFollowUp: (t: OutreachTarget) => void;
+  onQuickFollowUp: (t: OutreachTarget) => void;
   followedUpIds: Set<string>;
 }) {
   return (
@@ -384,6 +579,7 @@ function DroppableColumn({
                         isFollowedUp={followedUpIds.has(t.id)}
                         onClick={() => onTargetClick(t)}
                         onOpenFollowUp={isOutcome ? undefined : () => onOpenFollowUp(t)}
+                        onQuickFollowUp={isOutcome ? undefined : () => onQuickFollowUp(t)}
                       />
                     </div>
                   )}
@@ -412,6 +608,9 @@ function StaticColumn({
   allPipelines,
   onTargetClick,
   onAdd,
+  onOpenFollowUp,
+  onQuickFollowUp,
+  followedUpIds,
 }: {
   label: string;
   targets: OutreachTarget[];
@@ -419,6 +618,9 @@ function StaticColumn({
   allPipelines: (OutreachPipeline & { stages: PipelineStage[] })[];
   onTargetClick: (t: OutreachTarget) => void;
   onAdd: () => void;
+  onOpenFollowUp: (t: OutreachTarget) => void;
+  onQuickFollowUp: (t: OutreachTarget) => void;
+  followedUpIds: Set<string>;
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", width: 210, flexShrink: 0 }}>
@@ -448,8 +650,10 @@ function StaticColumn({
                 pipelineBadge={showPipelineBadge && tp ? { name: tp.name, color: tp.color } : undefined}
                 isDragging={false}
                 isOutcome={false}
-                isFollowedUp={false}
+                isFollowedUp={followedUpIds.has(t.id)}
                 onClick={() => onTargetClick(t)}
+                onOpenFollowUp={() => onOpenFollowUp(t)}
+                onQuickFollowUp={() => onQuickFollowUp(t)}
               />
             </div>
           );
@@ -484,6 +688,30 @@ export default function PipelineBoard({ pipelines, selectedPipeline, targets, on
     setFollowedUpIds(prev => new Set(prev).add(targetId));
   }
 
+  // Swipe-right gesture: log a quick follow-up (just bumps last_touched_at),
+  // no modal. The clicked-bar path still opens the full modal for adding type
+  // + notes via `setFollowUpTarget`.
+  function handleQuickFollowUp(target: OutreachTarget) {
+    handleLogged(target.id);
+    // Best-effort activity entry — same shape FollowUpModal writes, but with
+    // an autogenerated note. Failure is silent on purpose: the visible UI
+    // change (last-touched colour, copper checkmark) is the real ack.
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user || !target.contact_id) return;
+      const now = new Date().toISOString();
+      supabase.from("contact_activities").insert({
+        user_id:     user.id,
+        contact_id:  target.contact_id,
+        type:        "note" as ContactActivityType,
+        content:     `Quick follow-up logged for ${target.name}`,
+        occurred_at: now,
+      });
+      supabase.from("contacts").update({ last_contacted_at: now }).eq("id", target.contact_id);
+    });
+    window.dispatchEvent(new CustomEvent("outreach:followup-logged", { detail: { id: target.id, name: target.name } }));
+  }
+
   if (selectedPipeline) {
     const activeStages  = selectedPipeline.stages.filter(s => !s.is_outcome);
     const outcomeStages = selectedPipeline.stages.filter(s =>  s.is_outcome);
@@ -508,6 +736,7 @@ export default function PipelineBoard({ pipelines, selectedPipeline, targets, on
                     onTargetClick={onTargetClick}
                     onNewTarget={() => onNewTarget(selectedPipeline.id, stage.id)}
                     onOpenFollowUp={setFollowUpTarget}
+                    onQuickFollowUp={handleQuickFollowUp}
                     followedUpIds={followedUpIds}
                   />
                 ))}
@@ -530,6 +759,7 @@ export default function PipelineBoard({ pipelines, selectedPipeline, targets, on
                         onTargetClick={onTargetClick}
                         onNewTarget={() => onNewTarget(selectedPipeline.id, stage.id)}
                         onOpenFollowUp={setFollowUpTarget}
+                        onQuickFollowUp={handleQuickFollowUp}
                         followedUpIds={followedUpIds}
                       />
                     ))}
@@ -572,27 +802,39 @@ export default function PipelineBoard({ pipelines, selectedPipeline, targets, on
 
   // All pipelines — meta-stage columns (static, no drag)
   return (
-    <div style={{ flex: 1, overflowX: "auto", overflowY: "auto" }}>
-      <div style={{ display: "flex", gap: 14, padding: "20px", minWidth: "max-content", minHeight: "100%", alignItems: "flex-start" }}>
-        {META_ORDER.map(meta => {
-          const metaTargets = targets.filter(t => {
-            const tp = pipelines.find(p => p.id === t.pipeline_id);
-            const stage = tp?.stages.find(s => s.id === t.stage_id);
-            return stage?.meta_stage === meta;
-          });
-          return (
-            <StaticColumn
-              key={meta}
-              label={META_LABELS[meta]}
-              targets={metaTargets}
-              showPipelineBadge={true}
-              allPipelines={pipelines}
-              onTargetClick={onTargetClick}
-              onAdd={() => onNewTarget()}
-            />
-          );
-        })}
+    <>
+      <div style={{ flex: 1, overflowX: "auto", overflowY: "auto" }}>
+        <div style={{ display: "flex", gap: 14, padding: "20px", minWidth: "max-content", minHeight: "100%", alignItems: "flex-start" }}>
+          {META_ORDER.map(meta => {
+            const metaTargets = targets.filter(t => {
+              const tp = pipelines.find(p => p.id === t.pipeline_id);
+              const stage = tp?.stages.find(s => s.id === t.stage_id);
+              return stage?.meta_stage === meta;
+            });
+            return (
+              <StaticColumn
+                key={meta}
+                label={META_LABELS[meta]}
+                targets={metaTargets}
+                showPipelineBadge={true}
+                allPipelines={pipelines}
+                onTargetClick={onTargetClick}
+                onAdd={() => onNewTarget()}
+                onOpenFollowUp={setFollowUpTarget}
+                onQuickFollowUp={handleQuickFollowUp}
+                followedUpIds={followedUpIds}
+              />
+            );
+          })}
+        </div>
       </div>
-    </div>
+      {followUpTarget && (
+        <FollowUpModal
+          target={followUpTarget}
+          onClose={() => setFollowUpTarget(null)}
+          onLogged={() => handleLogged(followUpTarget.id)}
+        />
+      )}
+    </>
   );
 }

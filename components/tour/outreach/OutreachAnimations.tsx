@@ -208,79 +208,93 @@ export function DragStage() {
   );
 }
 
-// ─── Slide 3: last-touch ages → click follow-up bar → fresh again ──────────
+// ─── Slide 3: target ages → swipe-right gesture → fresh + logged ───────────
+// Mirrors the real PipelineBoard interaction: the card has a copper-coloured
+// swipe handle on the right edge. Grab it and pull the card to the right —
+// a copper reveal band appears behind, and at threshold the follow-up
+// commits. We loop the gesture so the slide reads as one continuous motion.
 export function FollowUpBar() {
   return (
     <div style={animationFrame}>
       <style>{`
-        /* The same target's last-touch ages on a loop, then a fingertip taps
-           the follow-up bar — bar turns green, label resets, and the date
-           snaps back to "Today". */
-        @keyframes ot-age-label {
-          0%, 18%    { color: var(--color-sage); opacity: 1; }
-          22%, 100%  { opacity: 0; }
+        /* Card translateX loop: aging → grab → pull → release → settle.
+           Copper colour throughout — distinct from sage, amber, red-orange. */
+        @keyframes ot-card-pull {
+          0%, 28%    { transform: translateX(0); box-shadow: 0 1px 3px rgba(0,0,0,0.07); }
+          38%        { transform: translateX(14px); box-shadow: 0 4px 12px rgba(201,122,74,0.18); }
+          58%, 64%   { transform: translateX(78px); box-shadow: 0 8px 22px rgba(201,122,74,0.30); }
+          76%        { transform: translateX(96px); box-shadow: 0 8px 22px rgba(201,122,74,0.30); }
+          86%        { transform: translateX(20px); box-shadow: 0 2px 8px rgba(201,122,74,0.15); }
+          100%       { transform: translateX(0); box-shadow: 0 1px 3px rgba(0,0,0,0.07); }
         }
-        @keyframes ot-age-label-mid {
-          0%, 18%    { opacity: 0; }
-          24%, 40%   { color: var(--color-charcoal); opacity: 1; }
-          44%, 100%  { opacity: 0; }
+        @keyframes ot-reveal-opacity {
+          0%, 30%    { opacity: 0; }
+          40%, 86%   { opacity: 1; }
+          100%       { opacity: 0; }
         }
-        @keyframes ot-age-label-amber {
-          0%, 40%    { opacity: 0; }
-          46%, 64%   { color: #b8860b; opacity: 1; }
-          68%, 100%  { opacity: 0; }
-        }
-        @keyframes ot-age-label-red {
-          0%, 64%    { opacity: 0; }
-          68%, 80%   { color: var(--color-red-orange); opacity: 1; }
+        @keyframes ot-reveal-label {
+          0%, 56%    { opacity: 0; }
+          62%, 80%   { opacity: 1; }
           84%, 100%  { opacity: 0; }
         }
-        @keyframes ot-age-label-reset {
-          0%, 84%    { opacity: 0; }
-          88%, 100%  { color: var(--color-sage); opacity: 1; }
+
+        /* Ageing labels — cycle: Today → 5d → 3w → 5w → Today */
+        @keyframes ot-age-fresh   { 0%, 8% { opacity: 1; color: var(--color-grey); } 12%, 100% { opacity: 0; } }
+        @keyframes ot-age-mid     { 0%, 8% { opacity: 0; } 12%, 18% { opacity: 1; color: var(--color-grey); } 22%, 100% { opacity: 0; } }
+        @keyframes ot-age-amber   { 0%, 18% { opacity: 0; } 22%, 26% { opacity: 1; color: #b8860b; } 30%, 100% { opacity: 0; } }
+        @keyframes ot-age-stale   { 0%, 26% { opacity: 0; } 30%, 80% { opacity: 1; color: var(--color-red-orange); } 84%, 100% { opacity: 0; } }
+        @keyframes ot-age-reset   { 0%, 84% { opacity: 0; } 88%, 100% { opacity: 1; color: #c97a4a; font-weight: 700; } }
+
+        /* Pointer (the user's fingertip on the handle) */
+        @keyframes ot-pointer {
+          0%, 24%    { opacity: 0; transform: translate(0,0); }
+          30%        { opacity: 1; transform: translate(0,0); }
+          58%, 64%   { opacity: 1; transform: translate(78px, 0); }
+          76%        { opacity: 1; transform: translate(96px, 0); }
+          80%        { opacity: 0; transform: translate(96px, 0); }
+          100%       { opacity: 0; transform: translate(0,0); }
         }
 
-        @keyframes ot-bar-color {
-          0%, 40%   { background: transparent; }
-          46%, 64%  { background: rgba(184,134,11,0.20); }
-          68%, 80%  { background: rgba(220,62,13,0.22); }
-          82%, 84%  { background: rgba(184,134,11,0.38); }
-          86%, 100% { background: rgba(61,107,79,0.32); }
-        }
-        @keyframes ot-bar-width {
-          0%, 80%   { width: 5px; }
-          82%, 84%  { width: 11px; }
-          86%, 100% { width: 5px; }
-        }
-        @keyframes ot-tap {
-          0%, 78%   { transform: translate(0,0); opacity: 0; }
-          80%, 86%  { transform: translate(0, -2px); opacity: 1; }
-          90%, 100% { transform: translate(0, 0); opacity: 0; }
-        }
-        @keyframes ot-check {
-          0%, 84%    { opacity: 0; transform: scale(0.6); }
-          88%, 100%  { opacity: 1; transform: scale(1); }
-        }
-        @keyframes ot-toast {
-          0%, 84%    { opacity: 0; transform: translateY(6px); }
-          88%, 96%   { opacity: 1; transform: translateY(0); }
-          100%       { opacity: 0; transform: translateY(0); }
+        /* Handle width — slightly bigger when actively grabbed */
+        @keyframes ot-handle {
+          0%, 24%   { width: 6px; background: rgba(201,122,74,0.18); }
+          28%, 30%  { width: 12px; background: #c97a4a; }
+          86%, 100% { width: 6px; background: rgba(201,122,74,0.28); }
         }
 
-        .ot-label-fresh  { animation: ot-age-label       6s ease-in-out infinite; }
-        .ot-label-mid    { animation: ot-age-label-mid   6s ease-in-out infinite; position: absolute; inset: 0; }
-        .ot-label-amber  { animation: ot-age-label-amber 6s ease-in-out infinite; position: absolute; inset: 0; }
-        .ot-label-red    { animation: ot-age-label-red   6s ease-in-out infinite; position: absolute; inset: 0; }
-        .ot-label-reset  { animation: ot-age-label-reset 6s ease-in-out infinite; position: absolute; inset: 0; }
-        .ot-bar-anim     { animation: ot-bar-color 6s ease-in-out infinite, ot-bar-width 6s ease-in-out infinite; }
-        .ot-tap          { animation: ot-tap 6s ease-in-out infinite; }
-        .ot-check        { animation: ot-check 6s ease-in-out infinite; }
-        .ot-toast        { animation: ot-toast 6s ease-in-out infinite; }
+        .ot-card-pull     { animation: ot-card-pull 6.5s cubic-bezier(0.34, 1.4, 0.5, 1) infinite; }
+        .ot-reveal        { animation: ot-reveal-opacity 6.5s ease-in-out infinite; }
+        .ot-reveal-label  { animation: ot-reveal-label 6.5s ease-in-out infinite; }
+        .ot-age-fresh     { animation: ot-age-fresh 6.5s ease-in-out infinite; position: absolute; inset: 0; }
+        .ot-age-mid       { animation: ot-age-mid 6.5s ease-in-out infinite; position: absolute; inset: 0; }
+        .ot-age-amber     { animation: ot-age-amber 6.5s ease-in-out infinite; position: absolute; inset: 0; }
+        .ot-age-stale     { animation: ot-age-stale 6.5s ease-in-out infinite; position: absolute; inset: 0; }
+        .ot-age-reset     { animation: ot-age-reset 6.5s ease-in-out infinite; position: absolute; inset: 0; }
+        .ot-pointer-anim  { animation: ot-pointer 6.5s ease-in-out infinite; }
+        .ot-handle-anim   { animation: ot-handle 6.5s ease-in-out infinite; }
       `}</style>
 
-      <div style={{ width: 250, position: "relative" }}>
+      <div style={{ width: 260, position: "relative" }}>
+        {/* Reveal layer (sits behind the card) */}
+        <div className="ot-reveal" style={{
+          position: "absolute", inset: 0,
+          borderRadius: 8,
+          background: "linear-gradient(90deg, rgba(201,122,74,0.18) 0%, rgba(201,122,74,0.30) 70%, #c97a4a 100%)",
+          display: "flex", alignItems: "center", paddingLeft: 14,
+        }}>
+          <span className="ot-reveal-label" style={{
+            display: "inline-flex", alignItems: "center", gap: 5,
+            fontSize: 9, fontWeight: 700, color: "white", letterSpacing: "0.02em",
+          }}>
+            <svg width="9" height="7" viewBox="0 0 8 6" fill="none">
+              <path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Release to log
+          </span>
+        </div>
+
         {/* Card */}
-        <div style={{
+        <div className="ot-card-pull" style={{
           position: "relative",
           background: "var(--color-warm-white)",
           border: "0.5px solid var(--color-border)",
@@ -297,47 +311,39 @@ export function FollowUpBar() {
           </div>
           <p style={{ fontSize: 9, color: "var(--color-grey)", marginBottom: 1 }}>Casey Lurie · NYC</p>
           <div style={{ position: "relative", height: 12, marginTop: 5 }}>
-            <span className="ot-label-fresh" style={{ fontSize: 9 }}>Today</span>
-            <span className="ot-label-mid" style={{ fontSize: 9 }}>5d ago</span>
-            <span className="ot-label-amber" style={{ fontSize: 9 }}>3w ago</span>
-            <span className="ot-label-red" style={{ fontSize: 9 }}>5w ago</span>
-            <span className="ot-label-reset" style={{ fontSize: 9 }}>Today</span>
+            <span className="ot-age-fresh" style={{ fontSize: 9 }}>Today</span>
+            <span className="ot-age-mid"   style={{ fontSize: 9 }}>5d ago</span>
+            <span className="ot-age-amber" style={{ fontSize: 9 }}>3w ago</span>
+            <span className="ot-age-stale" style={{ fontSize: 9 }}>5w ago</span>
+            <span className="ot-age-reset" style={{ fontSize: 9 }}>Today</span>
           </div>
 
-          {/* Follow-up bar */}
-          <div className="ot-bar-anim" style={{
+          {/* Swipe handle */}
+          <div className="ot-handle-anim" style={{
             position: "absolute",
             right: 0, top: 0, bottom: 0,
             borderRadius: "0 8px 8px 0",
             display: "flex", alignItems: "center", justifyContent: "center",
+            gap: 1,
           }}>
-            <span className="ot-check">
-              <svg width="6" height="5" viewBox="0 0 8 6" fill="none">
-                <path d="M1 3L3 5L7 1" stroke="#3d6b4f" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+            <span aria-hidden style={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+              <span style={{ width: 1.5, height: 1.5, borderRadius: 1, background: "white" }} />
+              <span style={{ width: 1.5, height: 1.5, borderRadius: 1, background: "white" }} />
+              <span style={{ width: 1.5, height: 1.5, borderRadius: 1, background: "white" }} />
             </span>
           </div>
         </div>
 
-        {/* Tap indicator above the bar */}
-        <div className="ot-tap" aria-hidden style={{
-          position: "absolute", right: -6, top: "50%",
-          marginTop: -6, width: 12, height: 12,
-          borderRadius: 99,
-          background: "rgba(31,33,26,0.85)",
+        {/* Pointer ring — follows the handle as it pulls right */}
+        <div className="ot-pointer-anim" aria-hidden style={{
+          position: "absolute", right: -8, top: "50%",
+          marginTop: -7,
+          width: 14, height: 14, borderRadius: 99,
+          background: "rgba(31,33,26,0.78)",
           border: "1.5px solid white",
-          boxShadow: "0 2px 6px rgba(0,0,0,0.25)",
+          boxShadow: "0 2px 6px rgba(0,0,0,0.28)",
+          pointerEvents: "none",
         }} />
-
-        {/* Logged toast */}
-        <div className="ot-toast" style={{
-          position: "absolute", bottom: -22, left: 0, right: 0,
-          textAlign: "center",
-          fontSize: 9, color: "var(--color-sage)",
-          fontWeight: 600,
-        }}>
-          ✓ Follow-up logged
-        </div>
       </div>
     </div>
   );
