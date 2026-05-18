@@ -1,10 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { Contact, LeadStage } from "@/types/database";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import { Users } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
+import { createClient } from "@/lib/supabase/client";
+
+// Pipeline membership chip — surfaces "is this lead in a pipeline?" so the
+// Target↔Lead unification is visible. Click opens the linked target via a
+// custom event handled by OutreachClient.
+interface LeadPipelineRef {
+  target_id:     string;
+  pipeline_id:   string;
+  pipeline_name: string;
+  pipeline_color: string;
+}
 
 function initials(c: Contact) {
   return (c.first_name[0] + (c.last_name[0] ?? "")).toUpperCase();
@@ -31,9 +42,18 @@ const LEAD_STAGE_CONFIG: Record<LeadStage, { color: string; label: string }> = {
 };
 const LEAD_STAGES: LeadStage[] = ["new", "reached_out", "in_conversation", "proposal_sent", "qualified", "nurturing", "lost"];
 
-function LeadCard({ contact, isDragging, onClick }: { contact: Contact; isDragging: boolean; onClick: () => void }) {
+function LeadCard({ contact, isDragging, onClick, pipelineRefs, onPipelineChipClick }: {
+  contact: Contact;
+  isDragging: boolean;
+  onClick: () => void;
+  pipelineRefs: LeadPipelineRef[];
+  onPipelineChipClick: (ref: LeadPipelineRef) => void;
+}) {
   const [hov, setHov] = useState(false);
   const lc = lastContactedDisplay(contact.last_contacted_at);
+  // First pipeline drives the chip; if there are more, append "+N".
+  const firstRef = pipelineRefs[0];
+  const extra    = pipelineRefs.length - 1;
   return (
     <div
       role="button"
@@ -79,6 +99,25 @@ function LeadCard({ contact, isDragging, onClick }: { contact: Contact; isDraggi
           </span>
         )}
       </div>
+      {firstRef && (
+        <button type="button"
+          onClick={(e) => { e.stopPropagation(); onPipelineChipClick(firstRef); }}
+          title={extra > 0 ? `${firstRef.pipeline_name} + ${extra} more` : `Open in ${firstRef.pipeline_name}`}
+          style={{
+            marginTop: 6,
+            display: "inline-flex", alignItems: "center", gap: 4,
+            fontSize: 9, fontWeight: 600,
+            padding: "2px 7px", borderRadius: 9999,
+            background: firstRef.pipeline_color + "18",
+            color: firstRef.pipeline_color,
+            border: `0.5px solid ${firstRef.pipeline_color}33`,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}>
+          <span style={{ width: 4, height: 4, borderRadius: 99, background: firstRef.pipeline_color }} />
+          in {firstRef.pipeline_name}{extra > 0 && ` +${extra}`}
+        </button>
+      )}
     </div>
   );
 }
@@ -93,6 +132,52 @@ interface Props {
 }
 
 export default function LeadsBoard({ contacts, onOpen, onStageChange, onNewLead }: Props) {
+  // Map of contact_id → ordered list of pipeline refs. Re-fetched when the
+  // set of lead ids changes. Single round-trip; the result is small (one row
+  // per linked target).
+  const [refsByContact, setRefsByContact] = useState<Record<string, LeadPipelineRef[]>>({});
+  const leadIds = useMemo(() => contacts.map(c => c.id), [contacts]);
+
+  useEffect(() => {
+    if (leadIds.length === 0) { setRefsByContact({}); return; }
+    let cancelled = false;
+    (async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("outreach_targets")
+        .select("id, contact_id, pipeline:outreach_pipelines(id, name, color)")
+        .in("contact_id", leadIds)
+        .eq("ether", false);
+      if (cancelled) return;
+      const next: Record<string, LeadPipelineRef[]> = {};
+      type Row = { id: string; contact_id: string | null; pipeline: { id: string; name: string; color: string } | null };
+      for (const row of ((data ?? []) as unknown as Row[])) {
+        if (!row.contact_id || !row.pipeline) continue;
+        const list = next[row.contact_id] ?? (next[row.contact_id] = []);
+        // De-dupe by pipeline_id — a contact may have multiple targets in one
+        // pipeline; we show that pipeline once.
+        if (list.some(r => r.pipeline_id === row.pipeline!.id)) continue;
+        list.push({
+          target_id:      row.id,
+          pipeline_id:    row.pipeline.id,
+          pipeline_name:  row.pipeline.name,
+          pipeline_color: row.pipeline.color,
+        });
+      }
+      setRefsByContact(next);
+    })();
+    return () => { cancelled = true; };
+  }, [leadIds]);
+
+  function handlePipelineChipClick(ref: LeadPipelineRef) {
+    // Routed through a custom event so OutreachClient can switch sections
+    // and open the target detail panel without LeadsBoard needing those
+    // setters.
+    window.dispatchEvent(new CustomEvent("outreach:open-target", {
+      detail: { target_id: ref.target_id, pipeline_id: ref.pipeline_id },
+    }));
+  }
+
   function handleDragEnd(result: DropResult) {
     if (!result.destination) return;
     const { draggableId, destination } = result;
@@ -177,6 +262,8 @@ export default function LeadsBoard({ contacts, onOpen, onStageChange, onNewLead 
                               contact={c}
                               isDragging={dragSnapshot.isDragging}
                               onClick={() => { if (!dragSnapshot.isDragging) onOpen(c); }}
+                              pipelineRefs={refsByContact[c.id] ?? []}
+                              onPipelineChipClick={handlePipelineChipClick}
                             />
                           </div>
                         )}

@@ -426,6 +426,246 @@ function ContactPicker({
   );
 }
 
+// ── MonthGrid ──────────────────────────────────────────────────────────────────
+// Six-week month grid (so any month fits with no layout shift). Cells
+// show up to 3 event chips and a "+N more" link that opens a day overlay.
+// Day-number click drops the user into Week view for that date.
+
+interface MonthGridProps {
+  viewDate:        Date;
+  events:          CalEvent[];
+  tasks:           Task[];
+  projects:        { id: string; title: string; due_date: string | null; status: string }[];
+  showWeekends:    boolean;
+  onEventClick:    (e: CalEvent) => void;
+  onTaskClick:     (e: React.MouseEvent, t: Task) => void;
+  onEmptyCellClick:(date: Date) => void;
+  onDayNumberClick:(date: Date) => void;
+  onShowMore:      (date: Date, x: number, y: number) => void;
+}
+
+function MonthGrid({
+  viewDate, events, tasks, projects, showWeekends,
+  onEventClick, onTaskClick, onEmptyCellClick, onDayNumberClick, onShowMore,
+}: MonthGridProps) {
+  const first      = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+  const gridStart  = getWeekStart(first);
+  const cells      = Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(gridStart);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+  const visibleCols = showWeekends ? 7 : 5;
+  const dowHeaders  = showWeekends
+    ? ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
+    : ["Mon","Tue","Wed","Thu","Fri"];
+
+  return (
+    <div
+      className="flex-1 flex flex-col overflow-hidden"
+      style={{ background: "var(--color-off-white)" }}
+    >
+      {/* Header row */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${visibleCols}, 1fr)`,
+          borderBottom: "0.5px solid var(--color-border)",
+          background: "var(--color-warm-white)",
+          flexShrink: 0,
+        }}
+      >
+        {dowHeaders.map((d) => (
+          <div
+            key={d}
+            style={{
+              padding: "8px 10px",
+              fontSize: 10, fontWeight: 600,
+              textTransform: "uppercase", letterSpacing: "0.06em",
+              color: "var(--color-text-tertiary)",
+              borderLeft: "0.5px solid var(--color-border)",
+            }}
+          >
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* 6-row grid */}
+      <div
+        style={{
+          flex: 1, display: "grid",
+          gridTemplateColumns: `repeat(${visibleCols}, 1fr)`,
+          gridTemplateRows: "repeat(6, minmax(0, 1fr))",
+          overflow: "hidden",
+        }}
+      >
+        {cells.map((date, idx) => {
+          // Drop weekend cells when showWeekends is off — but only entire
+          // weeks, never half-show.
+          if (!showWeekends && (date.getDay() === 0 || date.getDay() === 6)) return null;
+
+          const isCurrentMonth = date.getMonth() === viewDate.getMonth();
+          const today          = isToday(date);
+          const dayEvents      = events.filter((e) => {
+            if (e.allDay) {
+              const s = new Date(e.start + (e.start.length === 10 ? "T00:00:00" : ""));
+              return isSameDay(s, date);
+            }
+            return isSameDay(new Date(e.start), date);
+          });
+          const dayTasks    = tasks.filter((t) => {
+            const d = parseTaskDueDate(t.due_date!);
+            return d ? isSameDay(d, date) : false;
+          });
+          const dayProjects = projects.filter((p) => p.due_date && isSameDay(new Date(p.due_date + "T00:00:00"), date));
+          const chips       = [
+            ...dayEvents.map((e) => ({ kind: "event" as const, e })),
+            ...dayTasks .map((t) => ({ kind: "task"  as const, t })),
+            ...dayProjects.map((p) => ({ kind: "project" as const, p })),
+          ];
+          const VISIBLE  = 3;
+          const overflow = Math.max(0, chips.length - VISIBLE);
+          const shown    = chips.slice(0, VISIBLE);
+
+          return (
+            <div
+              key={idx}
+              onClick={(e) => {
+                if (e.target !== e.currentTarget) return;
+                onEmptyCellClick(date);
+              }}
+              style={{
+                borderLeft: "0.5px solid var(--color-border)",
+                borderTop:  idx >= visibleCols ? "0.5px solid var(--color-border)" : "none",
+                background: isCurrentMonth ? "var(--color-off-white)" : "var(--color-warm-white)",
+                padding: "4px 6px 6px",
+                position: "relative",
+                display: "flex", flexDirection: "column", gap: 2,
+                cursor: "pointer",
+                minHeight: 0, overflow: "hidden",
+              }}
+            >
+              {/* Day number — click to jump to Week view */}
+              <div
+                onClick={(e) => { e.stopPropagation(); onDayNumberClick(date); }}
+                style={{
+                  alignSelf: "flex-start",
+                  width: 22, height: 22,
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  borderRadius: "50%",
+                  background: today ? "var(--color-sage)" : "transparent",
+                  color: today
+                    ? "white"
+                    : isCurrentMonth
+                      ? "var(--color-text-primary)"
+                      : "var(--color-text-tertiary)",
+                  fontSize: 11, fontWeight: today ? 600 : 500,
+                  cursor: "pointer",
+                  flexShrink: 0,
+                }}
+              >
+                {date.getDate()}
+              </div>
+
+              {shown.map((c, i) => {
+                if (c.kind === "event") {
+                  const e = c.e;
+                  const color = e.colorId
+                    ? GCAL_COLORS[e.colorId]
+                    : (e.source === "microsoft" ? "#0078d4" : "#039BE5");
+                  return (
+                    <button
+                      key={`e-${e.id}-${i}`}
+                      onClick={(ev) => { ev.stopPropagation(); onEventClick(e); }}
+                      style={{
+                        textAlign: "left",
+                        background: `${color}18`, color,
+                        border: `0.5px solid ${color}44`,
+                        borderRadius: 4,
+                        padding: "1px 6px",
+                        fontSize: 10, fontWeight: 500,
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                        fontFamily: "inherit",
+                        cursor: "pointer",
+                      }}
+                      title={e.title}
+                    >
+                      {e.title}
+                    </button>
+                  );
+                }
+                if (c.kind === "task") {
+                  const t = c.t;
+                  const palette = PRIORITY_PALETTE[t.priority ?? "_default"];
+                  return (
+                    <button
+                      key={`t-${t.id}`}
+                      onClick={(ev) => { ev.stopPropagation(); onTaskClick(ev, t); }}
+                      style={{
+                        textAlign: "left",
+                        background: palette.bg, color: palette.fg,
+                        border: `0.5px solid ${palette.border}`,
+                        borderRadius: 4,
+                        padding: "1px 6px",
+                        fontSize: 10, fontWeight: 500,
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                        fontFamily: "inherit",
+                        cursor: "pointer",
+                        opacity: t.completed ? 0.45 : 1,
+                        textDecoration: t.completed ? "line-through" : "none",
+                      }}
+                      title={t.title}
+                    >
+                      ☐ {t.title}
+                    </button>
+                  );
+                }
+                const p = c.p;
+                return (
+                  <div
+                    key={`p-${p.id}`}
+                    style={{
+                      background: "rgba(155,163,122,0.14)",
+                      color: "#5a7040",
+                      border: "0.5px solid rgba(155,163,122,0.25)",
+                      borderRadius: 4,
+                      padding: "1px 6px",
+                      fontSize: 10, fontWeight: 500,
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    }}
+                  >
+                    {p.title} due
+                  </div>
+                );
+              })}
+
+              {overflow > 0 && (
+                <button
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+                    onShowMore(date, rect.left, rect.top + rect.height + 4);
+                  }}
+                  style={{
+                    background: "transparent", border: "none",
+                    color: "var(--color-text-tertiary)",
+                    fontSize: 10, fontWeight: 500,
+                    textAlign: "left", padding: "1px 6px",
+                    cursor: "pointer", fontFamily: "inherit",
+                  }}
+                >
+                  +{overflow} more
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── CalendarClient ─────────────────────────────────────────────────────────────
 
 interface CalEvent {
@@ -481,6 +721,8 @@ export default function CalendarClient({
   const [newEventPrefill, setNewEventPrefill] = useState<{ start?: Date; end?: Date; allDay?: boolean } | null>(null);
   const [newMenuOpen,     setNewMenuOpen]     = useState(false);
   const [quickTask,       setQuickTask]       = useState<{ task: Task; x: number; y: number } | null>(null);
+  const [viewMode,        setViewMode]        = useState<"Week" | "Month">("Week");
+  const [monthDayOverlay, setMonthDayOverlay] = useState<{ date: Date; x: number; y: number } | null>(null);
 
   // Drag-to-reschedule task pills. Tracks the in-flight drag so we can
   // hide the source pill slightly while it follows the cursor.
@@ -630,9 +872,22 @@ export default function CalendarClient({
   }, []);
   useEffect(() => {
     if (!anyConnected) return;
-    const days  = getWeekDays(viewDate);
-    const start = days[0].toISOString().split("T")[0];
-    const end   = days[6].toISOString().split("T")[0];
+    // Month view fetches a 6-week window (always the full month-grid
+    // visible range) so the cells don't miss events that straddle the
+    // first or last visible day. Week view fetches the standard Sun-Sat.
+    let startDate: Date, endDate: Date;
+    if (viewMode === "Month") {
+      const first = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+      startDate = getWeekStart(first);
+      endDate   = new Date(startDate);
+      endDate.setDate(endDate.getDate() + 41); // 6 rows × 7 cols - 1
+    } else {
+      const days = getWeekDays(viewDate);
+      startDate = days[0];
+      endDate   = days[6];
+    }
+    const start = startDate.toISOString().split("T")[0];
+    const end   = endDate.toISOString().split("T")[0];
     setGcalLoading(true);
     let cancelled = false;
     fetch(`/api/integrations/calendar/events?startDate=${start}&endDate=${end}`)
@@ -644,7 +899,7 @@ export default function CalendarClient({
       })
       .catch(() => { if (!cancelled) setGcalLoading(false); });
     return () => { cancelled = true; };
-  }, [viewDate, anyConnected, refreshNonce]);
+  }, [viewDate, viewMode, anyConnected, refreshNonce]);
 
   // ── On mount: if we just returned from an OAuth callback, fire the
   // event the tour listens for, then strip the query so refreshes don't
@@ -661,17 +916,33 @@ export default function CalendarClient({
   }, []);
 
   // ── Navigation
-  function prevWeek() { setViewDate(d => { const n = new Date(d); n.setDate(n.getDate() - 7); return n; }); }
-  function nextWeek() { setViewDate(d => { const n = new Date(d); n.setDate(n.getDate() + 7); return n; }); }
+  function prevWeek() {
+    setViewDate((d) => {
+      const n = new Date(d);
+      if (viewMode === "Month") n.setMonth(n.getMonth() - 1);
+      else                       n.setDate(n.getDate() - 7);
+      return n;
+    });
+  }
+  function nextWeek() {
+    setViewDate((d) => {
+      const n = new Date(d);
+      if (viewMode === "Month") n.setMonth(n.getMonth() + 1);
+      else                       n.setDate(n.getDate() + 7);
+      return n;
+    });
+  }
   function goToday()  { setViewDate(new Date()); }
 
   // ── Week label uses the full Sun-Sat span even when weekends are
   // hidden — the label describes the whole week the user is paging
-  // through, not just the visible columns.
+  // through, not just the visible columns. In Month view we show just
+  // the month name + year.
   const ws = allWeekDays[0];
   const we = allWeekDays[6];
-  const weekLabel =
-    ws.getMonth() === we.getMonth()
+  const weekLabel = viewMode === "Month"
+    ? `${MONTH_NAMES[viewDate.getMonth()]} ${viewDate.getFullYear()}`
+    : ws.getMonth() === we.getMonth()
       ? `${MONTH_NAMES[ws.getMonth()]} ${ws.getDate()}–${we.getDate()}, ${ws.getFullYear()}`
       : `${fmtDate(ws, { month: "short", day: "numeric" })} – ${fmtDate(we, { month: "short", day: "numeric", year: "numeric" })}`;
 
@@ -1054,21 +1325,23 @@ export default function CalendarClient({
             </div>
 
             <div className="flex rounded-md overflow-hidden" style={{ border: "0.5px solid var(--color-border)", background: "var(--color-cream)" }}>
-              {(["Week","Month"] as const).map(v => (
-                <button key={v}
-                  title={v === "Month" ? "Month view — coming in a follow-up" : "Week view"}
-                  disabled={v === "Month"}
-                  className="px-3 py-[5px] text-[11px]"
-                  style={{
-                    background: v === "Week" ? "var(--color-off-white)" : "transparent",
-                    color: v === "Week" ? "var(--color-charcoal)" : "var(--color-grey)",
-                    fontWeight: v === "Week" ? 600 : 400,
-                    opacity: v === "Month" ? 0.45 : 1,
-                    cursor: v === "Month" ? "not-allowed" : "pointer",
-                    border: "none", fontFamily: "inherit",
-                  }}
-                >{v}</button>
-              ))}
+              {(["Week","Month"] as const).map((v) => {
+                const active = viewMode === v;
+                return (
+                  <button
+                    key={v}
+                    onClick={() => setViewMode(v)}
+                    className="px-3 py-[5px] text-[11px]"
+                    style={{
+                      background: active ? "var(--color-off-white)" : "transparent",
+                      color:      active ? "var(--color-charcoal)" : "var(--color-grey)",
+                      fontWeight: active ? 600 : 400,
+                      border: "none", fontFamily: "inherit",
+                      cursor: "pointer",
+                    }}
+                  >{v}</button>
+                );
+              })}
             </div>
 
             <button
@@ -1285,7 +1558,26 @@ export default function CalendarClient({
           </div>
         )}
 
-        {/* ── Single scroll container: day headers + all-day + time grid all share same width ── */}
+        {viewMode === "Month" ? (
+          <MonthGrid
+            viewDate={viewDate}
+            events={gcalEvents}
+            tasks={scheduledTasks}
+            projects={initialProjects}
+            showWeekends={showWeekends}
+            onEventClick={setOpenEvent}
+            onTaskClick={openQuickTask}
+            onEmptyCellClick={(date) => {
+              const start = new Date(date); start.setHours(0, 0, 0, 0);
+              const end   = new Date(start); end.setDate(end.getDate() + 1);
+              setNewEventPrefill({ start, end, allDay: true });
+              setNewEventOpen(true);
+            }}
+            onDayNumberClick={(date) => { setViewMode("Week"); setViewDate(date); }}
+            onShowMore={(date, x, y) => setMonthDayOverlay({ date, x, y })}
+          />
+        ) : (
+        /* ── Single scroll container: day headers + all-day + time grid all share same width ── */
         <div
           ref={gridWrapRef}
           className="flex-1 overflow-y-auto overflow-x-hidden"
@@ -1689,10 +1981,148 @@ export default function CalendarClient({
             </div>
           </div>
 
-        </div>{/* /scroll container */}
+        </div>
+        )}
         </>
         )}
       </div>
+
+      {/* Month "+N more" day overlay */}
+      {monthDayOverlay && (() => {
+        const date = monthDayOverlay.date;
+        const dayEvents   = gcalEvents.filter((e) => {
+          if (e.allDay) {
+            const s = new Date(e.start + (e.start.length === 10 ? "T00:00:00" : ""));
+            return isSameDay(s, date);
+          }
+          return isSameDay(new Date(e.start), date);
+        });
+        const dayTasks    = scheduledTasks.filter((t) => {
+          const d = parseTaskDueDate(t.due_date!);
+          return d ? isSameDay(d, date) : false;
+        });
+        const dayProjects = initialProjects.filter((p) => p.due_date && isSameDay(new Date(p.due_date + "T00:00:00"), date));
+
+        const W = 280;
+        const left = Math.min(monthDayOverlay.x, window.innerWidth - W - 8);
+        const top  = Math.min(monthDayOverlay.y, window.innerHeight - 320);
+
+        return (
+          <>
+            <div
+              onClick={() => setMonthDayOverlay(null)}
+              style={{ position: "fixed", inset: 0, zIndex: 75 }}
+            />
+            <div
+              style={{
+                position: "fixed",
+                top: `${Math.max(8, top)}px`,
+                left: `${Math.max(8, left)}px`,
+                zIndex: 76,
+                width: W,
+                maxHeight: 380, overflowY: "auto",
+                background: "var(--color-off-white)",
+                border: "0.5px solid var(--color-border)",
+                borderRadius: 12,
+                boxShadow: "0 8px 32px rgba(0,0,0,0.16)",
+                padding: 14,
+                fontFamily: "inherit",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div>
+                  <p style={{
+                    fontSize: 9, fontWeight: 600, textTransform: "uppercase",
+                    letterSpacing: "0.06em", color: "var(--color-text-tertiary)",
+                    marginBottom: 2,
+                  }}>
+                    {date.toLocaleDateString("en-US", { weekday: "long" })}
+                  </p>
+                  <p style={{ fontSize: 18, fontWeight: 600, color: "var(--color-text-primary)", fontFamily: "var(--font-display)" }}>
+                    {date.toLocaleDateString("en-US", { month: "long", day: "numeric" })}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setMonthDayOverlay(null)}
+                  style={{
+                    width: 24, height: 24, borderRadius: 6,
+                    background: "transparent", border: "none",
+                    color: "var(--color-text-tertiary)", cursor: "pointer", fontSize: 16,
+                  }}
+                >×</button>
+              </div>
+
+              {dayEvents.length === 0 && dayTasks.length === 0 && dayProjects.length === 0 && (
+                <p style={{ fontSize: 11.5, color: "var(--color-text-tertiary)" }}>Nothing scheduled.</p>
+              )}
+
+              {dayEvents.map((e) => {
+                const color = e.colorId ? GCAL_COLORS[e.colorId] : (e.source === "microsoft" ? "#0078d4" : "#039BE5");
+                const time  = e.allDay ? "all day" : new Date(e.start).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+                return (
+                  <button
+                    key={e.id}
+                    onClick={() => { setMonthDayOverlay(null); setOpenEvent(e); }}
+                    style={{
+                      width: "100%", textAlign: "left",
+                      display: "flex", alignItems: "center", gap: 8,
+                      padding: "6px 8px", marginBottom: 2,
+                      background: "transparent", border: "none",
+                      borderLeft: `2.5px solid ${color}`,
+                      cursor: "pointer", fontFamily: "inherit",
+                      borderRadius: 4,
+                    }}
+                    onMouseEnter={(ev) => (ev.currentTarget.style.background = "var(--color-cream)")}
+                    onMouseLeave={(ev) => (ev.currentTarget.style.background = "transparent")}
+                  >
+                    <span style={{ fontSize: 10, color: "var(--color-text-tertiary)", flexShrink: 0, width: 56 }}>{time}</span>
+                    <span style={{ fontSize: 11.5, color: "var(--color-text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {e.title}
+                    </span>
+                  </button>
+                );
+              })}
+              {dayTasks.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={(ev) => { setMonthDayOverlay(null); openQuickTask(ev, t); }}
+                  style={{
+                    width: "100%", textAlign: "left",
+                    display: "flex", alignItems: "center", gap: 8,
+                    padding: "6px 8px", marginBottom: 2,
+                    background: "transparent", border: "none",
+                    borderLeft: "2.5px solid var(--color-sage)",
+                    cursor: "pointer", fontFamily: "inherit",
+                    borderRadius: 4,
+                    opacity: t.completed ? 0.5 : 1,
+                  }}
+                  onMouseEnter={(ev) => (ev.currentTarget.style.background = "var(--color-cream)")}
+                  onMouseLeave={(ev) => (ev.currentTarget.style.background = "transparent")}
+                >
+                  <span style={{ fontSize: 10, color: "var(--color-text-tertiary)", flexShrink: 0, width: 56 }}>task</span>
+                  <span style={{ fontSize: 11.5, color: "var(--color-text-primary)", textDecoration: t.completed ? "line-through" : "none" }}>
+                    {t.title}
+                  </span>
+                </button>
+              ))}
+              {dayProjects.map((p) => (
+                <div
+                  key={p.id}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    padding: "6px 8px",
+                    borderLeft: "2.5px solid #5a7040",
+                    borderRadius: 4,
+                  }}
+                >
+                  <span style={{ fontSize: 10, color: "var(--color-text-tertiary)", flexShrink: 0, width: 56 }}>due</span>
+                  <span style={{ fontSize: 11.5, color: "var(--color-text-primary)" }}>{p.title}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        );
+      })()}
 
       {/* Quick-edit task popover (rail + ribbon + topbar) */}
       {quickTask && (
