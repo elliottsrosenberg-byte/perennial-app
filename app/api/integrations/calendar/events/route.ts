@@ -17,6 +17,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getValidGoogleAccessToken } from "@/lib/integrations/google-tokens";
 import { getValidMicrosoftAccessToken } from "@/lib/integrations/microsoft-tokens";
+import { syncUserCalendarList } from "@/lib/calendar/sync-calendar-list";
 import type { IntegrationRow } from "@/lib/integrations/types";
 
 export const runtime = "nodejs";
@@ -64,7 +65,13 @@ async function refreshLegacyGcalToken(integration: LegacyIntegrationRow): Promis
   return access_token;
 }
 
-async function fetchGoogleEvents(token: string, accountName: string | null, timeMin: string, timeMax: string): Promise<CalendarEvent[]> {
+async function fetchGoogleEvents(
+  token: string,
+  accountName: string | null,
+  timeMin: string,
+  timeMax: string,
+  calendarIds: string[] = ["primary"],
+): Promise<CalendarEvent[]> {
   const params = new URLSearchParams({
     timeMin,
     timeMax,
@@ -72,13 +79,18 @@ async function fetchGoogleEvents(token: string, accountName: string | null, time
     orderBy:      "startTime",
     maxResults:   "100",
   });
-  const res = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`,
-    { headers: { Authorization: `Bearer ${token}` } },
+  const lists = await Promise.all(
+    calendarIds.map(async (calId) => {
+      const res = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?${params.toString()}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) return [] as GCalApiEvent[];
+      const data = await res.json() as { items?: GCalApiEvent[] };
+      return data.items ?? [];
+    }),
   );
-  if (!res.ok) return [];
-  const data = await res.json() as { items?: GCalApiEvent[] };
-  return (data.items ?? [])
+  return lists.flat()
     .filter((e) => e.status !== "cancelled")
     .map((e) => ({
       id:          e.id,
@@ -95,17 +107,30 @@ async function fetchGoogleEvents(token: string, accountName: string | null, time
     }));
 }
 
-async function fetchMicrosoftEvents(token: string, accountName: string | null, startIso: string, endIso: string): Promise<CalendarEvent[]> {
-  const url =
-    `https://graph.microsoft.com/v1.0/me/calendarView` +
-    `?startDateTime=${encodeURIComponent(startIso)}` +
-    `&endDateTime=${encodeURIComponent(endIso)}` +
-    `&$select=${encodeURIComponent("id,subject,bodyPreview,start,end,location,webLink,isAllDay,isCancelled")}` +
-    `&$top=100&$orderby=start/dateTime asc`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) return [];
-  const data = await res.json() as { value?: GraphApiEvent[] };
-  return (data.value ?? [])
+async function fetchMicrosoftEvents(
+  token: string,
+  accountName: string | null,
+  startIso: string,
+  endIso: string,
+  calendarIds: string[] | null = null,
+): Promise<CalendarEvent[]> {
+  const select = encodeURIComponent("id,subject,bodyPreview,start,end,location,webLink,isAllDay,isCancelled");
+  async function fetchOne(path: string): Promise<GraphApiEvent[]> {
+    const url =
+      `https://graph.microsoft.com/v1.0${path}` +
+      `?startDateTime=${encodeURIComponent(startIso)}` +
+      `&endDateTime=${encodeURIComponent(endIso)}` +
+      `&$select=${select}` +
+      `&$top=100&$orderby=start/dateTime asc`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { value?: GraphApiEvent[] };
+    return data.value ?? [];
+  }
+  const lists = calendarIds && calendarIds.length > 0
+    ? await Promise.all(calendarIds.map((id) => fetchOne(`/me/calendars/${encodeURIComponent(id)}/calendarView`)))
+    : [await fetchOne(`/me/calendarView`)];
+  return lists.flat()
     .filter((e) => !e.isCancelled)
     .map((e) => {
       const isAllDay = !!e.isAllDay;
@@ -159,26 +184,50 @@ export async function GET(req: Request) {
     return NextResponse.json({ connected: false, events: [], sources: [] });
   }
 
+  // Pull the per-account calendar list with visibility flags. If a user
+  // has any rows here for a given provider we honor `visible`; if they
+  // have none (e.g. they connected before user_calendars shipped) we
+  // fall back to primary-only and trigger a background sync so the
+  // next request has the full list.
+  const { data: userCalendars } = await supabase
+    .from("user_calendars")
+    .select("provider, external_id, visible")
+    .eq("user_id", user.id);
+  const calendarsByProvider = new Map<string, { ids: string[]; hasAny: boolean }>();
+  for (const c of userCalendars ?? []) {
+    const entry = calendarsByProvider.get(c.provider) ?? { ids: [], hasAny: false };
+    entry.hasAny = true;
+    if (c.visible) entry.ids.push(c.external_id);
+    calendarsByProvider.set(c.provider, entry);
+  }
+
   const work: Promise<CalendarEvent[]>[] = [];
   const sources: { provider: string; accountName: string | null }[] = [];
+  let needsBackfill = false;
 
   for (const r of rows) {
     if (r.provider === "google_calendar") {
       const legacy = r as unknown as LegacyIntegrationRow;
       sources.push({ provider: "google_calendar", accountName: legacy.account_name ?? null });
+      const entry = calendarsByProvider.get("google_calendar");
+      if (!entry) needsBackfill = true;
+      const ids = entry?.hasAny && entry.ids.length > 0 ? entry.ids : ["primary"];
       work.push((async () => {
         const token = await refreshLegacyGcalToken(legacy);
         if (!token) return [];
-        return fetchGoogleEvents(token, legacy.account_name ?? null, timeMin, timeMax);
+        return fetchGoogleEvents(token, legacy.account_name ?? null, timeMin, timeMax, ids);
       })());
     } else if (r.provider === "google") {
       const row = r as unknown as IntegrationRow;
       if (row.status !== "active" || !row.scopes?.calendar) continue;
       sources.push({ provider: "google", accountName: row.account_name ?? null });
+      const entry = calendarsByProvider.get("google");
+      if (!entry) needsBackfill = true;
+      const ids = entry?.hasAny && entry.ids.length > 0 ? entry.ids : ["primary"];
       work.push((async () => {
         try {
           const token = await getValidGoogleAccessToken(row.id);
-          return await fetchGoogleEvents(token, row.account_name ?? null, timeMin, timeMax);
+          return await fetchGoogleEvents(token, row.account_name ?? null, timeMin, timeMax, ids);
         } catch {
           return [];
         }
@@ -187,15 +236,26 @@ export async function GET(req: Request) {
       const row = r as unknown as IntegrationRow;
       if (row.status !== "active" || !row.scopes?.calendar) continue;
       sources.push({ provider: "microsoft", accountName: row.account_name ?? null });
+      const entry = calendarsByProvider.get("microsoft");
+      if (!entry) needsBackfill = true;
+      const ids = entry?.hasAny && entry.ids.length > 0 ? entry.ids : null;
       work.push((async () => {
         try {
           const token = await getValidMicrosoftAccessToken(row.id);
-          return await fetchMicrosoftEvents(token, row.account_name ?? null, timeMin, timeMax);
+          return await fetchMicrosoftEvents(token, row.account_name ?? null, timeMin, timeMax, ids);
         } catch {
           return [];
         }
       })());
     }
+  }
+
+  // Fire-and-forget back-fill for providers that don't yet have rows in
+  // user_calendars. The current request returns primary-only; the next
+  // one will see the full list. We don't block on this — the user
+  // shouldn't pay the latency of a calendar-list sync to load events.
+  if (needsBackfill) {
+    void syncUserCalendarList(user.id).catch(() => {});
   }
 
   const all = (await Promise.all(work)).flat();

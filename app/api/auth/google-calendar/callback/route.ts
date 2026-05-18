@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { syncUserCalendarList } from "@/lib/calendar/sync-calendar-list";
 
 export async function GET(req: Request) {
   const { searchParams, origin } = new URL(req.url);
@@ -65,6 +66,12 @@ export async function GET(req: Request) {
     connected_at:     new Date().toISOString(),
     last_synced_at:   new Date().toISOString(),
   }, { onConflict: "user_id,provider,account_id" });
+
+  // Seed per-account calendar list. Fire-and-forget so the redirect
+  // doesn't block on a Google API round-trip.
+  void syncUserCalendarList(user.id).catch((err) => {
+    console.error("[oauth/google-calendar/callback] calendar list sync failed:", err);
+  });
 
   return NextResponse.redirect(`${origin}/calendar?connected=gcal`);
 }

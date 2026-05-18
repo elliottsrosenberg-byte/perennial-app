@@ -8,6 +8,7 @@ import AshMark from "@/components/ui/AshMark";
 import DatePicker from "@/components/ui/DatePicker";
 import EmptyState from "@/components/ui/EmptyState";
 import CalendarOptionsMenu from "./CalendarOptionsMenu";
+import CalendarSourcesPanel from "./CalendarSourcesPanel";
 import EventDetailPanel, { type CalendarEventLite } from "./EventDetailPanel";
 import CalendarIntroModal from "@/components/tour/calendar/CalendarIntroModal";
 import CalendarTooltipTour from "@/components/tour/calendar/CalendarTooltipTour";
@@ -878,6 +879,13 @@ export default function CalendarClient({
                 </div>
               ))}
             </>
+          )}
+
+          {/* Per-account calendar visibility list — only renders when
+              we have something to show; first paint of a fresh
+              connection triggers a background sync server-side. */}
+          {anyConnected && (
+            <CalendarSourcesPanel refreshNonce={refreshNonce} />
           )}
 
           {/* Calendar integrations panel — covers Google + Outlook. The

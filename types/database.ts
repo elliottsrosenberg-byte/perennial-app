@@ -337,3 +337,22 @@ export interface ProjectContact {
   created_at: string;
   project?: Project;
 }
+
+// One row per (user, provider, calendar). Surfaces every calendar the
+// user owns across every connected account so the left rail can render
+// per-account checkbox lists and the aggregator can fan out to only
+// the calendars the user has marked visible.
+export interface UserCalendar {
+  id:            string;
+  user_id:       string;
+  provider:      "google" | "google_calendar" | "microsoft" | "apple_icloud";
+  external_id:   string;
+  account_email: string | null;
+  name:          string;
+  color:         string | null;
+  is_primary:    boolean;
+  visible:       boolean;
+  writable:      boolean;
+  created_at:    string;
+  updated_at:    string;
+}
