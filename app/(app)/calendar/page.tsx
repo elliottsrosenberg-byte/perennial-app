@@ -9,6 +9,7 @@ export default async function CalendarPage() {
     { data: tasks },
     { data: projects },
     { data: contacts },
+    { data: integrations },
   ] = await Promise.all([
     // Calendar now reads from the tasks table directly — reminders were
     // merged into tasks. We pull open tasks for the user; the client owns
@@ -27,14 +28,36 @@ export default async function CalendarPage() {
       .select("id, first_name, last_name")
       .eq("archived", false)
       .order("first_name"),
+    supabase
+      .from("integrations")
+      .select("provider, account_name, status, scopes, metadata, last_synced_at")
+      .in("provider", ["google_calendar", "google", "microsoft"]),
   ]);
 
-  // Check if Google Calendar is connected
-  const { data: gcalIntegration } = await supabase
-    .from("integrations")
-    .select("id, account_name, metadata, last_synced_at")
-    .eq("provider", "google_calendar")
-    .maybeSingle();
+  // Collapse the per-row integrations into per-provider connection
+  // summaries the CalendarClient uses to render its status panel and
+  // tour hint. A user might have:
+  //   - the legacy `google_calendar` standalone connection
+  //   - the unified `google` integration with the calendar sub-scope
+  //   - the unified `microsoft` integration with the calendar sub-scope
+  // Any one of these counts as "Google connected" or "Outlook connected".
+  type Conn = { kind: "google" | "outlook"; accountName: string | null };
+  const conns: Conn[] = [];
+  for (const intg of integrations ?? []) {
+    const scopes = (intg.scopes ?? {}) as Record<string, boolean>;
+    const meta   = (intg.metadata ?? {}) as { email?: string };
+    const name   = meta.email ?? intg.account_name ?? null;
+    if (intg.provider === "google_calendar") {
+      conns.push({ kind: "google", accountName: name });
+    } else if (intg.provider === "google" && intg.status === "active" && scopes.calendar) {
+      conns.push({ kind: "google", accountName: name });
+    } else if (intg.provider === "microsoft" && intg.status === "active" && scopes.calendar) {
+      conns.push({ kind: "outlook", accountName: name });
+    }
+  }
+
+  const googleConn  = conns.find((c) => c.kind === "google")  ?? null;
+  const outlookConn = conns.find((c) => c.kind === "outlook") ?? null;
 
   return (
     <CalendarClient
@@ -48,8 +71,10 @@ export default async function CalendarPage() {
         }[]
       }
       initialContacts={(contacts ?? []) as Pick<Contact, "id" | "first_name" | "last_name">[]}
-      gcalConnected={!!gcalIntegration}
-      gcalAccountName={(gcalIntegration?.metadata as { email?: string } | null)?.email ?? gcalIntegration?.account_name ?? null}
+      googleConnected={!!googleConn}
+      googleAccountName={googleConn?.accountName ?? null}
+      outlookConnected={!!outlookConn}
+      outlookAccountName={outlookConn?.accountName ?? null}
     />
   );
 }
