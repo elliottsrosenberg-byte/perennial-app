@@ -137,17 +137,26 @@ export async function syncUserCalendarList(userId: string): Promise<{ count: num
           name:          c.summaryOverride ?? c.summary ?? c.id,
           color:         c.backgroundColor ?? null,
           is_primary:    !!c.primary,
-          writable:      c.accessRole === "writer" || c.accessRole === "owner",
+          // The legacy google_calendar provider never requested the
+          // calendar.events scope; it's read-only by design. Users who
+          // want write should reconnect through the unified Google flow.
+          writable:      false,
         });
       }
     } else if (r.provider === "google") {
       const row = r as unknown as IntegrationRow;
       if (row.status !== "active" || !row.scopes?.calendar) continue;
+      // Per-calendar writability requires *both* a writer/owner role on
+      // that specific calendar and the calendar.events scope on the
+      // integration overall. Older connections without the write scope
+      // get writable=false everywhere even on calendars they own.
+      const canWrite = !!row.scopes?.calendar_write;
       try {
         const token = await getValidGoogleAccessToken(row.id);
         const list  = await fetchGoogleCalendars(token);
         providers.add("google");
         for (const c of list) {
+          const roleWritable = c.accessRole === "writer" || c.accessRole === "owner";
           upserts.push({
             user_id:       userId,
             provider:      "google",
@@ -156,7 +165,7 @@ export async function syncUserCalendarList(userId: string): Promise<{ count: num
             name:          c.summaryOverride ?? c.summary ?? c.id,
             color:         c.backgroundColor ?? null,
             is_primary:    !!c.primary,
-            writable:      c.accessRole === "writer" || c.accessRole === "owner",
+            writable:      canWrite && roleWritable,
           });
         }
       } catch (e) {
@@ -165,6 +174,7 @@ export async function syncUserCalendarList(userId: string): Promise<{ count: num
     } else if (r.provider === "microsoft") {
       const row = r as unknown as IntegrationRow;
       if (row.status !== "active" || !row.scopes?.calendar) continue;
+      const canWrite = !!row.scopes?.calendar_write;
       try {
         const token = await getValidMicrosoftAccessToken(row.id);
         const list  = await fetchMicrosoftCalendars(token);
@@ -178,7 +188,7 @@ export async function syncUserCalendarList(userId: string): Promise<{ count: num
             name:          c.name ?? "(Untitled calendar)",
             color:         c.hexColor || null,
             is_primary:    !!c.isDefaultCalendar,
-            writable:      !!c.canEdit,
+            writable:      canWrite && !!c.canEdit,
           });
         }
       } catch (e) {

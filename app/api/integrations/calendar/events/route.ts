@@ -18,6 +18,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getValidGoogleAccessToken } from "@/lib/integrations/google-tokens";
 import { getValidMicrosoftAccessToken } from "@/lib/integrations/microsoft-tokens";
 import { syncUserCalendarList } from "@/lib/calendar/sync-calendar-list";
+import { resolveWritableCalendar, createEvent } from "@/lib/calendar/write-event";
 import type { IntegrationRow } from "@/lib/integrations/types";
 
 export const runtime = "nodejs";
@@ -34,6 +35,13 @@ interface CalendarEvent {
   colorId:     string | null;
   source:      "google" | "microsoft";
   accountName: string | null;
+  // The user_calendars row this event lives in. Needed for write-back
+  // (PATCH/DELETE) so the UI doesn't have to do a second lookup. May be
+  // null for legacy connections that haven't been resynced yet.
+  calendarId:  string | null;
+  // Whether the parent calendar is writable. Drives whether the
+  // EventDetailPanel renders edit affordances or the read-only pill.
+  writable:    boolean;
 }
 
 // ── Legacy gcal token refresh (mirror of the existing events route) ──────
@@ -65,12 +73,18 @@ async function refreshLegacyGcalToken(integration: LegacyIntegrationRow): Promis
   return access_token;
 }
 
+interface CalendarMeta {
+  externalId: string;
+  rowId:      string | null;   // user_calendars.id
+  writable:   boolean;
+}
+
 async function fetchGoogleEvents(
   token: string,
   accountName: string | null,
   timeMin: string,
   timeMax: string,
-  calendarIds: string[] = ["primary"],
+  calendars: CalendarMeta[],
 ): Promise<CalendarEvent[]> {
   const params = new URLSearchParams({
     timeMin,
@@ -80,31 +94,35 @@ async function fetchGoogleEvents(
     maxResults:   "100",
   });
   const lists = await Promise.all(
-    calendarIds.map(async (calId) => {
+    calendars.map(async (cal) => {
       const res = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?${params.toString()}`,
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.externalId)}/events?${params.toString()}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      if (!res.ok) return [] as GCalApiEvent[];
+      if (!res.ok) return { cal, items: [] as GCalApiEvent[] };
       const data = await res.json() as { items?: GCalApiEvent[] };
-      return data.items ?? [];
+      return { cal, items: data.items ?? [] };
     }),
   );
-  return lists.flat()
-    .filter((e) => e.status !== "cancelled")
-    .map((e) => ({
-      id:          e.id,
-      title:       e.summary ?? "(No title)",
-      start:       e.start.dateTime ?? e.start.date ?? "",
-      end:         e.end.dateTime   ?? e.end.date   ?? "",
-      allDay:      !!e.start.date,
-      description: e.description ?? null,
-      location:    e.location ?? null,
-      htmlLink:    e.htmlLink ?? null,
-      colorId:     e.colorId ?? null,
-      source:      "google",
-      accountName,
-    }));
+  return lists.flatMap(({ cal, items }) =>
+    items
+      .filter((e) => e.status !== "cancelled")
+      .map((e) => ({
+        id:          e.id,
+        title:       e.summary ?? "(No title)",
+        start:       e.start.dateTime ?? e.start.date ?? "",
+        end:         e.end.dateTime   ?? e.end.date   ?? "",
+        allDay:      !!e.start.date,
+        description: e.description ?? null,
+        location:    e.location ?? null,
+        htmlLink:    e.htmlLink ?? null,
+        colorId:     e.colorId ?? null,
+        source:      "google" as const,
+        accountName,
+        calendarId:  cal.rowId,
+        writable:    cal.writable,
+      })),
+  );
 }
 
 async function fetchMicrosoftEvents(
@@ -112,7 +130,7 @@ async function fetchMicrosoftEvents(
   accountName: string | null,
   startIso: string,
   endIso: string,
-  calendarIds: string[] | null = null,
+  calendars: CalendarMeta[] | null = null,
 ): Promise<CalendarEvent[]> {
   const select = encodeURIComponent("id,subject,bodyPreview,start,end,location,webLink,isAllDay,isCancelled");
   async function fetchOne(path: string): Promise<GraphApiEvent[]> {
@@ -127,36 +145,57 @@ async function fetchMicrosoftEvents(
     const data = (await res.json()) as { value?: GraphApiEvent[] };
     return data.value ?? [];
   }
-  const lists = calendarIds && calendarIds.length > 0
-    ? await Promise.all(calendarIds.map((id) => fetchOne(`/me/calendars/${encodeURIComponent(id)}/calendarView`)))
-    : [await fetchOne(`/me/calendarView`)];
-  return lists.flat()
-    .filter((e) => !e.isCancelled)
-    .map((e) => {
-      const isAllDay = !!e.isAllDay;
-      // Graph returns dateTime as unzoned ISO; the UI parses these as
-      // local, which matches Outlook's user-facing display for non-all-day
-      // events. For all-day, just keep the date portion.
-      const startStr = isAllDay
-        ? (e.start?.dateTime ?? "").slice(0, 10)
-        : (e.start?.dateTime ?? "");
-      const endStr   = isAllDay
-        ? (e.end?.dateTime   ?? "").slice(0, 10)
-        : (e.end?.dateTime   ?? "");
-      return {
-        id:          e.id,
-        title:       e.subject ?? "(No title)",
-        start:       startStr,
-        end:         endStr,
-        allDay:      isAllDay,
-        description: e.bodyPreview ?? null,
-        location:    e.location?.displayName ?? null,
-        htmlLink:    e.webLink ?? null,
-        colorId:     null,
-        source:      "microsoft",
-        accountName,
-      };
-    });
+
+  // When we have a per-calendar list, fan out one request per calendar so
+  // each event keeps its calendarId provenance. Without it (legacy), fall
+  // back to the /me/calendarView aggregate — but in that case we can't
+  // attribute events to a specific user_calendars row, so writable is off.
+  if (calendars && calendars.length > 0) {
+    const lists = await Promise.all(
+      calendars.map(async (cal) => ({
+        cal,
+        items: await fetchOne(`/me/calendars/${encodeURIComponent(cal.externalId)}/calendarView`),
+      })),
+    );
+    return lists.flatMap(({ cal, items }) =>
+      items.filter((e) => !e.isCancelled).map((e) => normalizeGraphEvent(e, accountName, cal.rowId, cal.writable)),
+    );
+  }
+  const items = await fetchOne(`/me/calendarView`);
+  return items.filter((e) => !e.isCancelled).map((e) => normalizeGraphEvent(e, accountName, null, false));
+}
+
+function normalizeGraphEvent(
+  e:           GraphApiEvent,
+  accountName: string | null,
+  calendarId:  string | null,
+  writable:    boolean,
+): CalendarEvent {
+  const isAllDay = !!e.isAllDay;
+  // Graph returns dateTime as unzoned ISO; the UI parses these as
+  // local, which matches Outlook's user-facing display for non-all-day
+  // events. For all-day, just keep the date portion.
+  const startStr = isAllDay
+    ? (e.start?.dateTime ?? "").slice(0, 10)
+    : (e.start?.dateTime ?? "");
+  const endStr   = isAllDay
+    ? (e.end?.dateTime   ?? "").slice(0, 10)
+    : (e.end?.dateTime   ?? "");
+  return {
+    id:          e.id,
+    title:       e.subject ?? "(No title)",
+    start:       startStr,
+    end:         endStr,
+    allDay:      isAllDay,
+    description: e.bodyPreview ?? null,
+    location:    e.location?.displayName ?? null,
+    htmlLink:    e.webLink ?? null,
+    colorId:     null,
+    source:      "microsoft",
+    accountName,
+    calendarId,
+    writable,
+  };
 }
 
 export async function GET(req: Request) {
@@ -191,13 +230,13 @@ export async function GET(req: Request) {
   // next request has the full list.
   const { data: userCalendars } = await supabase
     .from("user_calendars")
-    .select("provider, external_id, visible")
+    .select("id, provider, external_id, visible, writable")
     .eq("user_id", user.id);
-  const calendarsByProvider = new Map<string, { ids: string[]; hasAny: boolean }>();
+  const calendarsByProvider = new Map<string, { metas: CalendarMeta[]; hasAny: boolean }>();
   for (const c of userCalendars ?? []) {
-    const entry = calendarsByProvider.get(c.provider) ?? { ids: [], hasAny: false };
+    const entry = calendarsByProvider.get(c.provider) ?? { metas: [], hasAny: false };
     entry.hasAny = true;
-    if (c.visible) entry.ids.push(c.external_id);
+    if (c.visible) entry.metas.push({ externalId: c.external_id, rowId: c.id, writable: !!c.writable });
     calendarsByProvider.set(c.provider, entry);
   }
 
@@ -211,11 +250,13 @@ export async function GET(req: Request) {
       sources.push({ provider: "google_calendar", accountName: legacy.account_name ?? null });
       const entry = calendarsByProvider.get("google_calendar");
       if (!entry) needsBackfill = true;
-      const ids = entry?.hasAny && entry.ids.length > 0 ? entry.ids : ["primary"];
+      const metas: CalendarMeta[] = entry?.hasAny && entry.metas.length > 0
+        ? entry.metas
+        : [{ externalId: "primary", rowId: null, writable: false }];
       work.push((async () => {
         const token = await refreshLegacyGcalToken(legacy);
         if (!token) return [];
-        return fetchGoogleEvents(token, legacy.account_name ?? null, timeMin, timeMax, ids);
+        return fetchGoogleEvents(token, legacy.account_name ?? null, timeMin, timeMax, metas);
       })());
     } else if (r.provider === "google") {
       const row = r as unknown as IntegrationRow;
@@ -223,11 +264,13 @@ export async function GET(req: Request) {
       sources.push({ provider: "google", accountName: row.account_name ?? null });
       const entry = calendarsByProvider.get("google");
       if (!entry) needsBackfill = true;
-      const ids = entry?.hasAny && entry.ids.length > 0 ? entry.ids : ["primary"];
+      const metas: CalendarMeta[] = entry?.hasAny && entry.metas.length > 0
+        ? entry.metas
+        : [{ externalId: "primary", rowId: null, writable: false }];
       work.push((async () => {
         try {
           const token = await getValidGoogleAccessToken(row.id);
-          return await fetchGoogleEvents(token, row.account_name ?? null, timeMin, timeMax, ids);
+          return await fetchGoogleEvents(token, row.account_name ?? null, timeMin, timeMax, metas);
         } catch {
           return [];
         }
@@ -238,11 +281,11 @@ export async function GET(req: Request) {
       sources.push({ provider: "microsoft", accountName: row.account_name ?? null });
       const entry = calendarsByProvider.get("microsoft");
       if (!entry) needsBackfill = true;
-      const ids = entry?.hasAny && entry.ids.length > 0 ? entry.ids : null;
+      const metas = entry?.hasAny && entry.metas.length > 0 ? entry.metas : null;
       work.push((async () => {
         try {
           const token = await getValidMicrosoftAccessToken(row.id);
-          return await fetchMicrosoftEvents(token, row.account_name ?? null, timeMin, timeMax, ids);
+          return await fetchMicrosoftEvents(token, row.account_name ?? null, timeMin, timeMax, metas);
         } catch {
           return [];
         }
@@ -271,6 +314,56 @@ export async function GET(req: Request) {
   );
 
   return NextResponse.json({ connected: sources.length > 0, events: all, sources });
+}
+
+// ── POST: create a new event on a user_calendar the user can write to ─────
+
+interface CreateBody {
+  calendar_id?:  string;
+  title?:        string;
+  start_iso?:    string;
+  end_iso?:      string;
+  all_day?:      boolean;
+  description?:  string | null;
+  location?:     string | null;
+  attendees?:    string[];
+}
+
+export async function POST(req: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = (await req.json().catch(() => ({}))) as CreateBody;
+  if (!body.calendar_id || !body.title || !body.start_iso || !body.end_iso) {
+    return NextResponse.json({ error: "calendar_id, title, start_iso, end_iso required" }, { status: 400 });
+  }
+
+  const lookup = await resolveWritableCalendar(user.id, body.calendar_id);
+  if (!lookup) return NextResponse.json({ error: "calendar not found" }, { status: 404 });
+
+  const result = await createEvent(lookup, {
+    title:       body.title,
+    start_iso:   body.start_iso,
+    end_iso:     body.end_iso,
+    all_day:     !!body.all_day,
+    description: body.description ?? null,
+    location:    body.location ?? null,
+    attendees:   body.attendees ?? [],
+  });
+
+  if (result.kind === "ok") return NextResponse.json({ event: result.event });
+  if (result.kind === "ok_noop") return NextResponse.json({ ok: true });
+  if (result.kind === "not_writable_calendar") {
+    return NextResponse.json({ error: "not_writable_calendar" }, { status: 400 });
+  }
+  if (result.kind === "scope_upgrade_required") {
+    return NextResponse.json(
+      { error: "scope_upgrade_required", provider: result.provider, reconnect_url: result.reconnect_url },
+      { status: 412 },
+    );
+  }
+  return NextResponse.json({ error: result.message }, { status: result.status });
 }
 
 // ── Provider-shaped types ─────────────────────────────────────────────────
