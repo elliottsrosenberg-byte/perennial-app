@@ -38,6 +38,7 @@ export interface Task {
   project_id:     string | null;
   contact_id:     string | null;
   opportunity_id: string | null;
+  target_id:      string | null;
   user_id:        string;
   title:          string;
   completed:      boolean;
@@ -49,6 +50,7 @@ export interface Task {
   project?:     { id: string; title: string } | null;
   contact?:     { id: string; first_name: string; last_name: string } | null;
   opportunity?: { id: string; title: string; category: string } | null;
+  target?:      { id: string; name: string; pipeline_id: string; pipeline?: { name: string; color: string } | null } | null;
 }
 
 export interface Note {
@@ -175,6 +177,8 @@ export interface OutreachTarget {
   canvas_html: string | null;
   contact_id: string | null;
   company_id: string | null;
+  link: string | null;
+  results_deadline: string | null;
   last_touched_at: string;
   created_at: string;
   updated_at: string;
@@ -182,6 +186,13 @@ export interface OutreachTarget {
   stage?: PipelineStage;
   contact?: Contact;
   company?: Company;
+}
+
+export interface OutreachTargetProject {
+  target_id:  string;
+  project_id: string;
+  user_id:    string;
+  created_at: string;
 }
 
 // ── Finance ───────────────────────────────────────────────────────────────────
