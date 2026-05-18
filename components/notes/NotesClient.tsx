@@ -5,13 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Note } from "@/types/database";
 import { useEditor, EditorContent } from "@tiptap/react";
-import { Pin, Search, Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, MoreHorizontal, Upload, NotebookPen } from "lucide-react";
+import { Pin, Search, Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, MoreHorizontal, Upload, NotebookPen, Image as ImageIcon } from "lucide-react";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
 import {
   getRichExtensions,
   InlineAshPopover,
   submitInlineAsh,
+  insertEditorImageFromFile,
 } from "@/components/ui/RichEditor";
 import NotesIntroModal from "@/components/tour/notes/NotesIntroModal";
 import NotesTooltipTour from "@/components/tour/notes/NotesTooltipTour";
@@ -292,7 +293,16 @@ function FormatToolbar({
   onGenerateTasks?:  () => void;
   suggesting?:       boolean;
 }) {
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
   if (!editor) return null;
+
+  async function pickImages(files: FileList | null) {
+    if (!files || files.length === 0 || !editor) return;
+    for (const f of Array.from(files)) {
+      await insertEditorImageFromFile(editor, f);
+    }
+  }
 
   function btn(label: React.ReactNode, action: () => void, active?: boolean, title?: string) {
     return (
@@ -345,6 +355,37 @@ function FormatToolbar({
         false,
         "Toggle block",
       )}
+      {sep()}
+      <button
+        type="button"
+        title="Insert image"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          const input = imageInputRef.current;
+          if (input) input.click();
+        }}
+        style={{
+          width: 26, height: 26, borderRadius: 5, border: "none",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: "transparent", color: "var(--color-text-secondary)",
+          cursor: "pointer", flexShrink: 0,
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+      >
+        <ImageIcon size={12} />
+      </button>
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+        multiple
+        style={{ display: "none" }}
+        onChange={(e) => {
+          void pickImages(e.target.files);
+          e.target.value = "";
+        }}
+      />
 
       {/* Spacer */}
       <div style={{ flex: 1 }} />
