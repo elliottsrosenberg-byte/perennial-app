@@ -1,12 +1,16 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { OutreachTarget, OutreachPipeline, PipelineStage } from "@/types/database";
-import { X, Maximize2, Minimize2, FileText, Trash2, Settings } from "lucide-react";
+import type { OutreachTarget, OutreachPipeline, PipelineStage, Project, Contact } from "@/types/database";
+import {
+  X, Maximize2, Minimize2, FileText, Trash2, Settings,
+  CheckSquare, Users, FolderOpen, ExternalLink, Plus, Link2,
+} from "lucide-react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { getRichExtensions, RichToolbar, InlineAshPopover, submitInlineAsh } from "@/components/ui/RichEditor";
 import type { AshPromptState } from "@/components/ui/RichEditor";
+import AshPromptsModule, { type AshPrompt } from "@/components/ui/AshPromptsModule";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -23,15 +27,34 @@ function daysSince(iso: string) {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
 }
 
-// ── Canvas editor ─────────────────────────────────────────────────────────────
+function isoToDateInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function dateInputToISO(s: string): string | null {
+  if (!s) return null;
+  return new Date(`${s}T12:00:00`).toISOString();
+}
+
+function fmtDeadline(iso: string | null): { label: string; color: string } {
+  if (!iso) return { label: "—", color: "var(--color-grey)" };
+  const d = new Date(iso);
+  const days = Math.ceil((d.getTime() - Date.now()) / 86400000);
+  const formatted = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  if (days < 0) return { label: `${formatted} · ${Math.abs(days)}d overdue`, color: "var(--color-red-orange)" };
+  if (days <= 14) return { label: `${formatted} · ${days === 0 ? "today" : `${days}d left`}`, color: "#b8860b" };
+  return { label: formatted, color: "#6b6860" };
+}
+
+// ── Canvas editor (unchanged from before) ─────────────────────────────────────
 
 function TargetCanvasEditor({
   targetId, targetName, contactId, initialHtml,
 }: {
   targetId:    string;
   targetName:  string;
-  /** When the outreach target is a known contact, surface that id so Ash
-   *  auto-links new tasks/activities to the person. */
   contactId:   string | null;
   initialHtml: string | null;
 }) {
@@ -96,104 +119,19 @@ function TargetCanvasEditor({
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", padding: "5px 20px", borderTop: "0.5px solid var(--color-border)", background: "var(--color-off-white)", flexShrink: 0, fontSize: 10, color: "var(--color-text-tertiary)" }}>
         {saving && "Saving…"}
-        {!saving && saved && <span style={{ color: "var(--color-sage)" }}>✓ Saved</span>}
+        {!saving && saved && <span style={{ color: "var(--color-sage)" }}>Saved</span>}
       </div>
       {ashPrompt && <InlineAshPopover anchor={ashPrompt.anchor} onSubmit={handleAshSubmit} onClose={() => setAshPrompt(null)} />}
     </div>
   );
 }
 
-// ── AshStrip ──────────────────────────────────────────────────────────────────
+// ── Editable plain text field ─────────────────────────────────────────────────
 
-function TargetAshStrip({ target, pipeline }: { target: OutreachTarget; pipeline: OutreachPipeline & { stages: PipelineStage[] } }) {
-  const stage = pipeline.stages.find(s => s.id === target.stage_id);
-  const stageName = stage?.name ?? "first stage";
-  const stale = daysSince(target.last_touched_at);
-  const name = target.name;
-
-  function generateContent(): { prompt: string; action: string; buttonLabel: string } {
-    if (stage?.is_outcome) return {
-      prompt:      `${name} is at an outcome stage. Want a quick note on what happened?`,
-      action:      `Write a brief summary of what happened with ${name} — the outcome, key context, and any follow-on actions.`,
-      buttonLabel: "Summarize outcome",
-    };
-    if (stale > 30) return {
-      prompt:      `${name} hasn't been touched in ${stale} days. Time to re-engage?`,
-      action:      `Draft a re-engagement message for ${name}. It's been ${stale} days — keep it natural and give them an easy reason to respond.`,
-      buttonLabel: "Re-engage",
-    };
-    if (stale > 14) return {
-      prompt:      `You last touched ${name} ${stale} days ago. A follow-up could keep this moving.`,
-      action:      `Draft a follow-up message for ${name}. It's been ${stale} days — be concise, reference past context, and suggest a clear next step.`,
-      buttonLabel: "Follow up",
-    };
-    if (stage?.meta_stage === "identify") return {
-      prompt:      `${name} is at ${stageName}. I can help you research them and craft a strong opener.`,
-      action:      `Help me prepare to reach out to ${name} in the ${pipeline.name} pipeline. What should I know about them, and what's the best opening message?`,
-      buttonLabel: "Prepare outreach",
-    };
-    if (stage?.meta_stage === "submit") return {
-      prompt:      `${name} is at ${stageName}. I can draft your pitch or submission.`,
-      action:      `Draft a compelling pitch or submission message for ${name} in the ${pipeline.name} pipeline. Keep it targeted and professional.`,
-      buttonLabel: "Draft pitch",
-    };
-    if (stage?.meta_stage === "discuss") return {
-      prompt:      `You're in discussion with ${name}. I can help you move toward a decision.`,
-      action:      `How do I move my conversation with ${name} forward? We're at ${stageName}. Give me a clear next move to advance toward a yes or no.`,
-      buttonLabel: "Move forward",
-    };
-    return {
-      prompt:      `I can help you think through your next move with ${name}.`,
-      action:      `What's the best next step with ${name} in my ${pipeline.name} pipeline? Give me a specific action and the message to send.`,
-      buttonLabel: "Next step",
-    };
-  }
-
-  const { prompt, action, buttonLabel } = generateContent();
-
-  function handleContextual() {
-    window.dispatchEvent(new CustomEvent("open-ash", {
-      detail: { message: action, pipeline: { name: pipeline.name, color: pipeline.color } },
-    }));
-  }
-  function handleOpenAsh() {
-    window.dispatchEvent(new CustomEvent("open-ash", {
-      detail: { pipeline: { name: pipeline.name, color: pipeline.color } },
-    }));
-  }
-
-  return (
-    <div style={{
-      flexShrink: 0, display: "flex", alignItems: "center", gap: 12,
-      padding: "0 18px", height: 56,
-      background: "linear-gradient(135deg, #7a9a55 0%, #5a7a38 45%, #3a5228 100%)",
-    }}>
-      <img src="/Ash-Logomak.svg" alt="" style={{ width: 16, height: 16, flexShrink: 0, filter: "brightness(0) invert(1)", opacity: 0.9, animation: "ash-shimmer 4s ease-in-out infinite" }} />
-      <span style={{ flex: 1, fontSize: 11, color: "rgba(255,255,255,0.88)", lineHeight: 1.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {prompt}
-      </span>
-      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-        <button onClick={handleContextual}
-          style={{ fontSize: 11, fontWeight: 700, color: "white", background: "rgba(255,255,255,0.22)", border: "0.5px solid rgba(255,255,255,0.35)", borderRadius: 9999, padding: "4px 12px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", lineHeight: 1 }}
-          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.32)"}
-          onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.22)"}>
-          {buttonLabel} →
-        </button>
-        <button onClick={handleOpenAsh}
-          style={{ fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,0.75)", background: "transparent", border: "0.5px solid rgba(255,255,255,0.25)", borderRadius: 9999, padding: "4px 12px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", lineHeight: 1 }}
-          onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; e.currentTarget.style.color = "white"; }}
-          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.75)"; }}>
-          Ask Ash
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── EditableField ─────────────────────────────────────────────────────────────
-
-function EditableField({ label, value, placeholder = "—", onSave }: {
+function EditableField({ label, value, placeholder = "—", onSave, isLink }: {
   label: string; value: string | null; placeholder?: string; onSave: (v: string | null) => void;
+  /** Show the value as a clickable URL when set and not editing. */
+  isLink?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft,   setDraft]   = useState(value ?? "");
@@ -207,15 +145,353 @@ function EditableField({ label, value, placeholder = "—", onSave }: {
 
   return (
     <div style={{ display: "flex", alignItems: "center", padding: "4px 0", borderBottom: "0.5px solid var(--color-border)" }}>
-      <span style={{ fontSize: 11, color: "var(--color-grey)", width: 72, flexShrink: 0 }}>{label}</span>
+      <span style={{ fontSize: 11, color: "var(--color-grey)", width: 80, flexShrink: 0 }}>{label}</span>
       {editing
         ? <input value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit}
             onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); commit(); } if (e.key === "Escape") { setDraft(value ?? ""); setEditing(false); } }}
             autoFocus style={{ flex: 1, fontSize: 12, background: "transparent", border: "none", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit", borderBottom: "1px solid var(--color-sage)" }} />
-        : <span onClick={() => setEditing(true)} style={{ flex: 1, fontSize: 12, color: value ? "#6b6860" : "var(--color-grey)", cursor: "text" }}>
-            {value || placeholder}
+        : isLink && value
+          ? <span style={{ flex: 1, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4, minWidth: 0 }}>
+              <a href={value} target="_blank" rel="noreferrer"
+                style={{ color: "var(--color-sage)", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}
+                onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
+                onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
+              >
+                {value.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+              </a>
+              <ExternalLink size={10} strokeWidth={1.75} style={{ color: "var(--color-grey)", flexShrink: 0 }} />
+              <button onClick={() => setEditing(true)}
+                style={{ background: "none", border: "none", color: "var(--color-grey)", fontSize: 10, cursor: "pointer", padding: "0 4px", marginLeft: "auto", fontFamily: "inherit" }}
+                title="Edit link"
+              >
+                Edit
+              </button>
+            </span>
+          : <span onClick={() => setEditing(true)} style={{ flex: 1, fontSize: 12, color: value ? "#6b6860" : "var(--color-grey)", cursor: "text" }}>
+              {value || placeholder}
+            </span>
+      }
+    </div>
+  );
+}
+
+// ── Date field ────────────────────────────────────────────────────────────────
+
+function DateField({ label, value, onSave }: {
+  label: string; value: string | null; onSave: (v: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft,   setDraft]   = useState(isoToDateInput(value));
+  useEffect(() => { setDraft(isoToDateInput(value)); }, [value]);
+
+  function commit() {
+    setEditing(false);
+    const next = dateInputToISO(draft);
+    if (next !== value) onSave(next);
+  }
+
+  const display = fmtDeadline(value);
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", padding: "4px 0", borderBottom: "0.5px solid var(--color-border)" }}>
+      <span style={{ fontSize: 11, color: "var(--color-grey)", width: 80, flexShrink: 0 }}>{label}</span>
+      {editing
+        ? <input type="date" value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit} autoFocus
+            style={{ flex: 1, fontSize: 12, background: "transparent", border: "none", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit", borderBottom: "1px solid var(--color-sage)" }} />
+        : <span onClick={() => setEditing(true)} style={{ flex: 1, fontSize: 12, color: display.color, cursor: "text", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {display.label}
+            {value && (
+              <button onClick={(e) => { e.stopPropagation(); onSave(null); }}
+                style={{ background: "none", border: "none", color: "var(--color-grey)", fontSize: 10, cursor: "pointer", padding: "0 4px", marginLeft: "auto", fontFamily: "inherit" }}
+                title="Clear deadline"
+              >
+                Clear
+              </button>
+            )}
           </span>
       }
+    </div>
+  );
+}
+
+// ── Linked Projects rail panel ────────────────────────────────────────────────
+
+function LinkedProjects({ targetId }: { targetId: string }) {
+  const [links, setLinks]       = useState<Project[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [adding, setAdding]     = useState(false);
+  const [query, setQuery]       = useState("");
+  const [results, setResults]   = useState<Project[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("outreach_target_projects")
+        .select("project:projects(*)")
+        .eq("target_id", targetId);
+      if (cancelled) return;
+      const projects = ((data ?? []) as unknown as { project: Project }[])
+        .map(r => r.project).filter(Boolean);
+      setLinks(projects);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [targetId]);
+
+  useEffect(() => {
+    if (!adding) return;
+    const q = query.trim();
+    const handle = setTimeout(async () => {
+      const supabase = createClient();
+      const builder = supabase.from("projects").select("*").order("updated_at", { ascending: false }).limit(8);
+      const { data } = q ? await builder.ilike("title", `%${q}%`) : await builder;
+      const existing = new Set(links.map(p => p.id));
+      setResults(((data ?? []) as Project[]).filter(p => !existing.has(p.id)));
+    }, 200);
+    return () => clearTimeout(handle);
+  }, [query, adding, links]);
+
+  async function attach(project: Project) {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    setLinks(prev => [...prev, project]);
+    setAdding(false);
+    setQuery("");
+    await supabase.from("outreach_target_projects").insert({
+      target_id:  targetId,
+      project_id: project.id,
+      user_id:    user.id,
+    });
+  }
+
+  async function detach(projectId: string) {
+    setLinks(prev => prev.filter(p => p.id !== projectId));
+    await createClient().from("outreach_target_projects")
+      .delete().eq("target_id", targetId).eq("project_id", projectId);
+  }
+
+  return (
+    <div style={{ marginTop: 14, borderTop: "0.5px solid var(--color-border)", paddingTop: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+        <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)" }}>
+          Linked projects
+        </p>
+        <button onClick={() => setAdding(v => !v)} title={adding ? "Cancel" : "Link a project"}
+          style={{ background: "none", border: "none", color: "var(--color-grey)", cursor: "pointer", padding: 0, display: "flex" }}>
+          {adding ? <X size={11} /> : <Plus size={12} />}
+        </button>
+      </div>
+
+      {loading ? (
+        <p style={{ fontSize: 11, color: "var(--color-grey)", padding: "4px 0" }}>Loading…</p>
+      ) : links.length === 0 && !adding ? (
+        <button
+          onClick={() => setAdding(true)}
+          style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "6px 8px", borderRadius: 6, background: "transparent", border: "0.5px dashed var(--color-border)", cursor: "pointer", color: "var(--color-grey)", fontFamily: "inherit", fontSize: 11 }}
+        >
+          <Link2 size={11} strokeWidth={1.75} />
+          Link a project
+        </button>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          {links.map(p => (
+            <div key={p.id} style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "5px 8px", borderRadius: 6,
+              background: "var(--color-off-white)",
+              border: "0.5px solid var(--color-border)",
+            }}>
+              <FolderOpen size={11} strokeWidth={1.75} style={{ color: "var(--color-grey)", flexShrink: 0 }} />
+              <a href={`/projects?projectId=${p.id}`}
+                style={{ flex: 1, fontSize: 11, color: "var(--color-charcoal)", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
+                onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
+              >
+                {p.title}
+              </a>
+              <button onClick={() => detach(p.id)} title="Unlink"
+                style={{ background: "none", border: "none", color: "var(--color-grey)", cursor: "pointer", padding: 0, display: "flex", flexShrink: 0 }}
+                onMouseEnter={e => e.currentTarget.style.color = "var(--color-red-orange)"}
+                onMouseLeave={e => e.currentTarget.style.color = "var(--color-grey)"}>
+                <X size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {adding && (
+        <div style={{ marginTop: 6 }}>
+          <input
+            type="text"
+            autoFocus
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search projects…"
+            style={{
+              width: "100%", padding: "5px 8px", fontSize: 11, borderRadius: 6,
+              background: "var(--color-warm-white)",
+              border: "0.5px solid var(--color-border)",
+              color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none",
+            }}
+          />
+          <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2, maxHeight: 160, overflowY: "auto" }}>
+            {results.length === 0 ? (
+              <p style={{ fontSize: 10, color: "var(--color-grey)", padding: "4px 8px" }}>No results</p>
+            ) : results.map(p => (
+              <button key={p.id} onClick={() => attach(p)}
+                style={{ textAlign: "left", padding: "5px 8px", borderRadius: 5, background: "transparent", border: "none", cursor: "pointer", fontSize: 11, color: "var(--color-charcoal)", fontFamily: "inherit" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                {p.title}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Linked People rail panel ──────────────────────────────────────────────────
+// Currently surfaces the single linked contact from `target.contact_id`. The
+// schema supports only one direct link today; surfacing it here as a section
+// gives the rail a consistent shape and a clear "Link a person" affordance.
+
+function LinkedPeople({ target, onChange }: { target: OutreachTarget; onChange: (next: { contact_id: string | null }) => void }) {
+  const [adding, setAdding]   = useState(false);
+  const [query, setQuery]     = useState("");
+  const [results, setResults] = useState<Contact[]>([]);
+
+  useEffect(() => {
+    if (!adding) return;
+    const q = query.trim();
+    const handle = setTimeout(async () => {
+      const supabase = createClient();
+      if (q) {
+        const { data } = await supabase.from("contacts")
+          .select("*, company:companies(*)")
+          .eq("archived", false)
+          .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`)
+          .limit(8);
+        setResults((data ?? []) as Contact[]);
+      } else {
+        const { data } = await supabase.from("contacts")
+          .select("*, company:companies(*)")
+          .eq("archived", false)
+          .order("last_contacted_at", { ascending: false, nullsFirst: false })
+          .limit(8);
+        setResults((data ?? []) as Contact[]);
+      }
+    }, 200);
+    return () => clearTimeout(handle);
+  }, [query, adding]);
+
+  const c = target.contact ?? null;
+
+  return (
+    <div style={{ marginTop: 14, borderTop: "0.5px solid var(--color-border)", paddingTop: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+        <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)" }}>
+          Linked people
+        </p>
+        {c && !adding && (
+          <button onClick={() => { onChange({ contact_id: null }); }} title="Unlink"
+            style={{ background: "none", border: "none", color: "var(--color-grey)", cursor: "pointer", padding: 0, display: "flex" }}>
+            <X size={11} />
+          </button>
+        )}
+        {!c && (
+          <button onClick={() => setAdding(v => !v)} title={adding ? "Cancel" : "Link a person"}
+            style={{ background: "none", border: "none", color: "var(--color-grey)", cursor: "pointer", padding: 0, display: "flex" }}>
+            {adding ? <X size={11} /> : <Plus size={12} />}
+          </button>
+        )}
+      </div>
+
+      {c ? (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "6px 8px", borderRadius: 6,
+          background: "var(--color-off-white)",
+          border: "0.5px solid var(--color-border)",
+        }}>
+          <div style={{ width: 22, height: 22, borderRadius: 99, background: "var(--color-cream)", color: "#6b6860", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            {(c.first_name[0] ?? "") + (c.last_name[0] ?? "")}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <a href={`/people?contactId=${c.id}`}
+              style={{ fontSize: 12, color: "var(--color-charcoal)", textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
+              onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
+            >
+              {c.first_name} {c.last_name}
+            </a>
+            {c.company?.name && <span style={{ fontSize: 10, color: "var(--color-grey)" }}>{c.company.name}</span>}
+          </div>
+        </div>
+      ) : !adding ? (
+        <button
+          onClick={() => setAdding(true)}
+          style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "6px 8px", borderRadius: 6, background: "transparent", border: "0.5px dashed var(--color-border)", cursor: "pointer", color: "var(--color-grey)", fontFamily: "inherit", fontSize: 11 }}
+        >
+          <Users size={11} strokeWidth={1.75} />
+          Link a person
+        </button>
+      ) : null}
+
+      {adding && !c && (
+        <div style={{ marginTop: 6 }}>
+          <input
+            type="text"
+            autoFocus
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search contacts…"
+            style={{
+              width: "100%", padding: "5px 8px", fontSize: 11, borderRadius: 6,
+              background: "var(--color-warm-white)",
+              border: "0.5px solid var(--color-border)",
+              color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none",
+            }}
+          />
+          <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2, maxHeight: 160, overflowY: "auto" }}>
+            {results.length === 0 ? (
+              <p style={{ fontSize: 10, color: "var(--color-grey)", padding: "4px 8px" }}>No results</p>
+            ) : results.map(r => (
+              <button key={r.id} onClick={() => { onChange({ contact_id: r.id }); setAdding(false); setQuery(""); }}
+                style={{ textAlign: "left", padding: "5px 8px", borderRadius: 5, background: "transparent", border: "none", cursor: "pointer", fontSize: 11, color: "var(--color-charcoal)", fontFamily: "inherit" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                {r.first_name} {r.last_name}
+                {r.company?.name && <span style={{ color: "var(--color-grey)", marginLeft: 6 }}>· {r.company.name}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Workspace tab stubs ───────────────────────────────────────────────────────
+// Tasks / Notes / Files panes are scaffolded placeholders for now — they
+// follow the Project detail panel structure so the user immediately reads
+// them as the same surface, but full CRUD wiring lives in a follow-up.
+
+function StubPane({ heading, body }: { heading: string; body: string }) {
+  return (
+    <div style={{
+      flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 32, background: "var(--color-off-white)",
+    }}>
+      <div style={{ maxWidth: 360, textAlign: "center" }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 6 }}>{heading}</p>
+        <p style={{ fontSize: 11.5, color: "var(--color-grey)", lineHeight: 1.55 }}>{body}</p>
+      </div>
     </div>
   );
 }
@@ -230,7 +506,7 @@ interface Props {
   onDeleted: (targetId: string) => void;
 }
 
-type SectionTab = "canvas";
+type SectionTab = "canvas" | "tasks" | "people" | "notes" | "files";
 
 export default function TargetDetailPanel({ target: initialTarget, pipeline, onClose, onUpdated, onDeleted }: Props) {
   const supabase = createClient();
@@ -299,21 +575,56 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
     onClose();
   }
 
-  const linkedLabel = target.contact
-    ? `${target.contact.first_name} ${target.contact.last_name}`
-    : target.company?.name ?? null;
-
   const currentStage = pipeline.stages.find(s => s.id === target.stage_id);
+  const stale = daysSince(target.last_touched_at);
 
   const NAV_ITEMS: { key: SectionTab; label: string; icon: React.ReactNode }[] = [
-    { key: "canvas", label: "Canvas", icon: <FileText size={13} strokeWidth={1.75} /> },
+    { key: "canvas", label: "Canvas", icon: <FileText    size={13} strokeWidth={1.75} /> },
+    { key: "tasks",  label: "Tasks",  icon: <CheckSquare size={13} strokeWidth={1.75} /> },
+    { key: "people", label: "People", icon: <Users       size={13} strokeWidth={1.75} /> },
+    { key: "notes",  label: "Notes",  icon: <FileText    size={13} strokeWidth={1.75} /> },
+    { key: "files",  label: "Files",  icon: <FolderOpen  size={13} strokeWidth={1.75} /> },
   ];
 
-  const ASH_PROMPTS = [
-    `How should I approach ${target.name}?`,
-    `What's my next move with ${target.name}?`,
-    `Draft a message for ${target.name}.`,
-  ];
+  // Contextual Ash prompts — same intelligence the old bottom AshStrip had,
+  // surfaced as an AshPromptsModule in the left rail to match Projects/People.
+  const ashContext = useMemo<{ headline: string; primary: AshPrompt; prompts: AshPrompt[] }>(() => {
+    const name = target.name;
+    const stageName = currentStage?.name ?? "first stage";
+    let headline: string;
+    let primary:  AshPrompt;
+
+    if (currentStage?.is_outcome) {
+      headline = `${name} is at an outcome stage.`;
+      primary  = { label: "Summarize outcome", message: `Write a brief summary of what happened with ${name} — the outcome, key context, and any follow-on actions.` };
+    } else if (stale > 30) {
+      headline = `${name} hasn't been touched in ${stale} days.`;
+      primary  = { label: "Re-engage", message: `Draft a re-engagement message for ${name}. It's been ${stale} days — keep it natural and give them an easy reason to respond.` };
+    } else if (stale > 14) {
+      headline = `You last touched ${name} ${stale} days ago.`;
+      primary  = { label: "Follow up", message: `Draft a follow-up message for ${name}. It's been ${stale} days — be concise, reference past context, and suggest a clear next step.` };
+    } else if (currentStage?.meta_stage === "identify") {
+      headline = `${name} is at ${stageName}. Research + strong opener.`;
+      primary  = { label: "Prepare outreach", message: `Help me prepare to reach out to ${name} in the ${pipeline.name} pipeline. What should I know about them, and what's the best opening message?` };
+    } else if (currentStage?.meta_stage === "submit") {
+      headline = `${name} is at ${stageName}. Time for a pitch.`;
+      primary  = { label: "Draft pitch", message: `Draft a compelling pitch or submission message for ${name} in the ${pipeline.name} pipeline. Keep it targeted and professional.` };
+    } else if (currentStage?.meta_stage === "discuss") {
+      headline = `You're in discussion with ${name}.`;
+      primary  = { label: "Move forward", message: `How do I move my conversation with ${name} forward? We're at ${stageName}. Give me a clear next move to advance toward a yes or no.` };
+    } else {
+      headline = `Think through the next move with ${name}.`;
+      primary  = { label: "Next step", message: `What's the best next step with ${name} in my ${pipeline.name} pipeline? Give me a specific action and the message to send.` };
+    }
+
+    const prompts: AshPrompt[] = [
+      { label: "How should I approach this?", message: `How should I approach ${name} in my ${pipeline.name} pipeline?` },
+      { label: "Draft a message",            message: `Draft a message for ${name} appropriate to where we are in the ${pipeline.name} pipeline.` },
+      { label: "What might go wrong?",       message: `What could derail my outreach to ${name}, and how do I mitigate it?` },
+    ];
+
+    return { headline, primary, prompts };
+  }, [target.name, stale, currentStage, pipeline.name]);
 
   return (
     <>
@@ -339,7 +650,7 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
 
         {/* ── Left sidebar ── */}
         <div style={{
-          width: 252, flexShrink: 0, display: "flex", flexDirection: "column", overflow: "hidden",
+          width: 268, flexShrink: 0, display: "flex", flexDirection: "column", overflow: "hidden",
           borderRight: "0.5px solid var(--color-border)", background: "var(--color-warm-white)",
           borderRadius: maximized ? 0 : "12px 0 0 12px",
         }}>
@@ -400,31 +711,31 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
             <div style={{ marginBottom: 14 }}>
               <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Details</p>
               <EditableField label="Location" value={target.location} placeholder="—" onSave={v => saveField({ location: v })} />
-              {linkedLabel && (
-                <div style={{ display: "flex", alignItems: "center", padding: "4px 0", borderBottom: "0.5px solid var(--color-border)" }}>
-                  <span style={{ fontSize: 11, color: "var(--color-grey)", width: 72, flexShrink: 0 }}>
-                    {target.contact ? "Contact" : "Company"}
-                  </span>
-                  <span style={{ fontSize: 12, color: "#6b6860" }}>{linkedLabel}</span>
-                </div>
-              )}
+              <EditableField label="Link" value={target.link} placeholder="—" isLink onSave={v => saveField({ link: v })} />
+              <DateField label="Deadline" value={target.results_deadline} onSave={v => saveField({ results_deadline: v })} />
               <div style={{ display: "flex", alignItems: "center", padding: "4px 0" }}>
-                <span style={{ fontSize: 11, color: "var(--color-grey)", width: 72, flexShrink: 0 }}>Touched</span>
-                <span style={{ fontSize: 12, color: daysSince(target.last_touched_at) > 14 ? "#b8860b" : "#6b6860" }}>
+                <span style={{ fontSize: 11, color: "var(--color-grey)", width: 80, flexShrink: 0 }}>Touched</span>
+                <span style={{ fontSize: 12, color: stale > 14 ? "#b8860b" : "#6b6860" }}>
                   {fmtDate(target.last_touched_at)}
                 </span>
               </div>
             </div>
 
+            {/* Linked projects */}
+            <LinkedProjects targetId={target.id} />
+
+            {/* Linked people */}
+            <LinkedPeople target={target} onChange={(next) => saveField(next)} />
+
             {/* Navigation */}
-            <div style={{ borderTop: "0.5px solid var(--color-border)", paddingTop: 10, marginTop: 8 }}>
+            <div data-tour-target="outreach.detail-workspace" style={{ marginTop: 14, borderTop: "0.5px solid var(--color-border)", paddingTop: 10 }}>
               <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Workspace</p>
               {NAV_ITEMS.map(item => {
                 const active = activeTab === item.key;
                 return (
                   <button key={item.key} onClick={() => setActiveTab(item.key)} style={{
                     width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 8px",
-                    borderRadius: 7, border: "none", background: active ? "var(--color-surface-raised)" : "transparent",
+                    borderRadius: 7, border: "none", background: active ? "rgba(155,163,122,0.12)" : "transparent",
                     cursor: "pointer", fontFamily: "inherit", marginBottom: 1,
                   }}
                   onMouseEnter={e => { if (!active) e.currentTarget.style.background = "rgba(0,0,0,0.04)"; }}
@@ -436,19 +747,14 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
               })}
             </div>
 
-            {/* Ask Ash */}
-            <div style={{ marginTop: 14, borderTop: "0.5px solid var(--color-border)", paddingTop: 10 }}>
-              <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Ask Ash</p>
-              {ASH_PROMPTS.map(prompt => (
-                <button key={prompt}
-                  onClick={() => window.dispatchEvent(new CustomEvent("open-ash", { detail: { message: prompt } }))}
-                  style={{ width: "100%", textAlign: "left", fontSize: 11, padding: "5px 8px", borderRadius: 7, background: "transparent", border: "none", cursor: "pointer", color: "#6b6860", fontFamily: "inherit" }}
-                  onMouseEnter={e => e.currentTarget.style.background = "rgba(155,163,122,0.08)"}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                  {prompt}
-                </button>
-              ))}
-            </div>
+            {/* Ash module — contextual prompts, lives in the left rail */}
+            <AshPromptsModule
+              headline={ashContext.headline}
+              primaryPrompt={ashContext.primary}
+              prompts={ashContext.prompts}
+              context={{ pipeline: { name: pipeline.name, color: pipeline.color }, target: { name: target.name } }}
+              placeholder={`Ask Ash about ${target.name}…`}
+            />
           </div>
 
           {/* Settings */}
@@ -523,10 +829,11 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
                     initialHtml={canvasHtml}
                   />
             )}
+            {activeTab === "tasks"  && <StubPane heading="Tasks for this target" body="Track what you need to do next — research, draft a pitch, follow up. Coming soon as a fully-wired task list, mirroring the project tasks surface." />}
+            {activeTab === "people" && <StubPane heading="People at this target" body="Galleries, fairs, and publications usually involve more than one person. Link the directors, curators, and editors you're talking to here." />}
+            {activeTab === "notes"  && <StubPane heading="Notes" body="Quick observations and follow-up reminders. For longform thinking, use the Canvas tab." />}
+            {activeTab === "files"  && <StubPane heading="Files" body="Decks, attachments, references — anything you'd want at hand for this target." />}
           </div>
-
-          {/* Ash strip — scrim mode only */}
-          {!maximized && <TargetAshStrip target={target} pipeline={pipeline} />}
         </div>
       </div>
     </>
