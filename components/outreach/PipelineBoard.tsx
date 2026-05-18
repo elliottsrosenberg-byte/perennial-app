@@ -476,14 +476,63 @@ function DroppableColumn({
             })}
             {provided.placeholder}
             {targets.length === 0 && !snapshot.isDraggingOver && (
-              <div style={{ padding: "14px 12px", borderRadius: 10, border: "1px dashed var(--color-border)", textAlign: "center" }}>
-                <p style={{ fontSize: 11, color: "var(--color-grey)" }}>—</p>
-              </div>
+              <EmptyStageDropzone
+                stageName={stage.name}
+                isOutcome={isOutcome}
+                pipelineColor={pipelineColor}
+                onAdd={onNewTarget}
+              />
             )}
           </div>
         </div>
       )}
     </Droppable>
+  );
+}
+
+// Hover-revealed CTA shown in empty stage columns. Resting state is the same
+// dashed "—" placeholder; on hover it morphs into a real click target inviting
+// the user to add a target right where it belongs.
+function EmptyStageDropzone({ stageName, isOutcome, pipelineColor, onAdd }: {
+  stageName: string;
+  isOutcome: boolean;
+  pipelineColor: string;
+  onAdd: () => void;
+}) {
+  const [hov, setHov] = useState(false);
+  // Outcomes don't get a "+ Add" affordance — outcomes are end-states, not
+  // somewhere you'd seed a new target. Show the resting "—" only.
+  if (isOutcome) {
+    return (
+      <div style={{ padding: "14px 12px", borderRadius: 10, border: "1px dashed var(--color-border)", textAlign: "center" }}>
+        <p style={{ fontSize: 11, color: "var(--color-grey)" }}>—</p>
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onAdd}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        width: "100%",
+        padding: "14px 12px",
+        borderRadius: 10,
+        border: `1px dashed ${hov ? pipelineColor + "88" : "var(--color-border)"}`,
+        background: hov ? pipelineColor + "0c" : "transparent",
+        textAlign: "center",
+        cursor: "pointer",
+        fontFamily: "inherit",
+        transition: "background 0.15s ease, border-color 0.15s ease, color 0.15s ease",
+        color: hov ? pipelineColor : "var(--color-grey)",
+        fontSize: 11,
+        fontWeight: hov ? 500 : 400,
+        outline: "none",
+      }}
+    >
+      {hov ? `+ Add target to ${stageName}` : "—"}
+    </button>
   );
 }
 
@@ -715,6 +764,40 @@ export default function PipelineBoard({ pipelines, selectedPipeline, targets, on
               "Create a pipeline for each type of outreach — e.g. 'Gallery submissions', 'Press pitches', 'Fair applications'.",
               "Each pipeline has stages you define (e.g. Identified → Reached out → In conversation → Proposal sent → Closed).",
               "Perennial tracks when you last touched each target so nothing slips through the cracks.",
+            ]}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // All pipelines — have pipelines but zero targets anywhere. Show the rich
+  // EmptyState rather than the meta-stage grid (which would be five "—"
+  // columns and look broken). Two CTAs because both on-ramps make sense at
+  // this moment: add a target, or stand up another pipeline.
+  if (targets.length === 0) {
+    return (
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflowY: "auto", padding: "24px" }}>
+        <div style={{ width: "100%", maxWidth: 520 }}>
+          <EmptyIllustration />
+          <EmptyState
+            icon={<Send size={22} strokeWidth={1.5} color="var(--color-sage)" />}
+            heading="No targets yet"
+            body="You have pipelines set up — now add the actual galleries, fairs, publications, or clients you're chasing. One real opportunity is enough to get the system working for you."
+            action={{
+              label:   "+ New target",
+              onClick: () => onNewTarget(),
+            }}
+            secondaryAction={onNewPipeline ? {
+              label:   "+ New pipeline",
+              onClick: onNewPipeline,
+              icon:    <Plus size={12} />,
+            } : undefined}
+            ashPrompt="Help me identify the first targets to add to my outreach pipelines based on my practice."
+            tips={[
+              "Pick one pipeline and add the most obvious target — the gallery you've been thinking about, the editor you wish would cover you.",
+              "Drag cards between stages to advance them. Hover the right edge of a card to log a follow-up inline.",
+              "Add a results deadline and a link (submission form, listing) so the card carries everything you need.",
             ]}
           />
         </div>
