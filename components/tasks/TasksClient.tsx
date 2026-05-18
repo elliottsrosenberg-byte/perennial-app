@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/client";
 import type { Task } from "@/types/database";
 import EmptyState from "@/components/ui/EmptyState";
 import AshMark from "@/components/ui/AshMark";
+import TasksIntroModal from "@/components/tour/tasks/TasksIntroModal";
+import TasksTooltipTour from "@/components/tour/tasks/TasksTooltipTour";
 
 const ASH_GRADIENT = "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)";
 function openAshTasks(message: string) {
@@ -539,7 +541,10 @@ function QuickAdd({
       .select("*, project:projects(id, title), contact:contacts(id, first_name, last_name), opportunity:opportunities(id, title, category)")
       .single();
 
-    if (data) onAdded(data as Task);
+    if (data) {
+      onAdded(data as Task);
+      window.dispatchEvent(new CustomEvent("tasks:created", { detail: { id: data.id, title: data.title } }));
+    }
     setTitle(""); setDueDate(null); setPriority(null);
     setLinks({ projectId: defaultProjectId, contactId: null, opportunityId: null });
     setLoading(false);
@@ -547,7 +552,7 @@ function QuickAdd({
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{
+    <form onSubmit={handleSubmit} data-tour-target="tasks.quick-add" style={{
       display: "flex", alignItems: "center", gap: 8, padding: "10px 16px",
       borderBottom: "0.5px solid var(--color-border)",
       background: "var(--color-surface-raised)", flexShrink: 0,
@@ -594,7 +599,7 @@ function SectionHeader({ title, count, dot, dimCount }: { title: string; count: 
 // ─── TaskRow ──────────────────────────────────────────────────────────────────
 
 function TaskRow({
-  task, projects, onToggle, onUpdate, highlighted,
+  task, projects, onToggle, onUpdate, highlighted, tourTarget,
 }: {
   task:        Task;
   projects:    { id: string; title: string }[];
@@ -602,6 +607,9 @@ function TaskRow({
   onUpdate:    (id: string, fields: Partial<Task> & { project?: { id: string; title: string } | null; contact?: { id: string; first_name: string; last_name: string } | null; opportunity?: { id: string; title: string; category: string } | null }) => void;
   /** Briefly tints the row when arriving via /tasks?taskId=… deep-link. */
   highlighted?: boolean;
+  /** When set, exposes a data-tour-target attribute so the welcome tour
+   *  spotlight can anchor on a specific row (typically the first). */
+  tourTarget?: string;
 }) {
   const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -632,6 +640,7 @@ function TaskRow({
   return (
     <div
       id={`task-${task.id}`}
+      data-tour-target={tourTarget}
       style={{
         display: "flex", alignItems: "center", gap: 10, padding: "9px 16px",
         borderBottom: "0.5px solid var(--color-border)",
@@ -1015,6 +1024,7 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
   const showCompletedSection = filter !== "completed" && completed.length > 0;
 
   return (
+    <>
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
 
       {/* Topbar */}
@@ -1040,7 +1050,7 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
         {/* Sidebar */}
-        <div style={{
+        <div data-tour-target="tasks.sidebar" style={{
           width: 196, flexShrink: 0, display: "flex", flexDirection: "column",
           borderRight: "0.5px solid var(--color-border)", background: "var(--color-surface-sunken)",
           overflow: "hidden",
@@ -1078,7 +1088,7 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
             <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)" }}>{filterLabel()}</span>
 
             {/* Sort controls: [↑↓] [Date | Priority | Created] + show-completed pill */}
-            <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+            <div data-tour-target="tasks.sort" style={{ display: "flex", alignItems: "center", gap: 3 }}>
             {filter.startsWith("project:") && (
               <button
                 onClick={() => {
@@ -1144,11 +1154,11 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
             {allSections !== null ? (
               <>
                 {allSections.length === 0 && !showCompletedSection ? <TaskEmptyState /> : (
-                  allSections.map(section => (
+                  allSections.map((section, sIdx) => (
                     <div key={section.title}>
                       <SectionHeader title={section.title} count={section.active.length} dot={section.dot} />
-                      {section.active.map(task => (
-                        <TaskRow key={task.id} task={task} projects={projects} onToggle={handleToggle} onUpdate={handleUpdate} highlighted={highlightedId === task.id} />
+                      {section.active.map((task, tIdx) => (
+                        <TaskRow key={task.id} task={task} projects={projects} onToggle={handleToggle} onUpdate={handleUpdate} highlighted={highlightedId === task.id} tourTarget={sIdx === 0 && tIdx === 0 ? "tasks.first-row" : undefined} />
                       ))}
                       {section.ghost.map(task => (
                         <TaskRow key={`ghost-${task.id}`} task={task} projects={projects} onToggle={handleToggle} onUpdate={handleUpdate} />
@@ -1192,8 +1202,8 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
               <>
                 {!hasActiveTasks && filter !== "completed" ? <TaskEmptyState /> : (
                   <>
-                    {viewTasks.map(task => (
-                      <TaskRow key={task.id} task={task} projects={projects} onToggle={handleToggle} onUpdate={handleUpdate} highlighted={highlightedId === task.id} />
+                    {viewTasks.map((task, idx) => (
+                      <TaskRow key={task.id} task={task} projects={projects} onToggle={handleToggle} onUpdate={handleUpdate} highlighted={highlightedId === task.id} tourTarget={idx === 0 ? "tasks.first-row" : undefined} />
                     ))}
                     {lingeringForView.map(task => (
                       <TaskRow key={`ghost-${task.id}`} task={task} projects={projects} onToggle={handleToggle} onUpdate={handleUpdate} />
@@ -1221,5 +1231,10 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
         </div>
       </div>
     </div>
+
+    {/* Walkthrough: intro modal first, then progressive tooltips */}
+    <TasksIntroModal />
+    <TasksTooltipTour />
+    </>
   );
 }
