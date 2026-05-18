@@ -3,13 +3,14 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Task, Contact } from "@/types/database";
-import { ChevronLeft, ChevronRight, Plus, CheckSquare, MoreHorizontal, CalendarClock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, CheckSquare, MoreHorizontal, CalendarClock, ChevronDown } from "lucide-react";
 import AshMark from "@/components/ui/AshMark";
 import DatePicker from "@/components/ui/DatePicker";
 import EmptyState from "@/components/ui/EmptyState";
 import CalendarOptionsMenu from "./CalendarOptionsMenu";
 import CalendarSourcesPanel from "./CalendarSourcesPanel";
 import EventDetailPanel, { type CalendarEventLite } from "./EventDetailPanel";
+import NewEventModal from "./NewEventModal";
 import CalendarIntroModal from "@/components/tour/calendar/CalendarIntroModal";
 import CalendarTooltipTour from "@/components/tour/calendar/CalendarTooltipTour";
 
@@ -507,6 +508,8 @@ interface CalEvent {
   colorId: string | null;
   source?: "google" | "microsoft";
   accountName?: string | null;
+  calendarId?: string | null;
+  writable?:   boolean;
 }
 
 // Google Calendar event colors (colorId → hex)
@@ -545,6 +548,9 @@ export default function CalendarClient({
   const [showDeclined,    setShowDeclined]    = useState(true);
   const [openEvent,       setOpenEvent]       = useState<CalEvent | null>(null);
   const [createError,     setCreateError]     = useState<string | null>(null);
+  const [newEventOpen,    setNewEventOpen]    = useState(false);
+  const [newEventPrefill, setNewEventPrefill] = useState<{ start?: Date; end?: Date; allDay?: boolean } | null>(null);
+  const [newMenuOpen,     setNewMenuOpen]     = useState(false);
 
   // Freeze "did this user have any calendar connected at mount?" so the
   // tooltip tour can drop the connect-integration steps if so (mirrors the
@@ -597,8 +603,23 @@ export default function CalendarClient({
   const [refreshNonce, setRefreshNonce] = useState(0);
   useEffect(() => {
     function onRefresh() { setRefreshNonce((n) => n + 1); }
+    function onCreated(e: Event) {
+      const detail = (e as CustomEvent).detail as { event?: CalEvent } | undefined;
+      if (!detail?.event) return;
+      // Optimistically merge the new event into the visible week without
+      // waiting for the next aggregator round-trip. The refresh-events
+      // event also fires from NewEventModal and will reconcile shortly.
+      setGcalEvents((prev) => {
+        if (prev.some((p) => p.id === detail.event!.id)) return prev;
+        return [...prev, detail.event!];
+      });
+    }
     window.addEventListener("calendar:refresh-events", onRefresh);
-    return () => window.removeEventListener("calendar:refresh-events", onRefresh);
+    window.addEventListener("calendar:event-created",  onCreated);
+    return () => {
+      window.removeEventListener("calendar:refresh-events", onRefresh);
+      window.removeEventListener("calendar:event-created",  onCreated);
+    };
   }, []);
   useEffect(() => {
     if (!anyConnected) return;
@@ -1086,11 +1107,11 @@ export default function CalendarClient({
               )}
             </div>
 
-            <span data-tour-target="calendar.new-task-button">
+            <span data-tour-target="calendar.new-task-button" style={{ position: "relative" }}>
               <button
-                onClick={openNewTask}
+                onClick={() => setNewMenuOpen((v) => !v)}
                 style={{
-                  padding: "7px 16px", fontSize: 12, fontWeight: 500,
+                  padding: "7px 14px 7px 16px", fontSize: 12, fontWeight: 500,
                   borderRadius: 8, border: "none", cursor: "pointer",
                   background: "var(--color-sage)", color: "white",
                   fontFamily: "inherit",
@@ -1101,8 +1122,62 @@ export default function CalendarClient({
                 onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-sage)")}
               >
                 <Plus size={12} />
-                New task
+                New
+                <ChevronDown size={11} style={{ marginLeft: 2, opacity: 0.85 }} />
               </button>
+              {newMenuOpen && (
+                <>
+                  {/* Scrim to close on outside click */}
+                  <div
+                    onClick={() => setNewMenuOpen(false)}
+                    style={{ position: "fixed", inset: 0, zIndex: 40 }}
+                  />
+                  <div
+                    style={{
+                      position: "absolute", top: "calc(100% + 6px)", right: 0,
+                      zIndex: 41,
+                      minWidth: 180,
+                      background: "var(--color-off-white)",
+                      border: "0.5px solid var(--color-border)",
+                      borderRadius: 10,
+                      boxShadow: "0 6px 24px rgba(0,0,0,0.12)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <button
+                      onClick={() => { setNewMenuOpen(false); setNewEventPrefill(null); setNewEventOpen(true); }}
+                      style={{
+                        width: "100%", textAlign: "left",
+                        padding: "9px 14px", fontSize: 12,
+                        background: "transparent", border: "none",
+                        color: "var(--color-text-primary)", cursor: "pointer",
+                        fontFamily: "inherit",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <CalendarClock size={11} style={{ display: "inline", marginRight: 8, color: "var(--color-sage)" }} />
+                      New event
+                    </button>
+                    <button
+                      onClick={() => { setNewMenuOpen(false); openNewTask(); }}
+                      style={{
+                        width: "100%", textAlign: "left",
+                        padding: "9px 14px", fontSize: 12,
+                        background: "transparent", border: "none",
+                        color: "var(--color-text-primary)", cursor: "pointer",
+                        fontFamily: "inherit",
+                        borderTop: "0.5px solid var(--color-border)",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <CheckSquare size={11} style={{ display: "inline", marginRight: 8, color: "var(--color-sage)" }} />
+                      New task
+                    </button>
+                  </div>
+                </>
+              )}
             </span>
           </div>
         </header>
@@ -1479,6 +1554,16 @@ export default function CalendarClient({
           onMarkComplete={() => markComplete(popover.task.id)}
           onUndo={() => undoComplete(popover.task.id)}
           onClose={() => setPopover(null)}
+        />
+      )}
+
+      {/* New event modal */}
+      {newEventOpen && (
+        <NewEventModal
+          defaultStart={newEventPrefill?.start}
+          defaultEnd={newEventPrefill?.end}
+          defaultAllDay={newEventPrefill?.allDay}
+          onClose={() => { setNewEventOpen(false); setNewEventPrefill(null); }}
         />
       )}
 

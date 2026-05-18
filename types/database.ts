@@ -180,6 +180,8 @@ export interface OutreachTarget {
   link: string | null;
   results_deadline: string | null;
   last_touched_at: string;
+  last_followup_at: string | null;
+  ether: boolean;
   created_at: string;
   updated_at: string;
   pipeline?: OutreachPipeline;
