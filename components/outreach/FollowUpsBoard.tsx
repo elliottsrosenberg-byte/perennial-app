@@ -1,6 +1,8 @@
 "use client";
 
 import type { Contact } from "@/types/database";
+import { CheckCircle2 } from "lucide-react";
+import EmptyState from "@/components/ui/EmptyState";
 
 function initials(c: Contact) {
   return (c.first_name[0] + (c.last_name[0] ?? "")).toUpperCase();
@@ -82,6 +84,27 @@ export default function FollowUpsBoard({ contacts, onOpen }: Props) {
     { label: "60+ days",        dot: "var(--color-red-orange)", items: contacts.filter(c => daysSince(c) >= 60 && daysSince(c) < Infinity) },
     { label: "30–60 days",      dot: "#b8860b",                 items: contacts.filter(c => daysSince(c) >= 30 && daysSince(c) < 60) },
   ];
+
+  // Whole-board empty state — no one's stale.
+  if (contacts.length === 0) {
+    return (
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflowY: "auto", padding: "24px", background: "var(--color-warm-white)" }}>
+        <div style={{ width: "100%", maxWidth: 520 }}>
+          <EmptyState
+            icon={<CheckCircle2 size={22} strokeWidth={1.5} color="var(--color-sage)" />}
+            heading="Everyone's in touch"
+            body="No one in your network has gone quiet for more than 30 days. Nice work — relationships stay warm because you keep them warm."
+            ashPrompt="Who in my network would benefit from a check-in soon — not stale yet, but worth a touch?"
+            tips={[
+              "This board surfaces contacts you haven't talked to in 30+ days, grouped by how long it's been.",
+              "Every follow-up you log (from a target card, a contact panel, or here) bumps the last-contacted clock.",
+              "Ash can suggest who to reach out to next based on relationship history, recent activity, and what's on your plate.",
+            ]}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", gap: 12, padding: "16px 20px", flex: 1, overflowX: "auto", overflowY: "hidden", alignItems: "flex-start", background: "var(--color-warm-white)" }}>
