@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { microsoftAdapter } from "@/lib/integrations/microsoft";
 import { upsertIntegrationRow, writeTokens } from "@/lib/integrations/storage";
+import { syncUserCalendarList } from "@/lib/calendar/sync-calendar-list";
 import { appOrigin } from "@/lib/url";
 
 export const runtime = "nodejs";
@@ -90,6 +91,14 @@ async function handle(req: Request, url: URL, origin: string) {
   } catch (e) {
     console.error("[microsoft/callback] storage failed:", e);
     return NextResponse.redirect(settingsUrl(origin, { provider: "microsoft", error: "storage_failed" }));
+  }
+
+  // Seed per-account calendar list. Fire-and-forget so the redirect
+  // doesn't block on a Graph round-trip.
+  if (enabledSubScopes.calendar) {
+    void syncUserCalendarList(user.id).catch((err) => {
+      console.error("[oauth/microsoft/callback] calendar list sync failed:", err);
+    });
   }
 
   const destination = nextPath

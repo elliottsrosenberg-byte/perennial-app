@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { googleAdapter } from "@/lib/integrations/google";
 import { upsertIntegrationRow, writeTokens } from "@/lib/integrations/storage";
+import { syncUserCalendarList } from "@/lib/calendar/sync-calendar-list";
 import { appOrigin } from "@/lib/url";
 
 export const runtime = "nodejs";
@@ -132,6 +133,16 @@ async function handle(req: Request, url: URL, origin: string) {
       provider: "google",
       error:    "storage_failed",
     }));
+  }
+
+  // Seed the per-account calendar list on first connect. Fire-and-
+  // forget — the user's redirect should NOT block on a Google API
+  // round-trip. If this fails the lazy back-fill in the events
+  // aggregator will pick it up.
+  if (enabledSubScopes.calendar) {
+    void syncUserCalendarList(user.id).catch((err) => {
+      console.error("[oauth/google/callback] calendar list sync failed:", err);
+    });
   }
 
   // ── Success: clear OAuth cookies, redirect ──────────────────────
