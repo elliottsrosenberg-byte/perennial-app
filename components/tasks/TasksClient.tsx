@@ -2,21 +2,19 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { MoreHorizontal } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Task } from "@/types/database";
+import Topbar from "@/components/layout/Topbar";
 import EmptyState from "@/components/ui/EmptyState";
-import AshMark from "@/components/ui/AshMark";
 import TasksIntroModal from "@/components/tour/tasks/TasksIntroModal";
 import TasksTooltipTour from "@/components/tour/tasks/TasksTooltipTour";
-
-const ASH_GRADIENT = "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)";
-function openAshTasks(message: string) {
-  window.dispatchEvent(new CustomEvent("open-ash", { detail: { message } }));
-}
+import TasksOptionsMenu from "./TasksOptionsMenu";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Filter  = "all" | "overdue" | "today" | "upcoming" | "no_date" | "completed" | `project:${string}`;
+type Filter  = "all" | "overdue" | "today" | "upcoming" | "no_date" | "completed"
+             | `project:${string}` | `person:${string}` | `target:${string}`;
 type SortKey = "due_date" | "priority" | "created_at";
 type SortDir = "asc" | "desc";
 
@@ -225,31 +223,36 @@ function InlineDatePicker({
 // ─── Link types ───────────────────────────────────────────────────────────────
 
 type LinkState = {
-  projectId:     string | null;
-  contactId:     string | null;
-  opportunityId: string | null;
+  projectId: string | null;
+  contactId: string | null;
+  targetId:  string | null;
 };
 
-type ContactOpt     = { id: string; first_name: string; last_name: string };
-type OpportunityOpt = { id: string; title: string; category: string };
+type ContactOpt = { id: string; first_name: string; last_name: string };
+type TargetOpt  = { id: string; name: string; pipeline_id: string; pipeline?: { name: string; color: string } | null };
 
 // ─── InlineLinkPicker ─────────────────────────────────────────────────────────
+//
+// Three sections — Projects, People (all contacts; lead status is irrelevant
+// here), and Targets (outreach_targets). Opportunities used to live in this
+// picker but were retired; the UI no longer reads or writes
+// tasks.opportunity_id even though the column still exists in the DB.
 
-type LinkTab = "projects" | "contacts" | "opportunities";
+type LinkTab = "projects" | "contacts" | "targets";
 
 function InlineLinkPicker({
   links, projects, onChange, align = "left",
 }: {
   links:    LinkState;
   projects: { id: string; title: string }[];
-  onChange: (links: LinkState) => void;
+  onChange: (links: LinkState, picked?: { contact?: ContactOpt | null; target?: TargetOpt | null }) => void;
   align?:   "left" | "right";
 }) {
   const [open,     setOpen]     = useState(false);
   const [tab,      setTab]      = useState<LinkTab>("projects");
   const [search,   setSearch]   = useState("");
   const [contacts, setContacts] = useState<ContactOpt[]>([]);
-  const [opps,     setOpps]     = useState<OpportunityOpt[]>([]);
+  const [targets,  setTargets]  = useState<TargetOpt[]>([]);
   const [loaded,   setLoaded]   = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -267,31 +270,34 @@ function InlineLinkPicker({
       const supabase = createClient();
       Promise.all([
         supabase.from("contacts").select("id, first_name, last_name").eq("archived", false).order("first_name"),
-        supabase.from("opportunities").select("id, title, category").order("title"),
-      ]).then(([{ data: c }, { data: o }]) => {
+        supabase.from("outreach_targets").select("id, name, pipeline_id, pipeline:outreach_pipelines(name, color)").order("name"),
+      ]).then(([{ data: c }, { data: t }]) => {
         if (c) setContacts(c as ContactOpt[]);
-        if (o) setOpps(o as OpportunityOpt[]);
+        if (t) setTargets(t as unknown as TargetOpt[]);
         setLoaded(true);
       });
     }
   }
 
-  const hasLinks  = links.projectId || links.contactId || links.opportunityId;
+  const hasLinks  = links.projectId || links.contactId || links.targetId;
   const q         = search.toLowerCase();
   const fProjects = projects.filter(p => p.title.toLowerCase().includes(q));
   const fContacts = contacts.filter(c => `${c.first_name} ${c.last_name}`.toLowerCase().includes(q));
-  const fOpps     = opps.filter(o => o.title.toLowerCase().includes(q));
+  const fTargets  = targets .filter(t => t.name.toLowerCase().includes(q));
+
+  const contactById = (id: string) => contacts.find(c => c.id === id) ?? null;
+  const targetById  = (id: string) => targets .find(t => t.id === id) ?? null;
 
   const labelParts = [
-    links.projectId     ? projects.find(p => p.id === links.projectId)?.title                                                     : null,
-    links.contactId     ? contacts.find(c => c.id === links.contactId) ? `${contacts.find(c => c.id === links.contactId)!.first_name} ${contacts.find(c => c.id === links.contactId)!.last_name}` : null : null,
-    links.opportunityId ? opps.find(o => o.id === links.opportunityId)?.title                                                      : null,
+    links.projectId ? projects.find(p => p.id === links.projectId)?.title ?? null : null,
+    links.contactId ? (contactById(links.contactId) ? `${contactById(links.contactId)!.first_name} ${contactById(links.contactId)!.last_name}` : null) : null,
+    links.targetId  ? targetById(links.targetId)?.name ?? null : null,
   ].filter(Boolean) as string[];
 
   const TABS: { key: LinkTab; label: string }[] = [
-    { key: "projects",      label: "Projects"      },
-    { key: "contacts",      label: "Contacts"      },
-    { key: "opportunities", label: "Opportunities" },
+    { key: "projects", label: "Projects" },
+    { key: "contacts", label: "People"   },
+    { key: "targets",  label: "Targets"  },
   ];
 
   function row(
@@ -371,7 +377,7 @@ function InlineLinkPicker({
             <input
               autoFocus
               value={search} onChange={e => setSearch(e.target.value)}
-              placeholder={`Search ${tab}…`}
+              placeholder={`Search ${tab === "contacts" ? "people" : tab}…`}
               style={{
                 width: "100%", padding: "5px 8px", fontSize: 11,
                 border: "0.5px solid var(--color-border)", borderRadius: 6,
@@ -396,25 +402,50 @@ function InlineLinkPicker({
 
             {loaded && tab === "contacts" && (
               fContacts.length === 0
-                ? <div style={{ padding: "14px 8px", fontSize: 11, color: "var(--color-text-tertiary)", textAlign: "center" }}>No contacts</div>
+                ? <div style={{ padding: "14px 8px", fontSize: 11, color: "var(--color-text-tertiary)", textAlign: "center" }}>No people</div>
                 : <>
-                    {links.contactId && row("_clear_contact", <span style={{ color: "var(--color-text-tertiary)" }}>No contact</span>, false, () => onChange({ ...links, contactId: null }))}
-                    {fContacts.map(c => row(c.id, `${c.first_name} ${c.last_name}`, links.contactId === c.id, () => onChange({ ...links, contactId: links.contactId === c.id ? null : c.id })))}
+                    {links.contactId && row("_clear_contact", <span style={{ color: "var(--color-text-tertiary)" }}>No person</span>, false, () => onChange({ ...links, contactId: null }, { contact: null }))}
+                    {fContacts.map(c => row(
+                      c.id,
+                      `${c.first_name} ${c.last_name}`,
+                      links.contactId === c.id,
+                      () => {
+                        const willClear = links.contactId === c.id;
+                        onChange(
+                          { ...links, contactId: willClear ? null : c.id },
+                          { contact: willClear ? null : c },
+                        );
+                      },
+                    ))}
                   </>
             )}
 
-            {loaded && tab === "opportunities" && (
-              fOpps.length === 0
-                ? <div style={{ padding: "14px 8px", fontSize: 11, color: "var(--color-text-tertiary)", textAlign: "center" }}>No opportunities</div>
+            {loaded && tab === "targets" && (
+              fTargets.length === 0
+                ? <div style={{ padding: "14px 8px", fontSize: 11, color: "var(--color-text-tertiary)", textAlign: "center" }}>No targets</div>
                 : <>
-                    {links.opportunityId && row("_clear_opp", <span style={{ color: "var(--color-text-tertiary)" }}>No opportunity</span>, false, () => onChange({ ...links, opportunityId: null }))}
-                    {fOpps.map(o => row(o.id,
-                      <div>
-                        <div>{o.title}</div>
-                        <div style={{ fontSize: 10, color: "var(--color-text-tertiary)", textTransform: "capitalize" }}>{o.category}</div>
+                    {links.targetId && row("_clear_target", <span style={{ color: "var(--color-text-tertiary)" }}>No target</span>, false, () => onChange({ ...links, targetId: null }, { target: null }))}
+                    {fTargets.map(t => row(
+                      t.id,
+                      <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+                        {t.pipeline?.color && (
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: t.pipeline.color, flexShrink: 0 }} />
+                        )}
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</div>
+                          {t.pipeline?.name && (
+                            <div style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>{t.pipeline.name}</div>
+                          )}
+                        </div>
                       </div>,
-                      links.opportunityId === o.id,
-                      () => onChange({ ...links, opportunityId: links.opportunityId === o.id ? null : o.id }),
+                      links.targetId === t.id,
+                      () => {
+                        const willClear = links.targetId === t.id;
+                        onChange(
+                          { ...links, targetId: willClear ? null : t.id },
+                          { target: willClear ? null : t },
+                        );
+                      },
                     ))}
                   </>
             )}
@@ -508,20 +539,24 @@ function PriorityPicker({
 // ─── QuickAdd ─────────────────────────────────────────────────────────────────
 
 function QuickAdd({
-  projects, defaultProjectId, onAdded,
+  projects, defaultProjectId, defaultContactId, defaultTargetId, onAdded,
 }: {
   projects:         { id: string; title: string }[];
   defaultProjectId: string | null;
+  defaultContactId: string | null;
+  defaultTargetId:  string | null;
   onAdded:          (task: Task) => void;
 }) {
   const [title,    setTitle]    = useState("");
   const [dueDate,  setDueDate]  = useState<string | null>(null);
   const [priority, setPriority] = useState<"high" | "medium" | "low" | null>(null);
-  const [links,    setLinks]    = useState<LinkState>({ projectId: defaultProjectId, contactId: null, opportunityId: null });
+  const [links,    setLinks]    = useState<LinkState>({ projectId: defaultProjectId, contactId: defaultContactId, targetId: defaultTargetId });
   const [loading,  setLoading]  = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { setLinks(l => ({ ...l, projectId: defaultProjectId })); }, [defaultProjectId]);
+  useEffect(() => {
+    setLinks({ projectId: defaultProjectId, contactId: defaultContactId, targetId: defaultTargetId });
+  }, [defaultProjectId, defaultContactId, defaultTargetId]);
 
   async function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
@@ -536,9 +571,9 @@ function QuickAdd({
       .insert({
         user_id: user.id, title: title.trim(), completed: false,
         due_date: dueDate, priority,
-        project_id: links.projectId, contact_id: links.contactId, opportunity_id: links.opportunityId,
+        project_id: links.projectId, contact_id: links.contactId, target_id: links.targetId,
       })
-      .select("*, project:projects(id, title), contact:contacts(id, first_name, last_name), opportunity:opportunities(id, title, category)")
+      .select("*, project:projects(id, title), contact:contacts(id, first_name, last_name), target:outreach_targets(id, name, pipeline_id, pipeline:outreach_pipelines(name, color))")
       .single();
 
     if (data) {
@@ -546,7 +581,7 @@ function QuickAdd({
       window.dispatchEvent(new CustomEvent("tasks:created", { detail: { id: data.id, title: data.title } }));
     }
     setTitle(""); setDueDate(null); setPriority(null);
-    setLinks({ projectId: defaultProjectId, contactId: null, opportunityId: null });
+    setLinks({ projectId: defaultProjectId, contactId: defaultContactId, targetId: defaultTargetId });
     setLoading(false);
     inputRef.current?.focus();
   }
@@ -604,13 +639,14 @@ function TaskRow({
   task:        Task;
   projects:    { id: string; title: string }[];
   onToggle:    (id: string, completed: boolean) => void;
-  onUpdate:    (id: string, fields: Partial<Task> & { project?: { id: string; title: string } | null; contact?: { id: string; first_name: string; last_name: string } | null; opportunity?: { id: string; title: string; category: string } | null }) => void;
+  onUpdate:    (id: string, fields: Partial<Task> & { project?: { id: string; title: string } | null; contact?: { id: string; first_name: string; last_name: string } | null; target?: { id: string; name: string; pipeline_id: string; pipeline?: { name: string; color: string } | null } | null }) => void;
   /** Briefly tints the row when arriving via /tasks?taskId=… deep-link. */
   highlighted?: boolean;
   /** When set, exposes a data-tour-target attribute so the welcome tour
    *  spotlight can anchor on a specific row (typically the first). */
   tourTarget?: string;
 }) {
+  const router = useRouter();
   const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft,   setDraft]   = useState(task.title);
@@ -705,22 +741,63 @@ function TaskRow({
       )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+        {/* Target pill — clickable, deep-links into Outreach. Sits LEFT of the
+            link picker so it reads as a status chip rather than another action. */}
+        {task.target && !task.completed && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push(`/outreach?targetId=${task.target!.id}`);
+            }}
+            title={task.target.pipeline?.name ? `${task.target.name} · ${task.target.pipeline.name}` : task.target.name}
+            style={{
+              display: "flex", alignItems: "center", gap: 5,
+              fontSize: 11, padding: "3px 8px", borderRadius: 9999,
+              border: "0.5px solid var(--color-border)",
+              background: "var(--color-surface-sunken)",
+              color: "var(--color-text-secondary)",
+              cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
+              maxWidth: 160, transition: "all 0.1s ease",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-border-strong)"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
+          >
+            {task.target.pipeline?.color && (
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: task.target.pipeline.color, flexShrink: 0 }} />
+            )}
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{task.target.name}</span>
+          </button>
+        )}
+
         {/* Links */}
-        {(task.project || task.contact || task.opportunity || hovered) && !task.completed && (
+        {(task.project || task.contact || task.target || hovered) && !task.completed && (
           <InlineLinkPicker
-            links={{ projectId: task.project_id, contactId: task.contact_id, opportunityId: task.opportunity_id }}
+            links={{ projectId: task.project_id, contactId: task.contact_id, targetId: task.target_id }}
             projects={projects}
-            onChange={newLinks => {
+            onChange={(newLinks, picked) => {
               const proj = newLinks.projectId ? (projects.find(p => p.id === newLinks.projectId) ?? null) : null;
-              onUpdate(task.id, { project_id: newLinks.projectId, project: proj, contact_id: newLinks.contactId, opportunity_id: newLinks.opportunityId });
+              const fields: Partial<Task> & { project?: typeof proj; contact?: Task["contact"]; target?: Task["target"] } = {
+                project_id: newLinks.projectId,
+                project:    proj,
+                contact_id: newLinks.contactId,
+                target_id:  newLinks.targetId,
+              };
+              if (picked?.contact !== undefined) fields.contact = picked.contact;
+              if (picked?.target  !== undefined) fields.target  = picked.target;
+              onUpdate(task.id, fields);
             }}
             align="right"
           />
         )}
         {/* Compact read-only chips for completed tasks */}
-        {task.completed && (task.project || task.contact || task.opportunity) && (
+        {task.completed && (task.project || task.contact || task.target) && (
           <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
-            {[task.project && (task.project as { title: string }).title, task.contact && `${task.contact.first_name} ${task.contact.last_name}`, task.opportunity && (task.opportunity as { title: string }).title].filter(Boolean).join(", ")}
+            {[
+              task.project && (task.project as { title: string }).title,
+              task.contact && `${task.contact.first_name} ${task.contact.last_name}`,
+              task.target  && task.target.name,
+            ].filter(Boolean).join(", ")}
           </span>
         )}
 
@@ -809,6 +886,7 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
   const [showProjCompleted,   setShowProjCompleted]   = useState(false);
   const [projCompleted,       setProjCompleted]       = useState<Task[]>([]);
   const [highlightedId,       setHighlightedId]       = useState<string | null>(null);
+  const [optionsOpen,         setOptionsOpen]         = useState(false);
 
   // Deep link: /tasks?taskId=… (from Ash inline "Created task → View task")
   // scrolls the row into view and briefly tints it sage. Cleared after 2.4s
@@ -854,6 +932,38 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
     [projects, projectCounts],
   );
 
+  // Derive People/Targets that have at least one linked task, ordered by
+  // task count (matches the implicit "most-tasks first" ordering Projects
+  // already follows). We don't fetch a separate roster — we just walk the
+  // tasks list and group by joined contact/target metadata.
+  const sidebarPeople = useMemo(() => {
+    const acc = new Map<string, { id: string; name: string; count: number }>();
+    for (const t of tasks) {
+      if (!t.contact_id || !t.contact) continue;
+      const cur = acc.get(t.contact_id);
+      const name = `${t.contact.first_name} ${t.contact.last_name}`.trim();
+      if (cur) cur.count++;
+      else acc.set(t.contact_id, { id: t.contact_id, name, count: 1 });
+    }
+    return [...acc.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [tasks]);
+
+  const sidebarTargets = useMemo(() => {
+    const acc = new Map<string, { id: string; name: string; color: string | null; count: number }>();
+    for (const t of tasks) {
+      if (!t.target_id || !t.target) continue;
+      const cur = acc.get(t.target_id);
+      if (cur) cur.count++;
+      else acc.set(t.target_id, {
+        id:    t.target_id,
+        name:  t.target.name,
+        color: t.target.pipeline?.color ?? null,
+        count: 1,
+      });
+    }
+    return [...acc.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [tasks]);
+
   // ── Sorted view tasks ────────────────────────────────────────────────────────
 
   const viewTasks = useMemo(() => {
@@ -865,6 +975,8 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
     else if (filter === "upcoming")  list = tasks.filter(t => isUpcoming(t.due_date));
     else if (filter === "no_date")   list = tasks.filter(t => !t.due_date);
     else if (filter.startsWith("project:")) list = tasks.filter(t => t.project_id === filter.slice(8));
+    else if (filter.startsWith("person:"))  list = tasks.filter(t => t.contact_id === filter.slice(7));
+    else if (filter.startsWith("target:"))  list = tasks.filter(t => t.target_id  === filter.slice(7));
     else list = tasks;
     return sortTasks(list, sort, sortDir);
   }, [tasks, completed, filter, sort, sortDir]);
@@ -877,6 +989,8 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
     if (filter === "upcoming") return lingering.filter(t => isUpcoming(t.due_date));
     if (filter === "no_date")  return lingering.filter(t => !t.due_date);
     if (filter.startsWith("project:")) return lingering.filter(t => t.project_id === filter.slice(8));
+    if (filter.startsWith("person:"))  return lingering.filter(t => t.contact_id === filter.slice(7));
+    if (filter.startsWith("target:"))  return lingering.filter(t => t.target_id  === filter.slice(7));
     return [];
   }, [lingering, filter]);
 
@@ -893,6 +1007,8 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
   }, [viewTasks, lingering, filter]);
 
   const defaultProjectId = filter.startsWith("project:") ? filter.slice(8) : null;
+  const defaultContactId = filter.startsWith("person:")  ? filter.slice(7) : null;
+  const defaultTargetId  = filter.startsWith("target:")  ? filter.slice(7) : null;
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -900,12 +1016,12 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
     setTasks(prev => [task, ...prev]);
   }
 
-  async function handleUpdate(id: string, fields: Partial<Task> & { project?: unknown; contact?: unknown; opportunity?: unknown }) {
+  async function handleUpdate(id: string, fields: Partial<Task> & { project?: unknown; contact?: unknown; target?: unknown }) {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...fields } : t));
     setCompleted(prev => prev.map(t => t.id === id ? { ...t, ...fields } : t));
     setProjCompleted(prev => prev.map(t => t.id === id ? { ...t, ...fields } : t));
-    const { project: _p, contact: _c, opportunity: _o, ...dbFields } = fields as Record<string, unknown>;
-    void _p; void _c; void _o;
+    const { project: _p, contact: _c, target: _t, ...dbFields } = fields as Record<string, unknown>;
+    void _p; void _c; void _t;
     if (Object.keys(dbFields).length > 0) {
       const supabase = createClient();
       await supabase.from("tasks").update(dbFields).eq("id", id);
@@ -915,7 +1031,7 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
   async function fetchProjCompleted(pid: string) {
     const { data } = await createClient()
       .from("tasks")
-      .select("*, project:projects(id,title), contact:contacts(id,first_name,last_name), opportunity:opportunities(id,title,category)")
+      .select("*, project:projects(id,title), contact:contacts(id,first_name,last_name), target:outreach_targets(id, name, pipeline_id, pipeline:outreach_pipelines(name, color))")
       .eq("project_id", pid).eq("completed", true)
       .order("created_at", { ascending: false });
     if (data) setProjCompleted(data as Task[]);
@@ -961,6 +1077,28 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
     await supabase.from("tasks").delete().eq("id", id);
   }
 
+  // Export currently-visible tasks as CSV. The options menu is the only
+  // entry point — the surface stays uncluttered for users who don't need it.
+  function exportVisibleCsv() {
+    const rows = viewTasks.map(t => [
+      t.title,
+      t.due_date ?? "",
+      t.priority ?? "",
+      t.completed ? "completed" : "open",
+      t.project?.title ?? "",
+      t.contact ? `${t.contact.first_name} ${t.contact.last_name}` : "",
+      t.target?.name ?? "",
+      t.notes ?? "",
+    ]);
+    const header = ["Title","Due","Priority","Status","Project","Person","Target","Notes"];
+    const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "tasks.csv";
+    a.click();
+  }
+
   // ── Filter label ─────────────────────────────────────────────────────────────
 
   function filterLabel(): string {
@@ -971,6 +1109,8 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
     if (filter === "no_date")   return "No date";
     if (filter === "completed") return "Completed";
     if (filter.startsWith("project:")) return projects.find(p => p.id === filter.slice(8))?.title ?? "Project";
+    if (filter.startsWith("person:"))  return sidebarPeople.find(p => p.id === filter.slice(7))?.name ?? "Person";
+    if (filter.startsWith("target:"))  return sidebarTargets.find(t => t.id === filter.slice(7))?.name ?? "Target";
     return "Tasks";
   }
 
@@ -1007,6 +1147,12 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
     if (filter.startsWith("project:")) {
       const title = projects.find(p => p.id === filter.slice(8))?.title ?? "this project";
       [heading, sub] = [`No tasks for ${title}`, "Add a task above to get started."];
+    } else if (filter.startsWith("person:")) {
+      const name = sidebarPeople.find(p => p.id === filter.slice(7))?.name ?? "this person";
+      [heading, sub] = [`No tasks for ${name}`, "Add a task above to get started."];
+    } else if (filter.startsWith("target:")) {
+      const name = sidebarTargets.find(t => t.id === filter.slice(7))?.name ?? "this target";
+      [heading, sub] = [`No tasks for ${name}`, "Add a task above to get started."];
     } else {
       [heading, sub] = msgs[filter] ?? ["No tasks", ""];
     }
@@ -1027,24 +1173,44 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
     <>
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
 
-      {/* Topbar */}
-      <div style={{
-        height: 44, display: "flex", alignItems: "center", padding: "0 20px", flexShrink: 0, gap: 10,
-        borderBottom: "0.5px solid var(--color-border)", background: "var(--color-surface-raised)",
-      }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", flex: 1 }}>Tasks</span>
-        <button
-          onClick={() => openAshTasks("What should I prioritize in my task list right now? What's overdue and what's coming up?")}
-          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", fontSize: 11, fontWeight: 500, borderRadius: 6, background: "transparent", color: "var(--color-ash-dark)", border: "0.5px solid var(--color-border)", cursor: "pointer", fontFamily: "inherit", transition: "background 0.1s ease" }}
-          onMouseEnter={e => (e.currentTarget.style.background = "var(--color-ash-tint)")}
-          onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-        >
-          <div style={{ width: 15, height: 15, borderRadius: "50%", background: ASH_GRADIENT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <AshMark size={8} variant="on-dark" />
+      {/* Topbar — title + 3-dot options. No primary CTA on the right; the
+          quick-add input handles task creation inline. Matches Projects/People
+          padding (Topbar component is 52px tall, px-6). */}
+      <Topbar
+        title="Tasks"
+        actions={
+          <div style={{ position: "relative" }}>
+            <button
+              type="button"
+              onClick={() => setOptionsOpen(v => !v)}
+              aria-label="Task options"
+              title="Task options"
+              data-tour-target="tasks.options-menu"
+              style={{
+                width: 28, height: 28, borderRadius: 7,
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                background: optionsOpen ? "var(--color-surface-sunken)" : "transparent",
+                border: "none", cursor: "pointer",
+                color: "var(--color-text-secondary)",
+                transition: "background 0.12s ease",
+              }}
+              onMouseEnter={e => { if (!optionsOpen) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+              onMouseLeave={e => { if (!optionsOpen) e.currentTarget.style.background = "transparent"; }}
+            >
+              <MoreHorizontal size={16} strokeWidth={2} />
+            </button>
+            {optionsOpen && (
+              <TasksOptionsMenu
+                showCompletedInline={completedExpanded}
+                onToggleShowCompletedInline={() => setCompletedExpanded(v => !v)}
+                completedCount={completed.length}
+                onExportCsv={exportVisibleCsv}
+                onClose={() => setOptionsOpen(false)}
+              />
+            )}
           </div>
-          Ask Ash
-        </button>
-      </div>
+        }
+      />
 
       {/* Body */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
@@ -1070,6 +1236,26 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
                 <div style={{ padding: "4px 10px 4px", fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-tertiary)" }}>Projects</div>
                 {sidebarProjects.map(p => (
                   <SidebarItem key={p.id} id={`project:${p.id}`} label={p.title} count={projectCounts[p.id]} activeFilter={filter} onSelect={f => setFilter(f as Filter)} />
+                ))}
+              </>
+            )}
+
+            {sidebarPeople.length > 0 && (
+              <>
+                <div style={{ height: "0.5px", background: "var(--color-border)", margin: "8px 4px" }} />
+                <div style={{ padding: "4px 10px 4px", fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-tertiary)" }}>People</div>
+                {sidebarPeople.map(p => (
+                  <SidebarItem key={p.id} id={`person:${p.id}`} label={p.name} count={p.count} activeFilter={filter} onSelect={f => setFilter(f as Filter)} />
+                ))}
+              </>
+            )}
+
+            {sidebarTargets.length > 0 && (
+              <>
+                <div style={{ height: "0.5px", background: "var(--color-border)", margin: "8px 4px" }} />
+                <div style={{ padding: "4px 10px 4px", fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-tertiary)" }}>Targets</div>
+                {sidebarTargets.map(t => (
+                  <SidebarItem key={t.id} id={`target:${t.id}`} label={t.name} count={t.count} dot={t.color ?? undefined} activeFilter={filter} onSelect={f => setFilter(f as Filter)} />
                 ))}
               </>
             )}
@@ -1147,7 +1333,13 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
           <div style={{ flex: 1, overflowY: "auto" }}>
 
             {filter !== "completed" && (
-              <QuickAdd projects={projects} defaultProjectId={defaultProjectId} onAdded={handleAdded} />
+              <QuickAdd
+                projects={projects}
+                defaultProjectId={defaultProjectId}
+                defaultContactId={defaultContactId}
+                defaultTargetId={defaultTargetId}
+                onAdded={handleAdded}
+              />
             )}
 
             {/* "All" view: sectioned with lingering ghosts + completed at bottom */}
