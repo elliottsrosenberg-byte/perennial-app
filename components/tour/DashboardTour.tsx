@@ -238,6 +238,10 @@ export default function DashboardTour() {
           dimmed. When centered (no anchor), use a uniform soft dim. */}
       {highlight ? (
         <div
+          // Keyed so React mounts a fresh node when transitioning from the
+          // full-screen dim backdrop — otherwise the transition animates the
+          // spotlight from `inset: 0` (left side of screen) to its target.
+          key="tour-spotlight"
           aria-hidden
           style={{
             position: "fixed",
@@ -257,6 +261,7 @@ export default function DashboardTour() {
         />
       ) : (
         <div
+          key="tour-dim"
           aria-hidden
           style={{
             position: "fixed", inset: 0,
