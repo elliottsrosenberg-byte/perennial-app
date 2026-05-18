@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { Contact, LeadStage } from "@/types/database";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
+import { Users } from "lucide-react";
+import EmptyState from "@/components/ui/EmptyState";
 
 function initials(c: Contact) {
   return (c.first_name[0] + (c.last_name[0] ?? "")).toUpperCase();
@@ -85,9 +87,12 @@ interface Props {
   contacts: Contact[];
   onOpen: (c: Contact) => void;
   onStageChange: (contactId: string, newStage: LeadStage) => void;
+  /** Routes the "+ New lead" CTA in the empty state. Optional so the board
+   *  also renders standalone, but expected when called from OutreachClient. */
+  onNewLead?: () => void;
 }
 
-export default function LeadsBoard({ contacts, onOpen, onStageChange }: Props) {
+export default function LeadsBoard({ contacts, onOpen, onStageChange, onNewLead }: Props) {
   function handleDragEnd(result: DropResult) {
     if (!result.destination) return;
     const { draggableId, destination } = result;
@@ -95,6 +100,34 @@ export default function LeadsBoard({ contacts, onOpen, onStageChange }: Props) {
     const contact = contacts.find(c => c.id === draggableId);
     if (!contact || (contact.lead_stage ?? "new") === newStage) return;
     onStageChange(draggableId, newStage);
+  }
+
+  // Whole-board empty state — no leads anywhere. Per-column "—" placeholders
+  // (below) handle the case where a stage is just empty.
+  if (contacts.length === 0) {
+    return (
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflowY: "auto", padding: "24px", background: "var(--color-warm-white)" }}>
+        <div style={{ width: "100%", maxWidth: 520 }}>
+          <EmptyState
+            icon={<Users size={22} strokeWidth={1.5} color="#b8860b" />}
+            heading="Start your lead pipeline"
+            body="Leads are the people you're chasing — galleries you'd love to show with, press you want covering you, collectors you're warming up. Each lead moves through stages from New to Qualified so you always know who's where."
+            action={onNewLead ? {
+              label:           "+ New lead",
+              onClick:         onNewLead,
+              background:      "#b8860b",
+              backgroundHover: "#a07800",
+            } : undefined}
+            ashPrompt="Help me identify leads to add to my outreach pipeline based on my practice."
+            tips={[
+              "Add anyone you'd like to do work with but haven't yet — galleries, press, collectors, collaborators.",
+              "Drag a lead between stages (New → Reached out → In conversation → Qualified) to keep your funnel honest.",
+              "When a lead becomes a real relationship, convert them in their detail panel — they move to Contacts with history intact.",
+            ]}
+          />
+        </div>
+      </div>
+    );
   }
 
   return (
