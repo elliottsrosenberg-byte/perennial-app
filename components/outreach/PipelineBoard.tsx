@@ -641,34 +641,10 @@ export default function PipelineBoard({ pipelines, selectedPipeline, targets, on
     const activeStages  = selectedPipeline.stages.filter(s => !s.is_outcome);
     const outcomeStages = selectedPipeline.stages.filter(s =>  s.is_outcome);
 
-    // Per-pipeline empty state — rich EmptyState with an animated illustration
-    // and a single CTA to add the first target in this pipeline.
-    if (targets.length === 0) {
-      return (
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflowY: "auto", padding: "24px" }}>
-          <div style={{ width: "100%", maxWidth: 520 }}>
-            <EmptyIllustration />
-            <EmptyState
-              icon={<Send size={22} strokeWidth={1.5} color={selectedPipeline.color} />}
-              heading={`No targets in ${selectedPipeline.name} yet`}
-              body="A target is a specific person, gallery, fair, or publication you're working in this pipeline. Add the first one to give yourself something to push forward."
-              action={{
-                label:           "+ New target",
-                onClick:         () => onNewTarget(selectedPipeline.id, activeStages[0]?.id),
-                background:      selectedPipeline.color,
-                backgroundHover: selectedPipeline.color,
-              }}
-              ashPrompt={`Help me identify targets to add to my "${selectedPipeline.name}" pipeline based on my practice.`}
-              tips={[
-                "Start with one real opportunity — a single gallery, fair, or publication you'd like to work with.",
-                "Drag cards between stages to advance them. Hover the right edge of a card to log a follow-up inline.",
-                "Add a results deadline and a link (submission form, listing) so the card carries everything you need.",
-              ]}
-            />
-          </div>
-        </div>
-      );
-    }
+    // Per-pipeline view always shows the stage columns — even with zero
+    // targets — so the user can see the structure of their pipeline. Empty
+    // columns reveal a hover dropzone (see DroppableColumn) inviting them to
+    // add a target right where it belongs.
 
     return (
       <DragDropContext onDragEnd={handleDragEnd}>

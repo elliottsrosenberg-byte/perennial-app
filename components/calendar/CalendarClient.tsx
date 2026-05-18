@@ -1747,6 +1747,14 @@ export default function CalendarClient({
           event={openEvent as unknown as CalendarEventLite}
           color={openEvent.colorId ? GCAL_COLORS[openEvent.colorId] : (openEvent.source === "microsoft" ? "#0078d4" : "#039BE5")}
           onClose={() => setOpenEvent(null)}
+          onUpdated={(updated) => {
+            setGcalEvents((prev) => prev.map((e) => (e.id === updated.id ? { ...e, ...updated } as CalEvent : e)));
+            setOpenEvent((prev) => (prev && prev.id === updated.id ? ({ ...prev, ...updated } as CalEvent) : prev));
+          }}
+          onDeleted={(id) => {
+            setGcalEvents((prev) => prev.filter((e) => e.id !== id));
+            setOpenEvent(null);
+          }}
         />
       )}
 
