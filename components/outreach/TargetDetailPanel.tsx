@@ -6,7 +6,9 @@ import type { OutreachTarget, OutreachPipeline, PipelineStage, Project, Contact 
 import {
   X, Maximize2, Minimize2, FileText, Trash2, Settings,
   CheckSquare, Users, FolderOpen, ExternalLink, Plus, Link2,
+  UserCheck, FolderPlus,
 } from "lucide-react";
+import { useProjectOptions } from "@/lib/projects/options";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { getRichExtensions, RichToolbar, InlineAshPopover, submitInlineAsh } from "@/components/ui/RichEditor";
 import type { AshPromptState } from "@/components/ui/RichEditor";
@@ -222,6 +224,18 @@ function LinkedProjects({ targetId }: { targetId: string }) {
   const [adding, setAdding]     = useState(false);
   const [query, setQuery]       = useState("");
   const [results, setResults]   = useState<Project[]>([]);
+  // Bumped when an external "promote to project" action runs, so this panel
+  // re-fetches without remounting the entire TargetDetailPanel.
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    function onProjectLinked(e: Event) {
+      const detail = (e as CustomEvent<{ target_id?: string }>).detail;
+      if (detail?.target_id === targetId) setRefreshKey(k => k + 1);
+    }
+    window.addEventListener("outreach:project-linked", onProjectLinked);
+    return () => window.removeEventListener("outreach:project-linked", onProjectLinked);
+  }, [targetId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -238,7 +252,7 @@ function LinkedProjects({ targetId }: { targetId: string }) {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [targetId]);
+  }, [targetId, refreshKey]);
 
   useEffect(() => {
     if (!adding) return;
@@ -510,6 +524,7 @@ type SectionTab = "canvas" | "tasks" | "people" | "notes" | "files";
 
 export default function TargetDetailPanel({ target: initialTarget, pipeline, onClose, onUpdated, onDeleted }: Props) {
   const supabase = createClient();
+  const { options: projectOptions } = useProjectOptions();
 
   const [target,       setTarget]       = useState(initialTarget);
   const [canvasHtml,   setCanvasHtml]   = useState<string | null | undefined>(undefined);
@@ -517,6 +532,78 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
   const [maximized,    setMaximized]    = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Lightweight toast — no toast lib in the app yet, so each action sets a
+  // string + auto-dismisses after 2s. Replace with a real toast surface when
+  // one lands.
+  const [toast,            setToast]            = useState<string | null>(null);
+  const [promoteOpen,      setPromoteOpen]      = useState(false);
+  const [promoteTitle,     setPromoteTitle]     = useState("");
+  const [promoteType,      setPromoteType]      = useState<string>("");
+  const [promoting,        setPromoting]        = useState(false);
+
+  useEffect(() => {
+    if (!toast) return;
+    const handle = setTimeout(() => setToast(null), 2200);
+    return () => clearTimeout(handle);
+  }, [toast]);
+
+  // Reset the promote form when we open it so it's always pre-filled with the
+  // current target's name and the user's default project type.
+  function openPromote() {
+    setPromoteTitle(target.name);
+    setPromoteType(projectOptions.type[0]?.key ?? "");
+    setPromoteOpen(true);
+  }
+
+  async function convertLeadToContact() {
+    if (!target.contact_id || !target.contact?.is_lead) return;
+    const { data } = await supabase.from("contacts")
+      .update({ is_lead: false, lead_stage: null })
+      .eq("id", target.contact_id)
+      .select("*, company:companies(*)")
+      .single();
+    if (data) {
+      // Reflect the new is_lead state locally so the action button hides.
+      setTarget(prev => ({ ...prev, contact: data as Contact }));
+      setToast("Converted to contact.");
+    }
+  }
+
+  async function promoteToProject() {
+    const title = promoteTitle.trim();
+    if (!title) return;
+    setPromoting(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setPromoting(false); return; }
+
+    const { data: project, error: pErr } = await supabase.from("projects")
+      .insert({
+        user_id: user.id,
+        title,
+        type:    promoteType || null,
+        status:  projectOptions.status[0]?.key ?? "planning",
+        priority: "medium",
+      })
+      .select("*")
+      .single();
+    if (pErr || !project) { setPromoting(false); setToast(pErr?.message ?? "Failed to create project."); return; }
+
+    await supabase.from("outreach_target_projects").insert({
+      target_id:  target.id,
+      project_id: project.id,
+      user_id:    user.id,
+    });
+
+    setPromoting(false);
+    setPromoteOpen(false);
+    setToast("Project created.");
+    // Notify the linked-projects rail panel to refresh — it re-fetches on
+    // targetId change, so we trigger a soft remount by dispatching an event
+    // that LinkedProjects can listen for. Simpler path: re-run its effect by
+    // bumping the target object reference.
+    setTarget(prev => ({ ...prev }));
+    window.dispatchEvent(new CustomEvent("outreach:project-linked", { detail: { target_id: target.id, project_id: project.id } }));
+  }
 
   const activeStages  = pipeline.stages.filter(s => !s.is_outcome);
   const outcomeStages = pipeline.stages.filter(s =>  s.is_outcome);
@@ -727,6 +814,60 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
             {/* Linked people */}
             <LinkedPeople target={target} onChange={(next) => saveField(next)} />
 
+            {/* Actions — convert linked lead to contact, promote target to
+                project. Both are reversible by hand so we don't auto-archive
+                the target after either action. */}
+            <div style={{ marginTop: 14, borderTop: "0.5px solid var(--color-border)", paddingTop: 10 }}>
+              <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 6 }}>
+                Actions
+              </p>
+              {target.contact?.is_lead && (
+                <button onClick={convertLeadToContact}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", borderRadius: 7, border: "0.5px solid var(--color-border)", background: "var(--color-off-white)", cursor: "pointer", fontFamily: "inherit", marginBottom: 6 }}
+                  onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "var(--color-off-white)"}>
+                  <UserCheck size={12} strokeWidth={1.75} style={{ color: "#3d6b4f" }} />
+                  <span style={{ fontSize: 11.5, color: "var(--color-charcoal)" }}>Convert to contact</span>
+                </button>
+              )}
+              {!promoteOpen ? (
+                <button onClick={openPromote}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", borderRadius: 7, border: "0.5px solid var(--color-border)", background: "var(--color-off-white)", cursor: "pointer", fontFamily: "inherit" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "var(--color-off-white)"}>
+                  <FolderPlus size={12} strokeWidth={1.75} style={{ color: "var(--color-sage)" }} />
+                  <span style={{ fontSize: 11.5, color: "var(--color-charcoal)" }}>Promote to project</span>
+                </button>
+              ) : (
+                <div style={{ padding: 8, borderRadius: 8, border: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
+                  <p style={{ fontSize: 10, fontWeight: 600, color: "var(--color-grey)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+                    New project from target
+                  </p>
+                  <input type="text" value={promoteTitle}
+                    onChange={e => setPromoteTitle(e.target.value)}
+                    placeholder="Project title"
+                    style={{ width: "100%", padding: "5px 8px", fontSize: 11.5, borderRadius: 6, background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none", marginBottom: 6 }} />
+                  <select value={promoteType}
+                    onChange={e => setPromoteType(e.target.value)}
+                    style={{ width: "100%", padding: "5px 8px", fontSize: 11.5, borderRadius: 6, background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none" }}>
+                    {projectOptions.type.map(o => (
+                      <option key={o.key} value={o.key}>{o.label}</option>
+                    ))}
+                  </select>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 8 }}>
+                    <button onClick={() => setPromoteOpen(false)}
+                      style={{ padding: "4px 10px", fontSize: 11, background: "transparent", color: "#6b6860", border: "0.5px solid var(--color-border)", borderRadius: 6, cursor: "pointer", fontFamily: "inherit" }}>
+                      Cancel
+                    </button>
+                    <button onClick={promoteToProject} disabled={!promoteTitle.trim() || promoting}
+                      style={{ padding: "4px 12px", fontSize: 11, fontWeight: 600, background: "var(--color-sage)", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", opacity: promoting ? 0.6 : 1 }}>
+                      {promoting ? "Creating…" : "Create"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Navigation */}
             <div data-tour-target="outreach.detail-workspace" style={{ marginTop: 14, borderTop: "0.5px solid var(--color-border)", paddingTop: 10 }}>
               <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Workspace</p>
@@ -835,6 +976,21 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
             {activeTab === "files"  && <StubPane heading="Files" body="Decks, attachments, references — anything you'd want at hand for this target." />}
           </div>
         </div>
+
+        {/* Mini toast — local to the panel so it sits above the scrim and
+            below any modal. Auto-dismisses after ~2s. */}
+        {toast && (
+          <div style={{
+            position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)",
+            background: "var(--color-charcoal)", color: "var(--color-warm-white)",
+            fontSize: 12, padding: "8px 16px", borderRadius: 999,
+            boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+            pointerEvents: "none",
+            zIndex: 10,
+          }}>
+            {toast}
+          </div>
+        )}
       </div>
     </>
   );

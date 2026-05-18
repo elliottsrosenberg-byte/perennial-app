@@ -104,6 +104,85 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
     setNewContactCompany("");
   }
 
+  // Splits "First Last" or "First Middle Last" — last token is the last name,
+  // the rest is the first name. Single-token inputs become first_name with
+  // empty last_name, matching how contacts are stored elsewhere.
+  function splitName(s: string): { first: string; last: string } {
+    const parts = s.trim().split(/\s+/);
+    if (parts.length === 0) return { first: "", last: "" };
+    if (parts.length === 1) return { first: parts[0], last: "" };
+    return { first: parts.slice(0, -1).join(" "), last: parts[parts.length - 1] };
+  }
+
+  // Creates a new contact (is_lead=true) plus optional company, then sets it
+  // as the linked contact and pre-fills the target name. Called from the
+  // "+ Create contact" affordance in the search results.
+  async function createAndLinkContact() {
+    const q = search.trim();
+    if (!q) return;
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setError("Not authenticated."); return; }
+
+    let companyId: string | null = null;
+    const companyName = newContactCompany.trim();
+    if (companyName) {
+      // Try to match an existing company first to avoid duplicates.
+      const { data: existing } = await supabase.from("companies")
+        .select("*").ilike("name", companyName).limit(1);
+      if (existing && existing.length > 0) {
+        companyId = existing[0].id;
+      } else {
+        const { data: newCo } = await supabase.from("companies")
+          .insert({ user_id: user.id, name: companyName })
+          .select("*").single();
+        if (newCo) companyId = newCo.id;
+      }
+    }
+
+    const { first, last } = splitName(q);
+    const { data: contact, error: cErr } = await supabase.from("contacts")
+      .insert({
+        user_id:    user.id,
+        first_name: first,
+        last_name:  last,
+        email:      newContactEmail.trim() || null,
+        company_id: companyId,
+        is_lead:    true,
+        lead_stage: "new",
+        archived:   false,
+      })
+      .select("*, company:companies(*)")
+      .single();
+    if (cErr || !contact) { setError(cErr?.message ?? "Failed to create contact."); return; }
+
+    setLinkedContact(contact as Contact);
+    setLinkedCompany(null);
+    setName(`${first} ${last}`.trim());
+    setCreatingContact(false);
+    setSearch("");
+    setSearchResults([]);
+    setShowSearch(false);
+    setNewContactEmail("");
+    setNewContactCompany("");
+  }
+
+  // Returns true when the search query looks like a person's name (single or
+  // multi-token) AND doesn't exactly match any existing contact. Drives the
+  // visibility of the inline-create affordance.
+  function canOfferCreate(): boolean {
+    const q = search.trim();
+    if (q.length < 2) return false;
+    const ql = q.toLowerCase();
+    const hasExactContact = searchResults.some(item => {
+      if ("first_name" in item) {
+        return `${item.first_name} ${item.last_name}`.toLowerCase() === ql;
+      }
+      return false;
+    });
+    return !hasExactContact;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !pipelineId || !stageId) return;
@@ -224,18 +303,17 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
                 {showSearch && (search.length > 0) && (
                   <div className="absolute top-full left-0 right-0 mt-1 rounded-xl overflow-hidden z-20"
                     style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 4px 20px rgba(0,0,0,0.12)" }}>
-                    {searching ? (
+                    {searching && (
                       <p className="text-[12px] text-center py-3" style={{ color: "var(--color-grey)" }}>Searching…</p>
-                    ) : searchResults.length === 0 ? (
-                      <p className="text-[12px] text-center py-3" style={{ color: "var(--color-grey)" }}>No results</p>
-                    ) : searchResults.map((item, i) => {
+                    )}
+                    {!searching && searchResults.map((item, i) => {
                       const isContact = "first_name" in item;
                       const label = isContact ? `${(item as Contact).first_name} ${(item as Contact).last_name}` : item.name;
                       const sub   = isContact ? ((item as Contact).title ?? "") : "Company";
                       return (
                         <button key={i} type="button" onClick={() => selectResult(item as (Contact | Company) & { _type?: string })}
                           className="w-full text-left px-4 py-2.5 flex items-center gap-2.5 transition-colors"
-                          style={{ borderBottom: i < searchResults.length - 1 ? "0.5px solid var(--color-border)" : "none" }}
+                          style={{ borderBottom: "0.5px solid var(--color-border)" }}
                           onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
                           onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
                           <span className="text-[9px] px-1.5 py-0.5 rounded"
@@ -249,6 +327,65 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
                         </button>
                       );
                     })}
+                    {!searching && searchResults.length === 0 && (
+                      <p className="text-[12px] text-center py-3" style={{ color: "var(--color-grey)" }}>No results</p>
+                    )}
+                    {/* Inline create: surfaces whenever the query doesn't
+                        exactly match an existing contact. Clicking expands
+                        the optional email/company fields below the dropdown
+                        rather than creating immediately, so the user can add
+                        context before committing. */}
+                    {!searching && canOfferCreate() && (
+                      <button type="button"
+                        onClick={() => { setCreatingContact(true); setShowSearch(false); }}
+                        className="w-full text-left px-4 py-2.5 flex items-center gap-2.5 transition-colors"
+                        style={{ background: "rgba(184,134,11,0.06)" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(184,134,11,0.12)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(184,134,11,0.06)")}>
+                        <span className="flex items-center justify-center" style={{ width: 18, height: 18, borderRadius: 9999, background: "rgba(184,134,11,0.18)", color: "#b8860b" }}>
+                          <UserPlus size={10} strokeWidth={2} />
+                        </span>
+                        <div>
+                          <div className="text-[12px] font-medium" style={{ color: "#b8860b" }}>+ Create contact for &ldquo;{search.trim()}&rdquo;</div>
+                          <div className="text-[10px]" style={{ color: "var(--color-grey)" }}>Will also appear as a Lead</div>
+                        </div>
+                      </button>
+                    )}
+                  </div>
+                )}
+                {/* Expanded inline-create panel — optional email + company
+                    fields before the actual create. */}
+                {creatingContact && !linkedContact && (
+                  <div className="mt-2 rounded-xl p-3"
+                    style={{ background: "rgba(184,134,11,0.06)", border: "0.5px solid rgba(184,134,11,0.25)" }}>
+                    <p className="text-[11px] font-medium mb-2" style={{ color: "#b8860b" }}>
+                      New contact: {search.trim() || "—"}
+                    </p>
+                    <input type="email" value={newContactEmail}
+                      onChange={(e) => setNewContactEmail(e.target.value)}
+                      placeholder="Email (optional)"
+                      className="w-full px-2.5 py-1.5 text-[12px] rounded-md border focus:outline-none mb-2"
+                      style={inputStyle} />
+                    <input type="text" value={newContactCompany}
+                      onChange={(e) => setNewContactCompany(e.target.value)}
+                      placeholder="Company (optional — created if new)"
+                      className="w-full px-2.5 py-1.5 text-[12px] rounded-md border focus:outline-none"
+                      style={inputStyle} />
+                    <div className="flex justify-end gap-1.5 mt-2">
+                      <button type="button"
+                        onClick={() => { setCreatingContact(false); setNewContactEmail(""); setNewContactCompany(""); }}
+                        className="px-2.5 py-1 text-[11px] rounded-md"
+                        style={{ background: "transparent", color: "#6b6860", border: "0.5px solid var(--color-border)" }}>
+                        Cancel
+                      </button>
+                      <button type="button"
+                        onClick={createAndLinkContact}
+                        disabled={!search.trim()}
+                        className="px-2.5 py-1 text-[11px] font-medium rounded-md disabled:opacity-50"
+                        style={{ background: "#b8860b", color: "white", border: "none" }}>
+                        Create &amp; link
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
