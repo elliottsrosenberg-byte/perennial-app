@@ -213,7 +213,6 @@ export interface OutreachTarget {
   name: string;
   location: string | null;
   description: string | null;
-  canvas_html: string | null;
   contact_id: string | null;
   organization_id: string | null;
   link: string | null;
