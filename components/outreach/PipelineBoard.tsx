@@ -12,6 +12,11 @@ import EmptyState from "@/components/ui/EmptyState";
 // thrown away". A special droppable id lets one DragDropContext handle drags
 // between stage columns and the Ether without extra plumbing.
 const ETHER_DROPPABLE_ID = "__ether__";
+// Prefix marking the meta-stage droppables used in the all-pipelines view.
+// These columns aggregate stages from many pipelines, so they can't change a
+// card's stage_id on drop — we only use them so `Draggable`s have a valid
+// parent (and to support drag-to-Ether from this view).
+const META_DROPPABLE_PREFIX = "__meta__:";
 const ETHER_BG           = "rgba(83, 134, 196, 0.06)";
 const ETHER_BG_HOVER     = "rgba(83, 134, 196, 0.16)";
 const ETHER_BLUE         = "#5386c4";
@@ -145,7 +150,7 @@ function TargetCard({
   // width because the gesture isn't available there.
   const compressed = showLogged && !isOutcome;
 
-  const handleWidth = (zoneHov || open) && !showLogged ? 44 : 6;
+  const handleWidth = (zoneHov || open) && !showLogged ? 104 : 6;
   const handleColor = showLogged
     ? FOLLOWUP_COPPER_LOGGED
     : (zoneHov || open)
@@ -552,9 +557,14 @@ function EmptyStageDropzone({ stageName, isOutcome, pipelineColor, onAdd }: {
   );
 }
 
-// ── Static column (All-pipelines view, no drag) ───────────────────────────────
+// ── Meta-stage column (All-pipelines view) ────────────────────────────────────
+// Aggregates stages from many pipelines, so it can't accept stage-changing
+// drops. It IS a Droppable, but only so its cards can be Draggables (so the
+// user can drag them down to the Ether). Drops onto this column itself are
+// no-ops (handled in `handleDragEnd`).
 
-function StaticColumn({
+function MetaColumn({
+  metaKey,
   label,
   targets,
   showPipelineBadge,
@@ -564,6 +574,7 @@ function StaticColumn({
   onLogFollowUp,
   followedUpIds,
 }: {
+  metaKey: MetaStage;
   label: string;
   targets: OutreachTarget[];
   showPipelineBadge: boolean;
@@ -591,29 +602,52 @@ function StaticColumn({
           <Plus size={12} />
         </button>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {targets.map((t, index) => {
-          const tp = allPipelines.find(p => p.id === t.pipeline_id);
-          return (
-            <div key={t.id} data-tour-target={index === 0 ? "outreach.first-card" : undefined}>
-              <TargetCard
-                target={t}
-                pipelineBadge={showPipelineBadge && tp ? { name: tp.name, color: tp.color } : undefined}
-                isDragging={false}
-                isOutcome={false}
-                isFollowedUp={followedUpIds.has(t.id)}
-                onClick={() => onTargetClick(t)}
-                onLogFollowUp={(type, note) => onLogFollowUp(t, type, note)}
-              />
-            </div>
-          );
-        })}
-        {targets.length === 0 && (
-          <div style={{ padding: "14px 12px", borderRadius: 10, border: "1px dashed var(--color-border)", textAlign: "center" }}>
-            <p style={{ fontSize: 11, color: "var(--color-grey)" }}>Empty</p>
+      <Droppable droppableId={`${META_DROPPABLE_PREFIX}${metaKey}`}>
+        {(provided) => (
+          <div
+            ref={provided.innerRef}
+            {...provided.droppableProps}
+            style={{ display: "flex", flexDirection: "column", gap: 8, minHeight: 40 }}
+          >
+            {targets.map((t, index) => {
+              const tp = allPipelines.find(p => p.id === t.pipeline_id);
+              return (
+                <Draggable key={t.id} draggableId={t.id} index={index}>
+                  {(dragProvided, dragSnapshot) => (
+                    <div
+                      ref={dragProvided.innerRef}
+                      {...dragProvided.draggableProps}
+                      {...dragProvided.dragHandleProps}
+                      data-tour-target={index === 0 ? "outreach.first-card" : undefined}
+                      style={{
+                        ...dragProvided.draggableProps.style,
+                        cursor: dragSnapshot.isDragging ? "grabbing" : "grab",
+                        opacity: dragSnapshot.isDragging ? 0.9 : 1,
+                      }}
+                    >
+                      <TargetCard
+                        target={t}
+                        pipelineBadge={showPipelineBadge && tp ? { name: tp.name, color: tp.color } : undefined}
+                        isDragging={dragSnapshot.isDragging}
+                        isOutcome={false}
+                        isFollowedUp={followedUpIds.has(t.id)}
+                        onClick={() => onTargetClick(t)}
+                        onLogFollowUp={(type, note) => onLogFollowUp(t, type, note)}
+                      />
+                    </div>
+                  )}
+                </Draggable>
+              );
+            })}
+            {provided.placeholder}
+            {targets.length === 0 && (
+              <div style={{ padding: "14px 12px", borderRadius: 10, border: "1px dashed var(--color-border)", textAlign: "center" }}>
+                <p style={{ fontSize: 11, color: "var(--color-grey)" }}>Empty</p>
+              </div>
+            )}
           </div>
         )}
-      </div>
+      </Droppable>
     </div>
   );
 }
@@ -815,11 +849,25 @@ export default function PipelineBoard({ pipelines, selectedPipeline, targets, on
       onEtherToggle(draggableId, true);
       return;
     }
-    // Drop FROM the Ether into a stage column — un-ether AND set the new
-    // stage in one atomic update.
+    // Drop FROM the Ether into a meta-stage column (all-pipelines view) —
+    // un-ether but keep the original stage_id; we can't infer a real stage
+    // from a meta-stage aggregate.
+    if (srcId === ETHER_DROPPABLE_ID && destId.startsWith(META_DROPPABLE_PREFIX)) {
+      clearFollowupMarker(draggableId);
+      onEtherToggle(draggableId, false);
+      return;
+    }
+    // Drop FROM the Ether into a real stage column — un-ether AND set the
+    // new stage in one atomic update.
     if (srcId === ETHER_DROPPABLE_ID && destId !== ETHER_DROPPABLE_ID) {
       clearFollowupMarker(draggableId);
       onEtherToggle(draggableId, false, destId);
+      return;
+    }
+
+    // Drags into / out of meta-stage columns in the all-pipelines view are
+    // no-ops — those columns are aggregates, not real stages.
+    if (destId.startsWith(META_DROPPABLE_PREFIX) || srcId.startsWith(META_DROPPABLE_PREFIX)) {
       return;
     }
 
@@ -888,56 +936,59 @@ export default function PipelineBoard({ pipelines, selectedPipeline, targets, on
 
     return (
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div style={{ flex: 1, overflowX: "auto", overflowY: "auto", display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", gap: 0, padding: "20px 20px 8px", minWidth: "max-content", alignItems: "flex-start" }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          {/* Stage columns — scrollable region that fills available space so
+              the Ether (below) is pinned to the bottom of the viewport. */}
+          <div style={{ flex: 1, minHeight: 0, overflowX: "auto", overflowY: "auto" }}>
+            <div style={{ display: "flex", gap: 0, padding: "20px 20px 8px", minWidth: "max-content", alignItems: "flex-start" }}>
+              <div style={{ display: "flex", gap: 14 }}>
+                {activeStages.map(stage => (
+                  <DroppableColumn
+                    key={stage.id}
+                    stage={stage}
+                    targets={stageTargets.filter(t => t.stage_id === stage.id)}
+                    pipelineColor={selectedPipeline.color}
+                    isOutcome={false}
+                    showPipelineBadge={false}
+                    allPipelines={pipelines}
+                    onTargetClick={onTargetClick}
+                    onNewTarget={() => onNewTarget(selectedPipeline.id, stage.id)}
+                    onLogFollowUp={handleLogFollowUp}
+                    followedUpIds={followedUpIds}
+                  />
+                ))}
+              </div>
 
-            {/* Active stage columns */}
-            <div style={{ display: "flex", gap: 14 }}>
-              {activeStages.map(stage => (
-                <DroppableColumn
-                  key={stage.id}
-                  stage={stage}
-                  targets={stageTargets.filter(t => t.stage_id === stage.id)}
-                  pipelineColor={selectedPipeline.color}
-                  isOutcome={false}
-                  showPipelineBadge={false}
-                  allPipelines={pipelines}
-                  onTargetClick={onTargetClick}
-                  onNewTarget={() => onNewTarget(selectedPipeline.id, stage.id)}
-                  onLogFollowUp={handleLogFollowUp}
-                  followedUpIds={followedUpIds}
-                />
-              ))}
+              {/* Outcome columns — separated by a vertical rule */}
+              {outcomeStages.length > 0 && (
+                <>
+                  <div style={{ width: 1, background: "var(--color-border)", margin: "0 20px", alignSelf: "stretch", flexShrink: 0 }} />
+                  <div style={{ display: "flex", gap: 14 }}>
+                    {outcomeStages.map(stage => (
+                      <DroppableColumn
+                        key={stage.id}
+                        stage={stage}
+                        targets={stageTargets.filter(t => t.stage_id === stage.id)}
+                        pipelineColor={selectedPipeline.color}
+                        isOutcome={true}
+                        showPipelineBadge={false}
+                        allPipelines={pipelines}
+                        onTargetClick={onTargetClick}
+                        onNewTarget={() => onNewTarget(selectedPipeline.id, stage.id)}
+                        onLogFollowUp={handleLogFollowUp}
+                        followedUpIds={followedUpIds}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
-
-            {/* Outcome columns — separated by a vertical rule */}
-            {outcomeStages.length > 0 && (
-              <>
-                <div style={{ width: 1, background: "var(--color-border)", margin: "0 20px", alignSelf: "stretch", flexShrink: 0 }} />
-                <div style={{ display: "flex", gap: 14 }}>
-                  {outcomeStages.map(stage => (
-                    <DroppableColumn
-                      key={stage.id}
-                      stage={stage}
-                      targets={stageTargets.filter(t => t.stage_id === stage.id)}
-                      pipelineColor={selectedPipeline.color}
-                      isOutcome={true}
-                      showPipelineBadge={false}
-                      allPipelines={pipelines}
-                      onTargetClick={onTargetClick}
-                      onNewTarget={() => onNewTarget(selectedPipeline.id, stage.id)}
-                      onLogFollowUp={handleLogFollowUp}
-                      followedUpIds={followedUpIds}
-                    />
-                  ))}
-                </div>
-              </>
-            )}
           </div>
 
-          {/* The Ether — always rendered so users can drag cards in even when
-              there's nothing parked yet. */}
-          <div style={{ padding: "8px 20px 20px" }}>
+          {/* The Ether — pinned to the bottom of the viewport. Capped height
+              with internal scroll so a long parking lot doesn't push the
+              stage columns offscreen. */}
+          <div style={{ padding: "8px 20px 20px", flexShrink: 0, maxHeight: "38vh", overflowY: "auto" }}>
             <EtherSection
               cards={etherTargets}
               search={etherSearch}
@@ -1012,31 +1063,55 @@ export default function PipelineBoard({ pipelines, selectedPipeline, targets, on
     );
   }
 
-  // All pipelines — meta-stage columns (static, no drag)
+  // All pipelines — meta-stage columns + the Ether pinned to the bottom.
+  // Cards are Draggable so users can drop them into the Ether from this view
+  // too; the meta-stage columns themselves don't accept stage-changing drops
+  // (see handleDragEnd).
+  const allStageTargets = targets.filter(t => !t.ether);
+  const allEtherTargets = targets.filter(t =>  t.ether);
+
   return (
-    <div style={{ flex: 1, overflowX: "auto", overflowY: "auto" }}>
-      <div style={{ display: "flex", gap: 14, padding: "20px", minWidth: "max-content", minHeight: "100%", alignItems: "flex-start" }}>
-        {META_ORDER.map(meta => {
-          const metaTargets = targets.filter(t => {
-            const tp = pipelines.find(p => p.id === t.pipeline_id);
-            const stage = tp?.stages.find(s => s.id === t.stage_id);
-            return stage?.meta_stage === meta;
-          });
-          return (
-            <StaticColumn
-              key={meta}
-              label={META_LABELS[meta]}
-              targets={metaTargets}
-              showPipelineBadge={true}
-              allPipelines={pipelines}
-              onTargetClick={onTargetClick}
-              onAdd={() => onNewTarget()}
-              onLogFollowUp={handleLogFollowUp}
-              followedUpIds={followedUpIds}
-            />
-          );
-        })}
+    <DragDropContext onDragEnd={handleDragEnd}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ flex: 1, minHeight: 0, overflowX: "auto", overflowY: "auto" }}>
+          <div style={{ display: "flex", gap: 14, padding: "20px", minWidth: "max-content", alignItems: "flex-start" }}>
+            {META_ORDER.map(meta => {
+              const metaTargets = allStageTargets.filter(t => {
+                const tp = pipelines.find(p => p.id === t.pipeline_id);
+                const stage = tp?.stages.find(s => s.id === t.stage_id);
+                return stage?.meta_stage === meta;
+              });
+              return (
+                <MetaColumn
+                  key={meta}
+                  metaKey={meta}
+                  label={META_LABELS[meta]}
+                  targets={metaTargets}
+                  showPipelineBadge={true}
+                  allPipelines={pipelines}
+                  onTargetClick={onTargetClick}
+                  onAdd={() => onNewTarget()}
+                  onLogFollowUp={handleLogFollowUp}
+                  followedUpIds={followedUpIds}
+                />
+              );
+            })}
+          </div>
+        </div>
+        <div style={{ padding: "8px 20px 20px", flexShrink: 0, maxHeight: "38vh", overflowY: "auto" }}>
+          <EtherSection
+            cards={allEtherTargets}
+            search={etherSearch}
+            onSearch={setEtherSearch}
+            onTargetClick={onTargetClick}
+            onLogFollowUp={handleLogFollowUp}
+            followedUpIds={followedUpIds}
+            allPipelines={pipelines}
+            showPipelineBadge
+            label="The Ether — paused"
+          />
+        </div>
       </div>
-    </div>
+    </DragDropContext>
   );
 }

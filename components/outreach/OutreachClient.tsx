@@ -17,6 +17,7 @@ import Button from "@/components/ui/Button";
 import OutreachIntroModal from "@/components/tour/outreach/OutreachIntroModal";
 import OutreachTooltipTour from "@/components/tour/outreach/OutreachTooltipTour";
 import OutreachOptionsMenu from "./OutreachOptionsMenu";
+import { ProjectOptionsProvider } from "@/lib/projects/options";
 
 type ActiveSection = "leads" | "followups" | "pipeline" | "all-ether";
 
@@ -26,7 +27,17 @@ interface Props {
   initialContacts: Contact[];
 }
 
-export default function OutreachClient({ initialPipelines, initialTargets, initialContacts }: Props) {
+// TargetDetailPanel's "promote to project" flow reads project options from
+// the shared context. Wrap the whole module so the panel can mount safely.
+export default function OutreachClient(props: Props) {
+  return (
+    <ProjectOptionsProvider>
+      <OutreachClientInner {...props} />
+    </ProjectOptionsProvider>
+  );
+}
+
+function OutreachClientInner({ initialPipelines, initialTargets, initialContacts }: Props) {
   const [pipelines, setPipelines] = useState(initialPipelines);
   const [targets, setTargets]     = useState(initialTargets);
   const [contacts, setContacts]   = useState(initialContacts);
@@ -229,13 +240,13 @@ export default function OutreachClient({ initialPipelines, initialTargets, initi
   // - In the All Ether view, surface only ether targets across all pipelines.
   // - In a specific pipeline, pass all that pipeline's targets (the board
   //   splits them into stage columns vs the Ether section internally).
-  // - In the meta-stage "All" view, hide ether targets — they're "paused",
-  //   not part of any active funnel.
+  // - In the meta-stage "All" view, pass everything — PipelineBoard splits
+  //   ether-vs-not internally so the Ether section shows up there too.
   const boardTargets = (activeSection === "all-ether"
     ? targets.filter(t => t.ether)
     : selectedPipeline
       ? targets.filter(t => t.pipeline_id === selectedPipeline.id)
-      : targets.filter(t => !t.ether)
+      : targets
   ).filter((t) => {
     if (showClosed) return true;
     const tp = pipelines.find(p => p.id === t.pipeline_id);
