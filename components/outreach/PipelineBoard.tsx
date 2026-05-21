@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { OutreachPipeline, PipelineStage, OutreachTarget, MetaStage, ContactActivityType } from "@/types/database";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
-import { Plus, Send, Check, Clock, Search, Moon } from "lucide-react";
+import { Plus, Send, Check, Clock, Search, Moon, MoreHorizontal } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
 
 // The Ether — a per-pipeline "parking lot" for paused targets. Visually
@@ -45,6 +45,11 @@ interface Props {
   onNewTarget: (pipelineId?: string, stageId?: string) => void;
   onNewPipeline?: () => void;
   onStageChange: (targetId: string, newStageId: string) => void;
+  /** Stage CRUD on the column header. Each handler resolves locally + on
+   *  the server inside OutreachClient; the board itself just dispatches. */
+  onStageRename?: (stageId: string, name: string) => void;
+  onStageDelete?: (stageId: string, moveTargetsToStageId: string | null) => void;
+  onStageCreate?: (pipelineId: string, isOutcome: boolean) => Promise<PipelineStage | null>;
   /** Bumps last_followup_at on the target (NOT last_touched_at — that's a
    *  general "anything happened" marker). The board uses this for the "I've
    *  been followed up today" treatment. */
@@ -402,9 +407,12 @@ function DroppableColumn({
   isOutcome,
   showPipelineBadge,
   allPipelines,
+  siblingStages,
   onTargetClick,
   onNewTarget,
   onLogFollowUp,
+  onStageRename,
+  onStageDelete,
   followedUpIds,
 }: {
   stage: PipelineStage;
@@ -413,9 +421,14 @@ function DroppableColumn({
   isOutcome: boolean;
   showPipelineBadge: boolean;
   allPipelines: (OutreachPipeline & { stages: PipelineStage[] })[];
+  /** Other stages in the same pipeline + section — fed into the "delete with
+   *  targets" picker so the user can pick where to move targets. */
+  siblingStages: PipelineStage[];
   onTargetClick: (t: OutreachTarget) => void;
   onNewTarget: () => void;
   onLogFollowUp: (t: OutreachTarget, type: ContactActivityType, note: string) => Promise<void>;
+  onStageRename?: (stageId: string, name: string) => void;
+  onStageDelete?: (stageId: string, moveTargetsToStageId: string | null) => void;
   followedUpIds: Set<string>;
 }) {
   return (
@@ -426,26 +439,16 @@ function DroppableColumn({
           {...provided.droppableProps}
           style={{ display: "flex", flexDirection: "column", width: 210, flexShrink: 0 }}
         >
-          {/* Column header */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div style={{ width: 6, height: 6, borderRadius: "50%", background: isOutcome ? "rgba(31,33,26,0.25)" : pipelineColor, flexShrink: 0 }} />
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: isOutcome ? "var(--color-grey)" : "var(--color-charcoal)" }}>
-                {stage.name}
-              </span>
-              {targets.length > 0 && (
-                <span style={{ fontSize: 10, color: "var(--color-grey)" }}>{targets.length}</span>
-              )}
-            </div>
-            {!isOutcome && (
-              <button type="button" onClick={onNewTarget}
-                style={{ width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 5, border: "none", background: "transparent", cursor: "pointer", color: "var(--color-grey)" }}
-                onMouseEnter={e => { e.currentTarget.style.color = "var(--color-charcoal)"; e.currentTarget.style.background = "var(--color-cream)"; }}
-                onMouseLeave={e => { e.currentTarget.style.color = "var(--color-grey)"; e.currentTarget.style.background = "transparent"; }}>
-                <Plus size={12} />
-              </button>
-            )}
-          </div>
+          <StageColumnHeader
+            stage={stage}
+            targets={targets}
+            pipelineColor={pipelineColor}
+            isOutcome={isOutcome}
+            siblingStages={siblingStages}
+            onAddTarget={isOutcome ? null : onNewTarget}
+            onRename={onStageRename}
+            onDelete={onStageDelete}
+          />
 
           {/* Cards drop zone */}
           <div
@@ -514,6 +517,277 @@ function DroppableColumn({
 // Hover-revealed CTA shown in empty stage columns. Resting state is the same
 // dashed "—" placeholder; on hover it morphs into a real click target inviting
 // the user to add a target right where it belongs.
+// ── Stage column header ─────────────────────────────────────────────────────
+// Click name to rename inline. Hover-revealed 3-dot menu offers Delete; if
+// the stage has targets, a small picker prompts the user to choose where to
+// move them before the row goes away.
+
+function StageColumnHeader({
+  stage, targets, pipelineColor, isOutcome, siblingStages,
+  onAddTarget, onRename, onDelete,
+}: {
+  stage: PipelineStage;
+  targets: OutreachTarget[];
+  pipelineColor: string;
+  isOutcome: boolean;
+  siblingStages: PipelineStage[];
+  onAddTarget: (() => void) | null;
+  onRename?: (stageId: string, name: string) => void;
+  onDelete?: (stageId: string, moveTargetsToStageId: string | null) => void;
+}) {
+  const [editing,    setEditing]    = useState(false);
+  const [draft,      setDraft]      = useState(stage.name);
+  const [hovered,    setHovered]    = useState(false);
+  const [menuOpen,   setMenuOpen]   = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [moveTo,     setMoveTo]     = useState<string>("");
+
+  useEffect(() => { setDraft(stage.name); }, [stage.name]);
+
+  function commitRename() {
+    setEditing(false);
+    const next = draft.trim();
+    if (!next || next === stage.name) { setDraft(stage.name); return; }
+    onRename?.(stage.id, next);
+  }
+
+  function startDelete() {
+    setMenuOpen(false);
+    if (targets.length === 0) {
+      onDelete?.(stage.id, null);
+      return;
+    }
+    setMoveTo(siblingStages[0]?.id ?? "");
+    setConfirming(true);
+  }
+
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, position: "relative" }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0 }}>
+        <div style={{ width: 6, height: 6, borderRadius: "50%", background: isOutcome ? "rgba(31,33,26,0.25)" : pipelineColor, flexShrink: 0 }} />
+        {editing ? (
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); commitRename(); }
+              if (e.key === "Escape") { setDraft(stage.name); setEditing(false); }
+            }}
+            autoFocus
+            style={{
+              fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em",
+              color: isOutcome ? "var(--color-grey)" : "var(--color-charcoal)",
+              background: "var(--color-warm-white)",
+              border: `0.5px solid ${isOutcome ? "var(--color-border)" : pipelineColor}55`,
+              borderRadius: 4,
+              padding: "1px 4px",
+              outline: "none",
+              fontFamily: "inherit",
+              flex: 1, minWidth: 0,
+              width: "100%",
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => onRename && setEditing(true)}
+            title={onRename ? "Click to rename" : undefined}
+            style={{
+              fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em",
+              color: isOutcome ? "var(--color-grey)" : "var(--color-charcoal)",
+              background: "transparent", border: "none", padding: 0,
+              cursor: onRename ? "text" : "default", fontFamily: "inherit",
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              maxWidth: 140,
+              textAlign: "left",
+            }}
+          >
+            {stage.name}
+          </button>
+        )}
+        {targets.length > 0 && (
+          <span style={{ fontSize: 10, color: "var(--color-grey)" }}>{targets.length}</span>
+        )}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+        {onDelete && (hovered || menuOpen) && (
+          <button
+            type="button"
+            onClick={() => setMenuOpen(v => !v)}
+            aria-label="Stage options"
+            style={{ width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 5, border: "none", background: menuOpen ? "var(--color-cream)" : "transparent", cursor: "pointer", color: "var(--color-grey)" }}
+            onMouseEnter={e => { e.currentTarget.style.color = "var(--color-charcoal)"; e.currentTarget.style.background = "var(--color-cream)"; }}
+            onMouseLeave={e => { if (!menuOpen) { e.currentTarget.style.color = "var(--color-grey)"; e.currentTarget.style.background = "transparent"; } }}
+          >
+            <MoreHorizontal size={12} />
+          </button>
+        )}
+        {onAddTarget && (
+          <button type="button" onClick={onAddTarget}
+            style={{ width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 5, border: "none", background: "transparent", cursor: "pointer", color: "var(--color-grey)" }}
+            onMouseEnter={e => { e.currentTarget.style.color = "var(--color-charcoal)"; e.currentTarget.style.background = "var(--color-cream)"; }}
+            onMouseLeave={e => { e.currentTarget.style.color = "var(--color-grey)"; e.currentTarget.style.background = "transparent"; }}>
+            <Plus size={12} />
+          </button>
+        )}
+      </div>
+
+      {menuOpen && (
+        <>
+          <div onClick={() => setMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+          <div style={{
+            position: "absolute", right: 0, top: "calc(100% + 4px)",
+            zIndex: 41, minWidth: 160,
+            background: "var(--color-surface-raised)",
+            border: "0.5px solid var(--color-border)",
+            borderRadius: 8,
+            boxShadow: "var(--shadow-overlay)",
+            overflow: "hidden",
+            padding: 4,
+          }}>
+            <button
+              type="button"
+              onClick={() => { setMenuOpen(false); setEditing(true); }}
+              style={menuItemStyle()}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-surface-sunken)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            >
+              Rename stage
+            </button>
+            <button
+              type="button"
+              onClick={startDelete}
+              style={menuItemStyle({ danger: true })}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-surface-sunken)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            >
+              Delete stage
+            </button>
+          </div>
+        </>
+      )}
+
+      {confirming && (
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(31,33,26,0.5)", padding: 16 }}
+          onClick={(e) => { if (e.target === e.currentTarget) setConfirming(false); }}
+        >
+          <div style={{ width: "100%", maxWidth: 380, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 14, padding: "20px 22px" }}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 6 }}>
+              Delete &ldquo;{stage.name}&rdquo;?
+            </p>
+            <p style={{ fontSize: 12, color: "var(--color-grey)", lineHeight: 1.55, marginBottom: 14 }}>
+              {targets.length} target{targets.length === 1 ? "" : "s"} in this stage. Pick where they should move:
+            </p>
+            {siblingStages.length > 0 ? (
+              <select
+                value={moveTo}
+                onChange={(e) => setMoveTo(e.target.value)}
+                style={{
+                  width: "100%", padding: "8px 10px", fontSize: 13, borderRadius: 8,
+                  background: "var(--color-warm-white)",
+                  border: "0.5px solid var(--color-border)",
+                  color: "var(--color-charcoal)", fontFamily: "inherit",
+                  marginBottom: 16,
+                }}
+              >
+                {siblingStages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            ) : (
+              <p style={{ fontSize: 12, color: "var(--color-red-orange)", marginBottom: 16 }}>
+                No other {isOutcome ? "outcome" : "active"} stage to move targets into. Add another stage first.
+              </p>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                style={{ padding: "8px 14px", fontSize: 13, borderRadius: 8, color: "#6b6860", border: "0.5px solid var(--color-border)", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={siblingStages.length === 0}
+                onClick={() => { setConfirming(false); onDelete?.(stage.id, moveTo || null); }}
+                style={{
+                  padding: "8px 14px", fontSize: 13, fontWeight: 500, borderRadius: 8,
+                  color: "white", background: "var(--color-red-orange)",
+                  border: "none", cursor: siblingStages.length === 0 ? "not-allowed" : "pointer",
+                  opacity: siblingStages.length === 0 ? 0.5 : 1,
+                  fontFamily: "inherit",
+                }}
+              >
+                Move & delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// "+ Add stage" column — slim ghost column at the right edge of each section.
+// Hover for emphasis; click creates a new stage and the parent's setPipelines
+// makes the column render with the default name pre-selected for renaming.
+
+function AddStageColumn({ pipelineColor, outcome, onAdd }: {
+  pipelineColor: string;
+  outcome?: boolean;
+  onAdd: () => Promise<PipelineStage | null> | void;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={async () => {
+        if (busy) return;
+        setBusy(true);
+        await onAdd();
+        setBusy(false);
+      }}
+      title={outcome ? "Add outcome stage" : "Add stage"}
+      style={{
+        width: 100,
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+        padding: "6px 8px",
+        background: "transparent",
+        border: `0.5px dashed ${outcome ? "var(--color-border-strong)" : pipelineColor + "55"}`,
+        borderRadius: 8,
+        color: outcome ? "var(--color-grey)" : pipelineColor,
+        fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em",
+        cursor: busy ? "default" : "pointer",
+        fontFamily: "inherit",
+        flexShrink: 0,
+        opacity: busy ? 0.5 : 1,
+        transition: "background 0.12s ease, border 0.12s ease",
+      }}
+      onMouseEnter={(e) => { if (!busy) e.currentTarget.style.background = "var(--color-cream)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+    >
+      <Plus size={11} />
+      {busy ? "Adding…" : (outcome ? "Outcome" : "Stage")}
+    </button>
+  );
+}
+
+function menuItemStyle(opts?: { danger?: boolean }): React.CSSProperties {
+  return {
+    width: "100%", textAlign: "left",
+    padding: "7px 10px", fontSize: 12, borderRadius: 6,
+    background: "transparent", border: "none", cursor: "pointer",
+    color: opts?.danger ? "var(--color-red-orange)" : "var(--color-text-primary)",
+    fontFamily: "inherit",
+  };
+}
+
 function EmptyStageDropzone({ stageName, isOutcome, pipelineColor, onAdd }: {
   stageName: string;
   isOutcome: boolean;
@@ -819,7 +1093,12 @@ function EtherSection({
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export default function PipelineBoard({ pipelines, selectedPipeline, targets, onTargetClick, onNewTarget, onNewPipeline, onStageChange, onFollowUp, onEtherToggle, etherView }: Props) {
+export default function PipelineBoard({
+  pipelines, selectedPipeline, targets,
+  onTargetClick, onNewTarget, onNewPipeline,
+  onStageChange, onStageRename, onStageDelete, onStageCreate,
+  onFollowUp, onEtherToggle, etherView,
+}: Props) {
   const [followedUpIds, setFollowedUpIds] = useState<Set<string>>(new Set());
   const [etherSearch,   setEtherSearch]   = useState("");
 
@@ -941,7 +1220,7 @@ export default function PipelineBoard({ pipelines, selectedPipeline, targets, on
               the Ether (below) is pinned to the bottom of the viewport. */}
           <div style={{ flex: 1, minHeight: 0, overflowX: "auto", overflowY: "auto" }}>
             <div style={{ display: "flex", gap: 0, padding: "20px 20px 8px", minWidth: "max-content", alignItems: "flex-start" }}>
-              <div style={{ display: "flex", gap: 14 }}>
+              <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
                 {activeStages.map(stage => (
                   <DroppableColumn
                     key={stage.id}
@@ -951,19 +1230,26 @@ export default function PipelineBoard({ pipelines, selectedPipeline, targets, on
                     isOutcome={false}
                     showPipelineBadge={false}
                     allPipelines={pipelines}
+                    siblingStages={activeStages.filter(s => s.id !== stage.id)}
                     onTargetClick={onTargetClick}
                     onNewTarget={() => onNewTarget(selectedPipeline.id, stage.id)}
                     onLogFollowUp={handleLogFollowUp}
+                    onStageRename={onStageRename}
+                    onStageDelete={onStageDelete}
                     followedUpIds={followedUpIds}
                   />
                 ))}
+                {onStageCreate && (
+                  <AddStageColumn pipelineColor={selectedPipeline.color}
+                    onAdd={() => onStageCreate(selectedPipeline.id, false)} />
+                )}
               </div>
 
               {/* Outcome columns — separated by a vertical rule */}
-              {outcomeStages.length > 0 && (
+              {(outcomeStages.length > 0 || onStageCreate) && (
                 <>
                   <div style={{ width: 1, background: "var(--color-border)", margin: "0 20px", alignSelf: "stretch", flexShrink: 0 }} />
-                  <div style={{ display: "flex", gap: 14 }}>
+                  <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
                     {outcomeStages.map(stage => (
                       <DroppableColumn
                         key={stage.id}
@@ -973,12 +1259,20 @@ export default function PipelineBoard({ pipelines, selectedPipeline, targets, on
                         isOutcome={true}
                         showPipelineBadge={false}
                         allPipelines={pipelines}
+                        siblingStages={outcomeStages.filter(s => s.id !== stage.id)}
                         onTargetClick={onTargetClick}
                         onNewTarget={() => onNewTarget(selectedPipeline.id, stage.id)}
                         onLogFollowUp={handleLogFollowUp}
+                        onStageRename={onStageRename}
+                        onStageDelete={onStageDelete}
                         followedUpIds={followedUpIds}
                       />
                     ))}
+                    {onStageCreate && (
+                      <AddStageColumn pipelineColor="var(--color-grey)"
+                        outcome
+                        onAdd={() => onStageCreate(selectedPipeline.id, true)} />
+                    )}
                   </div>
                 </>
               )}
