@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Task, Contact } from "@/types/database";
-import { ChevronLeft, ChevronRight, Plus, CheckSquare, MoreHorizontal, CalendarClock, ChevronDown } from "lucide-react";
-import AshMark from "@/components/ui/AshMark";
+import { ChevronLeft, ChevronRight, Plus, CheckSquare, MoreHorizontal, CalendarClock } from "lucide-react";
 import DatePicker from "@/components/ui/DatePicker";
 import EmptyState from "@/components/ui/EmptyState";
 import CalendarOptionsMenu from "./CalendarOptionsMenu";
@@ -14,11 +13,6 @@ import NewEventModal from "./NewEventModal";
 import TaskQuickEditPopover from "./TaskQuickEditPopover";
 import CalendarIntroModal from "@/components/tour/calendar/CalendarIntroModal";
 import CalendarTooltipTour from "@/components/tour/calendar/CalendarTooltipTour";
-
-const ASH_GRADIENT = "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)";
-function openAshCal(message: string) {
-  window.dispatchEvent(new CustomEvent("open-ash", { detail: { message } }));
-}
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -719,7 +713,6 @@ export default function CalendarClient({
   const [createError,     setCreateError]     = useState<string | null>(null);
   const [newEventOpen,    setNewEventOpen]    = useState(false);
   const [newEventPrefill, setNewEventPrefill] = useState<{ start?: Date; end?: Date; allDay?: boolean } | null>(null);
-  const [newMenuOpen,     setNewMenuOpen]     = useState(false);
   const [quickTask,       setQuickTask]       = useState<{ task: Task; x: number; y: number } | null>(null);
   const [viewMode,        setViewMode]        = useState<"Week" | "Month">("Week");
   const [monthDayOverlay, setMonthDayOverlay] = useState<{ date: Date; x: number; y: number } | null>(null);
@@ -1375,18 +1368,6 @@ export default function CalendarClient({
               })}
             </div>
 
-            <button
-              onClick={() => openAshCal("What's coming up in my calendar this week? Any tasks or deadlines I should know about?")}
-              style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", fontSize: 11, fontWeight: 500, borderRadius: 6, background: "transparent", color: "var(--color-ash-dark)", border: "0.5px solid var(--color-border)", cursor: "pointer", fontFamily: "inherit", transition: "background 0.1s ease" }}
-              onMouseEnter={e => (e.currentTarget.style.background = "var(--color-ash-tint)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-            >
-              <div style={{ width: 16, height: 16, borderRadius: "50%", background: ASH_GRADIENT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <AshMark size={9} variant="on-dark" />
-              </div>
-              Ask Ash
-            </button>
-
             {/* 3-dot options menu */}
             <div style={{ position: "relative" }}>
               <button
@@ -1418,78 +1399,40 @@ export default function CalendarClient({
               )}
             </div>
 
-            <span data-tour-target="calendar.new-task-button" style={{ position: "relative" }}>
-              <button
-                onClick={() => setNewMenuOpen((v) => !v)}
-                style={{
-                  padding: "7px 14px 7px 16px", fontSize: 12, fontWeight: 500,
-                  borderRadius: 8, border: "none", cursor: "pointer",
-                  background: "var(--color-sage)", color: "white",
-                  fontFamily: "inherit",
-                  display: "inline-flex", alignItems: "center", gap: 6,
-                  transition: "background 0.12s ease",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-sage-hover)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-sage)")}
-              >
-                <Plus size={12} />
-                New
-                <ChevronDown size={11} style={{ marginLeft: 2, opacity: 0.85 }} />
-              </button>
-              {newMenuOpen && (
-                <>
-                  {/* Scrim to close on outside click */}
-                  <div
-                    onClick={() => setNewMenuOpen(false)}
-                    style={{ position: "fixed", inset: 0, zIndex: 40 }}
-                  />
-                  <div
-                    style={{
-                      position: "absolute", top: "calc(100% + 6px)", right: 0,
-                      zIndex: 41,
-                      minWidth: 180,
-                      background: "var(--color-off-white)",
-                      border: "0.5px solid var(--color-border)",
-                      borderRadius: 10,
-                      boxShadow: "0 6px 24px rgba(0,0,0,0.12)",
-                      overflow: "hidden",
-                    }}
-                  >
-                    <button
-                      onClick={() => { setNewMenuOpen(false); setNewEventPrefill(null); setNewEventOpen(true); }}
-                      style={{
-                        width: "100%", textAlign: "left",
-                        padding: "9px 14px", fontSize: 12,
-                        background: "transparent", border: "none",
-                        color: "var(--color-text-primary)", cursor: "pointer",
-                        fontFamily: "inherit",
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                    >
-                      <CalendarClock size={11} style={{ display: "inline", marginRight: 8, color: "var(--color-sage)" }} />
-                      New event
-                    </button>
-                    <button
-                      onClick={() => { setNewMenuOpen(false); openNewTask(); }}
-                      style={{
-                        width: "100%", textAlign: "left",
-                        padding: "9px 14px", fontSize: 12,
-                        background: "transparent", border: "none",
-                        color: "var(--color-text-primary)", cursor: "pointer",
-                        fontFamily: "inherit",
-                        borderTop: "0.5px solid var(--color-border)",
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                    >
-                      <CheckSquare size={11} style={{ display: "inline", marginRight: 8, color: "var(--color-sage)" }} />
-                      New task
-                    </button>
-                  </div>
-                </>
-              )}
-            </span>
+            <button
+              data-tour-target="calendar.new-task-button"
+              onClick={() => openNewTask()}
+              style={{
+                padding: "7px 14px", fontSize: 12, fontWeight: 500,
+                borderRadius: 8, cursor: "pointer",
+                background: "var(--color-warm-white)", color: "var(--color-charcoal)",
+                border: "0.5px solid var(--color-border)",
+                fontFamily: "inherit",
+                display: "inline-flex", alignItems: "center", gap: 6,
+                transition: "background 0.12s ease",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-warm-white)")}
+            >
+              <CheckSquare size={11} />
+              New task
+            </button>
+            <button
+              onClick={() => { setNewEventPrefill(null); setNewEventOpen(true); }}
+              style={{
+                padding: "7px 14px", fontSize: 12, fontWeight: 500,
+                borderRadius: 8, border: "none", cursor: "pointer",
+                background: "var(--color-sage)", color: "white",
+                fontFamily: "inherit",
+                display: "inline-flex", alignItems: "center", gap: 6,
+                transition: "background 0.12s ease",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-sage-hover)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-sage)")}
+            >
+              <Plus size={12} />
+              New event
+            </button>
           </div>
         </header>
 
@@ -1673,82 +1616,15 @@ export default function CalendarClient({
             })}
           </div>
 
-          {/* All-day row — sticky just below day headers */}
+          {/* Tasks ribbon — sits directly under the day headers (above the
+              all-day row) so the day's to-dos are the first thing the user
+              scans. Drag-and-drop between cells reschedules. Sticky so it
+              stays visible when the time grid scrolls underneath. */}
           <div
             style={{
               position: "sticky",
               top: `${DAY_HDR_H}px`,
               zIndex: 19,
-              display: "flex",
-              background: "var(--color-off-white)",
-              borderBottom: "0.5px solid var(--color-border)",
-              minHeight: "30px",
-            }}
-          >
-            <div
-              style={{
-                width: "52px", flexShrink: 0,
-                display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
-                paddingRight: "8px", paddingTop: "6px",
-                fontSize: "9px", color: "var(--color-grey)",
-              }}
-            >
-              All day
-            </div>
-            {weekDays.map((day, i) => {
-              const dayProjects   = initialProjects.filter(p => p.due_date && isSameDay(new Date(p.due_date + "T00:00:00"), day));
-              const dayGcalAllDay = gcalEvents.filter(e => e.allDay && isSameDay(new Date(e.start), day));
-              return (
-                <div
-                  key={i}
-                  onClick={(e) => {
-                    if (e.target !== e.currentTarget) return;
-                    const start = new Date(day); start.setHours(0, 0, 0, 0);
-                    const end   = new Date(start); end.setDate(end.getDate() + 1);
-                    setNewEventPrefill({ start, end, allDay: true });
-                    setNewEventOpen(true);
-                  }}
-                  style={{
-                    flex: 1, borderLeft: "0.5px solid var(--color-border)",
-                    padding: "3px 3px", display: "flex", flexDirection: "column", gap: "2px",
-                    cursor: "pointer",
-                  }}
-                >
-                  {dayGcalAllDay.map(e => {
-                    const color = e.colorId ? GCAL_COLORS[e.colorId] : (e.source === "microsoft" ? "#0078d4" : "#039BE5");
-                    return (
-                      <button
-                        key={e.id}
-                        onClick={() => setOpenEvent(e)}
-                        className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate text-left"
-                        style={{
-                          background: `${color}18`, color,
-                          border: `0.5px solid ${color}44`,
-                          cursor: "pointer", fontFamily: "inherit",
-                        }}
-                      >
-                        {e.title}
-                      </button>
-                    );
-                  })}
-                  {dayProjects.map(p => (
-                    <div key={p.id} className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate"
-                      style={{ background: "rgba(155,163,122,0.14)", color: "#5a7040", border: "0.5px solid rgba(155,163,122,0.25)" }}
-                    >{p.title} due</div>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Tasks ribbon — dedicated row below all-day, holds task pills
-              by due date. Drag-and-drop between cells reschedules. Sticky
-              so it stays visible when the time grid scrolls underneath. */}
-          <div
-            style={{
-              position: "sticky",
-              top: `${DAY_HDR_H + 30}px`,
-              zIndex: 18,
               display: "flex",
               background: "var(--color-warm-white)",
               borderBottom: "0.5px solid var(--color-border)",
@@ -1825,6 +1701,76 @@ export default function CalendarClient({
                       </button>
                     );
                   })}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* All-day row — sits below the tasks ribbon. The visual ordering
+              is tasks-on-top so the to-do punch list is the first thing you
+              see when scanning a week. */}
+          <div
+            style={{
+              position: "sticky",
+              top: `${DAY_HDR_H + 26}px`,
+              zIndex: 18,
+              display: "flex",
+              background: "var(--color-off-white)",
+              borderBottom: "0.5px solid var(--color-border)",
+              minHeight: "30px",
+            }}
+          >
+            <div
+              style={{
+                width: "52px", flexShrink: 0,
+                display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
+                paddingRight: "8px", paddingTop: "6px",
+                fontSize: "9px", color: "var(--color-grey)",
+              }}
+            >
+              All day
+            </div>
+            {weekDays.map((day, i) => {
+              const dayProjects   = initialProjects.filter(p => p.due_date && isSameDay(new Date(p.due_date + "T00:00:00"), day));
+              const dayGcalAllDay = gcalEvents.filter(e => e.allDay && isSameDay(new Date(e.start), day));
+              return (
+                <div
+                  key={i}
+                  onClick={(e) => {
+                    if (e.target !== e.currentTarget) return;
+                    const start = new Date(day); start.setHours(0, 0, 0, 0);
+                    const end   = new Date(start); end.setDate(end.getDate() + 1);
+                    setNewEventPrefill({ start, end, allDay: true });
+                    setNewEventOpen(true);
+                  }}
+                  style={{
+                    flex: 1, borderLeft: "0.5px solid var(--color-border)",
+                    padding: "3px 3px", display: "flex", flexDirection: "column", gap: "2px",
+                    cursor: "pointer",
+                  }}
+                >
+                  {dayGcalAllDay.map(e => {
+                    const color = e.colorId ? GCAL_COLORS[e.colorId] : (e.source === "microsoft" ? "#0078d4" : "#039BE5");
+                    return (
+                      <button
+                        key={e.id}
+                        onClick={() => setOpenEvent(e)}
+                        className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate text-left"
+                        style={{
+                          background: `${color}18`, color,
+                          border: `0.5px solid ${color}44`,
+                          cursor: "pointer", fontFamily: "inherit",
+                        }}
+                      >
+                        {e.title}
+                      </button>
+                    );
+                  })}
+                  {dayProjects.map(p => (
+                    <div key={p.id} className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate"
+                      style={{ background: "rgba(155,163,122,0.14)", color: "#5a7040", border: "0.5px solid rgba(155,163,122,0.25)" }}
+                    >{p.title} due</div>
+                  ))}
                 </div>
               );
             })}
