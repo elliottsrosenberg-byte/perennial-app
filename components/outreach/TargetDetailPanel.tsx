@@ -52,12 +52,21 @@ function fmtDeadline(iso: string | null): { label: string; color: string } {
 
 // ── Canvas editor (unchanged from before) ─────────────────────────────────────
 
-function TargetCanvasEditor({
-  targetId, targetName, contactId, initialHtml,
+// The canvas is the wrapped entity's canvas — same workspace the user sees
+// in the Network module. The target itself no longer owns canvas content;
+// it's a pipeline-position record over a Contact or Organization.
+function EntityCanvasEditor({
+  targetId, targetName,
+  entityKind, entityId, entityName, entityRoute,
+  initialHtml,
 }: {
   targetId:    string;
   targetName:  string;
-  contactId:   string | null;
+  entityKind:  "contact" | "organization";
+  entityId:    string;
+  entityName:  string;
+  /** Route for the "Open in Network" affordance — e.g. /network?contactId=… */
+  entityRoute: string;
   initialHtml: string | null;
 }) {
   const [saving,    setSaving]    = useState(false);
@@ -65,34 +74,41 @@ function TargetCanvasEditor({
   const [ashPrompt, setAshPrompt] = useState<AshPromptState>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const table = entityKind === "contact" ? "contacts" : "organizations";
+
   const handleAshTrigger = useCallback((pos: number, coords: { top: number; left: number; bottom: number }) => {
     setAshPrompt({ pos, anchor: coords });
   }, []);
 
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: getRichExtensions({ placeholder: "Canvas — notes, research, strategy for this target…", onAshTrigger: handleAshTrigger }),
+    extensions: getRichExtensions({
+      placeholder: entityKind === "contact"
+        ? `Canvas for ${entityName} — notes, research, history…`
+        : `Canvas for ${entityName} — what they show, who's there, your angle…`,
+      onAshTrigger: handleAshTrigger,
+    }),
     content: initialHtml ?? "",
     onUpdate({ editor }) { scheduleSave(editor.getHTML()); },
     editorProps: { attributes: { style: "outline: none; min-height: 300px; font-size: 14px; line-height: 1.8; color: #6b6860;" } },
-  }, [targetId]);
+  }, [entityId]);
 
   useEffect(() => {
     return () => {
       if (saveTimer.current) {
         clearTimeout(saveTimer.current);
         const html = editor?.getHTML() ?? "";
-        createClient().from("outreach_targets").update({ canvas_html: html || null }).eq("id", targetId);
+        createClient().from(table).update({ canvas_html: html || null }).eq("id", entityId);
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetId]);
+  }, [entityId]);
 
   function scheduleSave(html: string) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     setSaving(true); setSaved(false);
     saveTimer.current = setTimeout(async () => {
-      await createClient().from("outreach_targets").update({ canvas_html: html || null }).eq("id", targetId);
+      await createClient().from(table).update({ canvas_html: html || null }).eq("id", entityId);
       setSaving(false); setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     }, 800);
@@ -105,7 +121,7 @@ function TargetCanvasEditor({
         type:        "outreach-target",
         target_id:   targetId,
         target_name: targetName,
-        contact_id:  contactId ?? undefined,
+        contact_id:  entityKind === "contact" ? entityId : undefined,
       },
       clearPrompt: () => setAshPrompt(null),
     });
@@ -113,6 +129,21 @@ function TargetCanvasEditor({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", position: "relative" }}>
+      {/* Crossover banner — orients the user to the fact that this canvas is
+          shared with the Network module, and offers a one-click jump. */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8,
+        padding: "6px 20px",
+        background: "var(--color-cream)",
+        borderBottom: "0.5px solid var(--color-border)",
+        fontSize: 11, color: "var(--color-grey)", flexShrink: 0,
+      }}>
+        <span>Workspace for <span style={{ color: "var(--color-charcoal)", fontWeight: 500 }}>{entityName}</span> — also editable in Network.</span>
+        <a href={entityRoute}
+          style={{ marginLeft: "auto", fontSize: 11, color: "var(--color-sage)", textDecoration: "none" }}>
+          Open in Network →
+        </a>
+      </div>
       <RichToolbar editor={editor} />
       <div style={{ flex: 1, overflowY: "auto", background: "var(--color-off-white)" }}>
         <div style={{ maxWidth: 760, padding: "36px 60px 80px" }}>
@@ -124,6 +155,109 @@ function TargetCanvasEditor({
         {!saving && saved && <span style={{ color: "var(--color-sage)" }}>Saved</span>}
       </div>
       {ashPrompt && <InlineAshPopover anchor={ashPrompt.anchor} onSubmit={handleAshSubmit} onClose={() => setAshPrompt(null)} />}
+    </div>
+  );
+}
+
+// Orphan-target prompt — shown when a target isn't linked to a Contact or
+// Organization yet. Surfaces a one-click migration: turn the target's name
+// into either a new lead or a new organization, link it, and the canvas
+// editor takes over on the next render.
+function OrphanTargetPrompt({
+  target, onLinked,
+}: {
+  target: OutreachTarget;
+  onLinked: (next: { contact_id?: string | null; organization_id?: string | null }) => void;
+}) {
+  const [busy, setBusy] = useState<"organization" | "person" | null>(null);
+
+  async function makeOrganization() {
+    if (busy) return;
+    setBusy("organization");
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setBusy(null); return; }
+    const { data: org } = await supabase.from("organizations")
+      .insert({ user_id: user.id, name: target.name, location: target.location ?? null })
+      .select("*").single();
+    if (org) {
+      await supabase.from("outreach_targets")
+        .update({ organization_id: org.id, contact_id: null })
+        .eq("id", target.id);
+      onLinked({ organization_id: org.id, contact_id: null });
+    }
+    setBusy(null);
+  }
+
+  async function makeLead() {
+    if (busy) return;
+    setBusy("person");
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setBusy(null); return; }
+    const parts = target.name.trim().split(/\s+/);
+    const first = parts.length === 1 ? parts[0] : parts.slice(0, -1).join(" ");
+    const last  = parts.length === 1 ? "" : parts[parts.length - 1];
+    const { data: contact } = await supabase.from("contacts")
+      .insert({
+        user_id: user.id,
+        first_name: first, last_name: last,
+        is_lead: true, lead_stage: "new", archived: false,
+      })
+      .select("*, organization:organizations(*)").single();
+    if (contact) {
+      await supabase.from("outreach_targets")
+        .update({ contact_id: contact.id, organization_id: null })
+        .eq("id", target.id);
+      onLinked({ contact_id: contact.id, organization_id: null });
+    }
+    setBusy(null);
+  }
+
+  return (
+    <div style={{ flex: 1, overflowY: "auto", background: "var(--color-off-white)" }}>
+      <div style={{ maxWidth: 540, margin: "0 auto", padding: "60px 32px 80px" }}>
+        <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-grey)", marginBottom: 12 }}>
+          Set up workspace
+        </p>
+        <h3 style={{ fontSize: 18, color: "var(--color-charcoal)", marginBottom: 6 }}>
+          What is <span style={{ fontWeight: 600 }}>{target.name}</span>?
+        </h3>
+        <p style={{ fontSize: 13, color: "var(--color-grey)", lineHeight: 1.55, marginBottom: 24 }}>
+          Targets are now linked to a person or an organization in Network. Pick one and your canvas, files, notes, and activity all live there — visible from both this pipeline and the Network module.
+        </p>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <button type="button" onClick={makeOrganization} disabled={busy !== null}
+            style={{
+              textAlign: "left", padding: 14, borderRadius: 12,
+              background: "var(--color-warm-white)",
+              border: "0.5px solid var(--color-border)",
+              cursor: busy ? "default" : "pointer", opacity: busy && busy !== "organization" ? 0.5 : 1,
+            }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 4 }}>
+              {busy === "organization" ? "Creating…" : "An organization"}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--color-grey)", lineHeight: 1.5 }}>
+              Gallery, brand, publication, fair. The workspace lives on the organization, shared across any targets that wrap it.
+            </div>
+          </button>
+          <button type="button" onClick={makeLead} disabled={busy !== null}
+            style={{
+              textAlign: "left", padding: 14, borderRadius: 12,
+              background: "var(--color-warm-white)",
+              border: "0.5px solid var(--color-border)",
+              cursor: busy ? "default" : "pointer", opacity: busy && busy !== "person" ? 0.5 : 1,
+            }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 4 }}>
+              {busy === "person" ? "Creating…" : "A person"}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--color-grey)", lineHeight: 1.5 }}>
+              A specific human — curator, editor, buyer. Creates a lead in Network you can convert to a contact later.
+            </div>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -608,15 +742,24 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
   const activeStages  = pipeline.stages.filter(s => !s.is_outcome);
   const outcomeStages = pipeline.stages.filter(s =>  s.is_outcome);
 
-  // Load canvas on open
+  // Load canvas from the wrapped entity (Contact's or Organization's
+  // canvas_html). The target itself no longer carries canvas content.
   useEffect(() => {
     setTarget(initialTarget);
     setActiveTab("canvas");
     setSettingsOpen(false);
     setCanvasHtml(undefined);
-    supabase.from("outreach_targets").select("canvas_html").eq("id", initialTarget.id).single()
-      .then(({ data }) => setCanvasHtml(data?.canvas_html ?? null));
-  }, [initialTarget.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (initialTarget.contact_id) {
+      supabase.from("contacts").select("canvas_html").eq("id", initialTarget.contact_id).single()
+        .then(({ data }) => setCanvasHtml(data?.canvas_html ?? null));
+    } else if (initialTarget.organization_id) {
+      supabase.from("organizations").select("canvas_html").eq("id", initialTarget.organization_id).single()
+        .then(({ data }) => setCanvasHtml(data?.canvas_html ?? null));
+    } else {
+      // Orphan target — no wrapped entity yet. No canvas to load.
+      setCanvasHtml(null);
+    }
+  }, [initialTarget.id, initialTarget.contact_id, initialTarget.organization_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Hide floating Ash FAB in scrim mode
   useEffect(() => {
@@ -959,17 +1102,38 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
 
           {/* Content */}
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            {activeTab === "canvas" && (
-              canvasHtml === undefined
-                ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "var(--color-grey)" }}>Loading…</div>
-                : <TargetCanvasEditor
-                    key={target.id}
-                    targetId={target.id}
-                    targetName={target.name}
-                    contactId={target.contact_id}
-                    initialHtml={canvasHtml}
-                  />
-            )}
+            {activeTab === "canvas" && (() => {
+              const entity = target.contact_id
+                ? { kind: "contact" as const, id: target.contact_id, name: target.contact
+                    ? `${target.contact.first_name} ${target.contact.last_name}`.trim()
+                    : target.name, route: `/network?contactId=${target.contact_id}` }
+                : target.organization_id
+                  ? { kind: "organization" as const, id: target.organization_id, name: target.organization?.name ?? target.name, route: `/network?view=organizations&organizationId=${target.organization_id}` }
+                  : null;
+              if (!entity) {
+                return <OrphanTargetPrompt
+                  target={target}
+                  onLinked={({ contact_id, organization_id }) => {
+                    const next = { ...target, contact_id: contact_id ?? null, organization_id: organization_id ?? null } as OutreachTarget;
+                    setTarget(next);
+                    onUpdated(next);
+                  }}
+                />;
+              }
+              if (canvasHtml === undefined) {
+                return <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "var(--color-grey)" }}>Loading…</div>;
+              }
+              return <EntityCanvasEditor
+                key={`${entity.kind}:${entity.id}`}
+                targetId={target.id}
+                targetName={target.name}
+                entityKind={entity.kind}
+                entityId={entity.id}
+                entityName={entity.name}
+                entityRoute={entity.route}
+                initialHtml={canvasHtml}
+              />;
+            })()}
             {activeTab === "tasks"  && <StubPane heading="Tasks for this target" body="Track what you need to do next — research, draft a pitch, follow up. Coming soon as a fully-wired task list, mirroring the project tasks surface." />}
             {activeTab === "people" && <StubPane heading="People at this target" body="Galleries, fairs, and publications usually involve more than one person. Link the directors, curators, and editors you're talking to here." />}
             {activeTab === "notes"  && <StubPane heading="Notes" body="Quick observations and follow-up reminders. For longform thinking, use the Canvas tab." />}
