@@ -94,8 +94,9 @@ function inferMeta(stages: EditableStage[], index: number): MetaStage {
 const inputStyle = { background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" };
 
 export default function NewPipelineModal({ onClose, onCreated }: Props) {
-  const [name,      setName]      = useState("");
-  const [color,     setColor]     = useState(COLORS[0]);
+  const [name,        setName]        = useState("");
+  const [description, setDescription] = useState("");
+  const [color,       setColor]       = useState(COLORS[0]);
   const [template,  setTemplate]  = useState<string>("gallery");
   const [stages,    setStages]    = useState<EditableStage[]>(() =>
     TEMPLATES.gallery.map(s => ({ ...s, id: makeId() }))
@@ -215,7 +216,7 @@ export default function NewPipelineModal({ onClose, onCreated }: Props) {
 
     const { data: pipeline, error: pErr } = await supabase
       .from("outreach_pipelines")
-      .insert({ user_id: user.id, name: name.trim(), color, position: nextPos })
+      .insert({ user_id: user.id, name: name.trim(), description: description.trim() || null, color, position: nextPos })
       .select("*").single();
 
     if (pErr || !pipeline) { setError(pErr?.message ?? "Failed to create pipeline."); setLoading(false); return; }
@@ -269,6 +270,18 @@ export default function NewPipelineModal({ onClose, onCreated }: Props) {
                 required placeholder="e.g. Gallery outreach" autoFocus
                 className="w-full px-3 py-2 text-[13px] rounded-lg border focus:outline-none"
                 style={inputStyle} />
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>
+                Description <span className="font-normal" style={{ color: "var(--color-grey)" }}>(shown under the pipeline title — priorities, criteria, reminders)</span>
+              </label>
+              <textarea value={description} onChange={(e) => setDescription(e.target.value)}
+                placeholder="e.g. Mid-sized galleries in the Northeast. Prioritize spaces that have shown peers in the last 18 months."
+                rows={2}
+                className="w-full px-3 py-2 text-[13px] rounded-lg border focus:outline-none"
+                style={{ ...inputStyle, resize: "vertical" }} />
             </div>
 
             {/* Color */}

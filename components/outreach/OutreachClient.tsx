@@ -431,6 +431,12 @@ function OutreachClientInner({ initialPipelines, initialTargets, initialContacts
       {/* ── Main content ── */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <Topbar title={topbarTitle} actions={topbarActions} />
+        {activeSection === "pipeline" && selectedPipeline && (
+          <PipelineDescriptionBar
+            pipeline={selectedPipeline}
+            onUpdated={(p) => setPipelines(prev => prev.map(x => x.id === p.id ? { ...x, description: p.description } : x))}
+          />
+        )}
         <div className="flex-1 flex overflow-hidden">
           {activeSection === "leads" && (
             <LeadsBoard
@@ -582,5 +588,104 @@ function NavItem({ label, count, dot, active, onClick, suggestedPill }: {
       )}
       <span className="text-[10px] shrink-0" style={{ color: "var(--color-grey)" }}>{count}</span>
     </button>
+  );
+}
+
+// ── Pipeline description bar ─────────────────────────────────────────────────
+// Sits below the Topbar on a single-pipeline view. Click to edit; blur or
+// Cmd/Ctrl+Enter to save. Empty state shows a subtle "+ Add description"
+// prompt so users know the surface exists.
+
+function PipelineDescriptionBar({
+  pipeline, onUpdated,
+}: {
+  pipeline: OutreachPipeline & { stages: PipelineStage[] };
+  onUpdated: (p: OutreachPipeline) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft,   setDraft]   = useState(pipeline.description ?? "");
+  const taRef = useRef<HTMLTextAreaElement>(null);
+
+  // Reset draft when the pipeline switches, so we don't carry one pipeline's
+  // unsaved edit into another's view.
+  useEffect(() => { setDraft(pipeline.description ?? ""); setEditing(false); }, [pipeline.id, pipeline.description]);
+
+  useEffect(() => {
+    if (editing && taRef.current) {
+      taRef.current.focus();
+      // Place caret at the end rather than selecting everything — feels less
+      // destructive when the user just wants to append a line.
+      const len = taRef.current.value.length;
+      taRef.current.setSelectionRange(len, len);
+    }
+  }, [editing]);
+
+  async function commit() {
+    setEditing(false);
+    const next = draft.trim() || null;
+    if ((next ?? "") === (pipeline.description ?? "")) return;
+    const { data } = await createClient()
+      .from("outreach_pipelines")
+      .update({ description: next })
+      .eq("id", pipeline.id)
+      .select("*").single();
+    if (data) onUpdated(data as OutreachPipeline);
+  }
+
+  return (
+    <div
+      style={{
+        padding: "8px 20px",
+        borderBottom: "0.5px solid var(--color-border)",
+        background: "var(--color-off-white)",
+      }}>
+      {editing ? (
+        <textarea
+          ref={taRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") { setDraft(pipeline.description ?? ""); setEditing(false); }
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { commit(); }
+          }}
+          placeholder={`What this pipeline is for — priorities, criteria, who you're chasing…`}
+          rows={Math.min(6, Math.max(2, draft.split("\n").length))}
+          style={{
+            width: "100%",
+            background: "var(--color-warm-white)",
+            border: `0.5px solid ${pipeline.color}55`,
+            borderRadius: 8,
+            padding: "6px 10px",
+            fontSize: 12,
+            lineHeight: 1.55,
+            color: "var(--color-charcoal)",
+            fontFamily: "inherit",
+            outline: "none",
+            resize: "vertical",
+          }}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          title="Click to edit description"
+          style={{
+            width: "100%",
+            textAlign: "left",
+            background: "transparent",
+            border: "none",
+            cursor: "text",
+            padding: "2px 0",
+            fontSize: 12,
+            lineHeight: 1.55,
+            color: pipeline.description ? "var(--color-text-secondary)" : "var(--color-grey)",
+            fontStyle: pipeline.description ? "normal" : "italic",
+            whiteSpace: "pre-wrap",
+          }}>
+          {pipeline.description || "+ Add description — priorities, criteria, reminders"}
+        </button>
+      )}
+    </div>
   );
 }
