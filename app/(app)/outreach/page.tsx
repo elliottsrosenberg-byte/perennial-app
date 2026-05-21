@@ -18,6 +18,7 @@ export default async function OutreachPage() {
     supabase
       .from("outreach_pipelines")
       .select("*, stages:pipeline_stages(*)")
+      .eq("archived", false)
       .order("position", { ascending: true }),
     supabase
       .from("outreach_targets")

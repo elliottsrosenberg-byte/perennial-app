@@ -8,6 +8,7 @@ import PipelineBoard from "./PipelineBoard";
 import LeadsBoard from "./LeadsBoard";
 import FollowUpsBoard from "./FollowUpsBoard";
 import NewPipelineModal from "./NewPipelineModal";
+import EditPipelineModal from "./EditPipelineModal";
 import NewTargetModal from "./NewTargetModal";
 import TargetDetailPanel from "./TargetDetailPanel";
 import NewContactModal from "@/components/network/NewContactModal";
@@ -52,6 +53,8 @@ function OutreachClientInner({ initialPipelines, initialTargets, initialContacts
   const [openContact, setOpenContact]               = useState<Contact | null>(null);
 
   const [showNewPipeline, setShowNewPipeline]   = useState(false);
+  const [showEditPipeline, setShowEditPipeline] = useState(false);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [showNewTarget, setShowNewTarget]       = useState(false);
   const [showNewLead, setShowNewLead]           = useState(false);
   const [newTargetDefaults, setNewTargetDefaults] = useState<{ pipelineId?: string; stageId?: string }>({});
@@ -139,6 +142,20 @@ function OutreachClientInner({ initialPipelines, initialTargets, initialContacts
     window.dispatchEvent(new CustomEvent("outreach:pipeline-created", {
       detail: { id: pipeline.id, name: pipeline.name },
     }));
+  }
+
+  function handlePipelineUpdated(pipeline: OutreachPipeline & { stages: PipelineStage[] }) {
+    setPipelines((prev) => prev.map(p => p.id === pipeline.id ? { ...pipeline, stages: p.stages } : p));
+  }
+
+  async function handlePipelineArchive() {
+    if (!selectedPipeline) return;
+    const id = selectedPipeline.id;
+    await createClient().from("outreach_pipelines").update({ archived: true }).eq("id", id);
+    setPipelines(prev => prev.filter(p => p.id !== id));
+    setSelectedPipelineId(null);
+    setActiveSection("pipeline");
+    setShowArchiveConfirm(false);
   }
 
   function handleTargetCreated(target: OutreachTarget) {
@@ -310,6 +327,9 @@ function OutreachClientInner({ initialPipelines, initialTargets, initialContacts
           onToggleShowClosed={() => setShowClosed(v => !v)}
           closedCount={closedCount}
           onClose={() => setOptionsOpen(false)}
+          pipelineLabel={activeSection === "pipeline" && selectedPipeline ? selectedPipeline.name : undefined}
+          onEditPipeline={activeSection === "pipeline" && selectedPipeline ? () => setShowEditPipeline(true) : undefined}
+          onArchivePipeline={activeSection === "pipeline" && selectedPipeline ? () => setShowArchiveConfirm(true) : undefined}
         />
       )}
     </div>
@@ -485,6 +505,21 @@ function OutreachClientInner({ initialPipelines, initialTargets, initialContacts
           <NewPipelineModal onClose={() => setShowNewPipeline(false)} onCreated={handlePipelineCreated} />
         </div>
       )}
+      {showEditPipeline && selectedPipeline && (
+        <EditPipelineModal
+          pipeline={selectedPipeline}
+          onClose={() => setShowEditPipeline(false)}
+          onUpdated={handlePipelineUpdated}
+        />
+      )}
+      {showArchiveConfirm && selectedPipeline && (
+        <ArchivePipelineConfirm
+          pipelineName={selectedPipeline.name}
+          targetCount={targets.filter(t => t.pipeline_id === selectedPipeline.id).length}
+          onCancel={() => setShowArchiveConfirm(false)}
+          onConfirm={handlePipelineArchive}
+        />
+      )}
       {showNewTarget && pipelines.length > 0 && (
         <div data-tour-target="outreach.new-target-modal">
           <NewTargetModal
@@ -588,6 +623,55 @@ function NavItem({ label, count, dot, active, onClick, suggestedPill }: {
       )}
       <span className="text-[10px] shrink-0" style={{ color: "var(--color-grey)" }}>{count}</span>
     </button>
+  );
+}
+
+// ── Archive confirm ──────────────────────────────────────────────────────────
+// Lightweight confirm modal — no shared confirm primitive lives in /ui yet
+// and inlining keeps OutreachClient self-contained for this small interaction.
+
+function ArchivePipelineConfirm({
+  pipelineName, targetCount, onCancel, onConfirm,
+}: {
+  pipelineName: string;
+  targetCount: number;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(31,33,26,0.5)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
+      <div className="w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden"
+        style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}>
+        <div className="px-6 py-5">
+          <p className="text-[14px] font-semibold mb-2" style={{ color: "var(--color-charcoal)" }}>
+            Archive “{pipelineName}”?
+          </p>
+          <p className="text-[12px]" style={{ color: "var(--color-grey)", lineHeight: 1.55 }}>
+            The pipeline disappears from your sidebar.
+            {targetCount > 0
+              ? ` Its ${targetCount} target${targetCount === 1 ? "" : "s"} stay intact — you can restore the pipeline later from settings.`
+              : " You can restore it later from settings."}
+          </p>
+        </div>
+        <div className="flex items-center justify-end gap-2 px-6 py-4"
+          style={{ borderTop: "0.5px solid var(--color-border)" }}>
+          <button type="button" onClick={onCancel}
+            className="px-4 py-2 text-[13px] rounded-lg"
+            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+            Cancel
+          </button>
+          <button type="button" onClick={onConfirm}
+            className="px-4 py-2 text-[13px] font-medium rounded-lg text-white"
+            style={{ background: "var(--color-red-orange)", border: "none" }}>
+            Archive
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
