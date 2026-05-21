@@ -327,6 +327,8 @@ interface CreateBody {
   description?:  string | null;
   location?:     string | null;
   attendees?:    string[];
+  conferencing?:    "google_meet" | "teams" | "none";
+  reminder_minutes?: number | null;
 }
 
 export async function POST(req: Request) {
@@ -343,13 +345,15 @@ export async function POST(req: Request) {
   if (!lookup) return NextResponse.json({ error: "calendar not found" }, { status: 404 });
 
   const result = await createEvent(lookup, {
-    title:       body.title,
-    start_iso:   body.start_iso,
-    end_iso:     body.end_iso,
-    all_day:     !!body.all_day,
-    description: body.description ?? null,
-    location:    body.location ?? null,
-    attendees:   body.attendees ?? [],
+    title:            body.title,
+    start_iso:        body.start_iso,
+    end_iso:          body.end_iso,
+    all_day:          !!body.all_day,
+    description:      body.description ?? null,
+    location:         body.location ?? null,
+    attendees:        body.attendees ?? [],
+    conferencing:     body.conferencing,
+    reminder_minutes: body.reminder_minutes ?? undefined,
   });
 
   if (result.kind === "ok") return NextResponse.json({ event: result.event });

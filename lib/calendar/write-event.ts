@@ -38,6 +38,14 @@ export interface CalendarEventInput {
   description?: string | null;
   location?:    string | null;
   attendees?:   string[];
+  /** Auto-attach a video conferencing link. "google_meet" → Google's
+   *  conferenceData.createRequest (Google calendars only). "teams" →
+   *  Microsoft Graph's isOnlineMeeting (Microsoft calendars only). The
+   *  other provider's value is silently ignored. */
+  conferencing?:    "google_meet" | "teams" | "none";
+  /** Single popup reminder in minutes before start. 0 disables overrides
+   *  and falls back to the calendar default. */
+  reminder_minutes?: number | null;
 }
 
 export type CalendarWriteResult =
@@ -162,6 +170,24 @@ function googleBody(input: Partial<CalendarEventInput>): Record<string, unknown>
   if (input.attendees && input.attendees.length > 0) {
     body.attendees = input.attendees.map((email) => ({ email }));
   }
+  if (input.conferencing === "google_meet") {
+    body.conferenceData = {
+      createRequest: {
+        requestId:            `perennial-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        conferenceSolutionKey: { type: "hangoutsMeet" },
+      },
+    };
+  }
+  if (input.reminder_minutes !== undefined) {
+    if (input.reminder_minutes === null || input.reminder_minutes < 0) {
+      body.reminders = { useDefault: true };
+    } else {
+      body.reminders = {
+        useDefault: false,
+        overrides:  [{ method: "popup", minutes: input.reminder_minutes }],
+      };
+    }
+  }
   return body;
 }
 
@@ -169,8 +195,14 @@ async function createGoogleEvent(lookup: CalendarLookup, input: CalendarEventInp
   const token = await getValidGoogleAccessToken(lookup.integrationId!).catch(() => null);
   if (!token) return { kind: "scope_upgrade_required", provider: "google", reconnect_url: googleReconnectUrl() };
 
+  // Google requires conferenceDataVersion=1 to actually mint a Meet link
+  // from a conferenceData.createRequest body. Without it the body is
+  // silently ignored and you get an event with no Meet attached.
+  const wantConference = input.conferencing === "google_meet";
+  const qs = wantConference ? "?conferenceDataVersion=1" : "";
+
   const res = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(lookup.cal.external_id)}/events`,
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(lookup.cal.external_id)}/events${qs}`,
     {
       method:  "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -292,6 +324,14 @@ function microsoftBody(input: Partial<CalendarEventInput>): Record<string, unkno
       emailAddress: { address: email },
       type:         "required",
     }));
+  }
+  if (input.conferencing === "teams") {
+    body.isOnlineMeeting       = true;
+    body.onlineMeetingProvider = "teamsForBusiness";
+  }
+  if (input.reminder_minutes !== undefined && input.reminder_minutes !== null && input.reminder_minutes >= 0) {
+    body.reminderMinutesBeforeStart = input.reminder_minutes;
+    body.isReminderOn               = true;
   }
   return body;
 }
