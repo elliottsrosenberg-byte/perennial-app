@@ -1,10 +1,11 @@
 "use client";
 
-// Tier 1: full-screen modal that introduces the Contacts module with 4
+// Tier 1: full-screen modal that introduces the Network module with 4
 // animated slides. Closing it (Skip OR Get started) marks
 // profiles.tour_visited.contacts so it won't re-show. "Get started" also
 // fires window event "contacts-tooltips-start" which the tooltip tour
-// listens for.
+// listens for. (Internal keys + event names keep the legacy "contacts"
+// naming — only user-visible copy says "Network".)
 
 import { useState, useEffect } from "react";
 import { X as XIcon } from "lucide-react";
@@ -23,7 +24,7 @@ interface Slide {
 const SLIDES: Slide[] = [
   {
     title: "Your network",
-    body:  "People holds everyone connected to your studio — galleries, collectors, press, clients, fabricators, plus the leads you're still chasing. Each row carries status, tags, and when you last connected, so the list reads like a living map of your practice.",
+    body:  "Network holds everyone connected to your studio — galleries, collectors, press, clients, fabricators, plus the leads you're still chasing and the organizations they belong to. Each row carries status, tags, and when you last connected, so the list reads like a living map of your practice.",
     Anim:  NetworkMaterialize,
   },
   {
@@ -32,13 +33,13 @@ const SLIDES: Slide[] = [
     Anim:  StaleSurface,
   },
   {
-    title: "Contacts and Leads",
-    body:  "Toggle between Contacts (relationships you've started) and Leads (the pipeline you're working) at the top. Same person record, different lens — convert a lead to a contact the moment the relationship begins, and their history follows. Tags slice your network in seconds; stages keep the pipeline honest.",
+    title: "Contacts, Leads, Organizations",
+    body:  "Switch between Contacts (relationships you've started), Leads (the pipeline you're working), and Organizations (galleries, studios, publications) at the top. Contacts and leads share the same person record — convert a lead the moment the relationship begins. Tags slice your network in seconds; stages keep the pipeline honest.",
     Anim:  TagFilter,
   },
   {
     title: "The relationship file",
-    body:  "Open a row and you get its full file — Canvas for your thinking, Activity for every logged touchpoint, Tasks, Notes, Files. Linked projects show in the sidebar. One scrim, everything you know about this person.",
+    body:  "Open any row — person or organization — and you get its full file: Canvas for your thinking, Activity for every logged touchpoint, Tasks, Notes, Files. Linked projects show in the sidebar. One scrim, everything you know about this contact or studio.",
     Anim:  RelationshipFile,
   },
 ];
@@ -123,7 +124,7 @@ export default function ContactsIntroModal() {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Contacts walkthrough"
+      aria-label="Network walkthrough"
       style={{
         position: "fixed", inset: 0, zIndex: 200,
         background: "rgba(31,33,26,0.55)",
@@ -163,7 +164,7 @@ export default function ContactsIntroModal() {
           background: "var(--color-off-white)",
         }}>
           <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-grey)" }}>
-            People · {stepIdx + 1} of {SLIDES.length}
+            Network · {stepIdx + 1} of {SLIDES.length}
           </span>
           <button
             onClick={() => close(false)}

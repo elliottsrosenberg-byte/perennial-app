@@ -34,7 +34,7 @@ const STEPS: Step[] = [
   {
     id:     "snapshots",
     title:  "Module snapshots",
-    body:   "Finance, Projects, and Contacts stay quiet until your modules have data. They each link to their module — click View all to set them up.",
+    body:   "Finance, Projects, and Network stay quiet until your modules have data. They each link to their module — click View all to set them up.",
     anchor: '[data-tour-step="dashboard.snapshots"]',
   },
   {
