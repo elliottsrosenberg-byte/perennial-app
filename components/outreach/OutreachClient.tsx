@@ -196,6 +196,59 @@ function OutreachClientInner({ initialPipelines, initialTargets, initialContacts
     if (openContact?.id === id) setOpenContact(null);
   }
 
+  async function handleStageRename(stageId: string, name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setPipelines(prev => prev.map(p => ({
+      ...p,
+      stages: p.stages.map(s => s.id === stageId ? { ...s, name: trimmed } : s),
+    })));
+    await createClient().from("pipeline_stages").update({ name: trimmed }).eq("id", stageId);
+  }
+
+  async function handleStageDelete(stageId: string, moveTargetsToStageId: string | null) {
+    const supabase = createClient();
+    if (moveTargetsToStageId) {
+      // Reassign targets in this stage to the chosen destination before
+      // the row goes away. Local + remote both kept in sync.
+      setTargets(prev => prev.map(t => t.stage_id === stageId ? { ...t, stage_id: moveTargetsToStageId } : t));
+      await supabase.from("outreach_targets").update({ stage_id: moveTargetsToStageId }).eq("stage_id", stageId);
+    }
+    setPipelines(prev => prev.map(p => ({ ...p, stages: p.stages.filter(s => s.id !== stageId) })));
+    await supabase.from("pipeline_stages").delete().eq("id", stageId);
+  }
+
+  async function handleStageCreate(pipelineId: string, isOutcome: boolean): Promise<import("@/types/database").PipelineStage | null> {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    const pipeline = pipelines.find(p => p.id === pipelineId);
+    if (!pipeline) return null;
+    // Place the new stage at the end of its own section. We compute against
+    // the full ordered list so the position stays globally monotonic.
+    const sectionStages = pipeline.stages.filter(s => s.is_outcome === isOutcome);
+    const lastPos = sectionStages.length > 0
+      ? Math.max(...sectionStages.map(s => s.position))
+      : (pipeline.stages.length > 0 ? Math.max(...pipeline.stages.map(s => s.position)) : -1);
+    const { data, error } = await supabase
+      .from("pipeline_stages")
+      .insert({
+        pipeline_id: pipelineId,
+        user_id:     user.id,
+        name:        isOutcome ? "New outcome" : "New stage",
+        position:    lastPos + 1,
+        is_outcome:  isOutcome,
+        meta_stage:  isOutcome ? "closed" : "submit",
+      })
+      .select("*").single();
+    if (error || !data) return null;
+    const stage = data as import("@/types/database").PipelineStage;
+    setPipelines(prev => prev.map(p => p.id === pipelineId
+      ? { ...p, stages: [...p.stages, stage] }
+      : p));
+    return stage;
+  }
+
   async function handleStageChange(targetId: string, newStageId: string) {
     const now = new Date().toISOString();
     // Moving to a new column counts as a touch, and clears any follow-up the
@@ -478,6 +531,9 @@ function OutreachClientInner({ initialPipelines, initialTargets, initialContacts
               onNewTarget={openNewTarget}
               onNewPipeline={() => setShowNewPipeline(true)}
               onStageChange={handleStageChange}
+              onStageRename={handleStageRename}
+              onStageDelete={handleStageDelete}
+              onStageCreate={handleStageCreate}
               onFollowUp={handleFollowUp}
               onEtherToggle={handleEtherToggle}
             />
