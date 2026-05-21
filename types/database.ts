@@ -83,14 +83,45 @@ export type LeadStage = "new" | "reached_out" | "in_conversation" | "proposal_se
 
 export type ContactActivityType = "email" | "call" | "note" | "meeting";
 
-export interface Company {
+export interface Organization {
   id: string;
   user_id: string;
   name: string;
   website: string | null;
   location: string | null;
+  email: string | null;
+  phone: string | null;
+  bio: string | null;
+  description: string | null;
+  avatar_url: string | null;
+  canvas_html: string | null;
+  tags: string[];
+  archived: boolean;
+  last_touched_at: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface OrganizationFile {
+  id:              string;
+  organization_id: string;
+  user_id:         string;
+  name:            string;
+  url:             string;
+  file_type:       string | null;
+  size_bytes:      number | null;
+  created_at:      string;
+}
+
+export interface OrganizationActivity {
+  id:              string;
+  user_id:         string;
+  organization_id: string;
+  type:            ContactActivityType;
+  content:         string | null;
+  occurred_at:     string;
+  metadata:        Record<string, unknown> | null;
+  created_at:      string;
 }
 
 export interface ContactFile {
@@ -111,7 +142,7 @@ export interface Contact {
   last_name: string;
   email: string | null;
   phone: string | null;
-  company_id: string | null;
+  organization_id: string | null;
   title: string | null;
   tags: string[];
   status: ContactStatus;
@@ -126,7 +157,7 @@ export interface Contact {
   archived: boolean;
   created_at: string;
   updated_at: string;
-  company?: Company | null;
+  organization?: Organization | null;
 }
 
 export interface ContactActivity {
@@ -180,7 +211,7 @@ export interface OutreachTarget {
   description: string | null;
   canvas_html: string | null;
   contact_id: string | null;
-  company_id: string | null;
+  organization_id: string | null;
   link: string | null;
   results_deadline: string | null;
   last_touched_at: string;
@@ -191,7 +222,7 @@ export interface OutreachTarget {
   pipeline?: OutreachPipeline;
   stage?: PipelineStage;
   contact?: Contact;
-  company?: Company;
+  organization?: Organization;
 }
 
 export interface OutreachTargetProject {
@@ -259,7 +290,7 @@ export interface Invoice {
   number: number;
   status: InvoiceStatus;
   client_contact_id: string | null;
-  client_company_id: string | null;
+  client_organization_id: string | null;
   project_id: string | null;
   issued_at: string;
   due_at: string | null;
@@ -270,7 +301,7 @@ export interface Invoice {
   created_at: string;
   updated_at: string;
   client_contact?: Contact | null;
-  client_company?: Company | null;
+  client_organization?: Organization | null;
   project?: Project | null;
   line_items?: InvoiceLineItem[];
 }

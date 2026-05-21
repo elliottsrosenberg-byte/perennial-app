@@ -172,57 +172,57 @@ export const addTaskTool: AshToolDefinition = {
 // ─── create_contact ───────────────────────────────────────────────────────────
 
 async function create_contact(
-  input: { first_name: string; last_name: string; email?: string; phone?: string; company?: string; tags?: string[]; is_lead?: boolean },
+  input: { first_name: string; last_name: string; email?: string; phone?: string; organization?: string; tags?: string[]; is_lead?: boolean },
   { supabase, userId }: ToolContext
 ): Promise<string> {
-  let company_id: string | null = null;
+  let organization_id: string | null = null;
 
-  if (input.company) {
+  if (input.organization) {
     const { data: existing } = await supabase
-      .from("companies")
+      .from("organizations")
       .select("id")
       .eq("user_id", userId)
-      .ilike("name", input.company)
+      .ilike("name", input.organization)
       .maybeSingle();
 
     if (existing) {
-      company_id = existing.id;
+      organization_id = existing.id;
     } else {
-      const { data: newCo } = await supabase
-        .from("companies")
-        .insert({ user_id: userId, name: input.company })
+      const { data: newOrg } = await supabase
+        .from("organizations")
+        .insert({ user_id: userId, name: input.organization })
         .select("id")
         .single();
-      if (newCo) company_id = newCo.id;
+      if (newOrg) organization_id = newOrg.id;
     }
   }
 
   const { data, error } = await supabase
     .from("contacts")
     .insert({
-      user_id:    userId,
-      first_name: input.first_name,
-      last_name:  input.last_name,
-      email:      input.email ?? null,
-      phone:      input.phone ?? null,
-      company_id: company_id,
-      tags:       input.tags ?? [],
-      status:     "active",
-      is_lead:    input.is_lead ?? false,
-      archived:   false,
+      user_id:         userId,
+      first_name:      input.first_name,
+      last_name:       input.last_name,
+      email:           input.email ?? null,
+      phone:           input.phone ?? null,
+      organization_id: organization_id,
+      tags:            input.tags ?? [],
+      status:          "active",
+      is_lead:         input.is_lead ?? false,
+      archived:        false,
     })
     .select("id, first_name, last_name")
     .single();
 
   if (error) return `Failed to create contact: ${error.message}`;
-  return `Contact created: "${data.first_name} ${data.last_name}"${input.company ? ` at ${input.company}` : ""} (id: ${data.id}). They will appear in the People module.`;
+  return `Contact created: "${data.first_name} ${data.last_name}"${input.organization ? ` at ${input.organization}` : ""} (id: ${data.id}). They will appear in the People module.`;
 }
 
 export const createContactTool: AshToolDefinition = {
   name: "create_contact",
   description:
     "Create a new contact. Use when the user asks to add someone to their network, " +
-    "address book, or contacts list. Optionally creates a company record too.",
+    "address book, or contacts list. Optionally creates an organization record too.",
   input_schema: {
     type: "object",
     properties: {
@@ -230,7 +230,7 @@ export const createContactTool: AshToolDefinition = {
       last_name:  { type: "string" },
       email:      { type: "string" },
       phone:      { type: "string" },
-      company:    { type: "string", description: "Company or gallery name — will match or create a company record" },
+      organization: { type: "string", description: "Organization or gallery name — will match or create an organization record" },
       tags:       { type: "array", items: { type: "string" }, description: "e.g. ['gallery', 'press', 'client']" },
       is_lead:    { type: "boolean", description: "Mark as a lead instead of active contact" },
     },

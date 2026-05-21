@@ -49,9 +49,9 @@ function ContactCard({ contact, onClick }: { contact: Contact; onClick: () => vo
           </div>
         </div>
       </div>
-      {(contact.company?.name || contact.title) && (
+      {(contact.organization?.name || contact.title) && (
         <p style={{ fontSize: 10, color: "var(--color-grey)", marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {[contact.title, contact.company?.name].filter(Boolean).join(" · ")}
+          {[contact.title, contact.organization?.name].filter(Boolean).join(" · ")}
         </p>
       )}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>

@@ -183,7 +183,7 @@ export default function ContactsClient({ initialContacts }: Props) {
       if (q) {
         const full  = `${c.first_name} ${c.last_name}`.toLowerCase();
         const email = (c.email ?? "").toLowerCase();
-        const co    = (c.company?.name ?? "").toLowerCase();
+        const co    = (c.organization?.name ?? "").toLowerCase();
         if (!full.includes(q) && !email.includes(q) && !co.includes(q)) return false;
       }
       return true;
@@ -270,11 +270,11 @@ export default function ContactsClient({ initialContacts }: Props) {
   function exportCSV() {
     const rows = visible.map(c => [
       c.first_name, c.last_name, c.email ?? "", c.phone ?? "",
-      c.company?.name ?? "", c.title ?? "", c.location ?? "",
+      c.organization?.name ?? "", c.title ?? "", c.location ?? "",
       c.website ?? "", c.tags.join("; "), c.status,
       c.is_lead ? "lead" : "contact", c.last_contacted_at ?? "",
     ]);
-    const header = ["First Name","Last Name","Email","Phone","Company","Title","Location","Website","Tags","Status","Type","Last Contacted"];
+    const header = ["First Name","Last Name","Email","Phone","Organization","Title","Location","Website","Tags","Status","Type","Last Contacted"];
     const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "contacts.csv"; a.click();
@@ -539,7 +539,7 @@ export default function ContactsClient({ initialContacts }: Props) {
         <div className="grid items-center px-6 py-2 sticky top-0 z-10"
           style={{ gridTemplateColumns: GRID, background: "var(--color-cream)", borderBottom: "0.5px solid var(--color-border)" }}>
           <div><Checkbox checked={allChecked} onChange={toggleSelectAll} /></div>
-          {["Name", "Company", "Tags", isLeads ? "Stage" : "Status", "Last contact", "Location"].map(h => (
+          {["Name", "Organization", "Tags", isLeads ? "Stage" : "Status", "Last contact", "Location"].map(h => (
             <div key={h} className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>{h}</div>
           ))}
         </div>
@@ -634,8 +634,8 @@ export default function ContactsClient({ initialContacts }: Props) {
               </div>
 
               <div className="pr-4">
-                {c.company?.name
-                  ? <><div className="text-[12px]" style={{ color: "#6b6860" }}>{c.company.name}</div>
+                {c.organization?.name
+                  ? <><div className="text-[12px]" style={{ color: "#6b6860" }}>{c.organization.name}</div>
                       {c.title && <div className="text-[11px]" style={{ color: "var(--color-grey)" }}>{c.title}</div>}</>
                   : c.title
                     ? <div className="text-[12px]" style={{ color: "#6b6860" }}>{c.title}</div>

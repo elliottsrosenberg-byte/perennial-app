@@ -43,7 +43,7 @@ export default function NewContactModal({ onClose, onCreated, isLead = false }: 
   const [lastName, setLastName]   = useState("");
   const [email, setEmail]         = useState("");
   const [phone, setPhone]         = useState("");
-  const [company, setCompany]     = useState("");
+  const [organization, setOrganization] = useState("");
   const [title, setTitle]         = useState("");
   const [location, setLocation]   = useState("");
   const [website, setWebsite]     = useState("");
@@ -83,26 +83,26 @@ export default function NewContactModal({ onClose, onCreated, isLead = false }: 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setError("Not authenticated."); setLoading(false); return; }
 
-    let company_id: string | null = null;
+    let organization_id: string | null = null;
 
-    if (company.trim()) {
-      // Look up or create company
+    if (organization.trim()) {
+      // Look up or create organization
       const { data: existing } = await supabase
-        .from("companies")
+        .from("organizations")
         .select("id")
         .eq("user_id", user.id)
-        .ilike("name", company.trim())
+        .ilike("name", organization.trim())
         .maybeSingle();
 
       if (existing) {
-        company_id = existing.id;
+        organization_id = existing.id;
       } else {
         const { data: created } = await supabase
-          .from("companies")
-          .insert({ user_id: user.id, name: company.trim() })
+          .from("organizations")
+          .insert({ user_id: user.id, name: organization.trim() })
           .select("id")
           .single();
-        company_id = created?.id ?? null;
+        organization_id = created?.id ?? null;
       }
     }
 
@@ -112,7 +112,7 @@ export default function NewContactModal({ onClose, onCreated, isLead = false }: 
       last_name:   lastName.trim(),
       email:       email.trim()    || null,
       phone:       phone.trim()    || null,
-      company_id,
+      organization_id,
       title:       title.trim()    || null,
       location:    location.trim() || null,
       website:     website.trim()  || null,
@@ -125,7 +125,7 @@ export default function NewContactModal({ onClose, onCreated, isLead = false }: 
     const { data, error: dbError } = await supabase
       .from("contacts")
       .insert(payload)
-      .select("*, company:companies(*)")
+      .select("*, organization:organizations(*)")
       .single();
 
     if (dbError) {
@@ -214,11 +214,11 @@ export default function NewContactModal({ onClose, onCreated, isLead = false }: 
             </div>
           </div>
 
-          {/* Company + Title */}
+          {/* Organization + Title */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls} style={{ color: "var(--color-charcoal)" }}>Company</label>
-              <input type="text" value={company} onChange={(e) => setCompany(e.target.value)}
+              <label className={labelCls} style={{ color: "var(--color-charcoal)" }}>Organization</label>
+              <input type="text" value={organization} onChange={(e) => setOrganization(e.target.value)}
                 placeholder="The Parlour Gallery" className={inputCls} style={inputStyle} />
             </div>
             <div>

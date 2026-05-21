@@ -21,11 +21,11 @@ export default async function OutreachPage() {
       .order("position", { ascending: true }),
     supabase
       .from("outreach_targets")
-      .select("*, pipeline:outreach_pipelines(*), stage:pipeline_stages(*), contact:contacts(*, company:companies(*)), company:companies(*)")
+      .select("*, pipeline:outreach_pipelines(*), stage:pipeline_stages(*), contact:contacts(*, organization:organizations(*)), organization:organizations(*)")
       .order("last_touched_at", { ascending: false }),
     supabase
       .from("contacts")
-      .select("*, company:companies(*)")
+      .select("*, organization:organizations(*)")
       .eq("archived", false)
       .order("last_name", { ascending: true }),
   ]);

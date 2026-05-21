@@ -43,7 +43,7 @@ export async function buildAshContext(
 
     supabase
       .from("contacts")
-      .select("first_name, last_name, last_contacted_at, company:companies(name)")
+      .select("first_name, last_name, last_contacted_at, organization:organizations(name)")
       .eq("user_id", userId)
       .eq("status", "active")
       .eq("archived", false)
@@ -92,7 +92,7 @@ export async function buildAshContext(
   type RawContact = {
     first_name: string; last_name: string;
     last_contacted_at: string | null;
-    company: { name: string } | null;
+    organization: { name: string } | null;
   };
   const contacts = (staleContacts ?? []) as unknown as RawContact[];
 
@@ -140,7 +140,7 @@ export async function buildAshContext(
     staleContacts:  contacts.map((c) => ({
       first_name: c.first_name, last_name: c.last_name,
       last_contacted_at: c.last_contacted_at,
-      company_name: c.company?.name ?? null,
+      organization_name: c.organization?.name ?? null,
     })),
     openTasks:      tasks.map((t) => ({
       title:    t.title,

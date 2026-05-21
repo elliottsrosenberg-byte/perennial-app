@@ -7,7 +7,7 @@
 //   2. map      — assign each detected CSV header to a Perennial field
 //   3. preview  — show first 5 rows mapped + summary, then Import
 //
-// Companies are looked up or created on the fly (case-insensitive by name)
+// Organizations are looked up or created on the fly (case-insensitive by name)
 // so imports don't pile up duplicates. Insert happens in chunks of 50 to keep
 // requests small and surface failures incrementally.
 
@@ -22,7 +22,7 @@ import Select from "@/components/ui/Select";
 
 type FieldKey =
   | "first_name" | "last_name" | "full_name"
-  | "email" | "phone" | "company" | "title"
+  | "email" | "phone" | "organization" | "title"
   | "location" | "website" | "tags" | "is_lead"
   | "_ignore";
 
@@ -39,7 +39,7 @@ const FIELDS: FieldSpec[] = [
   { key: "full_name",  label: "Full name",    matches: [/^name$|^full.?name|^display/i] },
   { key: "email",      label: "Email",        matches: [/e-?mail|^email/i] },
   { key: "phone",      label: "Phone",        matches: [/phone|mobile|cell/i] },
-  { key: "company",    label: "Company",      matches: [/compan|organi[sz]ation|employer|business/i] },
+  { key: "organization", label: "Organization", matches: [/compan|organi[sz]ation|employer|business/i] },
   { key: "title",      label: "Title / role", matches: [/title|role|position|^job/i] },
   { key: "location",   label: "Location",     matches: [/location|city|address/i] },
   { key: "website",    label: "Website",      matches: [/website|url|^web|domain/i] },
@@ -201,36 +201,36 @@ export default function ImportContactsModal({ onClose, onImported }: Props) {
       return;
     }
 
-    // Resolve / create companies up front so we don't hit the DB N times in
+    // Resolve / create organizations up front so we don't hit the DB N times in
     // the contact insert loop. Lowercase-normalize to merge duplicates from
     // the CSV (e.g. "Acme Studio" + "acme studio").
-    const companyCache = new Map<string, string>(); // lowercased name → company_id
-    const desiredCompanies = new Set<string>();
+    const organizationCache = new Map<string, string>(); // lowercased name → organization_id
+    const desiredOrganizations = new Set<string>();
     rows.forEach(r => {
       const p = buildContactPayload(r, headers, mapping);
-      if (p.company_name) desiredCompanies.add(p.company_name.trim().toLowerCase());
+      if (p.organization_name) desiredOrganizations.add(p.organization_name.trim().toLowerCase());
     });
 
-    if (desiredCompanies.size > 0) {
+    if (desiredOrganizations.size > 0) {
       const { data: existing } = await supabase
-        .from("companies")
+        .from("organizations")
         .select("id, name")
         .eq("user_id", user.id);
       (existing ?? []).forEach((c: { id: string; name: string }) => {
         const key = c.name.toLowerCase().trim();
-        if (desiredCompanies.has(key)) companyCache.set(key, c.id);
+        if (desiredOrganizations.has(key)) organizationCache.set(key, c.id);
       });
 
-      const toCreate = Array.from(desiredCompanies)
-        .filter(n => !companyCache.has(n))
+      const toCreate = Array.from(desiredOrganizations)
+        .filter(n => !organizationCache.has(n))
         .map(n => ({ user_id: user.id, name: capitalizeWords(n) }));
       if (toCreate.length > 0) {
         const { data: created } = await supabase
-          .from("companies")
+          .from("organizations")
           .insert(toCreate)
           .select("id, name");
         (created ?? []).forEach((c: { id: string; name: string }) => {
-          companyCache.set(c.name.toLowerCase().trim(), c.id);
+          organizationCache.set(c.name.toLowerCase().trim(), c.id);
         });
       }
     }
@@ -241,8 +241,8 @@ export default function ImportContactsModal({ onClose, onImported }: Props) {
     for (const r of rows) {
       const p = buildContactPayload(r, headers, mapping);
       if (!p.first_name && !p.last_name) { skipped++; continue; }
-      const company_id = p.company_name
-        ? companyCache.get(p.company_name.trim().toLowerCase()) ?? null
+      const organization_id = p.organization_name
+        ? organizationCache.get(p.organization_name.trim().toLowerCase()) ?? null
         : null;
       inserts.push({
         user_id:    user.id,
@@ -250,7 +250,7 @@ export default function ImportContactsModal({ onClose, onImported }: Props) {
         last_name:  p.last_name  || "",
         email:      p.email      || null,
         phone:      p.phone      || null,
-        company_id,
+        organization_id,
         title:      p.title      || null,
         location:   p.location   || null,
         website:    p.website    || null,
@@ -268,7 +268,7 @@ export default function ImportContactsModal({ onClose, onImported }: Props) {
       const { data, error } = await supabase
         .from("contacts")
         .insert(chunk)
-        .select("*, company:companies(*)");
+        .select("*, organization:organizations(*)");
       if (error) {
         setImportError(`Imported ${created.length} of ${inserts.length} — Supabase error: ${error.message}`);
         setImportedCount(created.length);
@@ -423,7 +423,7 @@ export default function ImportContactsModal({ onClose, onImported }: Props) {
                 <ul style={{ fontSize: 11, lineHeight: 1.6, color: "var(--color-text-secondary)", paddingLeft: 16, listStyle: "disc" }}>
                   <li><strong>Google Contacts</strong>: Settings → Export → Google CSV</li>
                   <li><strong>Apple Contacts</strong>: select all → File → Export → vCard, then convert to CSV with any free converter</li>
-                  <li>Common columns we recognize: name, email, phone, company, tags</li>
+                  <li>Common columns we recognize: name, email, phone, organization, tags</li>
                 </ul>
               </div>
             </>
@@ -550,7 +550,7 @@ export default function ImportContactsModal({ onClose, onImported }: Props) {
                       <div style={{ fontSize: 10.5, color: "var(--color-text-tertiary)", marginTop: 3, display: "flex", flexWrap: "wrap", gap: 8 }}>
                         {p.email     && <span>{p.email}</span>}
                         {p.phone     && <span>{p.phone}</span>}
-                        {p.company_name && <span>{p.company_name}</span>}
+                        {p.organization_name && <span>{p.organization_name}</span>}
                         {p.title     && <span>{p.title}</span>}
                         {p.location  && <span>{p.location}</span>}
                       </div>
@@ -657,22 +657,22 @@ export default function ImportContactsModal({ onClose, onImported }: Props) {
 // ─── Row → contact payload ────────────────────────────────────────────────────
 
 interface MappedContact {
-  first_name:   string;
-  last_name:    string;
-  email:        string;
-  phone:        string;
-  company_name: string;
-  title:        string;
-  location:     string;
-  website:      string;
-  tags:         string[];
-  is_lead:      boolean;
+  first_name:        string;
+  last_name:         string;
+  email:             string;
+  phone:             string;
+  organization_name: string;
+  title:             string;
+  location:          string;
+  website:           string;
+  tags:              string[];
+  is_lead:           boolean;
 }
 
 function buildContactPayload(row: string[], _headers: string[], mapping: FieldKey[]): MappedContact {
   const out: MappedContact = {
     first_name: "", last_name: "", email: "", phone: "",
-    company_name: "", title: "", location: "", website: "",
+    organization_name: "", title: "", location: "", website: "",
     tags: [], is_lead: false,
   };
   mapping.forEach((field, idx) => {
@@ -689,7 +689,7 @@ function buildContactPayload(row: string[], _headers: string[], mapping: FieldKe
       }
       case "email":      out.email     = raw; break;
       case "phone":      out.phone     = raw; break;
-      case "company":    out.company_name = raw; break;
+      case "organization": out.organization_name = raw; break;
       case "title":      out.title     = raw; break;
       case "location":   out.location  = raw; break;
       case "website":    out.website   = raw; break;

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { OutreachPipeline, PipelineStage, OutreachTarget, Contact, Company } from "@/types/database";
+import type { OutreachPipeline, PipelineStage, OutreachTarget, Contact, Organization } from "@/types/database";
 import { X, UserPlus } from "lucide-react";
 
 interface Props {
@@ -28,9 +28,9 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
 
   // Contact/company search
   const [search, setSearch]             = useState("");
-  const [searchResults, setSearchResults] = useState<(Contact | Company)[]>([]);
+  const [searchResults, setSearchResults] = useState<(Contact | Organization)[]>([]);
   const [linkedContact, setLinkedContact] = useState<Contact | null>(null);
-  const [linkedCompany, setLinkedCompany] = useState<Company | null>(null);
+  const [linkedOrganization, setLinkedOrganization] = useState<Organization | null>(null);
   const [searching, setSearching]       = useState(false);
   const [showSearch, setShowSearch]     = useState(false);
 
@@ -40,7 +40,7 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
   // grow for the common case.
   const [creatingContact,    setCreatingContact]    = useState(false);
   const [newContactEmail,    setNewContactEmail]    = useState("");
-  const [newContactCompany,  setNewContactCompany]  = useState("");
+  const [newContactOrganization, setNewContactOrganization] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
@@ -66,27 +66,27 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
   async function runSearch(q: string) {
     setSearching(true);
     const supabase = createClient();
-    const [{ data: contacts }, { data: companies }] = await Promise.all([
-      supabase.from("contacts").select("*, company:companies(*)").eq("archived", false).or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`).limit(5),
-      supabase.from("companies").select("*").ilike("name", `%${q}%`).limit(5),
+    const [{ data: contacts }, { data: organizations }] = await Promise.all([
+      supabase.from("contacts").select("*, organization:organizations(*)").eq("archived", false).or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`).limit(5),
+      supabase.from("organizations").select("*").ilike("name", `%${q}%`).limit(5),
     ]);
-    const results: (Contact | Company)[] = [
+    const results: (Contact | Organization)[] = [
       ...(contacts ?? []).map((c: Contact) => ({ ...c, _type: "contact" as const })),
-      ...(companies ?? []).map((c: Company) => ({ ...c, _type: "company" as const })),
+      ...(organizations ?? []).map((c: Organization) => ({ ...c, _type: "organization" as const })),
     ];
     setSearchResults(results);
     setSearching(false);
   }
 
-  function selectResult(item: (Contact | Company) & { _type?: string }) {
+  function selectResult(item: (Contact | Organization) & { _type?: string }) {
     if (item._type === "contact" || "first_name" in item) {
       const c = item as Contact;
       setLinkedContact(c);
-      setLinkedCompany(null);
+      setLinkedOrganization(null);
       setName(`${c.first_name} ${c.last_name}`);
     } else {
-      const co = item as Company;
-      setLinkedCompany(co);
+      const co = item as Organization;
+      setLinkedOrganization(co);
       setLinkedContact(null);
       setName(co.name);
     }
@@ -97,11 +97,11 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
 
   function clearLink() {
     setLinkedContact(null);
-    setLinkedCompany(null);
+    setLinkedOrganization(null);
     setName("");
     setCreatingContact(false);
     setNewContactEmail("");
-    setNewContactCompany("");
+    setNewContactOrganization("");
   }
 
   // Splits "First Last" or "First Middle Last" — last token is the last name,
@@ -124,47 +124,47 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setError("Not authenticated."); return; }
 
-    let companyId: string | null = null;
-    const companyName = newContactCompany.trim();
-    if (companyName) {
-      // Try to match an existing company first to avoid duplicates.
-      const { data: existing } = await supabase.from("companies")
-        .select("*").ilike("name", companyName).limit(1);
+    let organizationId: string | null = null;
+    const organizationName = newContactOrganization.trim();
+    if (organizationName) {
+      // Try to match an existing organization first to avoid duplicates.
+      const { data: existing } = await supabase.from("organizations")
+        .select("*").ilike("name", organizationName).limit(1);
       if (existing && existing.length > 0) {
-        companyId = existing[0].id;
+        organizationId = existing[0].id;
       } else {
-        const { data: newCo } = await supabase.from("companies")
-          .insert({ user_id: user.id, name: companyName })
+        const { data: newOrg } = await supabase.from("organizations")
+          .insert({ user_id: user.id, name: organizationName })
           .select("*").single();
-        if (newCo) companyId = newCo.id;
+        if (newOrg) organizationId = newOrg.id;
       }
     }
 
     const { first, last } = splitName(q);
     const { data: contact, error: cErr } = await supabase.from("contacts")
       .insert({
-        user_id:    user.id,
-        first_name: first,
-        last_name:  last,
-        email:      newContactEmail.trim() || null,
-        company_id: companyId,
-        is_lead:    true,
-        lead_stage: "new",
-        archived:   false,
+        user_id:         user.id,
+        first_name:      first,
+        last_name:       last,
+        email:           newContactEmail.trim() || null,
+        organization_id: organizationId,
+        is_lead:         true,
+        lead_stage:      "new",
+        archived:        false,
       })
-      .select("*, company:companies(*)")
+      .select("*, organization:organizations(*)")
       .single();
     if (cErr || !contact) { setError(cErr?.message ?? "Failed to create contact."); return; }
 
     setLinkedContact(contact as Contact);
-    setLinkedCompany(null);
+    setLinkedOrganization(null);
     setName(`${first} ${last}`.trim());
     setCreatingContact(false);
     setSearch("");
     setSearchResults([]);
     setShowSearch(false);
     setNewContactEmail("");
-    setNewContactCompany("");
+    setNewContactOrganization("");
   }
 
   // Returns true when the search query looks like a person's name (single or
@@ -202,15 +202,15 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
       description:  description.trim()  || null,
       link:         link.trim()         || null,
       results_deadline: resultsDeadline ? new Date(`${resultsDeadline}T12:00:00`).toISOString() : null,
-      contact_id:   linkedContact?.id   ?? null,
-      company_id:   linkedCompany?.id   ?? null,
+      contact_id:      linkedContact?.id      ?? null,
+      organization_id: linkedOrganization?.id ?? null,
       last_touched_at: new Date().toISOString(),
     };
 
     const { data, error: dbErr } = await supabase
       .from("outreach_targets")
       .insert(payload)
-      .select("*, pipeline:outreach_pipelines(*), stage:pipeline_stages(*), contact:contacts(*, company:companies(*)), company:companies(*)")
+      .select("*, pipeline:outreach_pipelines(*), stage:pipeline_stages(*), contact:contacts(*, organization:organizations(*)), organization:organizations(*)")
       .single();
 
     if (dbErr) { setError(dbErr.message); setLoading(false); return; }
@@ -218,7 +218,7 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
     onClose();
   }
 
-  const linked = linkedContact ?? linkedCompany;
+  const linked = linkedContact ?? linkedOrganization;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -277,7 +277,7 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
           {/* Link to contact / company */}
           <div>
             <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>
-              Link to contact or company
+              Link to contact or organization
             </label>
             {linked ? (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
@@ -297,7 +297,7 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
                   type="text" value={search}
                   onChange={(e) => { setSearch(e.target.value); setShowSearch(true); }}
                   onFocus={() => setShowSearch(true)}
-                  placeholder="Search contacts and companies…"
+                  placeholder="Search contacts and organizations…"
                   className={inputCls} style={inputStyle}
                 />
                 {showSearch && (search.length > 0) && (
@@ -309,16 +309,16 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
                     {!searching && searchResults.map((item, i) => {
                       const isContact = "first_name" in item;
                       const label = isContact ? `${(item as Contact).first_name} ${(item as Contact).last_name}` : item.name;
-                      const sub   = isContact ? ((item as Contact).title ?? "") : "Company";
+                      const sub   = isContact ? ((item as Contact).title ?? "") : "Organization";
                       return (
-                        <button key={i} type="button" onClick={() => selectResult(item as (Contact | Company) & { _type?: string })}
+                        <button key={i} type="button" onClick={() => selectResult(item as (Contact | Organization) & { _type?: string })}
                           className="w-full text-left px-4 py-2.5 flex items-center gap-2.5 transition-colors"
                           style={{ borderBottom: "0.5px solid var(--color-border)" }}
                           onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
                           onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
                           <span className="text-[9px] px-1.5 py-0.5 rounded"
                             style={{ background: isContact ? "var(--color-cream)" : "rgba(37,99,171,0.1)", color: isContact ? "#6b6860" : "#2563ab" }}>
-                            {isContact ? "Contact" : "Company"}
+                            {isContact ? "Contact" : "Organization"}
                           </span>
                           <div>
                             <div className="text-[12px] font-medium" style={{ color: "var(--color-charcoal)" }}>{label}</div>
@@ -366,14 +366,14 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
                       placeholder="Email (optional)"
                       className="w-full px-2.5 py-1.5 text-[12px] rounded-md border focus:outline-none mb-2"
                       style={inputStyle} />
-                    <input type="text" value={newContactCompany}
-                      onChange={(e) => setNewContactCompany(e.target.value)}
-                      placeholder="Company (optional — created if new)"
+                    <input type="text" value={newContactOrganization}
+                      onChange={(e) => setNewContactOrganization(e.target.value)}
+                      placeholder="Organization (optional — created if new)"
                       className="w-full px-2.5 py-1.5 text-[12px] rounded-md border focus:outline-none"
                       style={inputStyle} />
                     <div className="flex justify-end gap-1.5 mt-2">
                       <button type="button"
-                        onClick={() => { setCreatingContact(false); setNewContactEmail(""); setNewContactCompany(""); }}
+                        onClick={() => { setCreatingContact(false); setNewContactEmail(""); setNewContactOrganization(""); }}
                         className="px-2.5 py-1 text-[11px] rounded-md"
                         style={{ background: "transparent", color: "#6b6860", border: "0.5px solid var(--color-border)" }}>
                         Cancel

@@ -9,7 +9,7 @@ export default async function ContactsPage() {
   // toggle archived visibility without a refetch. Default UI hides archived.
   const { data: contacts } = await supabase
     .from("contacts")
-    .select("*, company:companies(*)")
+    .select("*, organization:organizations(*)")
     .order("last_name", { ascending: true });
 
   return <ContactsClient initialContacts={(contacts ?? []) as Contact[]} />;

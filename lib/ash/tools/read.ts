@@ -127,7 +127,7 @@ async function search_contacts(
 ): Promise<string> {
   let q = supabase
     .from("contacts")
-    .select("id, first_name, last_name, email, phone, title, tags, status, last_contacted_at, location, company:companies(name)")
+    .select("id, first_name, last_name, email, phone, title, tags, status, last_contacted_at, location, organization:organizations(name)")
     .eq("user_id", userId)
     .eq("archived", false);
 
@@ -140,7 +140,7 @@ async function search_contacts(
     id: string; first_name: string; last_name: string;
     email: string | null; tags: string[]; status: string;
     last_contacted_at: string | null; title: string | null;
-    company: { name: string } | null;
+    organization: { name: string } | null;
   }>;
 
   if (input.query) {
@@ -148,7 +148,7 @@ async function search_contacts(
     results = results.filter((c) =>
       `${c.first_name} ${c.last_name}`.toLowerCase().includes(q) ||
       c.email?.toLowerCase().includes(q) ||
-      c.company?.name?.toLowerCase().includes(q) ||
+      c.organization?.name?.toLowerCase().includes(q) ||
       c.title?.toLowerCase().includes(q)
     );
   }
@@ -164,7 +164,7 @@ async function search_contacts(
   return JSON.stringify(results.map((c) => ({
     id:   c.id,
     name: `${c.first_name} ${c.last_name}`,
-    company: c.company?.name,
+    organization: c.organization?.name,
     title: c.title,
     tags: c.tags,
     status: c.status,
@@ -175,13 +175,13 @@ async function search_contacts(
 export const searchContactsTool: AshToolDefinition = {
   name: "search_contacts",
   description:
-    "Search the user's contacts by name, company, title, or tag. " +
+    "Search the user's contacts by name, organization, title, or tag. " +
     "Use when the user asks about specific people, wants to find someone, " +
     "is planning outreach, or mentions a name not in the current context.",
   input_schema: {
     type: "object",
     properties: {
-      query:  { type: "string", description: "Name, email, company, or job title to search" },
+      query:  { type: "string", description: "Name, email, organization, or job title to search" },
       tag:    { type: "string", description: "Filter by contact tag (gallery, client, press, etc.)" },
       status: { type: "string", enum: ["active", "lead", "inactive"], description: "Filter by relationship status" },
     },
@@ -199,7 +199,7 @@ async function get_contact_details(
   const [{ data: contact }, { data: activity }] = await Promise.all([
     supabase
       .from("contacts")
-      .select("*, company:companies(*)")
+      .select("*, organization:organizations(*)")
       .eq("id", input.contact_id)
       .eq("user_id", userId)
       .single(),
@@ -220,7 +220,7 @@ async function get_contact_details(
 export const getContactDetailsTool: AshToolDefinition = {
   name: "get_contact_details",
   description:
-    "Get complete details for a specific contact including company info, relationship status, " +
+    "Get complete details for a specific contact including organization info, relationship status, " +
     "last contact date, bio, and recent activity (emails, calls, notes, meetings). " +
     "Use when discussing a specific person's relationship or planning an interaction.",
   input_schema: {

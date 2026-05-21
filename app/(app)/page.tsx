@@ -19,7 +19,7 @@ type HomeNote    = { id: string; title: string | null; content: string | null; u
 type RawInvoice  = { id: string; number: number; due_at: string | null; line_items: { amount: number }[] };
 type HomeTimeEntry = { duration_minutes: number; billable: boolean; project: { rate: number | null } | null };
 type HomeProject = { id: string; title: string; status: string; due_date: string | null; priority: string };
-type HomeContact = { id: string; first_name: string; last_name: string; last_contacted_at: string | null; company: { name: string } | null };
+type HomeContact = { id: string; first_name: string; last_name: string; last_contacted_at: string | null; organization: { name: string } | null };
 
 function invoiceTotal(inv: RawInvoice) {
   return (inv.line_items ?? []).reduce((s, l) => s + Number(l.amount), 0);
@@ -90,7 +90,7 @@ export default async function HomePage() {
       .limit(5),
     supabase
       .from("contacts")
-      .select("id, first_name, last_name, last_contacted_at, company:companies(name)")
+      .select("id, first_name, last_name, last_contacted_at, organization:organizations(name)")
       .eq("status", "active")
       .eq("archived", false)
       .or(`last_contacted_at.is.null,last_contacted_at.lt.${thirtyDaysAgo}`)
