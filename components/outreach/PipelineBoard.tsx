@@ -133,7 +133,7 @@ function TargetCard({
 
   const linkedLabel = target.contact
     ? `${target.contact.first_name} ${target.contact.last_name}`
-    : target.company?.name ?? null;
+    : target.organization?.name ?? null;
 
   // "Logged" is keyed off the dedicated `last_followup_at` timestamp — NOT
   // `last_touched_at`. Brand-new targets get last_touched_at set on insert,
@@ -719,7 +719,7 @@ function EtherSection({
         return t.name.toLowerCase().includes(q)
           || (t.location ?? "").toLowerCase().includes(q)
           || linked.toLowerCase().includes(q)
-          || (t.company?.name ?? "").toLowerCase().includes(q);
+          || (t.organization?.name ?? "").toLowerCase().includes(q);
       })
     : cards;
 

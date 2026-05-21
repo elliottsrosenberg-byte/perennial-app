@@ -387,14 +387,14 @@ function LinkedPeople({ target, onChange }: { target: OutreachTarget; onChange: 
       const supabase = createClient();
       if (q) {
         const { data } = await supabase.from("contacts")
-          .select("*, company:companies(*)")
+          .select("*, organization:organizations(*)")
           .eq("archived", false)
           .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`)
           .limit(8);
         setResults((data ?? []) as Contact[]);
       } else {
         const { data } = await supabase.from("contacts")
-          .select("*, company:companies(*)")
+          .select("*, organization:organizations(*)")
           .eq("archived", false)
           .order("last_contacted_at", { ascending: false, nullsFirst: false })
           .limit(8);
@@ -444,7 +444,7 @@ function LinkedPeople({ target, onChange }: { target: OutreachTarget; onChange: 
             >
               {c.first_name} {c.last_name}
             </a>
-            {c.company?.name && <span style={{ fontSize: 10, color: "var(--color-grey)" }}>{c.company.name}</span>}
+            {c.organization?.name && <span style={{ fontSize: 10, color: "var(--color-grey)" }}>{c.organization.name}</span>}
           </div>
         </div>
       ) : !adding ? (
@@ -481,7 +481,7 @@ function LinkedPeople({ target, onChange }: { target: OutreachTarget; onChange: 
                 onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                 {r.first_name} {r.last_name}
-                {r.company?.name && <span style={{ color: "var(--color-grey)", marginLeft: 6 }}>· {r.company.name}</span>}
+                {r.organization?.name && <span style={{ color: "var(--color-grey)", marginLeft: 6 }}>· {r.organization.name}</span>}
               </button>
             ))}
           </div>
@@ -560,7 +560,7 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
     const { data } = await supabase.from("contacts")
       .update({ is_lead: false, lead_stage: null })
       .eq("id", target.contact_id)
-      .select("*, company:companies(*)")
+      .select("*, organization:organizations(*)")
       .single();
     if (data) {
       // Reflect the new is_lead state locally so the action button hides.
@@ -647,7 +647,7 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
       .from("outreach_targets")
       .update({ ...updates, last_touched_at: new Date().toISOString() })
       .eq("id", target.id)
-      .select("*, pipeline:outreach_pipelines(*), stage:pipeline_stages(*), contact:contacts(*, company:companies(*)), company:companies(*)")
+      .select("*, pipeline:outreach_pipelines(*), stage:pipeline_stages(*), contact:contacts(*, organization:organizations(*)), organization:organizations(*)")
       .single();
     if (data) { setTarget(data as OutreachTarget); onUpdated(data as OutreachTarget); }
   }

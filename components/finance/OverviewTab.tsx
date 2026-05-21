@@ -210,7 +210,7 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
               const total = invoiceTotal(inv);
               const clientName = inv.client_contact
                 ? `${inv.client_contact.first_name} ${inv.client_contact.last_name}`
-                : inv.client_company?.name ?? "—";
+                : inv.client_organization?.name ?? "—";
               return (
                 <div key={inv.id} className="flex items-center gap-2.5 px-4 py-2.5"
                   style={{ borderBottom: "0.5px solid var(--color-border)" }}>

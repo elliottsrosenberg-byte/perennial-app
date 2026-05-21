@@ -1045,19 +1045,19 @@ export default function ContactDetailPanel({
   // ── Field save ──────────────────────────────────────────────────────────────
 
   async function saveField(updates: Partial<Contact>) {
-    const { data } = await supabase.from("contacts").update(updates).eq("id", contact.id).select("*, company:companies(*)").single();
+    const { data } = await supabase.from("contacts").update(updates).eq("id", contact.id).select("*, organization:organizations(*)").single();
     if (data) { const c = data as Contact; setContact(c); onUpdated(c); }
   }
 
-  async function saveCompany(name: string | null) {
+  async function saveOrganization(name: string | null) {
     const { data: { user } } = await supabase.auth.getUser(); if (!user) return;
-    let company_id = contact.company_id;
-    if (!name?.trim()) { company_id = null; }
-    else if (name.trim() !== (contact.company?.name ?? "")) {
-      const { data: ex } = await supabase.from("companies").select("id").eq("user_id", user.id).ilike("name", name.trim()).maybeSingle();
-      company_id = ex?.id ?? (await supabase.from("companies").insert({ user_id: user.id, name: name.trim() }).select("id").single()).data?.id ?? null;
+    let organization_id = contact.organization_id;
+    if (!name?.trim()) { organization_id = null; }
+    else if (name.trim() !== (contact.organization?.name ?? "")) {
+      const { data: ex } = await supabase.from("organizations").select("id").eq("user_id", user.id).ilike("name", name.trim()).maybeSingle();
+      organization_id = ex?.id ?? (await supabase.from("organizations").insert({ user_id: user.id, name: name.trim() }).select("id").single()).data?.id ?? null;
     }
-    const { data } = await supabase.from("contacts").update({ company_id }).eq("id", contact.id).select("*, company:companies(*)").single();
+    const { data } = await supabase.from("contacts").update({ organization_id }).eq("id", contact.id).select("*, organization:organizations(*)").single();
     if (data) { setContact(data as Contact); onUpdated(data as Contact); }
   }
 
@@ -1120,7 +1120,7 @@ export default function ContactDetailPanel({
   }
 
   async function performConvertToContact() {
-    const { data } = await supabase.from("contacts").update({ is_lead: false, status: "active", lead_stage: null }).eq("id", contact.id).select("*, company:companies(*)").single();
+    const { data } = await supabase.from("contacts").update({ is_lead: false, status: "active", lead_stage: null }).eq("id", contact.id).select("*, organization:organizations(*)").single();
     if (data) { setContact(data as Contact); onUpdated(data as Contact); }
     setConfirmConvert(false);
   }
@@ -1260,7 +1260,7 @@ export default function ContactDetailPanel({
               <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Details</p>
               <EditableField label="Email"    value={contact.email}   placeholder="—" onSave={v => saveField({ email: v })} />
               <EditableField label="Phone"    value={contact.phone}   placeholder="—" onSave={v => saveField({ phone: v })} />
-              <EditableField label="Company"  value={contact.company?.name ?? null} placeholder="—" onSave={saveCompany} />
+              <EditableField label="Organization"  value={contact.organization?.name ?? null} placeholder="—" onSave={saveOrganization} />
               <EditableField label="Title"    value={contact.title}   placeholder="—" onSave={v => saveField({ title: v })} />
               <EditableField label="Website"  value={contact.website} placeholder="—" onSave={v => saveField({ website: v })} />
               <EditableField label="Location" value={contact.location} placeholder="—" onSave={v => saveField({ location: v })} />

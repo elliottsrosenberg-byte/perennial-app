@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Invoice, Project, Contact, Company } from "@/types/database";
+import type { Invoice, Project, Contact, Organization } from "@/types/database";
 import { X } from "lucide-react";
 
 interface Props {
@@ -15,7 +15,7 @@ interface Props {
 const inputCls = "w-full px-3 py-2 text-[13px] rounded-lg border transition-colors focus:outline-none";
 const inputStyle = { background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" };
 
-type SearchResult = (Contact & { _type: "contact" }) | (Company & { _type: "company" });
+type SearchResult = (Contact & { _type: "contact" }) | (Organization & { _type: "organization" });
 
 export default function NewInvoiceModal({ projects, nextNumber, onClose, onCreated }: Props) {
   const today = new Date().toISOString().split("T")[0];
@@ -23,8 +23,8 @@ export default function NewInvoiceModal({ projects, nextNumber, onClose, onCreat
   const [searchResults, setSearchResults]     = useState<SearchResult[]>([]);
   const [searching, setSearching]             = useState(false);
   const [showSearch, setShowSearch]           = useState(false);
-  const [clientContact, setClientContact]     = useState<Contact | null>(null);
-  const [clientCompany, setClientCompany]     = useState<Company | null>(null);
+  const [clientContact, setClientContact]           = useState<Contact | null>(null);
+  const [clientOrganization, setClientOrganization] = useState<Organization | null>(null);
   const [projectId, setProjectId]             = useState("");
   const [issuedAt, setIssuedAt]               = useState(today);
   const [dueAt, setDueAt]                     = useState("");
@@ -43,13 +43,13 @@ export default function NewInvoiceModal({ projects, nextNumber, onClose, onCreat
   async function runSearch(q: string) {
     setSearching(true);
     const supabase = createClient();
-    const [{ data: contacts }, { data: companies }] = await Promise.all([
+    const [{ data: contacts }, { data: organizations }] = await Promise.all([
       supabase.from("contacts").select("*").eq("archived", false).or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`).limit(5),
-      supabase.from("companies").select("*").ilike("name", `%${q}%`).limit(4),
+      supabase.from("organizations").select("*").ilike("name", `%${q}%`).limit(4),
     ]);
     setSearchResults([
       ...(contacts ?? []).map((c: Contact) => ({ ...c, _type: "contact" as const })),
-      ...(companies ?? []).map((c: Company) => ({ ...c, _type: "company" as const })),
+      ...(organizations ?? []).map((c: Organization) => ({ ...c, _type: "organization" as const })),
     ]);
     setSearching(false);
   }
@@ -57,19 +57,19 @@ export default function NewInvoiceModal({ projects, nextNumber, onClose, onCreat
   function selectClient(item: SearchResult) {
     if (item._type === "contact") {
       setClientContact(item);
-      setClientCompany(null);
+      setClientOrganization(null);
     } else {
-      setClientCompany(item);
+      setClientOrganization(item);
       setClientContact(null);
     }
     setSearch(""); setSearchResults([]); setShowSearch(false);
   }
 
-  function clearClient() { setClientContact(null); setClientCompany(null); }
+  function clearClient() { setClientContact(null); setClientOrganization(null); }
 
   const clientLabel = clientContact
     ? `${clientContact.first_name} ${clientContact.last_name}`
-    : clientCompany?.name ?? null;
+    : clientOrganization?.name ?? null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -85,7 +85,7 @@ export default function NewInvoiceModal({ projects, nextNumber, onClose, onCreat
         number: nextNumber,
         status: "draft",
         client_contact_id: clientContact?.id ?? null,
-        client_company_id: clientCompany?.id ?? null,
+        client_organization_id: clientOrganization?.id ?? null,
         project_id: projectId || null,
         issued_at: issuedAt,
         due_at: dueAt || null,
@@ -93,7 +93,7 @@ export default function NewInvoiceModal({ projects, nextNumber, onClose, onCreat
         payment_method: paymentMethod || null,
         notes: notes.trim() || null,
       })
-      .select("*, client_contact:contacts(id, first_name, last_name), client_company:companies(id, name), project:projects(id, title, rate), line_items:invoice_line_items(*)")
+      .select("*, client_contact:contacts(id, first_name, last_name), client_organization:organizations(id, name), project:projects(id, title, rate), line_items:invoice_line_items(*)")
       .single();
     if (dbErr) { setError(dbErr.message); setLoading(false); return; }
     onCreated(data as Invoice);
@@ -127,7 +127,7 @@ export default function NewInvoiceModal({ projects, nextNumber, onClose, onCreat
                 <span className="flex-1 text-[13px]" style={{ color: "var(--color-charcoal)" }}>{clientLabel}</span>
                 <span className="text-[10px] px-1.5 py-0.5 rounded"
                   style={{ background: "rgba(31,33,26,0.07)", color: "var(--color-grey)" }}>
-                  {clientContact ? "Contact" : "Company"}
+                  {clientContact ? "Contact" : "Organization"}
                 </span>
                 <button type="button" onClick={clearClient} style={{ color: "var(--color-grey)" }}><X size={12} /></button>
               </div>
@@ -136,7 +136,7 @@ export default function NewInvoiceModal({ projects, nextNumber, onClose, onCreat
                 <input type="text" value={search}
                   onChange={(e) => { setSearch(e.target.value); setShowSearch(true); }}
                   onFocus={() => setShowSearch(true)}
-                  placeholder="Search contacts and companies…"
+                  placeholder="Search contacts and organizations…"
                   className={inputCls} style={inputStyle} />
                 {showSearch && search.length > 0 && (
                   <div className="absolute top-full left-0 right-0 mt-1 rounded-xl z-20 overflow-hidden"
@@ -155,7 +155,7 @@ export default function NewInvoiceModal({ projects, nextNumber, onClose, onCreat
                           onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
                           <span className="text-[9px] px-1.5 py-0.5 rounded"
                             style={{ background: item._type === "contact" ? "var(--color-cream)" : "rgba(37,99,171,0.1)", color: item._type === "contact" ? "#6b6860" : "#2563ab" }}>
-                            {item._type === "contact" ? "Contact" : "Company"}
+                            {item._type === "contact" ? "Contact" : "Organization"}
                           </span>
                           <span className="text-[12px] font-medium" style={{ color: "var(--color-charcoal)" }}>{label}</span>
                         </button>

@@ -18,7 +18,7 @@ function invoiceTotal(inv: Invoice) {
 
 function clientName(inv: Invoice) {
   if (inv.client_contact) return `${inv.client_contact.first_name} ${inv.client_contact.last_name}`;
-  if (inv.client_company) return inv.client_company.name;
+  if (inv.client_organization) return inv.client_organization.name;
   return "—";
 }
 
@@ -32,7 +32,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
 
   const { data } = await supabase
     .from("invoices")
-    .select("*, client_contact:contacts(id, first_name, last_name, email, company_id), client_company:companies(id, name), project:projects(id, title, rate), line_items:invoice_line_items(*)")
+    .select("*, client_contact:contacts(id, first_name, last_name, email, organization_id), client_organization:organizations(id, name), project:projects(id, title, rate), line_items:invoice_line_items(*)")
     .eq("id", id)
     .single();
 

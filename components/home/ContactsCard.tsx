@@ -9,7 +9,7 @@ interface HomeContact {
   first_name: string;
   last_name: string;
   last_contacted_at: string | null;
-  company: { name: string } | null;
+  organization: { name: string } | null;
 }
 
 function lastContactedLabel(date: string | null): { text: string; color: string } {
@@ -127,9 +127,9 @@ export default function ContactsCard({ contacts, totalCount }: Props) {
                 <div className="text-[12px] font-medium truncate" style={{ color: "var(--color-charcoal)" }}>
                   {c.first_name} {c.last_name}
                 </div>
-                {c.company?.name && (
+                {c.organization?.name && (
                   <div className="text-[10px] truncate" style={{ color: "var(--color-grey)" }}>
-                    {c.company.name}
+                    {c.organization.name}
                   </div>
                 )}
               </div>

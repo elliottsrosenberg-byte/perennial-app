@@ -137,7 +137,7 @@ export interface AshContext {
   outstandingInvoices: Array<{ number: number; total: number; due_at: string | null }>;
   overdueInvoices:     Array<{ number: number; total: number }>;
   recentNotes:         Array<{ title: string | null; content: string | null; updated_at: string }>;
-  staleContacts:       Array<{ first_name: string; last_name: string; last_contacted_at: string | null; company_name: string | null }>;
+  staleContacts:       Array<{ first_name: string; last_name: string; last_contacted_at: string | null; organization_name: string | null }>;
   openTasks:           Array<{ title: string; due_date: string | null; priority: string | null; project: string | null }>;
   billableHoursThisMonth: number;
 }
@@ -197,7 +197,7 @@ export function buildDynamicContext(ctx: AshContext): string {
   if (ctx.staleContacts.length > 0) {
     lines.push(`\n**Contacts needing attention:**`);
     for (const c of ctx.staleContacts) {
-      const co = c.company_name ? ` · ${c.company_name}` : "";
+      const co = c.organization_name ? ` · ${c.organization_name}` : "";
       const ago = c.last_contacted_at
         ? `last contact ${Math.floor((Date.now() - new Date(c.last_contacted_at).getTime()) / 86400000)}d ago`
         : "never contacted";
