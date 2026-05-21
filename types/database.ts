@@ -36,21 +36,23 @@ export interface Project {
 export interface Task {
   id:             string;
   project_id:     string | null;
-  contact_id:     string | null;
-  opportunity_id: string | null;
-  target_id:      string | null;
-  user_id:        string;
-  title:          string;
-  completed:      boolean;
-  due_date:       string | null;
-  priority:       "high" | "medium" | "low" | null;
-  notes:          string | null;
-  created_at:     string;
+  contact_id:      string | null;
+  organization_id: string | null;
+  opportunity_id:  string | null;
+  target_id:       string | null;
+  user_id:         string;
+  title:           string;
+  completed:       boolean;
+  due_date:        string | null;
+  priority:        "high" | "medium" | "low" | null;
+  notes:           string | null;
+  created_at:      string;
   // Joined
-  project?:     { id: string; title: string } | null;
-  contact?:     { id: string; first_name: string; last_name: string } | null;
-  opportunity?: { id: string; title: string; category: string } | null;
-  target?:      { id: string; name: string; pipeline_id: string; pipeline?: { name: string; color: string } | null } | null;
+  project?:      { id: string; title: string } | null;
+  contact?:      { id: string; first_name: string; last_name: string } | null;
+  organization?: { id: string; name: string } | null;
+  opportunity?:  { id: string; title: string; category: string } | null;
+  target?:       { id: string; name: string; pipeline_id: string; pipeline?: { name: string; color: string } | null } | null;
 }
 
 export interface Note {
@@ -58,6 +60,7 @@ export interface Note {
   user_id: string;
   project_id: string | null;
   contact_id: string | null;
+  organization_id: string | null;
   opportunity_id: string | null;
   title: string | null;
   content: string | null;
@@ -68,6 +71,7 @@ export interface Note {
   // Joined
   project?: { id: string; title: string } | null;
   contact?: { id: string; first_name: string; last_name: string } | null;
+  organization?: { id: string; name: string } | null;
   opportunity?: { id: string; title: string; category: string } | null;
 }
 
