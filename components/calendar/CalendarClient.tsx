@@ -1741,103 +1741,150 @@ export default function CalendarClient({
             })}
           </div>
 
-          {/* All-day row — sits below the tasks ribbon. The visual ordering
-              is tasks-on-top so the to-do punch list is the first thing you
-              see when scanning a week. */}
-          <div
-            style={{
-              position: "sticky",
-              top: `${DAY_HDR_H + 26}px`,
-              zIndex: 18,
-              display: "flex",
-              background: "var(--color-off-white)",
-              borderBottom: "0.5px solid var(--color-border)",
-              minHeight: "30px",
-            }}
-          >
-            <div
-              style={{
-                width: "52px", flexShrink: 0,
-                display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
-                paddingRight: "8px", paddingTop: "6px",
-                fontSize: "9px", color: "var(--color-grey)",
-              }}
-            >
-              All day
-            </div>
-            {weekDays.map((day, i) => {
-              const dayProjects   = initialProjects.filter(p => p.due_date && isSameDay(new Date(p.due_date + "T00:00:00"), day));
-              const dayGcalAllDay = gcalEvents.filter(e => e.allDay && isSameDay(new Date(e.start), day));
-              const dayOpps = initialOpportunities.filter(o => {
+          {/* All-day row — sits below the tasks ribbon. Uses CSS grid so
+              multi-day opportunity bars can span columns natively without
+              percentage-math. Per-day chips occupy the first grid row;
+              each multi-day bar gets its own row beneath, sized to the
+              visible window for this week. */}
+          {(() => {
+            // Compute opportunity spans visible in this week. startIdx/endIdx
+            // are clamped to 0..6 so a multi-week opp still shows correctly.
+            const oppSpans = initialOpportunities
+              .map(o => {
                 const s = parseOppDate(o.start_date);
+                if (!s) return null;
                 const e = parseOppDate(o.end_date) ?? s;
-                if (!s) return false;
-                // Inclusive on both ends so a multi-day fair shows up on every
-                // day it runs.
-                return day >= new Date(s.getFullYear(), s.getMonth(), s.getDate())
-                    && day <= new Date((e ?? s).getFullYear(), (e ?? s).getMonth(), (e ?? s).getDate());
-              });
-              return (
+                const startIdx = weekDays.findIndex(d => isSameDay(d, s) || d > s);
+                const endIdx   = weekDays.findIndex(d => isSameDay(d, e) || d > e);
+                const inferStart = startIdx === -1 ? -1 : (s < weekDays[0] ? 0 : startIdx);
+                const inferEnd   = e   < weekDays[0]               ? -1
+                                 : e   > weekDays[weekDays.length - 1] ? 6
+                                 : endIdx === -1 ? 6 : (isSameDay(weekDays[endIdx], e) ? endIdx : Math.max(0, endIdx - 1));
+                if (inferStart < 0 || inferEnd < 0 || inferEnd < inferStart) return null;
+                return { opp: o, startIdx: inferStart, endIdx: inferEnd };
+              })
+              .filter((x): x is NonNullable<typeof x> => x !== null)
+              // Longest first so the most prominent bars settle into the
+              // top rows; shorter ones stack underneath.
+              .sort((a, b) => (b.endIdx - b.startIdx) - (a.endIdx - a.startIdx));
+
+            return (
+              <div
+                style={{
+                  position: "sticky",
+                  top: `${DAY_HDR_H + 26}px`,
+                  zIndex: 18,
+                  background: "var(--color-off-white)",
+                  borderBottom: "0.5px solid var(--color-border)",
+                  display: "grid",
+                  gridTemplateColumns: "52px repeat(7, 1fr)",
+                  gridAutoRows: "min-content",
+                  rowGap: 2,
+                  minHeight: 30,
+                  paddingBottom: oppSpans.length > 0 ? 4 : 0,
+                }}
+              >
                 <div
-                  key={i}
-                  onClick={(e) => {
-                    if (e.target !== e.currentTarget) return;
-                    const start = new Date(day); start.setHours(0, 0, 0, 0);
-                    const end   = new Date(start); end.setDate(end.getDate() + 1);
-                    setNewEventPrefill({ start, end, allDay: true });
-                    setNewEventOpen(true);
-                  }}
                   style={{
-                    flex: 1, borderLeft: "0.5px solid var(--color-border)",
-                    padding: "3px 3px", display: "flex", flexDirection: "column", gap: "2px",
-                    cursor: "pointer",
+                    gridColumn: 1, gridRow: "1 / -1",
+                    display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
+                    paddingRight: 8, paddingTop: 6,
+                    fontSize: 9, color: "var(--color-grey)",
                   }}
                 >
-                  {dayGcalAllDay.map(e => {
-                    const color = e.colorId ? GCAL_COLORS[e.colorId] : (e.source === "microsoft" ? "#0078d4" : "#039BE5");
-                    return (
-                      <button
-                        key={e.id}
-                        onClick={() => setOpenEvent(e)}
-                        className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate text-left"
-                        style={{
-                          background: `${color}18`, color,
-                          border: `0.5px solid ${color}44`,
-                          cursor: "pointer", fontFamily: "inherit",
-                        }}
-                      >
-                        {e.title}
-                      </button>
-                    );
-                  })}
-                  {dayOpps.map(o => {
-                    const pal = oppPalette(o.category);
-                    return (
-                      <a
-                        key={o.id}
-                        href={`/presence?opportunityId=${o.id}`}
-                        className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate text-left no-underline"
-                        style={{
-                          background: pal.bg, color: pal.fg,
-                          border: `0.5px dashed ${pal.border}`,
-                          fontFamily: "inherit", cursor: "pointer",
-                          display: "block",
-                        }}
-                        title={`${o.title}${o.location ? ` · ${o.location}` : ""}`}
-                      >
-                        {o.title}
-                      </a>
-                    );
-                  })}
-                  {dayProjects.map(p => (
-                    <div key={p.id} className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate"
-                      style={{ background: "rgba(155,163,122,0.14)", color: "#5a7040", border: "0.5px solid rgba(155,163,122,0.25)" }}
-                    >{p.title} due</div>
-                  ))}
+                  All day
                 </div>
-              );
-            })}
-          </div>
+
+                {/* Per-day cells: single-day items (gcal all-day, project
+                    deadlines). Multi-day opps move to rows below. */}
+                {weekDays.map((day, i) => {
+                  const dayProjects   = initialProjects.filter(p => p.due_date && isSameDay(new Date(p.due_date + "T00:00:00"), day));
+                  const dayGcalAllDay = gcalEvents.filter(e => e.allDay && isSameDay(new Date(e.start), day));
+                  return (
+                    <div
+                      key={i}
+                      onClick={(e) => {
+                        if (e.target !== e.currentTarget) return;
+                        const start = new Date(day); start.setHours(0, 0, 0, 0);
+                        const end   = new Date(start); end.setDate(end.getDate() + 1);
+                        setNewEventPrefill({ start, end, allDay: true });
+                        setNewEventOpen(true);
+                      }}
+                      style={{
+                        gridColumn: i + 2, gridRow: 1,
+                        borderLeft: "0.5px solid var(--color-border)",
+                        padding: "3px 3px",
+                        display: "flex", flexDirection: "column", gap: 2,
+                        cursor: "pointer",
+                        minHeight: 28,
+                      }}
+                    >
+                      {dayGcalAllDay.map(e => {
+                        const color = e.colorId ? GCAL_COLORS[e.colorId] : (e.source === "microsoft" ? "#0078d4" : "#039BE5");
+                        return (
+                          <button
+                            key={e.id}
+                            onClick={() => setOpenEvent(e)}
+                            className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate text-left"
+                            style={{
+                              background: `${color}18`, color,
+                              border: `0.5px solid ${color}44`,
+                              cursor: "pointer", fontFamily: "inherit",
+                            }}
+                          >
+                            {e.title}
+                          </button>
+                        );
+                      })}
+                      {dayProjects.map(p => (
+                        <div key={p.id} className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate"
+                          style={{ background: "rgba(155,163,122,0.14)", color: "#5a7040", border: "0.5px solid rgba(155,163,122,0.25)" }}
+                        >{p.title} due</div>
+                      ))}
+                    </div>
+                  );
+                })}
+
+                {/* Multi-day opp bars — one per row, spanning the visible
+                    range of the opportunity. Title shows at the left edge of
+                    the bar; the bar stretches to indicate the duration. */}
+                {oppSpans.map((span, idx) => {
+                  const pal = oppPalette(span.opp.category);
+                  const s = parseOppDate(span.opp.start_date);
+                  const e = parseOppDate(span.opp.end_date) ?? s;
+                  const startsBeforeWeek = s && s < weekDays[0];
+                  const endsAfterWeek    = e && e > weekDays[weekDays.length - 1];
+                  return (
+                    <a
+                      key={span.opp.id}
+                      href={`/presence?opportunityId=${span.opp.id}`}
+                      title={`${span.opp.title}${span.opp.location ? ` · ${span.opp.location}` : ""}`}
+                      style={{
+                        gridColumn: `${span.startIdx + 2} / ${span.endIdx + 3}`,
+                        gridRow: idx + 2,
+                        marginLeft: 2, marginRight: 2,
+                        background: pal.bg, color: pal.fg,
+                        border: `0.5px dashed ${pal.border}`,
+                        // Round outside edges; flat where the bar continues
+                        // beyond this week so the user can tell it's a span.
+                        borderTopLeftRadius:    startsBeforeWeek ? 0 : 4,
+                        borderBottomLeftRadius: startsBeforeWeek ? 0 : 4,
+                        borderTopRightRadius:   endsAfterWeek    ? 0 : 4,
+                        borderBottomRightRadius: endsAfterWeek   ? 0 : 4,
+                        padding: "1px 6px",
+                        fontSize: 10, fontWeight: 500,
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                        textDecoration: "none",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      {startsBeforeWeek && "← "}{span.opp.title}{endsAfterWeek && " →"}
+                    </a>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {/* Time grid — not sticky, scrolls with the container */}
           <div style={{ display: "flex", height: `${GRID_HEIGHT}px`, position: "relative" }}>
