@@ -685,18 +685,53 @@ const GCAL_COLORS: Record<string, string> = {
   "9": "#3F51B5", "10": "#0B8043", "11": "#D50000",
 };
 
+// Tight projection of Opportunity used by the all-day row. Keeps the prop
+// surface small — the Presence module owns the full record.
+export interface CalendarOpportunity {
+  id:          string;
+  title:       string;
+  event_type:  string;
+  category:    string;
+  start_date:  string | null;
+  end_date:    string | null;
+  location:    string | null;
+  user_status: string | null;
+}
+
 interface Props {
   initialTasks:    Task[];
   initialProjects: { id: string; title: string; due_date: string | null; status: string }[];
   initialContacts: Pick<Contact, "id" | "first_name" | "last_name">[];
+  initialOpportunities?: CalendarOpportunity[];
   googleConnected?:    boolean;
   googleAccountName?:  string | null;
   outlookConnected?:   boolean;
   outlookAccountName?: string | null;
 }
 
+// Soft palette per opportunity category. Stays close to Presence's catColor
+// while leaning paler so a week of fairs doesn't overpower personal events.
+const OPP_PALETTE: Record<string, { bg: string; fg: string; border: string }> = {
+  fair:       { bg: "rgba(109,79,163,0.10)", fg: "#6d4fa3", border: "rgba(109,79,163,0.30)" },
+  openCall:   { bg: "rgba(184,134,11,0.10)", fg: "#b8860b", border: "rgba(184,134,11,0.30)" },
+  grant:      { bg: "rgba(61,107,79,0.10)",  fg: "#3d6b4f", border: "rgba(61,107,79,0.30)" },
+  award:      { bg: "rgba(220,62,13,0.10)",  fg: "var(--color-red-orange)", border: "rgba(220,62,13,0.28)" },
+  residency:  { bg: "rgba(20,140,140,0.10)", fg: "#148c8c", border: "rgba(20,140,140,0.30)" },
+  _default:   { bg: "rgba(155,163,122,0.12)",fg: "#5a7040", border: "rgba(155,163,122,0.28)" },
+};
+function oppPalette(category: string) {
+  return OPP_PALETTE[category] ?? OPP_PALETTE._default;
+}
+
+function parseOppDate(s: string | null): Date | null {
+  if (!s) return null;
+  const d = new Date(s + "T00:00:00");
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 export default function CalendarClient({
   initialTasks, initialProjects, initialContacts,
+  initialOpportunities = [],
   googleConnected = false, googleAccountName,
   outlookConnected = false, outlookAccountName,
 }: Props) {
@@ -1733,6 +1768,15 @@ export default function CalendarClient({
             {weekDays.map((day, i) => {
               const dayProjects   = initialProjects.filter(p => p.due_date && isSameDay(new Date(p.due_date + "T00:00:00"), day));
               const dayGcalAllDay = gcalEvents.filter(e => e.allDay && isSameDay(new Date(e.start), day));
+              const dayOpps = initialOpportunities.filter(o => {
+                const s = parseOppDate(o.start_date);
+                const e = parseOppDate(o.end_date) ?? s;
+                if (!s) return false;
+                // Inclusive on both ends so a multi-day fair shows up on every
+                // day it runs.
+                return day >= new Date(s.getFullYear(), s.getMonth(), s.getDate())
+                    && day <= new Date((e ?? s).getFullYear(), (e ?? s).getMonth(), (e ?? s).getDate());
+              });
               return (
                 <div
                   key={i}
@@ -1764,6 +1808,25 @@ export default function CalendarClient({
                       >
                         {e.title}
                       </button>
+                    );
+                  })}
+                  {dayOpps.map(o => {
+                    const pal = oppPalette(o.category);
+                    return (
+                      <a
+                        key={o.id}
+                        href={`/presence?opportunityId=${o.id}`}
+                        className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate text-left no-underline"
+                        style={{
+                          background: pal.bg, color: pal.fg,
+                          border: `0.5px dashed ${pal.border}`,
+                          fontFamily: "inherit", cursor: "pointer",
+                          display: "block",
+                        }}
+                        title={`${o.title}${o.location ? ` · ${o.location}` : ""}`}
+                      >
+                        {o.title}
+                      </a>
                     );
                   })}
                   {dayProjects.map(p => (

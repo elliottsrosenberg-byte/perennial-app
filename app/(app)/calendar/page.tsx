@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import CalendarClient from "@/components/calendar/CalendarClient";
-import type { Task, Contact } from "@/types/database";
+import type { Task, Contact, Opportunity } from "@/types/database";
 
 export default async function CalendarPage() {
   const supabase = await createClient();
@@ -10,6 +10,7 @@ export default async function CalendarPage() {
     { data: projects },
     { data: contacts },
     { data: integrations },
+    { data: opportunities },
   ] = await Promise.all([
     // Calendar now reads from the tasks table directly — reminders were
     // merged into tasks. We pull open tasks for the user; the client owns
@@ -32,6 +33,13 @@ export default async function CalendarPage() {
       .from("integrations")
       .select("provider, account_name, status, scopes, metadata, last_synced_at")
       .in("provider", ["google_calendar", "google", "microsoft"]),
+    // Opportunities the user is engaged with (saved/attending/applied/exhibiting)
+    // OR Perennial-feed picks with dates. Filter at the DB so the calendar
+    // page doesn't ship every opportunity in the world.
+    supabase
+      .from("opportunities")
+      .select("id, title, event_type, category, start_date, end_date, location, user_status")
+      .not("start_date", "is", null),
   ]);
 
   // Collapse the per-row integrations into per-provider connection
@@ -71,6 +79,7 @@ export default async function CalendarPage() {
         }[]
       }
       initialContacts={(contacts ?? []) as Pick<Contact, "id" | "first_name" | "last_name">[]}
+      initialOpportunities={(opportunities ?? []) as Pick<Opportunity, "id" | "title" | "event_type" | "category" | "start_date" | "end_date" | "location" | "user_status">[]}
       googleConnected={!!googleConn}
       googleAccountName={googleConn?.accountName ?? null}
       outlookConnected={!!outlookConn}
