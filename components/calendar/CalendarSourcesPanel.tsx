@@ -128,6 +128,21 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
     await Promise.all(ops);
   }
 
+  async function removeFromList(cal: UserCalendar) {
+    // Optimistic — pull the row out immediately, restore on failure.
+    const prev = calendars;
+    setCalendars((cs) => cs.filter(c => c.id !== cal.id));
+    try {
+      const res = await fetch(`/api/integrations/calendar/calendars?id=${encodeURIComponent(cal.id)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("DELETE failed");
+      window.dispatchEvent(new Event("calendar:refresh-events"));
+    } catch {
+      setCalendars(prev);
+    }
+  }
+
   function toggleGroup(key: string) {
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -204,6 +219,7 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
                   onToggleVisible={() => setVisible(c, !c.visible)}
                   onColor={(v) => setColor(c, v)}
                   onShowOnly={() => showOnlyThis(c)}
+                  onRemove={() => removeFromList(c)}
                 />
               );
             })}
@@ -268,7 +284,7 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
 
 function CalendarRow({
   cal, color, menuOpen, onToggleMenu, onCloseMenu,
-  onToggleVisible, onColor, onShowOnly,
+  onToggleVisible, onColor, onShowOnly, onRemove,
 }: {
   cal: UserCalendar;
   color: string;
@@ -278,6 +294,7 @@ function CalendarRow({
   onToggleVisible: () => void;
   onColor: (hex: string) => void;
   onShowOnly: () => void;
+  onRemove: () => void;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState(false);
@@ -374,6 +391,7 @@ function CalendarRow({
           onColor={onColor}
           onShowOnly={onShowOnly}
           onToggleVisible={onToggleVisible}
+          onRemove={onRemove}
         />
       )}
     </div>
@@ -381,7 +399,7 @@ function CalendarRow({
 }
 
 function RowMenu({
-  cal, color, settingsHref, onClose, onColor, onShowOnly, onToggleVisible,
+  cal, color, settingsHref, onClose, onColor, onShowOnly, onToggleVisible, onRemove,
 }: {
   cal: UserCalendar;
   color: string;
@@ -390,6 +408,7 @@ function RowMenu({
   onColor: (hex: string) => void;
   onShowOnly: () => void;
   onToggleVisible: () => void;
+  onRemove: () => void;
 }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
@@ -471,14 +490,7 @@ function RowMenu({
           label="Remove from list"
           icon={<Trash2 size={12} />}
           danger
-          onClick={() => {
-            // No destructive endpoint yet — fall back to hiding the calendar
-            // so it disappears from the rail and stops fanning out fetches.
-            // Real removal would mean deleting the user_calendars row + the
-            // OAuth credential when the last calendar in an account is gone.
-            if (cal.visible) onToggleVisible();
-            onClose();
-          }}
+          onClick={() => { onRemove(); onClose(); }}
         />
       </div>
     </>

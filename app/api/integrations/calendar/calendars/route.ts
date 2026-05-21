@@ -72,3 +72,29 @@ export async function PATCH(req: Request) {
   }
   return NextResponse.json({ calendar: data });
 }
+
+// Remove a single calendar from the user's list. The OAuth credential stays
+// intact (other calendars in the same account may still be in use); the user
+// can disconnect the whole account from Settings → Integrations. A re-sync
+// will repopulate this row if the calendar still exists upstream — we don't
+// keep a "soft-removed" flag, so removing a calendar the user still has in
+// Google/Outlook only sticks until the next sync. If that's a problem, the
+// next iteration is a `tombstoned` boolean.
+export async function DELETE(req: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const url = new URL(req.url);
+  const id  = url.searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+  const { error } = await supabase
+    .from("user_calendars")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  return NextResponse.json({ ok: true });
+}
