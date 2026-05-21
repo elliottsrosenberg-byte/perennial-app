@@ -437,7 +437,7 @@ function LinkedPeople({ target, onChange }: { target: OutreachTarget; onChange: 
             {(c.first_name[0] ?? "") + (c.last_name[0] ?? "")}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <a href={`/people?contactId=${c.id}`}
+            <a href={`/network?contactId=${c.id}`}
               style={{ fontSize: 12, color: "var(--color-charcoal)", textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
               onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
               onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}

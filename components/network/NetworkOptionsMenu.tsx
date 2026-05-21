@@ -15,7 +15,7 @@ interface Props {
   onClose: () => void;
 }
 
-export default function ContactsOptionsMenu({
+export default function NetworkOptionsMenu({
   showArchived, onToggleShowArchived, archivedCount, onClose,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);

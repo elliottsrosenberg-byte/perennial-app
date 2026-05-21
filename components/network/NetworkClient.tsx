@@ -3,19 +3,20 @@
 import { useState, useMemo, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { Contact, ContactStatus, LeadStage } from "@/types/database";
+import type { Contact, ContactStatus, LeadStage, Organization } from "@/types/database";
 import ContactDetailPanel from "./ContactDetailPanel";
+import OrganizationDetailPanel from "./OrganizationDetailPanel";
 import NewContactModal from "./NewContactModal";
-import Button from "@/components/ui/Button";
+import NewOrganizationModal from "./NewOrganizationModal";
 import Topbar from "@/components/layout/Topbar";
 import EmptyState from "@/components/ui/EmptyState";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import ImportContactsModal from "./ImportContactsModal";
 import ContactsIntroModal from "@/components/tour/contacts/ContactsIntroModal";
 import ContactsTooltipTour from "@/components/tour/contacts/ContactsTooltipTour";
-import ContactsOptionsMenu from "./ContactsOptionsMenu";
+import NetworkOptionsMenu from "./NetworkOptionsMenu";
 import FilterTabs from "@/components/ui/FilterTabs";
-import { Users, Upload, MoreHorizontal, ArrowUpDown } from "lucide-react";
+import { Users, Building2, Upload, MoreHorizontal, ArrowUpDown } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -51,6 +52,13 @@ function initials(c: Contact) {
   return (c.first_name[0] + (c.last_name[0] ?? "")).toUpperCase();
 }
 
+function orgInitials(o: Organization) {
+  const parts = o.name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 function lastContactedDisplay(date: string | null): { label: string; color: string } {
   if (!date) return { label: "Never", color: "var(--color-grey)" };
   const days = Math.floor((Date.now() - new Date(date).getTime()) / 86400000);
@@ -63,12 +71,12 @@ function lastContactedDisplay(date: string | null): { label: string; color: stri
 
 type SortKey = "name" | "last_contact" | "status" | "added";
 
-// The "People" module hosts two views of the same `contacts` table: real
-// relationships you've already started ("contacts", is_lead=false) and the
-// pipeline of people you're still chasing ("leads", is_lead=true). The view
-// is purely a lens — the data type is identical, only the filter + theme +
-// status semantics change.
-type View = "contacts" | "leads";
+// The "Network" module hosts three views of your relationship graph:
+//   • contacts      — real relationships you've already started (people, is_lead=false)
+//   • leads         — people you're still chasing (people, is_lead=true)
+//   • organizations — the orgs those people belong to (galleries, brands, etc.)
+// The first two share the `contacts` table, the third is its own table.
+type View = "contacts" | "leads" | "organizations";
 
 const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
   new:               "New",
@@ -82,31 +90,43 @@ const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
 const LEAD_STAGE_ORDER: LeadStage[] = ["new", "reached_out", "in_conversation", "proposal_sent", "qualified", "nurturing", "lost"];
 
 const GRID = "32px 2.6fr 1.6fr 1.2fr 0.9fr 1.1fr 0.8fr";
+// Organization rows reuse the same 7-column grid so the header line stays
+// steady when the view switches — the columns just relabel.
+const ORG_GRID = GRID;
 
-interface Props { initialContacts: Contact[] }
+interface Props {
+  initialContacts:      Contact[];
+  initialOrganizations: Organization[];
+}
 
-export default function ContactsClient({ initialContacts }: Props) {
-  const [contacts, setContacts]       = useState<Contact[]>(initialContacts);
-  const [view, setView]               = useState<View>("contacts");
-  const [search,   setSearch]         = useState("");
-  const [tagFilter, setTagFilter]     = useState<string | null>(null);
-  const [stageFilter, setStageFilter] = useState<LeadStage | null>(null);
-  const [showArchived, setShowArchived] = useState(false);
-  const [optionsOpen, setOptionsOpen] = useState(false);
-  const [sortKey,  setSortKey]        = useState<SortKey>("name");
-  const [sortAsc,  setSortAsc]        = useState(true);
-  const [selected, setSelected]       = useState<Set<string>>(new Set());
-  const [openContact, setOpenContact] = useState<Contact | null>(null);
-  const [showModal, setShowModal]     = useState(false);
+export default function NetworkClient({ initialContacts, initialOrganizations }: Props) {
+  const [contacts, setContacts]                 = useState<Contact[]>(initialContacts);
+  const [organizations, setOrganizations]       = useState<Organization[]>(initialOrganizations);
+  const [view, setView]                         = useState<View>("contacts");
+  const [search,   setSearch]                   = useState("");
+  const [tagFilter, setTagFilter]               = useState<string | null>(null);
+  const [stageFilter, setStageFilter]           = useState<LeadStage | null>(null);
+  const [showArchived, setShowArchived]         = useState(false);
+  const [optionsOpen, setOptionsOpen]           = useState(false);
+  const [sortKey,  setSortKey]                  = useState<SortKey>("name");
+  const [sortAsc,  setSortAsc]                  = useState(true);
+  const [selected, setSelected]                 = useState<Set<string>>(new Set());
+  const [openContact, setOpenContact]           = useState<Contact | null>(null);
+  const [openOrganization, setOpenOrganization] = useState<Organization | null>(null);
+  const [showModal, setShowModal]               = useState(false);
+  const [showOrgModal, setShowOrgModal]         = useState(false);
   const [confirmBulkArchive, setConfirmBulkArchive] = useState(false);
-  const [showImport, setShowImport] = useState(false);
+  const [showImport, setShowImport]             = useState(false);
 
   // Deep links — all stripped from the URL after consume:
-  //   ?new=1                                       → open the new-contact modal
+  //   ?new=1                                       → open new-contact OR new-org modal
+  //                                                  (depends on ?view=)
   //   ?import=1                                    → open the CSV importer
-  //   ?contactId=X[&tab=tasks|notes|activity|…]    → open panel, set tab
+  //   ?contactId=X[&tab=tasks|notes|activity|…]    → open contact panel, set tab
   //   ?contactId=X&tab=tasks&taskId=Y              → also highlight that task
   //   ?contactId=X&tab=notes&noteId=Y              → also highlight that note
+  //   ?organizationId=X                            → open organization panel
+  //   ?view=contacts|leads|organizations           → switch top-level view
   const searchParams = useSearchParams();
   const router       = useRouter();
   const [openTab,         setOpenTab]         = useState<string | null>(null);
@@ -114,53 +134,81 @@ export default function ContactsClient({ initialContacts }: Props) {
   const [openNoteId,      setOpenNoteId]      = useState<string | null>(null);
 
   useEffect(() => {
-    // ?view=leads jumps the top-level toggle into the leads pipeline.
     const v = searchParams.get("view");
-    if (v === "leads" || v === "contacts") setView(v);
+    if (v === "leads" || v === "contacts" || v === "organizations") setView(v);
 
     const newFlag    = searchParams.get("new");
     const importFlag = searchParams.get("import");
     const contactId  = searchParams.get("contactId");
+    const orgId      = searchParams.get("organizationId");
     if (newFlag === "1") {
-      setShowModal(true);
-      window.dispatchEvent(new Event("contacts:modal-opened"));
-      router.replace("/people");
+      if (v === "organizations") {
+        setShowOrgModal(true);
+      } else {
+        setShowModal(true);
+        window.dispatchEvent(new Event("contacts:modal-opened"));
+      }
+      router.replace("/network");
     } else if (importFlag === "1") {
       setShowImport(true);
-      router.replace("/people");
+      router.replace("/network");
     } else if (contactId) {
       const found = contacts.find((c) => c.id === contactId);
       if (found) {
         setOpenContact(found);
-        // If the deep-linked person is a lead, flip the view so the panel
-        // appears against the matching backdrop.
         if (found.is_lead) setView("leads");
       }
       setOpenTab(searchParams.get("tab"));
       setOpenTaskId(searchParams.get("taskId"));
       setOpenNoteId(searchParams.get("noteId"));
-      router.replace("/people");
+      router.replace("/network");
+    } else if (orgId) {
+      const found = organizations.find((o) => o.id === orgId);
+      if (found) {
+        setOpenOrganization(found);
+        setView("organizations");
+      }
+      router.replace("/network");
     } else if (v) {
-      router.replace("/people");
+      router.replace("/network");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Tag filter is contacts-view-only; leads have their own stage filter.
+  // OrganizationDetailPanel's "People at this org" rail fires
+  // `network:open-contact` when the user clicks through. Catch it here, flip
+  // to the right view, and open that contact's detail panel.
+  useEffect(() => {
+    function onOpenContact(e: Event) {
+      const id = (e as CustomEvent<{ contact_id?: string }>).detail?.contact_id;
+      if (!id) return;
+      const found = contacts.find((c) => c.id === id);
+      if (!found) return;
+      setView(found.is_lead ? "leads" : "contacts");
+      setOpenOrganization(null);
+      setOpenContact(found);
+    }
+    window.addEventListener("network:open-contact", onOpenContact as EventListener);
+    return () => window.removeEventListener("network:open-contact", onOpenContact as EventListener);
+  }, [contacts]);
+
+  // Tag filter is contacts-view-only; leads have their own stage filter and
+  // organizations don't show tag pills here (the panel exposes them).
   const allTags = useMemo(() => {
     const set = new Set<string>();
     contacts.filter(c => !c.is_lead && !c.archived).forEach(c => c.tags.forEach(t => set.add(t)));
     return Array.from(set).sort();
   }, [contacts]);
 
-  // Whether the active view (contacts vs leads) has ANY rows ignoring search
-  // / tag / stage filters. Drives the rich vs. terse empty-state branch
-  // below: "you have nothing yet" deserves the full EmptyState; "your filter
-  // matched nothing" just needs a one-liner.
+  // Whether the active view has ANY rows ignoring search/tag/stage filters.
+  // Drives the rich vs. terse empty-state branch below.
   const viewHasAnyRows = useMemo(() => {
+    if (view === "organizations") {
+      return organizations.some(o => showArchived || !o.archived);
+    }
     const wantLead = view === "leads";
     return contacts.some(c => c.is_lead === wantLead && (showArchived || !c.archived));
-  }, [contacts, view, showArchived]);
+  }, [contacts, organizations, view, showArchived]);
 
   // Stage counts for the Leads view — used by the stage filter pill row.
   const stageCounts = useMemo(() => {
@@ -207,11 +255,41 @@ export default function ContactsClient({ initialContacts }: Props) {
     });
   }, [contacts, view, search, tagFilter, stageFilter, showArchived, sortKey, sortAsc]);
 
+  // Organizations list — separate filter pipeline. Orgs don't have a status
+  // flag, so "status" sort falls back to alpha.
+  const visibleOrgs = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    let list = organizations.filter(o => {
+      if (!showArchived && o.archived) return false;
+      if (q) {
+        const name = o.name.toLowerCase();
+        const loc  = (o.location ?? "").toLowerCase();
+        const site = (o.website ?? "").toLowerCase();
+        if (!name.includes(q) && !loc.includes(q) && !site.includes(q)) return false;
+      }
+      return true;
+    });
+    return [...list].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "last_contact") {
+        const ta = a.last_touched_at ? new Date(a.last_touched_at).getTime() : 0;
+        const tb = b.last_touched_at ? new Date(b.last_touched_at).getTime() : 0;
+        cmp = tb - ta;
+      } else if (sortKey === "added") {
+        cmp = new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      } else {
+        cmp = a.name.localeCompare(b.name);
+      }
+      return sortAsc ? cmp : -cmp;
+    });
+  }, [organizations, search, showArchived, sortKey, sortAsc]);
+
   function toggleSelect(id: string) {
     setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
   function toggleSelectAll() {
-    setSelected(selected.size === visible.length ? new Set() : new Set(visible.map(c => c.id)));
+    const ids = view === "organizations" ? visibleOrgs.map(o => o.id) : visible.map(c => c.id);
+    setSelected(selected.size === ids.length ? new Set() : new Set(ids));
   }
 
   function handleCreated(contact: Contact) {
@@ -226,26 +304,50 @@ export default function ContactsClient({ initialContacts }: Props) {
     if (openContact?.id === contact.id) setOpenContact(contact);
   }
 
-  function openNewContactModal() {
+  function handleOrgCreated(org: Organization) {
+    setOrganizations(prev => [org, ...prev]);
+    // Drop straight into the new org's detail panel so the user can flesh
+    // it out (bio, tags, canvas, files) without an extra click.
+    setOpenOrganization(org);
+  }
+  function handleOrgUpdated(org: Organization) {
+    setOrganizations(prev => prev.map(o => o.id === org.id ? org : o));
+    if (openOrganization?.id === org.id) setOpenOrganization(org);
+  }
+  function handleOrgArchived(id: string) {
+    setOrganizations(prev => prev.filter(o => o.id !== id));
+    if (openOrganization?.id === id) setOpenOrganization(null);
+  }
+
+  function openNewModal() {
+    if (view === "organizations") {
+      setShowOrgModal(true);
+      return;
+    }
     setShowModal(true);
     window.dispatchEvent(new Event("contacts:modal-opened"));
   }
 
   // ── View-driven theme tokens ────────────────────────────────────────────────
-  // The data is identical between views; we just swap the accent colour so
-  // the user always knows whether they're looking at relationships (sage)
-  // or pipeline (amber).
+  // Sage for relationships, amber for pipeline, blue for places — the three
+  // views inherit the colour their detail panel uses so the user keeps a
+  // mental map of where they are.
   const isLeads = view === "leads";
+  const isOrgs  = view === "organizations";
   const accent = isLeads
     ? { primary: "#b8860b", primaryHover: "#a07800", tint: "rgba(184,134,11,0.10)", ring: "rgba(184,134,11,0.32)" }
-    : { primary: "var(--color-sage)", primaryHover: "var(--color-sage-hover)", tint: "rgba(155,163,122,0.10)", ring: "rgba(155,163,122,0.32)" };
+    : isOrgs
+      ? { primary: "#2563ab", primaryHover: "#1f4f8b", tint: "rgba(37,99,171,0.10)", ring: "rgba(37,99,171,0.32)" }
+      : { primary: "var(--color-sage)", primaryHover: "var(--color-sage-hover)", tint: "rgba(155,163,122,0.10)", ring: "rgba(155,163,122,0.32)" };
+
   function openDetail(contact: Contact) {
     setOpenContact(contact);
     window.dispatchEvent(new Event("contacts:detail-opened"));
   }
+  function openOrgDetail(org: Organization) {
+    setOpenOrganization(org);
+  }
   function handleArchived(id: string) {
-    // We keep archived contacts in state (the options menu can toggle them
-    // back on); just flip the flag instead of dropping the row.
     setContacts(prev => prev.map(c => c.id === id ? { ...c, archived: true } : c));
     setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
     if (openContact?.id === id) setOpenContact(null);
@@ -253,8 +355,13 @@ export default function ContactsClient({ initialContacts }: Props) {
 
   async function performBulkArchive() {
     const ids = Array.from(selected);
-    await createClient().from("contacts").update({ archived: true }).in("id", ids);
-    setContacts(prev => prev.map(c => selected.has(c.id) ? { ...c, archived: true } : c));
+    if (isOrgs) {
+      await createClient().from("organizations").update({ archived: true }).in("id", ids);
+      setOrganizations(prev => prev.filter(o => !selected.has(o.id)));
+    } else {
+      await createClient().from("contacts").update({ archived: true }).in("id", ids);
+      setContacts(prev => prev.map(c => selected.has(c.id) ? { ...c, archived: true } : c));
+    }
     setSelected(new Set());
     setConfirmBulkArchive(false);
   }
@@ -264,10 +371,24 @@ export default function ContactsClient({ initialContacts }: Props) {
     setContacts(prev => prev.map(c => c.id === id ? { ...c, archived: false } : c));
   }
 
-  const allChecked = visible.length > 0 && selected.size === visible.length;
-  const archivedCount = contacts.filter(c => c.archived).length;
+  const visibleCount  = isOrgs ? visibleOrgs.length : visible.length;
+  const allChecked    = visibleCount > 0 && selected.size === visibleCount;
+  const archivedCount = isOrgs
+    ? organizations.filter(o => o.archived).length
+    : contacts.filter(c => c.archived).length;
 
   function exportCSV() {
+    if (isOrgs) {
+      const rows = visibleOrgs.map(o => [
+        o.name, o.location ?? "", o.website ?? "", o.email ?? "", o.phone ?? "",
+        o.tags.join("; "), o.last_touched_at ?? "",
+      ]);
+      const header = ["Name","Location","Website","Email","Phone","Tags","Last Touched"];
+      const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "organizations.csv"; a.click();
+      return;
+    }
     const rows = visible.map(c => [
       c.first_name, c.last_name, c.email ?? "", c.phone ?? "",
       c.organization?.name ?? "", c.title ?? "", c.location ?? "",
@@ -281,16 +402,28 @@ export default function ContactsClient({ initialContacts }: Props) {
   }
 
   const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-    { key: "name",         label: "Name"         },
-    { key: "last_contact", label: "Last contact" },
-    { key: "status",       label: "Status"       },
-    { key: "added",        label: "Added"        },
+    { key: "name",         label: "Name" },
+    { key: "last_contact", label: isOrgs ? "Last touched" : "Last contact" },
+    { key: "status",       label: "Status" },
+    { key: "added",        label: "Added" },
   ];
+
+  const newCtaLabel = isLeads
+    ? "+ New lead"
+    : isOrgs
+      ? "+ New organization"
+      : "+ New contact";
+
+  const optionsLabel = isLeads
+    ? "Lead options"
+    : isOrgs
+      ? "Organization options"
+      : "Contact options";
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <Topbar
-        title="People"
+        title="Network"
         actions={
           <>
             {/* 3-dot options menu — list-wide preferences + bulk actions. */}
@@ -298,8 +431,8 @@ export default function ContactsClient({ initialContacts }: Props) {
               <button
                 type="button"
                 onClick={() => setOptionsOpen(v => !v)}
-                aria-label={isLeads ? "Lead options" : "Contact options"}
-                title={isLeads ? "Lead options" : "Contact options"}
+                aria-label={optionsLabel}
+                title={optionsLabel}
                 style={{
                   width: 28, height: 28, borderRadius: 7,
                   display: "inline-flex", alignItems: "center", justifyContent: "center",
@@ -314,7 +447,7 @@ export default function ContactsClient({ initialContacts }: Props) {
                 <MoreHorizontal size={16} strokeWidth={2} />
               </button>
               {optionsOpen && (
-                <ContactsOptionsMenu
+                <NetworkOptionsMenu
                   showArchived={showArchived}
                   onToggleShowArchived={() => setShowArchived(v => !v)}
                   archivedCount={archivedCount}
@@ -322,10 +455,10 @@ export default function ContactsClient({ initialContacts }: Props) {
                 />
               )}
             </div>
-            {/* New button — themed amber in leads view */}
+            {/* New button — themed per view (sage / amber / blue) */}
             <span data-tour-target="contacts.new-button">
               <button
-                onClick={openNewContactModal}
+                onClick={openNewModal}
                 style={{
                   padding: "7px 20px", fontSize: 12, fontWeight: 500,
                   borderRadius: 8, border: "none", cursor: "pointer",
@@ -336,14 +469,14 @@ export default function ContactsClient({ initialContacts }: Props) {
                 onMouseEnter={(e) => (e.currentTarget.style.background = accent.primaryHover)}
                 onMouseLeave={(e) => (e.currentTarget.style.background = accent.primary)}
               >
-                {isLeads ? "+ New lead" : "+ New contact"}
+                {newCtaLabel}
               </button>
             </span>
           </>
         }
       />
 
-      {/* ── Contacts / Leads view toggle (sits under the People title) ── */}
+      {/* ── Contacts / Leads / Organizations view toggle ── */}
       <div
         style={{
           display: "flex", alignItems: "center",
@@ -353,7 +486,7 @@ export default function ContactsClient({ initialContacts }: Props) {
       >
         <div
           role="tablist"
-          aria-label="People view"
+          aria-label="Network view"
           style={{
             display: "inline-flex",
             padding: 3,
@@ -362,11 +495,13 @@ export default function ContactsClient({ initialContacts }: Props) {
             borderRadius: 8,
           }}
         >
-          {(["contacts", "leads"] as const).map((v) => {
+          {(["contacts", "leads", "organizations"] as const).map((v) => {
             const active = view === v;
             const tint = v === "leads"
-              ? { fg: "#b8860b", ringBg: "var(--color-surface-raised)" }
-              : { fg: "#3d6b4f", ringBg: "var(--color-surface-raised)" };
+              ? { fg: "#b8860b" }
+              : v === "organizations"
+                ? { fg: "#2563ab" }
+                : { fg: "#3d6b4f" };
             return (
               <button
                 key={v}
@@ -376,7 +511,7 @@ export default function ContactsClient({ initialContacts }: Props) {
                 style={{
                   padding: "5px 16px", borderRadius: 6,
                   fontSize: 12, fontWeight: 600,
-                  background: active ? tint.ringBg : "transparent",
+                  background: active ? "var(--color-surface-raised)" : "transparent",
                   color: active ? tint.fg : "var(--color-text-tertiary)",
                   border: "none", cursor: "pointer", fontFamily: "inherit",
                   transition: "background 0.12s ease, color 0.12s ease",
@@ -391,7 +526,7 @@ export default function ContactsClient({ initialContacts }: Props) {
         </div>
       </div>
 
-      {/* ── Sort + filter bar (matches the Projects topbar visual language) ── */}
+      {/* ── Sort + filter bar ── */}
       <div
         style={{
           display: "flex", alignItems: "center", gap: 8,
@@ -435,7 +570,7 @@ export default function ContactsClient({ initialContacts }: Props) {
             <circle cx="7" cy="7" r="5"/><path d="M11 11l3 3"/>
           </svg>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search contacts…"
+            placeholder={isOrgs ? "Search organizations…" : "Search contacts…"}
             style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 11, color: "var(--color-text-primary)", fontFamily: "inherit" }} />
           {search && (
             <button onClick={() => setSearch("")} style={{ color: "var(--color-grey)", background: "transparent", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
@@ -445,11 +580,14 @@ export default function ContactsClient({ initialContacts }: Props) {
         </div>
 
         <p style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
-          {visible.length} contact{visible.length !== 1 ? "s" : ""}
+          {isOrgs
+            ? `${visibleOrgs.length} organization${visibleOrgs.length !== 1 ? "s" : ""}`
+            : `${visible.length} contact${visible.length !== 1 ? "s" : ""}`}
         </p>
 
         <div style={{ display: "flex", alignItems: "center", gap: 4, borderLeft: "0.5px solid var(--color-border)", paddingLeft: 8, marginLeft: 4 }}>
-          <button onClick={exportCSV} title="Export visible contacts as CSV"
+          <button onClick={exportCSV}
+            title={isOrgs ? "Export visible organizations as CSV" : "Export visible contacts as CSV"}
             style={{
               padding: "5px 10px", fontSize: 11, fontWeight: 500, borderRadius: 7,
               color: "var(--color-text-tertiary)", border: "0.5px solid var(--color-border)",
@@ -459,24 +597,27 @@ export default function ContactsClient({ initialContacts }: Props) {
             onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}>
             Export
           </button>
-          <button
-            onClick={() => setShowImport(true)}
-            title="Import contacts from CSV"
-            style={{
-              padding: "5px 10px", fontSize: 11, fontWeight: 500, borderRadius: 7,
-              color: "var(--color-text-tertiary)", border: "0.5px solid var(--color-border)",
-              background: "transparent", cursor: "pointer", fontFamily: "inherit",
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = "var(--color-surface-sunken)"; e.currentTarget.style.color = "var(--color-text-primary)"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}>
-            Import
-          </button>
+          {!isOrgs && (
+            <button
+              onClick={() => setShowImport(true)}
+              title="Import contacts from CSV"
+              style={{
+                padding: "5px 10px", fontSize: 11, fontWeight: 500, borderRadius: 7,
+                color: "var(--color-text-tertiary)", border: "0.5px solid var(--color-border)",
+                background: "transparent", cursor: "pointer", fontFamily: "inherit",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "var(--color-surface-sunken)"; e.currentTarget.style.color = "var(--color-text-primary)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}>
+              Import
+            </button>
+          )}
         </div>
       </div>
 
       {/* ── Secondary filter strip ──────────────────────────────────────────
-          Contacts view: tag pills (gallery, press, …).
-          Leads view: stage pills (New, Reached out, …) with counts. */}
+          Contacts view: tag pills.
+          Leads view: stage pills with counts.
+          Organizations view: nothing — panel handles org tagging. */}
       {isLeads ? (
         <div className="flex items-center gap-1.5 px-6 py-1.5 shrink-0 overflow-x-auto"
           style={{ borderBottom: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
@@ -509,47 +650,44 @@ export default function ContactsClient({ initialContacts }: Props) {
             );
           })}
         </div>
-      ) : (
-        allTags.length > 0 && (
-          <div className="flex items-center gap-1.5 px-6 py-1.5 shrink-0 overflow-x-auto"
-            style={{ borderBottom: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
-            <button onClick={() => setTagFilter(null)}
-              className="px-2.5 py-0.5 rounded-full text-[10px] font-medium shrink-0"
-              style={{ background: tagFilter === null ? "var(--color-charcoal)" : "transparent", color: tagFilter === null ? "white" : "#6b6860", border: "0.5px solid var(--color-border)" }}>
-              All
-            </button>
-            {allTags.map(tag => {
-              const s = tagStyle(tag);
-              const active = tagFilter === tag;
-              return (
-                <button key={tag} onClick={() => setTagFilter(active ? null : tag)}
-                  className="px-2.5 py-0.5 rounded-full text-[10px] font-medium shrink-0"
-                  style={{ background: active ? s.color : "transparent", color: active ? "white" : s.color, border: `0.5px solid ${active ? s.color : s.color + "55"}` }}>
-                  {tag}
-                </button>
-              );
-            })}
-          </div>
-        )
-      )}
+      ) : !isOrgs && allTags.length > 0 ? (
+        <div className="flex items-center gap-1.5 px-6 py-1.5 shrink-0 overflow-x-auto"
+          style={{ borderBottom: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
+          <button onClick={() => setTagFilter(null)}
+            className="px-2.5 py-0.5 rounded-full text-[10px] font-medium shrink-0"
+            style={{ background: tagFilter === null ? "var(--color-charcoal)" : "transparent", color: tagFilter === null ? "white" : "#6b6860", border: "0.5px solid var(--color-border)" }}>
+            All
+          </button>
+          {allTags.map(tag => {
+            const s = tagStyle(tag);
+            const active = tagFilter === tag;
+            return (
+              <button key={tag} onClick={() => setTagFilter(active ? null : tag)}
+                className="px-2.5 py-0.5 rounded-full text-[10px] font-medium shrink-0"
+                style={{ background: active ? s.color : "transparent", color: active ? "white" : s.color, border: `0.5px solid ${active ? s.color : s.color + "55"}` }}>
+                {tag}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
 
       {/* ── Table ── */}
       <div className="flex-1 overflow-y-auto" style={{ background: "var(--color-warm-white)" }}>
         {/* Header */}
         <div className="grid items-center px-6 py-2 sticky top-0 z-10"
-          style={{ gridTemplateColumns: GRID, background: "var(--color-cream)", borderBottom: "0.5px solid var(--color-border)" }}>
+          style={{ gridTemplateColumns: isOrgs ? ORG_GRID : GRID, background: "var(--color-cream)", borderBottom: "0.5px solid var(--color-border)" }}>
           <div><Checkbox checked={allChecked} onChange={toggleSelectAll} /></div>
-          {["Name", "Organization", "Tags", isLeads ? "Stage" : "Status", "Last contact", "Location"].map(h => (
-            <div key={h} className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>{h}</div>
+          {(isOrgs
+            ? ["Name", "Location", "Website", "Tags", "Last touched", ""]
+            : ["Name", "Organization", "Tags", isLeads ? "Stage" : "Status", "Last contact", "Location"]
+          ).map((h, i) => (
+            <div key={`${h}-${i}`} className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>{h}</div>
           ))}
         </div>
 
-        {/* Empty state — keyed off the active view. When the current view
-            (contacts or leads) has no rows at all, show the rich EmptyState
-            with icon + copy + CTAs. When the view has rows but they're
-            filtered out by search / tag / stage, show a smaller "No matches"
-            message so we don't pretend the user has no data. */}
-        {visible.length === 0 ? (
+        {/* Empty state — keyed off the active view. */}
+        {visibleCount === 0 ? (
           viewHasAnyRows ? (
             <div className="flex flex-col items-center justify-center h-48 text-center px-6">
               <p className="text-[13px] font-medium" style={{ color: "var(--color-charcoal)" }}>
@@ -559,6 +697,23 @@ export default function ContactsClient({ initialContacts }: Props) {
                 Try adjusting your search or filters.
               </p>
             </div>
+          ) : isOrgs ? (
+            <EmptyState
+              icon={<Building2 size={24} strokeWidth={1.5} color="#2563ab" />}
+              heading="Map the rooms you move through"
+              body="Organizations are the galleries, brands, publications, fairs, and studios that the people in your network belong to. Add them so you can see every contact at a place in one view, share notes and files across the org, and link outreach targets to the whole institution."
+              action={{
+                label:           "+ New organization",
+                onClick:         () => setShowOrgModal(true),
+                background:      accent.primary,
+                backgroundHover: accent.primaryHover,
+              }}
+              tips={[
+                "Add an organization once and link every contact at it — the panel rolls up activity across all of them.",
+                "Use orgs for galleries you're submitting to, publications you're pitching, brands you're collaborating with, and fairs you're exhibiting at.",
+                "Outreach targets can point at an organization directly — useful when you're pursuing a gallery but don't have a person there yet.",
+              ]}
+            />
           ) : isLeads ? (
             <EmptyState
               icon={<Users size={24} strokeWidth={1.5} color="#b8860b" />}
@@ -566,7 +721,7 @@ export default function ContactsClient({ initialContacts }: Props) {
               body="Leads are the people you're pursuing — galleries you want to show with, press you want covering you, collectors you're warming up. Add them with a stage so you can see at a glance who's at the top of the funnel and who's almost across the line."
               action={{
                 label:           "+ New lead",
-                onClick:         openNewContactModal,
+                onClick:         openNewModal,
                 background:      accent.primary,
                 backgroundHover: accent.primaryHover,
               }}
@@ -581,7 +736,7 @@ export default function ContactsClient({ initialContacts }: Props) {
               icon={<Users size={24} strokeWidth={1.5} color="var(--color-sage)" />}
               heading="Build your network"
               body="Contacts holds your full relationship graph — galleries, collectors, press, clients, fabricators, and collaborators. Knowing who you know and how recently you've connected is one of the most undertracked assets in a creative practice."
-              action={{ label: "+ Add contact", onClick: openNewContactModal }}
+              action={{ label: "+ Add contact", onClick: openNewModal }}
               secondaryAction={{
                 label:   "Import contacts",
                 onClick: () => setShowImport(true),
@@ -594,7 +749,66 @@ export default function ContactsClient({ initialContacts }: Props) {
               ]}
             />
           )
-        ) : visible.map((c, idx) => {
+        ) : isOrgs ? visibleOrgs.map((o) => {
+          const isSelected = selected.has(o.id);
+          const lc = lastContactedDisplay(o.last_touched_at);
+          return (
+            <div key={o.id} className="group grid items-center px-6 cursor-pointer transition-colors"
+              style={{
+                gridTemplateColumns: ORG_GRID, borderBottom: "0.5px solid var(--color-border)",
+                background: isSelected ? "rgba(37,99,171,0.06)" : "var(--color-off-white)", minHeight: "48px",
+                opacity: o.archived ? 0.6 : 1,
+              }}
+              onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = "var(--color-warm-white)"; }}
+              onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = "var(--color-off-white)"; }}
+              onClick={e => { if ((e.target as HTMLElement).closest("[data-checkbox]")) return; openOrgDetail(o); }}
+            >
+              <div data-checkbox onClick={e => { e.stopPropagation(); toggleSelect(o.id); }}>
+                <Checkbox checked={isSelected} onChange={() => toggleSelect(o.id)} />
+              </div>
+
+              <div className="flex items-center gap-2.5 py-2.5 pr-4">
+                <div className="w-[30px] h-[30px] rounded-md flex items-center justify-center text-[11px] font-semibold shrink-0"
+                  style={{ background: "rgba(37,99,171,0.10)", border: "0.5px solid var(--color-border)", color: "#2563ab", overflow: "hidden" }}>
+                  {o.avatar_url
+                    ? <img src={o.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : orgInitials(o)}
+                </div>
+                <div>
+                  <div className="text-[13px] font-medium" style={{ color: "var(--color-charcoal)" }}>
+                    {o.name}
+                  </div>
+                  {o.email && <div className="text-[11px]" style={{ color: "var(--color-grey)" }}>{o.email}</div>}
+                </div>
+              </div>
+
+              <div className="text-[12px] pr-4" style={{ color: "#6b6860" }}>
+                {o.location ?? <span style={{ color: "var(--color-grey)" }}>—</span>}
+              </div>
+
+              <div className="text-[12px] pr-4" style={{ color: "#6b6860" }}>
+                {o.website
+                  ? <a href={o.website.startsWith("http") ? o.website : `https://${o.website}`}
+                       target="_blank" rel="noreferrer"
+                       onClick={(e) => e.stopPropagation()}
+                       style={{ color: "#2563ab", textDecoration: "none" }}>
+                      {o.website.replace(/^https?:\/\//, "")}
+                    </a>
+                  : <span style={{ color: "var(--color-grey)" }}>—</span>}
+              </div>
+
+              <div className="flex items-center gap-1 flex-wrap pr-4">
+                {o.tags.length > 0
+                  ? o.tags.slice(0, 2).map(tag => { const s = tagStyle(tag); return <span key={tag} className="text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: s.bg, color: s.color }}>{tag}</span>; })
+                  : <span className="text-[11px]" style={{ color: "var(--color-grey)" }}>—</span>}
+                {o.tags.length > 2 && <span className="text-[10px]" style={{ color: "var(--color-grey)" }}>+{o.tags.length - 2}</span>}
+              </div>
+
+              <div className="text-[11px] pr-4" style={{ color: lc.color }}>{lc.label}</div>
+              <div className="text-[11px]" style={{ color: "var(--color-grey)" }} />
+            </div>
+          );
+        }) : visible.map((c, idx) => {
           const isSelected = selected.has(c.id);
           const status = STATUS_CONFIG[c.status];
           const stageKey = (c.lead_stage ?? "new") as LeadStage;
@@ -705,6 +919,12 @@ export default function ContactsClient({ initialContacts }: Props) {
           <NewContactModal isLead={isLeads} onClose={() => setShowModal(false)} onCreated={handleCreated} />
         </div>
       )}
+      {showOrgModal && (
+        <NewOrganizationModal
+          onClose={() => setShowOrgModal(false)}
+          onCreated={handleOrgCreated}
+        />
+      )}
       {openContact && (
         <ContactDetailPanel
           contact={openContact}
@@ -714,6 +934,14 @@ export default function ContactsClient({ initialContacts }: Props) {
           initialTab={openTab}
           initialHighlightTaskId={openTaskId}
           initialHighlightNoteId={openNoteId}
+        />
+      )}
+      {openOrganization && (
+        <OrganizationDetailPanel
+          organization={openOrganization}
+          onClose={() => setOpenOrganization(null)}
+          onUpdated={handleOrgUpdated}
+          onArchived={handleOrgArchived}
         />
       )}
 
@@ -726,9 +954,15 @@ export default function ContactsClient({ initialContacts }: Props) {
 
       <ConfirmDialog
         open={confirmBulkArchive}
-        title={`Archive ${selected.size} contact${selected.size > 1 ? "s" : ""}?`}
-        body="Archived contacts are removed from your active list. Their activity, notes, and linked projects stay — you can restore them later from settings if needed."
-        confirmLabel={`Archive ${selected.size > 1 ? `${selected.size} contacts` : "contact"}`}
+        title={isOrgs
+          ? `Archive ${selected.size} organization${selected.size > 1 ? "s" : ""}?`
+          : `Archive ${selected.size} contact${selected.size > 1 ? "s" : ""}?`}
+        body={isOrgs
+          ? "Archived organizations are hidden from the active list. The contacts and outreach targets linked to them stay put — you can restore the org later if needed."
+          : "Archived contacts are removed from your active list. Their activity, notes, and linked projects stay — you can restore them later from settings if needed."}
+        confirmLabel={isOrgs
+          ? `Archive ${selected.size > 1 ? `${selected.size} organizations` : "organization"}`
+          : `Archive ${selected.size > 1 ? `${selected.size} contacts` : "contact"}`}
         cancelLabel="Keep"
         tone="danger"
         onConfirm={performBulkArchive}
