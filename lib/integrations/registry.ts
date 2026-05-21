@@ -71,7 +71,7 @@ export const PROVIDERS: Record<string, ProviderDefinition> = {
       {
         key:            "contacts",
         label:          "Contacts",
-        description:    "Import your Google contacts into the People module.",
+        description:    "Import your Google contacts into the Network module.",
         upstreamScopes: ["https://www.googleapis.com/auth/contacts.readonly"],
       },
       {
@@ -117,7 +117,7 @@ export const PROVIDERS: Record<string, ProviderDefinition> = {
       {
         key:            "contacts",
         label:          "Outlook Contacts",
-        description:    "Import your Outlook contacts into the People module.",
+        description:    "Import your Outlook contacts into the Network module.",
         upstreamScopes: ["Contacts.Read"],
       },
     ],
@@ -150,7 +150,7 @@ export const PROVIDERS: Record<string, ProviderDefinition> = {
       {
         key:            "contacts",
         label:          "iCloud Contacts",
-        description:    "Import your iCloud contacts into the People module.",
+        description:    "Import your iCloud contacts into the Network module.",
         upstreamScopes: [],
       },
     ],

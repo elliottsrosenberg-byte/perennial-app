@@ -9,7 +9,7 @@
 // up by `access_token_secret_id` / `refresh_token_secret_id`.
 
 export type ProviderId =
-  | "google"            // unified Gmail + Calendar + Contacts + Drive (People module)
+  | "google"            // unified Gmail + Calendar + Contacts + Drive (Network module)
   | "google_analytics"  // standalone, kept separate for Presence module
   | "google_calendar"   // legacy — superseded by `google`, kept until migration
   | "microsoft"         // Outlook Mail + Calendar + Contacts via MS Graph

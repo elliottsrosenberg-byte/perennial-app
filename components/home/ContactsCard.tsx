@@ -52,7 +52,7 @@ export default function ContactsCard({ contacts, totalCount }: Props) {
         style={{ borderBottom: "0.5px solid var(--color-border)" }}
       >
         <span className="text-[12px] font-semibold flex-1" style={{ color: "var(--color-charcoal)" }}>
-          People
+          Network
         </span>
         {contacts.length > 0 && (
           <span

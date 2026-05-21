@@ -24,7 +24,7 @@ const NAV_GROUPS = [
     items: [
       { id: "modules",          label: "Module overview"     },
       { id: "module-projects",  label: "Projects & Tasks"    },
-      { id: "module-contacts",  label: "Contacts & Outreach" },
+      { id: "module-contacts",  label: "Network & Outreach" },
       { id: "module-notes",     label: "Notes"               },
       { id: "module-finance",   label: "Finance"             },
       { id: "module-calendar",  label: "Calendar"            },
@@ -476,14 +476,14 @@ export default function DocsPage() {
 
         {/* ════════════════════════ WELCOME ════════════════════════ */}
         <Section id="welcome" title="Welcome to Perennial"
-          subtitle="Perennial is a studio management app built for independent furniture designers, object makers, and artists. It's the operations layer for a creative practice — projects, contacts, finance, calendar, and an AI partner that knows your studio.">
+          subtitle="Perennial is a studio management app built for independent furniture designers, object makers, and artists. It's the operations layer for a creative practice — projects, network, finance, calendar, and an AI partner that knows your studio.">
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 32 }}>
             {[
               { label: "Version",          value: `v${APP_VERSION}` },
               { label: "Public beta",      value: "Launched at NYCxDesign, May 19, 2026" },
               { label: "Built for",        value: "Independent furniture, object & art studios" },
-              { label: "Core modules",     value: "Projects · Tasks · Contacts · Notes · Finance · Calendar · Resources" },
+              { label: "Core modules",     value: "Projects · Tasks · Network · Notes · Finance · Calendar · Resources" },
               { label: "AI partner",       value: "Ash — Claude Sonnet 4.6 with tool use" },
               { label: "Your data",        value: "Stored in your private Supabase row · encrypted at rest" },
             ].map((item) => (
@@ -497,7 +497,7 @@ export default function DocsPage() {
           <Sub title="What you can do today">
             {[
               ["Track every project from sketch to invoice", "Projects, tasks, time, materials and linked contacts all live in one place. Drag cards between status columns; everything saves as you go."],
-              ["Manage relationships like a real CRM", "Contacts with companies, tags, last-contacted dates, activity feed, and a separate Outreach pipeline for galleries, press and clients."],
+              ["Manage relationships like a real CRM", "Contacts, leads, and organizations with tags, last-contacted dates, activity feed, and a separate Outreach pipeline for galleries, press and clients."],
               ["Run your finances", "Time tracking with a sidebar timer, expenses by category, invoices with PDF export and email sending, and a banking tab via Teller for transaction import."],
               ["Write and share notes", "Rich-text editor, pin notes, link to projects, and generate a public share link for any note."],
               ["Get a working partner, not a chatbot", "Ash sees your live data and can read or modify it on your behalf — searching projects, logging time, creating contacts, drafting reminders."],
@@ -609,7 +609,7 @@ export default function DocsPage() {
             <ModuleRow name="Home"      status="live"     ash="live"     features={["Dashboard","Notes card","Today / tasks","Finance snapshot","Active projects","Stale contacts"]} />
             <ModuleRow name="Projects"  status="live"     ash="live"     features={["Drag-drop status","Detail panel","Tasks checklist","Time tracking","Linked contacts","Finance section","Notes tab"]} />
             <ModuleRow name="Tasks"     status="live"     ash="live"     features={["All tasks list","Project / contact / opportunity links","Due dates","Calendar surface"]} />
-            <ModuleRow name="Contacts"  status="live"     ash="live"     features={["Search & tags","Activity feed","Company linking","Leads toggle","Bulk actions","Cross-module finance"]} />
+            <ModuleRow name="Network"   status="live"     ash="live"     features={["Contacts · Leads · Organizations","Search & tags","Activity feed","Organization linking","Bulk actions","Cross-module finance"]} />
             <ModuleRow name="Outreach"  status="live"     ash="live"     features={["Pipeline board","Leads board","Follow-ups board","Stage tracking","Per-target activity"]} />
             <ModuleRow name="Notes"     status="live"     ash="live"     features={["Rich editor","Pin","Project link","Public share link","Markdown export"]} />
             <ModuleRow name="Finance"   status="live"     ash="live"     features={["Overview","Time tracking + timer","Expenses","Invoices + PDF","Banking via Teller","Send invoice email"]} />
@@ -622,7 +622,7 @@ export default function DocsPage() {
           <Sub title="Home dashboard">
             <Card>
               <p style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.7 }}>
-                The Home dashboard is a <em>lens</em> — every card surfaces real data from another module and links into it. Five cards: <strong>Notes</strong> (recent + pinned), <strong>Today</strong> (tasks due today + overdue invoices), <strong>Finance</strong> (billable hours + outstanding invoice totals), <strong>Projects</strong> (active projects with due-date badges), <strong>Contacts</strong> (people you haven&apos;t reached in 30+ days).
+                The Home dashboard is a <em>lens</em> — every card surfaces real data from another module and links into it. Five cards: <strong>Notes</strong> (recent + pinned), <strong>Today</strong> (tasks due today + overdue invoices), <strong>Finance</strong> (billable hours + outstanding invoice totals), <strong>Projects</strong> (active projects with due-date badges), <strong>Network</strong> (people you haven&apos;t reached in 30+ days).
               </p>
             </Card>
           </Sub>
@@ -649,7 +649,7 @@ export default function DocsPage() {
               body: "Click any project card to open its panel. Every field is inline-editable: tap to edit, tab away to save. The panel shows tasks, linked contacts, materials, hours logged, billable summary, linked notes, and invoice totals.",
               bullets: [
                 "Tasks tab: add tasks, check them off, set due dates. Checked tasks update the progress bar on the card.",
-                "Contacts: link any contact to a project. Linked contacts show up on the contact's panel too.",
+                "Network: link any contact to a project. Linked contacts show up on the contact's panel too.",
                 "Finance section in the panel: hours logged, billable amount, and a count of invoices issued against this project.",
                 "Notes tab: a list of notes linked to this project. Create a new note from here with one click.",
               ],
@@ -669,40 +669,40 @@ export default function DocsPage() {
           ]}
         />
 
-        {/* ════════════════════════ MODULE: CONTACTS & OUTREACH ════════════════════════ */}
+        {/* ════════════════════════ MODULE: NETWORK & OUTREACH ════════════════════════ */}
         <ModuleGuide
           id="module-contacts"
-          title="Contacts & Outreach"
+          title="Network & Outreach"
           status="live"
-          lede="Contacts is your address book — galleries, clients, press, suppliers, leads. Outreach is the active layer on top: kanban boards for relationships you're actively building."
+          lede="Network is your address book — contacts, leads, and organizations. Galleries, clients, press, suppliers, fabricators, peers. Outreach is the active layer on top: kanban boards for relationships you're actively building."
           sections={[
             {
-              heading: "Contacts",
-              body: "Every contact has a name, optional company, tags, status (active / lead / inactive), and a free-text bio. Open the detail panel for an activity feed of every email, call, meeting, or note logged against them.",
+              heading: "Network",
+              body: "Three views over the same relationship graph: Contacts (people you've started working with), Leads (people you're still pursuing, with a pipeline stage), and Organizations (galleries, studios, publications, suppliers — the studios you work with, not the individuals). Open the detail panel on any row for the activity feed and full workspace.",
               bullets: [
                 "Tags are user-defined — common ones: gallery, client, press, supplier, lead, fabricator, peer.",
-                "Companies are first-class — multiple contacts at the same company share a Company row.",
-                "The Leads toggle filters the page to contacts with status=lead.",
+                "Organizations are first-class — they have their own canvas, files, notes, tasks, and activity feed. Multiple contacts can share the same organization, and an organization can be its own outreach target.",
+                "The Leads view filters to people with is_lead=true, organized by lead stage. Converting a lead to a contact preserves their history.",
                 "Bulk-tag or bulk-archive multiple contacts at once from the action bar.",
               ],
             },
             {
               heading: "Activity log",
-              body: "Every interaction is a row in the contact's activity feed: type (email / call / meeting / note), content, date. Adding an activity bumps the contact's last_contacted_at — that's what powers the Stale Contacts card on Home and the Follow-ups board in Outreach.",
+              body: "Every interaction is a row in the contact's or organization's activity feed: type (email / call / meeting / note), content, date. Adding an activity bumps last_contacted_at — that's what powers the Stale Contacts card on Home and the Follow-ups board in Outreach.",
             },
             {
               heading: "Outreach",
-              body: "Outreach has three views: Pipelines (custom kanban for active opportunities), Leads (contacts with status=lead, organized by lead stage), and Follow-ups (contacts you haven't reached in 30+ days).",
+              body: "Outreach has three views: Pipelines (custom kanban for active pursuits), Leads (people with is_lead=true, organized by lead stage), and Follow-ups (contacts and organizations you haven't reached in 30+ days).",
               bullets: [
                 "Create as many pipelines as you want — gallery applications, press outreach, retail accounts, commissions.",
                 "Each pipeline has custom stages. Drag a target card between stages to move it forward.",
-                "Targets can be contacts, companies, or opportunities (a press piece, a fair, a commission lead).",
-                "Logging a follow-up on a target also writes to the underlying contact's activity feed.",
+                "Targets wrap a lead (person) or an organization. The wrapped entity owns the workspace — canvas, files, notes, tasks, activity — and the target tracks pipeline position. Multiple targets can wrap the same organization across different pipelines.",
+                "Logging a follow-up on a target also writes to the wrapped person's or organization's activity feed.",
               ],
             },
             {
               heading: "Importing contacts",
-              body: "Connect Google Contacts in Settings → Integrations and Perennial will import your full Google contact list with names, emails, phones, companies, and titles. CSV import with column mapping is on the roadmap.",
+              body: "Connect Google Contacts in Settings → Integrations and Perennial will import your full Google contact list with names, emails, phones, organizations, and titles. CSV import with column mapping is on the roadmap.",
             },
           ]}
         />
@@ -1039,7 +1039,7 @@ export default function DocsPage() {
             <PlannedChips tools={["set_project_priority", "add_contact_to_project", "link_note_to_project"]} />
           </Sub>
 
-          <Sub title="Contacts">
+          <Sub title="Network">
             <ToolDivider label="Read" />
             <ToolRow name="get_contact_details" status="live" kind="read"
               desc="Full contact: company, relationship status, last contact date, bio, recent activity feed."
@@ -1151,7 +1151,7 @@ export default function DocsPage() {
               where="Settings → Integrations" />
             <IntegrationRow name="Google · Contacts"           status="live"
               scopes="contacts.readonly"
-              purpose="One-click import of your Google contacts into the Contacts module."
+              purpose="One-click import of your Google contacts into the Network module."
               where="Settings → Integrations" />
             <IntegrationRow name="Google · Gmail"              status="progress"
               scopes="gmail.readonly (production approval pending)"
@@ -1402,7 +1402,7 @@ export default function DocsPage() {
               title="CSV contact import with column mapping"
               detail="Multi-step import flow: pick file → map columns → preview → confirm." />
             <RoadmapItem icon="→" color="var(--color-blue)"
-              title="Contacts filtered view modes"
+              title="Network filtered view modes"
               detail="Top-level mode switcher: All / Leads / Follow-ups / Recent, with the tag filter strip nested inside." />
             <RoadmapItem icon="→" color="var(--color-blue)"
               title="Lead vs. contact distinction in add flow"
@@ -1510,7 +1510,7 @@ export default function DocsPage() {
             },
             {
               q: "A contact won't delete",
-              a: "Contacts linked to invoices, time entries, or outreach targets can't be deleted — the dependencies would break. Archive them instead (coming soon) or unlink them from those records first.",
+              a: "Contacts and organizations linked to invoices, time entries, or outreach targets can't be deleted — the dependencies would break. Archive them instead (coming soon) or unlink them from those records first.",
             },
             {
               q: "Dark mode broke a panel / element",

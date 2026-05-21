@@ -1336,7 +1336,7 @@ function FilterTabsSection() {
 
   return (
     <Section id="filter-tabs" title="Filter Tabs" description="Tab navigation pattern. Used in Projects, Finance, Notes, and more.">
-      <SubSection title="With Counts (Projects, Contacts)">
+      <SubSection title="With Counts (Projects, Network)">
         <TabBar tabs={TABS_1} active={tab1} onSelect={setTab1} showCount />
       </SubSection>
       <SubSection title="Without Counts (Finance, Presence)">
@@ -1437,12 +1437,12 @@ function TablesSection() {
   };
 
   return (
-    <Section id="tables" title="Tables" description="Row-based data layout. Used in Contacts, Invoices, and Expenses.">
+    <Section id="tables" title="Tables" description="Row-based data layout. Used in Network, Invoices, and Expenses.">
       <div style={{ border: "0.5px solid var(--color-border)", borderRadius: 12, overflow: "hidden", boxShadow: "var(--shadow-card)" }}>
         {/* Header */}
         <div style={{ display: "grid", gridTemplateColumns: COLS, padding: "8px 20px", background: "var(--color-surface-sunken)", borderBottom: "0.5px solid var(--color-border)" }}>
           <div />
-          {["Name", "Company", "Tags", "Status", "Last contact"].map((h) => (
+          {["Name", "Organization", "Tags", "Status", "Last contact"].map((h) => (
             <div key={h} style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-tertiary)" }}>{h}</div>
           ))}
         </div>
@@ -1553,7 +1553,7 @@ function ModalsSection() {
 
 function PanelsSection() {
   return (
-    <Section id="panels" title="Panels" description="Right-edge detail panels slide in over content. Used in Projects, Contacts, Outreach.">
+    <Section id="panels" title="Panels" description="Right-edge detail panels slide in over content. Used in Projects, Network, Outreach.">
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
         <div style={{ flex: 2, background: "var(--color-surface-sunken)", borderRadius: 16, padding: "0 0 0 32px", display: "flex", overflow: "hidden", minHeight: 360 }}>
           {/* Simulated page content */}
@@ -1751,7 +1751,7 @@ function LayoutsSection() {
           {BOX("rgba(155,163,122,0.35)", "Today", { gridRow: "span 2" })}
           {BOX("rgba(155,163,122,0.25)", "Finance")}
           {BOX("rgba(155,163,122,0.25)", "Projects")}
-          {BOX("rgba(155,163,122,0.25)", "Contacts")}
+          {BOX("rgba(155,163,122,0.25)", "Network")}
         </div>
       ),
     },
@@ -1769,7 +1769,7 @@ function LayoutsSection() {
     },
     {
       name: "Table",
-      desc: "Full-width rows · header · Contacts",
+      desc: "Full-width rows · header · Network",
       diagram: (
         <div style={{ display: "flex", flexDirection: "column", gap: 2, height: 120 }}>
           {BOX("rgba(155,163,122,0.4)", "Header", { height: 20 })}
@@ -1779,7 +1779,7 @@ function LayoutsSection() {
     },
     {
       name: "List + Panel",
-      desc: "List col · detail panel · Contacts, Notes",
+      desc: "List col · detail panel · Network, Notes",
       diagram: (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1.1fr", gap: 4, height: 120 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>

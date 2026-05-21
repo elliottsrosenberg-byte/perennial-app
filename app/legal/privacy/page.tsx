@@ -297,7 +297,7 @@ export default function PrivacyPolicyPage() {
                   characters). If you opt in to <em>Store linked email bodies</em>
                   in Settings &rarr; Integrations, we additionally store the
                   full body of any email whose sender or recipient matches a
-                  contact in your Perennial People module &mdash; never of
+                  contact in your Perennial Network module &mdash; never of
                   emails that do not match a contact. Stored bodies are
                   encrypted at rest, isolated to your account, and deleted
                   within 24 hours if you disable the setting, disconnect
@@ -324,7 +324,7 @@ export default function PrivacyPolicyPage() {
                 <td style={{ padding: "10px 12px", borderBottom: "0.5px solid #e3dccb", verticalAlign: "top" }}>
                   Surface events on the Perennial calendar, and create a
                   &ldquo;meeting&rdquo; activity entry for any event whose
-                  attendees include a contact in your People module.
+                  attendees include a contact in your Network module.
                 </td>
               </tr>
               <tr>
@@ -336,7 +336,7 @@ export default function PrivacyPolicyPage() {
                   notes).
                 </td>
                 <td style={{ padding: "10px 12px", borderBottom: "0.5px solid #e3dccb", verticalAlign: "top" }}>
-                  One-time and ongoing import into your Perennial People module,
+                  One-time and ongoing import into your Perennial Network module,
                   for contacts you choose to import.
                 </td>
               </tr>

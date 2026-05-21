@@ -54,7 +54,7 @@ const STEPS: Step[] = [
     id:      "in-modal",
     anchor:  '[data-tour-target="contacts.new-modal"]',
     title:   "Just a name to start",
-    body:    "Everything else — email, phone, tags, company — you can add later from the detail panel. Don't let a half-filled form stop you from capturing the person.",
+    body:    "Everything else — email, phone, tags, organization — you can add later from the detail panel. Don't let a half-filled form stop you from capturing the person.",
     hint:    "Waiting for the contact to be created…",
     advance: "create",
     spotlight: false,
@@ -100,7 +100,7 @@ const STEPS: Step[] = [
     id:       "ash-handoff",
     anchor:   null,
     title:    "Let Ash kickstart your network",
-    body:     "Ash knows your practice, your city, and your selling channels. Ask it to draft a starter list of 8–10 contacts you should reach out to — galleries, press, collectors that fit your work — with reasoning and suggested tags.",
+    body:     "Ash knows your practice, your city, and your selling channels. Ask it to draft a starter list of 8–10 contacts and organizations you should reach out to — galleries, press, collectors that fit your work — with reasoning and suggested tags.",
     advance:  "next",
     spotlight: false,
     finalCta: { label: "Suggest contacts to add", action: "ash-suggest-contacts" },
@@ -369,7 +369,7 @@ export default function ContactsTooltipTour() {
 
       <div
         role="dialog"
-        aria-label={`People tour step ${stepIdx + 1}: ${step.title}`}
+        aria-label={`Network tour step ${stepIdx + 1}: ${step.title}`}
         style={{
           position: "fixed",
           top:  centered ? "50%" : pos!.top,
@@ -388,7 +388,7 @@ export default function ContactsTooltipTour() {
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(245,241,233,0.5)" }}>
-            People tour · {stepIdx + 1} of {STEPS.length}
+            Network tour · {stepIdx + 1} of {STEPS.length}
           </span>
           <button
             onClick={dismiss}
