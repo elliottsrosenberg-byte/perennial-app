@@ -233,26 +233,27 @@ export default function EventDetailPanel({ event: initialEvent, color, onClose, 
 
   const providerLabel = event.source === "microsoft" ? "Outlook" : event.source === "google" ? "Google Calendar" : "External";
 
+  // Non-blocking right-edge preview card — no scrim, so the calendar grid
+  // stays visible while the user reads or edits an event.
   return (
-    <div
-      aria-modal
-      role="dialog"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
-        position: "fixed", inset: 0, zIndex: 70,
-        background: "rgba(31,33,26,0.32)",
-        backdropFilter: "blur(3px)",
-        display: "flex", alignItems: "center", justifyContent: "flex-end",
-      }}
-    >
+    <>
       <div
         ref={ref}
+        role="dialog"
+        aria-modal={false}
         style={{
-          width: 440, height: "100%",
+          position: "fixed",
+          top: 64,
+          right: 16,
+          width: 380,
+          maxHeight: "calc(100vh - 80px)",
+          zIndex: 70,
           background: "var(--color-off-white)",
-          borderLeft: "0.5px solid var(--color-border)",
-          boxShadow: "-12px 0 40px rgba(0,0,0,0.16)",
+          border: "0.5px solid var(--color-border)",
+          borderRadius: 14,
+          boxShadow: "0 8px 28px rgba(0,0,0,0.16)",
           display: "flex", flexDirection: "column",
+          overflow: "hidden",
           fontFamily: "inherit",
         }}
       >
@@ -687,7 +688,7 @@ export default function EventDetailPanel({ event: initialEvent, color, onClose, 
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 }
 

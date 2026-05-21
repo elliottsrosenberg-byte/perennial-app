@@ -179,20 +179,31 @@ export default function NewEventModal({
     }
   }
 
+  // Non-blocking right-edge preview card — no scrim, the calendar grid stays
+  // visible and interactable behind it. Sits below the global Topbar (52px)
+  // and the in-module header (52px) so it lines up with the day-headers row.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center"
-      style={{ background: "rgba(31,33,26,0.35)", backdropFilter: "blur(4px)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
+    <>
       <div
-        className="rounded-2xl p-6 flex flex-col gap-4"
+        className="rounded-2xl flex flex-col gap-4 p-5"
         style={{
-          width: 460, maxHeight: "92vh", overflowY: "auto",
+          position: "fixed",
+          top: 64,
+          right: 16,
+          width: 360,
+          maxHeight: "calc(100vh - 80px)",
+          overflowY: "auto",
           background: "var(--color-off-white)",
           border:     "0.5px solid var(--color-border)",
-          boxShadow:  "0 8px 40px rgba(0,0,0,0.18)",
+          boxShadow:  "0 8px 28px rgba(0,0,0,0.16)",
           fontFamily: "inherit",
+          zIndex: 60,
         }}
       >
         <div className="flex items-center justify-between">
@@ -429,6 +440,6 @@ export default function NewEventModal({
           </button>
         </div>
       </div>
-    </div>
+    </>
   );
 }
