@@ -186,6 +186,7 @@ export interface OutreachPipeline {
   color: string;
   position: number;
   description: string | null;
+  archived: boolean;
   /** True when the pipeline was auto-seeded from onboarding answers. Drives
    *  the "Suggested" pill on the left rail; cleared by the UI once the user
    *  adds a target to the pipeline. */
