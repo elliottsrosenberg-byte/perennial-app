@@ -1533,8 +1533,13 @@ export default function CalendarClient({
         </div>
       </div>
 
-      {/* ── Main calendar ─────────────────────────────────────────────────────── */}
-      <div className="flex flex-col flex-1 overflow-hidden">
+      {/* ── Main calendar ───────────────────────────────────────────────────────
+          minWidth: 0 is critical — without it the flex item's intrinsic
+          min-content (≥WEEK_MIN_WIDTH of the time grid below) prevents the
+          column from shrinking under that width, which means the calendar
+          pushes the viewport instead of letting `overflow-x: auto` on the
+          inner grid wrapper kick in. */}
+      <div className="flex flex-col flex-1 overflow-hidden" style={{ minWidth: 0 }}>
 
         {/* Topbar — matches Projects/People standard: title left, date
             label after it, then nav + view toggle + Ash + 3-dot + primary
@@ -1792,14 +1797,18 @@ export default function CalendarClient({
           />
         ) : (
         /* ── Single scroll container: day headers + all-day + time grid all share same width ──
-            overflow-x: auto lets the user pan sideways at narrow widths;
-            inner rows pick up a minWidth so the columns stay legible
-            instead of collapsing to ~20px each. */
+            The outer wrapper provides BOTH axes of scroll. A single inner
+            block carries minWidth: WEEK_MIN_WIDTH so every row shares the
+            exact same horizontal scroll offset — day headers, tasks
+            ribbon, all-day row, and time grid all pan together. Without
+            the shared parent the sticky rows would compute their own
+            min-width contexts and drift apart on narrow viewports. */
         <div
           ref={gridWrapRef}
           className="flex-1 overflow-y-auto overflow-x-auto"
           style={{ position: "relative", background: "var(--color-off-white)" }}
         >
+        <div style={{ minWidth: WEEK_MIN_WIDTH, position: "relative" }}>
 
           {/* Day headers — sticky at top of scroll container */}
           <div
@@ -1811,7 +1820,6 @@ export default function CalendarClient({
               background: "var(--color-off-white)",
               borderBottom: "0.5px solid var(--color-border)",
               height: `${DAY_HDR_H}px`,
-              minWidth: WEEK_MIN_WIDTH,
             }}
           >
             <div
@@ -1873,7 +1881,6 @@ export default function CalendarClient({
               background: "var(--color-warm-white)",
               borderBottom: "0.5px solid var(--color-border)",
               minHeight: 26,
-              minWidth: WEEK_MIN_WIDTH,
             }}
           >
             <div
@@ -1994,7 +2001,6 @@ export default function CalendarClient({
                   gridAutoRows: "min-content",
                   rowGap: 2,
                   minHeight: 30,
-                  minWidth: WEEK_MIN_WIDTH,
                   paddingBottom: oppSpans.length > 0 ? 4 : 0,
                 }}
               >
@@ -2104,7 +2110,7 @@ export default function CalendarClient({
           })()}
 
           {/* Time grid — not sticky, scrolls with the container */}
-          <div style={{ display: "flex", height: `${GRID_HEIGHT}px`, position: "relative", minWidth: WEEK_MIN_WIDTH }}>
+          <div style={{ display: "flex", height: `${GRID_HEIGHT}px`, position: "relative" }}>
 
             {/* Time gutter */}
             <div style={{ width: "52px", flexShrink: 0, position: "relative", height: `${GRID_HEIGHT}px` }}>
@@ -2333,6 +2339,7 @@ export default function CalendarClient({
             </div>
           </div>
 
+        </div>
         </div>
         )}
         </>
