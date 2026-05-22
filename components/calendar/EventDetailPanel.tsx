@@ -80,6 +80,98 @@ function encodeRef(event: CalendarEventLite): string {
   return encodeURIComponent(`${provider}:${event.id}`);
 }
 
+// Google Calendar descriptions can contain HTML (paragraphs, links).
+// Rendering as plain text shows raw markup; rendering as innerHTML
+// without sanitization is an XSS risk. We allow a narrow tag set and
+// strip everything else via DOMParser. Returns a sanitized HTML string
+// safe to drop into dangerouslySetInnerHTML.
+const ALLOWED_TAGS = new Set(["P", "A", "BR", "B", "STRONG", "I", "EM", "UL", "OL", "LI", "DIV", "SPAN"]);
+function sanitizeEventDescription(html: string): string {
+  if (typeof window === "undefined") {
+    // Server fallback: strip every tag, return plain text.
+    return html.replace(/<[^>]*>/g, "");
+  }
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
+  const root = doc.body.firstElementChild;
+  if (!root) return "";
+
+  function clean(node: Element) {
+    // Walk a snapshot so removals during iteration don't skip nodes.
+    const children = Array.from(node.children);
+    for (const child of children) {
+      if (!ALLOWED_TAGS.has(child.tagName)) {
+        // Replace disallowed elements with their text content.
+        const text = child.textContent ?? "";
+        child.replaceWith(doc.createTextNode(text));
+        continue;
+      }
+      // For anchors, capture the href before stripping attributes; for
+      // other tags, strip every attribute.
+      let savedHref: string | null = null;
+      if (child.tagName === "A") {
+        savedHref = (child as HTMLAnchorElement).getAttribute("href");
+      }
+      for (const name of Array.from(child.getAttributeNames())) {
+        child.removeAttribute(name);
+      }
+      if (child.tagName === "A") {
+        const text = child.textContent ?? "";
+        // Fall back to text content if href is missing — Google often
+        // wraps a bare URL in <a> with the URL as the text too.
+        const url = (savedHref && /^https?:/i.test(savedHref))
+          ? savedHref
+          : (text.match(/^https?:\/\/\S+$/i)?.[0] ?? null);
+        if (url) {
+          child.setAttribute("href",   url);
+          child.setAttribute("target", "_blank");
+          child.setAttribute("rel",    "noopener noreferrer");
+        } else {
+          // Unlinkable anchor — degrade to plain text.
+          child.replaceWith(doc.createTextNode(text));
+          continue;
+        }
+      }
+      clean(child);
+    }
+  }
+  // Pre-pass: also linkify bare URLs in text nodes so the user can click
+  // through to the link Google embedded as plain text.
+  function linkifyTextNodes(node: Node) {
+    if (node.nodeType === 3) {
+      const text = (node as Text).data;
+      const re = /(https?:\/\/[^\s<>"]+)/g;
+      if (!re.test(text)) return;
+      re.lastIndex = 0;
+      const frag = doc.createDocumentFragment();
+      let last = 0; let m: RegExpExecArray | null;
+      while ((m = re.exec(text)) !== null) {
+        if (m.index > last) frag.appendChild(doc.createTextNode(text.slice(last, m.index)));
+        const a = doc.createElement("a");
+        a.setAttribute("href", m[1]);
+        a.setAttribute("target", "_blank");
+        a.setAttribute("rel", "noopener noreferrer");
+        a.textContent = m[1];
+        frag.appendChild(a);
+        last = re.lastIndex;
+      }
+      if (last < text.length) frag.appendChild(doc.createTextNode(text.slice(last)));
+      (node as Text).replaceWith(frag);
+      return;
+    }
+    if (node.nodeType === 1 && (node as Element).tagName !== "A") {
+      for (const child of Array.from(node.childNodes)) linkifyTextNodes(child);
+    }
+  }
+  clean(root);
+  linkifyTextNodes(root);
+  return root.innerHTML;
+}
+
+function descriptionLooksLikeHtml(d: string | null | undefined): boolean {
+  if (!d) return false;
+  return /<\/?[a-z][\s\S]*>/i.test(d);
+}
+
 export default function EventDetailPanel({ event: initialEvent, color, onClose, onUpdated, onDeleted, anchorRect }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [event, setEvent] = useState(initialEvent);
@@ -617,17 +709,52 @@ export default function EventDetailPanel({ event: initialEvent, color, onClose, 
                 }}>
                   Description
                 </p>
-                <p
-                  style={{
-                    fontSize: 12.5, lineHeight: 1.7,
-                    color: event.description ? "#4a4640" : "var(--color-text-tertiary)",
-                    whiteSpace: "pre-wrap",
-                    margin: 0,
-                    fontStyle: event.description ? "normal" : "italic",
-                  }}
-                >
-                  {event.description || "Add a description…"}
-                </p>
+                {event.description
+                  ? (descriptionLooksLikeHtml(event.description)
+                      ? (
+                        <div
+                          className="cal-event-description"
+                          style={{
+                            fontSize: 12.5, lineHeight: 1.7,
+                            color: "#4a4640",
+                            margin: 0,
+                          }}
+                          dangerouslySetInnerHTML={{ __html: sanitizeEventDescription(event.description) }}
+                        />
+                      )
+                      : (
+                        <p
+                          style={{
+                            fontSize: 12.5, lineHeight: 1.7,
+                            color: "#4a4640",
+                            whiteSpace: "pre-wrap",
+                            margin: 0,
+                          }}
+                        >
+                          {event.description}
+                        </p>
+                      )
+                    )
+                  : (
+                    <p
+                      style={{
+                        fontSize: 12.5, lineHeight: 1.7,
+                        color: "var(--color-text-tertiary)",
+                        whiteSpace: "pre-wrap",
+                        margin: 0,
+                        fontStyle: "italic",
+                      }}
+                    >
+                      Add a description…
+                    </p>
+                  )
+                }
+                <style>{`
+                  .cal-event-description a { color: var(--color-sage); text-decoration: underline; word-break: break-word; }
+                  .cal-event-description p { margin: 0 0 8px; }
+                  .cal-event-description p:last-child { margin-bottom: 0; }
+                  .cal-event-description ul, .cal-event-description ol { margin: 0 0 8px; padding-left: 18px; }
+                `}</style>
               </div>
             )
           )}

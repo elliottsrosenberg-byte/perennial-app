@@ -1048,7 +1048,8 @@ export default function CalendarClient({
       e.id === extId && (provider ? e.source === provider : true),
     );
     if (match) {
-      setOpenEvent(match);
+      // Deep link: no clicked chip, so anchor falls back to right edge.
+      openEventAt(match, null);
       setPendingDeepLinkId(null);
     }
   }, [pendingDeepLinkId, gcalEvents]);
@@ -2122,7 +2123,10 @@ export default function CalendarClient({
                         return (
                           <button
                             key={e.id}
-                            onClick={() => setOpenEvent(e)}
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              openEventAt(e, (ev.currentTarget as HTMLElement).getBoundingClientRect());
+                            }}
                             style={{
                               position: "absolute",
                               top:    `${y}px`,
@@ -2264,7 +2268,7 @@ export default function CalendarClient({
                 return (
                   <button
                     key={e.id}
-                    onClick={() => { setMonthDayOverlay(null); setOpenEvent(e); }}
+                    onClick={() => { setMonthDayOverlay(null); openEventAt(e, null); }}
                     style={{
                       width: "100%", textAlign: "left",
                       display: "flex", alignItems: "center", gap: 8,
@@ -2380,7 +2384,8 @@ export default function CalendarClient({
         <EventDetailPanel
           event={openEvent as unknown as CalendarEventLite}
           color={openEvent.colorId ? GCAL_COLORS[openEvent.colorId] : (openEvent.source === "microsoft" ? "#0078d4" : "#039BE5")}
-          onClose={() => setOpenEvent(null)}
+          anchorRect={openEventAnchor}
+          onClose={() => { setOpenEvent(null); setOpenEventAnchor(null); }}
           onUpdated={(updated) => {
             setGcalEvents((prev) => prev.map((e) => (e.id === updated.id ? { ...e, ...updated } as CalEvent : e)));
             setOpenEvent((prev) => (prev && prev.id === updated.id ? ({ ...prev, ...updated } as CalEvent) : prev));
@@ -2388,6 +2393,7 @@ export default function CalendarClient({
           onDeleted={(id) => {
             setGcalEvents((prev) => prev.filter((e) => e.id !== id));
             setOpenEvent(null);
+            setOpenEventAnchor(null);
           }}
         />
       )}
