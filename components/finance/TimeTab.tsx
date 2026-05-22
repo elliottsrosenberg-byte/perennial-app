@@ -206,13 +206,15 @@ export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projec
   return (
     <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
       {/* Start timer bar */}
-      <StartTimerBar
-        activeTimer={activeTimer}
-        timerSeconds={timerSeconds}
-        projects={projects}
-        onStartTimer={onStartTimer}
-        onStopTimer={onStopTimer}
-      />
+      <div data-tour-target="finance.timer-bar">
+        <StartTimerBar
+          activeTimer={activeTimer}
+          timerSeconds={timerSeconds}
+          projects={projects}
+          onStartTimer={onStartTimer}
+          onStopTimer={onStopTimer}
+        />
+      </div>
 
       {/* Filter bar */}
       <div className="flex items-center gap-2">

@@ -14,6 +14,8 @@ import NewInvoiceModal from "./NewInvoiceModal";
 import { Plus } from "lucide-react";
 import Button from "@/components/ui/Button";
 import AshMark from "@/components/ui/AshMark";
+import FinanceIntroModal from "@/components/tour/finance/FinanceIntroModal";
+import FinanceTooltipTour from "@/components/tour/finance/FinanceTooltipTour";
 
 const ASH_GRADIENT = "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)";
 function openAsh(message: string) {
@@ -61,6 +63,16 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
 
   const now = new Date();
   const periodLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
+
+  // Tour can ask us to switch tabs as it advances across the tab strip
+  useEffect(() => {
+    function onSetTab(e: Event) {
+      const tab = (e as CustomEvent<{ tab: Tab }>).detail?.tab;
+      if (tab) setActiveTab(tab);
+    }
+    window.addEventListener("finance:set-tab", onSetTab);
+    return () => window.removeEventListener("finance:set-tab", onSetTab);
+  }, []);
 
   // Timer tick
   useEffect(() => {
@@ -148,11 +160,15 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
     </>,
     expenses: <>
       <AshBtn message="What are my biggest expense categories this month? How can I reduce costs?" />
-      <Button onClick={() => setShowAddExpense(true)}><Plus size={12} />Add expense</Button>
+      <span data-tour-target="finance.add-expense">
+        <Button onClick={() => setShowAddExpense(true)}><Plus size={12} />Add expense</Button>
+      </span>
     </>,
     invoices: <>
       <AshBtn message="What invoices are outstanding or overdue? Help me draft a payment follow-up." />
-      <Button onClick={() => setShowNewInvoice(true)}><Plus size={12} />New invoice</Button>
+      <span data-tour-target="finance.new-invoice">
+        <Button onClick={() => setShowNewInvoice(true)}><Plus size={12} />New invoice</Button>
+      </span>
     </>,
     banking:  <AshBtn message="What does my cash flow look like based on recent transactions?" />,
   };
@@ -167,7 +183,7 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
           <h1 className="font-semibold text-[14px]" style={{ color: "var(--color-charcoal)" }}>Finance</h1>
           <span className="text-[11px]" style={{ color: "var(--color-grey)" }}>{periodLabel}</span>
         </div>
-        <div className="flex items-stretch">
+        <div className="flex items-stretch" data-tour-target="finance.tabs">
           {(["overview","time","expenses","invoices","banking"] as Tab[]).map((tab) => (
             <button key={tab} type="button" onClick={() => setActiveTab(tab)}
               className="px-5 text-[12px] capitalize"
@@ -248,6 +264,9 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
           onClose={() => setShowNewInvoice(false)}
           onCreated={(inv) => setInvoices((prev) => [{ ...inv, line_items: [] }, ...prev])} />
       )}
+
+      <FinanceIntroModal />
+      <FinanceTooltipTour />
     </div>
   );
 }

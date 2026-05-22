@@ -189,6 +189,7 @@ export default function BankingTab() {
           <button
             onClick={openTellerConnect}
             disabled={connecting || !scriptReady}
+            data-tour-target="finance.connect-bank"
             className="px-3 py-1.5 text-[11px] font-medium rounded-lg text-white disabled:opacity-50"
             style={{ background: "var(--color-sage)" }}>
             {connecting ? "Connecting…" : accounts.length > 0 ? "+ Add account" : "Connect bank"}
