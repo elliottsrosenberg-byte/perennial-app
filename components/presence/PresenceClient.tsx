@@ -3,6 +3,8 @@
 import { useState, useMemo, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Opportunity } from "@/types/database";
+import PresenceIntroModal from "@/components/tour/presence/PresenceIntroModal";
+import PresenceTooltipTour from "@/components/tour/presence/PresenceTooltipTour";
 
 function openAsh(message: string) {
   window.dispatchEvent(new CustomEvent("open-ash", { detail: { message } }));
@@ -1667,9 +1669,14 @@ export default function PresenceClient({ initialOpportunities }: { initialOpport
           <span style={{ fontSize:14, fontWeight:650, color:"var(--color-charcoal)" }}>Presence</span>
           <span style={{ fontSize:11, color:"var(--color-grey)" }}>{period}</span>
         </div>
-        <div className="flex items-stretch flex-1">
+        <div className="flex items-stretch flex-1" data-tour-target="presence.tabs">
           {TABS.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)} style={{ padding:"0 18px", fontSize:12, color:tab===t.key?"var(--color-charcoal)":"var(--color-grey)", cursor:"pointer", borderBottom:tab===t.key?"2px solid var(--color-sage)":"2px solid transparent", borderRight:"0.5px solid rgba(31,33,26,0.07)", borderTop:"none", borderLeft:"none", background:"transparent", fontWeight:tab===t.key?600:400, whiteSpace:"nowrap", fontFamily:"inherit" }}>{t.label}</button>
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              data-tour-target={t.key === "opportunities" ? "presence.tab-opportunities" : undefined}
+              style={{ padding:"0 18px", fontSize:12, color:tab===t.key?"var(--color-charcoal)":"var(--color-grey)", cursor:"pointer", borderBottom:tab===t.key?"2px solid var(--color-sage)":"2px solid transparent", borderRight:"0.5px solid rgba(31,33,26,0.07)", borderTop:"none", borderLeft:"none", background:"transparent", fontWeight:tab===t.key?600:400, whiteSpace:"nowrap", fontFamily:"inherit" }}
+            >{t.label}</button>
           ))}
         </div>
         <div className="flex items-center gap-2 shrink-0" style={{ padding:"0 16px" }}>{TAB_ACTIONS[tab]}</div>
@@ -1715,6 +1722,9 @@ export default function PresenceClient({ initialOpportunities }: { initialOpport
           onConnected={handleIntegrationConnected}
         />
       )}
+
+      <PresenceIntroModal />
+      <PresenceTooltipTour />
     </div>
   );
 }
