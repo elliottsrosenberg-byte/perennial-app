@@ -1,7 +1,7 @@
 "use client";
 
 // Lightweight inline card for creating a task from the calendar surface.
-// Mirrors NewEventModal's right-anchored 340px shape so the create-event
+// Mirrors EventCard's right-anchored 340px shape so the create-event
 // and create-task flows feel symmetric. The full NewTaskModal still
 // exists for the sidebar "+ New task" button (project + contact pickers
 // + date picker); this card is intentionally smaller — title, optional
@@ -116,7 +116,7 @@ export default function QuickTaskCard({
     }
   }
 
-  // Anchored positioning — same logic as EventDetailPanel. With a rect we
+  // Anchored positioning — same logic as EventCard. With a rect we
   // anchor to its right edge, flipping left if it would overflow; without
   // a rect we fall back to the right edge of the viewport (matches the
   // create-event card).
