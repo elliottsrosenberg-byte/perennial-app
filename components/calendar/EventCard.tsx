@@ -219,9 +219,18 @@ export default function EventCard({
 
   const titleRef = useRef<HTMLInputElement>(null);
   const cardRef  = useRef<HTMLDivElement>(null);
+  // Stable ref for onClose so the click-outside effect can be mount-only.
+  // Without this, onClose's inline-arrow identity changes every parent
+  // render and the effect tears down + re-arms — leaving the listener
+  // briefly disarmed each cycle, which on a busy calendar (timer ticks,
+  // event refetch) reads as "click-outside doesn't close the card."
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
   useEffect(() => { if (!isEdit) titleRef.current?.focus(); }, [isEdit]);
 
-  // Click-outside to close, armed after the first frame.
+  // Click-outside to close. Mount-only — the listener stays armed for the
+  // life of the card. We still defer the first arm by one macrotask so
+  // the very click that opened the card doesn't immediately close it.
   useEffect(() => {
     let armed = false;
     const arm = window.setTimeout(() => { armed = true; }, 0);
@@ -229,14 +238,14 @@ export default function EventCard({
       if (!armed) return;
       if (!cardRef.current) return;
       if (cardRef.current.contains(e.target as Node)) return;
-      onClose();
+      onCloseRef.current();
     }
     document.addEventListener("mousedown", onDown);
     return () => {
       window.clearTimeout(arm);
       document.removeEventListener("mousedown", onDown);
     };
-  }, [onClose]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -632,7 +641,7 @@ export default function EventCard({
           <p style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>Loading calendars…</p>
         ) : noWritable ? (
           <p style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
-            No writable calendar. <a href="/settings#integrations" style={{ color: "var(--color-sage)", textDecoration: "underline" }}>Connect one</a> to create events.
+            No writable calendar. <a href="/settings?section=integrations" style={{ color: "var(--color-sage)", textDecoration: "underline" }}>Connect one</a> to create events.
           </p>
         ) : (
           <button

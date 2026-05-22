@@ -260,7 +260,7 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
             }}>
               <AccountChoice
                 label="Connect Google Calendar"
-                onClick={() => { window.location.href = "/api/auth/google-calendar"; }}
+                onClick={() => { window.location.href = "/api/auth/google?next=/calendar"; }}
               />
               <AccountChoice
                 label="Connect Outlook"
@@ -270,7 +270,7 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
               <AccountChoice
                 label="Manage integrations"
                 external
-                onClick={() => { window.location.href = "/settings#integrations"; }}
+                onClick={() => { window.location.href = "/settings?section=integrations"; }}
               />
             </div>
           </>
@@ -318,12 +318,12 @@ function CalendarRow({
   }, [menuOpen]);
 
   // Settings link maps to the user-facing provider settings page; falls back
-  // to /settings#integrations for providers without a public settings URL.
+  // to /settings?section=integrations for providers without a public settings URL.
   const settingsHref = cal.provider === "google" || cal.provider === "google_calendar"
     ? "https://calendar.google.com/calendar/u/0/r/settings"
     : cal.provider === "microsoft"
       ? "https://outlook.office.com/calendar/options/calendar"
-      : "/settings#integrations";
+      : "/settings?section=integrations";
 
   return (
     <div

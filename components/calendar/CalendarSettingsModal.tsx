@@ -1,21 +1,39 @@
 "use client";
 
-// Calendar settings — currently a stub. The modal exists so the user
-// can see where the surface will land; sections are placeholders with
-// "Coming soon" captions. Real persistence is tracked as a deferred
-// TODO ("Calendar settings modal — wire real settings"). Wiring will
-// hang account management, conferencing defaults, working hours, and
-// notifications off this same shell.
+// Calendar settings — full-scrim modal with a left sidebar of tabs. Each
+// tab is a placeholder for now ("Coming soon") so the IA is in place; real
+// persistence (account management, conferencing defaults, working hours,
+// notifications, keyboard shortcuts) is tracked as a deferred TODO and
+// will hang off this shell.
 
-import { useEffect, useRef } from "react";
-import { X, Cable, Video, Clock, Bell } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { X, Cable, Video, Clock, Bell, Keyboard, SlidersHorizontal } from "lucide-react";
 
 interface Props {
   onClose: () => void;
 }
 
+type TabKey = "accounts" | "conferencing" | "hours" | "notifications" | "shortcuts" | "general";
+
+interface Tab {
+  key:   TabKey;
+  label: string;
+  icon:  React.ReactNode;
+  blurb: string;
+}
+
+const TABS: Tab[] = [
+  { key: "general",       label: "General",         icon: <SlidersHorizontal size={13} strokeWidth={1.75} />, blurb: "Default view, week-start, weekend visibility, timezone display." },
+  { key: "accounts",      label: "Calendar accounts", icon: <Cable size={13} strokeWidth={1.75} />,             blurb: "Connect or remove Google and Outlook accounts, and pick which calendars from each account show up here." },
+  { key: "conferencing",  label: "Conferencing",    icon: <Video size={13} strokeWidth={1.75} />,             blurb: "Default to Google Meet or Teams when creating events — per account." },
+  { key: "hours",         label: "Working hours",   icon: <Clock size={13} strokeWidth={1.75} />,             blurb: "Shade non-working hours, and use them when Ash suggests times." },
+  { key: "notifications", label: "Notifications",   icon: <Bell size={13} strokeWidth={1.75} />,              blurb: "Default reminder times for new events, and how Perennial nudges you before a meeting." },
+  { key: "shortcuts",     label: "Keyboard shortcuts", icon: <Keyboard size={13} strokeWidth={1.75} />,        blurb: "Create events, jump dates, switch views — without lifting your hands." },
+];
+
 export default function CalendarSettingsModal({ onClose }: Props) {
   const cardRef = useRef<HTMLDivElement>(null);
+  const [activeTab, setActiveTab] = useState<TabKey>("general");
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
@@ -23,14 +41,16 @@ export default function CalendarSettingsModal({ onClose }: Props) {
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  const tab = TABS.find(t => t.key === activeTab) ?? TABS[0];
+
   return (
     <div
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
         position: "fixed", inset: 0, zIndex: 90,
-        background: "rgba(31,33,26,0.35)", backdropFilter: "blur(4px)",
+        background: "rgba(31,33,26,0.45)", backdropFilter: "blur(4px)",
         display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 24,
+        padding: 32,
       }}
     >
       <div
@@ -38,20 +58,23 @@ export default function CalendarSettingsModal({ onClose }: Props) {
         role="dialog"
         aria-modal={true}
         style={{
-          width: 520, maxWidth: "100%",
-          maxHeight: "calc(100vh - 48px)", overflowY: "auto",
+          width: "100%", maxWidth: 960,
+          height: "100%", maxHeight: "calc(100vh - 64px)",
           background: "var(--color-off-white)",
           border:     "0.5px solid var(--color-border)",
           borderRadius: 14,
-          boxShadow: "0 12px 40px rgba(0,0,0,0.22)",
+          boxShadow: "0 16px 48px rgba(0,0,0,0.28)",
           fontFamily: "inherit",
+          display: "flex", flexDirection: "column",
+          overflow: "hidden",
         }}
       >
         {/* Header */}
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "14px 18px",
+          padding: "14px 20px",
           borderBottom: "0.5px solid var(--color-border)",
+          flexShrink: 0,
         }}>
           <div>
             <p style={{
@@ -62,11 +85,12 @@ export default function CalendarSettingsModal({ onClose }: Props) {
               Calendar
             </p>
             <h2 style={{
-              fontSize: 16, fontWeight: 600,
+              fontSize: 18, fontWeight: 600,
               color: "var(--color-text-primary)",
               fontFamily: "var(--font-display)",
+              letterSpacing: "-0.01em",
             }}>
-              Calendar settings
+              Settings
             </h2>
           </div>
           <button
@@ -85,87 +109,94 @@ export default function CalendarSettingsModal({ onClose }: Props) {
           </button>
         </div>
 
-        {/* Sections */}
-        <div style={{ padding: "12px 14px 18px" }}>
-          <SettingsSection
-            icon={<Cable size={14} strokeWidth={1.75} />}
-            title="Calendar accounts"
-            blurb="Connect or remove Google and Outlook accounts, and pick which calendars from each account show up here."
-          />
-          <SettingsSection
-            icon={<Video size={14} strokeWidth={1.75} />}
-            title="Conferencing defaults"
-            blurb="Default to Google Meet or Teams when creating events — per account."
-          />
-          <SettingsSection
-            icon={<Clock size={14} strokeWidth={1.75} />}
-            title="Working hours"
-            blurb="Shade non-working hours, and use them when Ash suggests times."
-          />
-          <SettingsSection
-            icon={<Bell size={14} strokeWidth={1.75} />}
-            title="Notifications"
-            blurb="Default reminder times for new events, and how Perennial nudges you before a meeting."
-          />
-        </div>
-
-        {/* Footer */}
-        <div style={{
-          display: "flex", justifyContent: "flex-end", gap: 8,
-          padding: "10px 16px",
-          borderTop: "0.5px solid var(--color-border)",
-        }}>
-          <button
-            onClick={onClose}
-            style={{
-              padding: "7px 16px", fontSize: 12, borderRadius: 7,
-              color: "var(--color-grey)", border: "0.5px solid var(--color-border)",
-              background: "transparent", cursor: "pointer", fontFamily: "inherit",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SettingsSection({ icon, title, blurb }: { icon: React.ReactNode; title: string; blurb: string }) {
-  return (
-    <div
-      style={{
-        display: "flex", gap: 12,
-        padding: "12px 14px",
-        marginBottom: 8,
-        background: "var(--color-warm-white)",
-        border: "0.5px solid var(--color-border)",
-        borderRadius: 10,
-      }}
-    >
-      <span style={{ color: "var(--color-text-tertiary)", flexShrink: 0, marginTop: 1 }}>{icon}</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)" }}>
-            {title}
-          </p>
-          <span style={{
-            fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em",
-            color: "var(--color-text-tertiary)",
-            background: "var(--color-surface-sunken)",
-            padding: "2px 7px", borderRadius: 999,
+        {/* Body: left sidebar + right content */}
+        <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
+          {/* Sidebar */}
+          <div style={{
+            width: 220, flexShrink: 0,
+            borderRight: "0.5px solid var(--color-border)",
+            background: "var(--color-warm-white)",
+            padding: "12px 8px",
+            overflowY: "auto",
           }}>
-            Coming soon
-          </span>
+            {TABS.map(t => {
+              const active = t.key === activeTab;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setActiveTab(t.key)}
+                  style={{
+                    width: "100%", display: "flex", alignItems: "center", gap: 9,
+                    padding: "8px 10px", marginBottom: 2,
+                    borderRadius: 7, border: "none",
+                    background: active ? "var(--color-cream)" : "transparent",
+                    color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+                    fontWeight: active ? 500 : 400,
+                    fontSize: 12.5,
+                    fontFamily: "inherit",
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                  onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+                  onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
+                >
+                  <span style={{ color: "var(--color-text-tertiary)", flexShrink: 0 }}>{t.icon}</span>
+                  <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {t.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Content */}
+          <div style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: "28px 32px" }}>
+            <p style={{
+              fontSize: 10, fontWeight: 700, textTransform: "uppercase",
+              letterSpacing: "0.08em", color: "var(--color-text-tertiary)",
+              marginBottom: 6,
+            }}>
+              {tab.label}
+            </p>
+            <h3 style={{
+              fontSize: 22, fontWeight: 600,
+              fontFamily: "var(--font-display)",
+              color: "var(--color-text-primary)",
+              letterSpacing: "-0.01em",
+              marginBottom: 10,
+            }}>
+              {tab.label === "General" ? "General preferences" : tab.label}
+            </h3>
+            <p style={{
+              fontSize: 13, lineHeight: 1.6,
+              color: "var(--color-text-secondary)",
+              marginBottom: 20,
+              maxWidth: 520,
+            }}>
+              {tab.blurb}
+            </p>
+
+            <div
+              style={{
+                padding: "20px 22px",
+                borderRadius: 12,
+                background: "var(--color-warm-white)",
+                border: "0.5px dashed var(--color-border-strong)",
+                color: "var(--color-text-tertiary)",
+                fontSize: 12.5,
+                lineHeight: 1.55,
+                maxWidth: 520,
+              }}
+            >
+              <p style={{ fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: 4, fontSize: 11.5, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Coming soon
+              </p>
+              <p>
+                This tab is a placeholder so the surface is in place. Real controls will land here as the calendar grows; the IA stays the same.
+              </p>
+            </div>
+          </div>
         </div>
-        <p style={{
-          fontSize: 11.5, lineHeight: 1.55, color: "var(--color-text-tertiary)",
-          marginTop: 4,
-        }}>
-          {blurb}
-        </p>
       </div>
     </div>
   );
