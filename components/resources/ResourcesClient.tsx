@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Resource, ResourceLink } from "@/types/database";
+import type { Resource, ResourceLink, ResourceItemStatus } from "@/types/database";
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
@@ -25,10 +25,14 @@ interface ResourceCard {
   id: string;
   name: string;
   meta: string;
+  itemType: "file" | "structured" | "link" | "alias";
   status: "complete" | "partial" | "empty" | "alias";
   previewType: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   previewData?: Record<string, any>;
+  fields?: Record<string, unknown>;
+  fileUrls: string[];
+  externalUrl: string | null;
   actions: CardAction[];
   emptyWhy?: string;
   modalKey?: string;
@@ -47,9 +51,13 @@ function resourceToCard(r: Resource): ResourceCard {
     id:          r.id,
     name:        r.name,
     meta:        r.meta,
+    itemType:    r.item_type,
     status:      r.status,
     previewType: r.preview_type,
     previewData: r.preview_data as Record<string, unknown>,
+    fields:      r.fields as Record<string, unknown>,
+    fileUrls:    r.file_urls ?? [],
+    externalUrl: r.external_url ?? null,
     actions:     r.actions as CardAction[],
     emptyWhy:    r.empty_why  ?? undefined,
     modalKey:    r.modal_key  ?? undefined,
@@ -183,17 +191,49 @@ function HealthPip({ filled, total }: { filled: number; total: number }) {
 }
 
 // ─── Action button ────────────────────────────────────────────────────────────
-function ActionBtn({ action, onOpenModal }: { action: CardAction; onOpenModal: (k: string) => void }) {
+// Action semantics:
+//   - variant="finder"  → opens the OS file picker and calls onUpload with the
+//     chosen file. (Used for cards that store uploads in Supabase Storage.)
+//   - variant="primary" or default + action.label looks like "Open" / "View" /
+//     "Download" → opens `openUrl` in a new tab when present.
+//   - otherwise → opens `action.modal` if set.
+function ActionBtn({ action, onOpenModal, onUpload, openUrl }: {
+  action: CardAction;
+  onOpenModal: (k: string) => void;
+  onUpload?: (file: File) => void;
+  openUrl?: string;
+}) {
+  const fileInputId = `res-file-${Math.random().toString(36).slice(2, 9)}`;
+  const labelLooksLikeOpen = /^(open|view|download|preview)\b/i.test(action.label.trim());
+
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (action.modal) onOpenModal(action.modal);
+    if (action.modal) { onOpenModal(action.modal); return; }
+    if (labelLooksLikeOpen && openUrl) {
+      window.open(openUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
   };
+
   if (action.variant === "finder") {
     return (
-      <button onClick={handleClick} title="Upload your file"
-        style={{ display:"flex", alignItems:"center", gap:3, padding:"3px 8px", fontSize:10, borderRadius:5, cursor:"pointer", border:"0.5px solid var(--color-border)", background:"transparent", color:"var(--color-grey)", fontFamily:"inherit" }}>
-        <IcFolderSm /> {action.label}
-      </button>
+      <>
+        <input
+          id={fileInputId}
+          type="file"
+          style={{ display:"none" }}
+          onClick={e => e.stopPropagation()}
+          onChange={e => {
+            const f = e.target.files?.[0];
+            if (f && onUpload) onUpload(f);
+            e.target.value = "";
+          }}
+        />
+        <label htmlFor={fileInputId} onClick={e => e.stopPropagation()} title="Upload your file"
+          style={{ display:"flex", alignItems:"center", gap:3, padding:"3px 8px", fontSize:10, borderRadius:5, cursor:"pointer", border:"0.5px solid var(--color-border)", background:"transparent", color:"var(--color-grey)", fontFamily:"inherit" }}>
+          <IcFolderSm /> {action.label}
+        </label>
+      </>
     );
   }
   if (action.variant === "primary") {
@@ -295,10 +335,14 @@ function CardPreview({ type, data }: { type: string; data?: Record<string, any> 
     </div>
   );
 
-  if (type === "linked") return (
+  if (type === "linked" || type === "external_url") return (
     <div style={{ ...base, background:C.accentL, flexDirection:"column", gap:4 }}>
-      <span style={{ color:C.darkAccent }}><IcLink /></span>
-      <span style={{ fontSize:10, color:C.darkAccent, fontWeight:500 }}>{d.service}</span>
+      {d.icon_url
+        ? <img src={d.icon_url as string} alt="" style={{ width:18, height:18 }} />
+        : <span style={{ color:C.darkAccent }}><IcLink /></span>}
+      <span style={{ fontSize:10, color:C.darkAccent, fontWeight:500 }}>
+        {d.service ?? (d.source === "google_drive" ? "Google Drive" : "External link")}
+      </span>
       <div style={{ position:"absolute", top:8, right:8, fontSize:8, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.05em", padding:"2px 7px", borderRadius:10, background:"rgba(255,255,255,0.7)", color:"var(--color-grey)", display:"flex", alignItems:"center", gap:3 }}>
         <IcLink />Linked
       </div>
@@ -324,18 +368,36 @@ function CardPreview({ type, data }: { type: string; data?: Record<string, any> 
 }
 
 // ─── Resource card ────────────────────────────────────────────────────────────
-function ResourceCardItem({ card, onOpenModal }: { card: ResourceCard; onOpenModal: (k: string) => void }) {
+function ResourceCardItem({ card, onOpenModal, onUploadFile, tourTarget }: {
+  card: ResourceCard;
+  onOpenModal: (k: string) => void;
+  onUploadFile: (cardId: string, file: File) => Promise<void>;
+  tourTarget?: string;
+}) {
   const isEmpty = card.status === "empty";
+
+  // Click behaviour: prefer the setup modal if there is one. Otherwise, open
+  // the underlying file or external link in a new tab so the card is
+  // actually useful at a glance.
+  function handleClick() {
+    if (card.modalKey) { onOpenModal(card.modalKey); return; }
+    const url = card.fileUrls[0] ?? card.externalUrl;
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  const clickable = Boolean(card.modalKey || card.fileUrls[0] || card.externalUrl);
+
   return (
     <div
-      onClick={() => card.modalKey && onOpenModal(card.modalKey)}
+      onClick={handleClick}
+      data-tour-target={tourTarget}
       className="flex flex-col overflow-hidden"
       style={{
         background: isEmpty ? "transparent" : "var(--color-off-white)",
         border: isEmpty ? "0.5px dashed var(--color-border)" : "none",
         borderRadius:12,
         boxShadow: isEmpty ? "none" : "0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)",
-        cursor: card.modalKey ? "pointer" : "default",
+        cursor: clickable ? "pointer" : "default",
         transition:"box-shadow 0.12s",
       }}
     >
@@ -348,7 +410,15 @@ function ResourceCardItem({ card, onOpenModal }: { card: ResourceCard; onOpenMod
         }
         {card.actions.length > 0 && (
           <div className="flex flex-wrap gap-1" style={{ marginTop:6 }}>
-            {card.actions.map((a, i) => <ActionBtn key={i} action={a} onOpenModal={onOpenModal} />)}
+            {card.actions.map((a, i) => (
+              <ActionBtn
+                key={i}
+                action={a}
+                onOpenModal={onOpenModal}
+                onUpload={file => onUploadFile(card.id, file)}
+                openUrl={card.fileUrls[0] ?? card.externalUrl ?? undefined}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -418,9 +488,37 @@ function AddLinkModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
 }
 
 // ─── Setup modal ──────────────────────────────────────────────────────────────
-function SetupModal({ modalKey, onClose }: { modalKey: string; onClose: () => void }) {
-  const [showManual, setShowManual] = useState(false);
+// Tied to a specific resource row. Reads existing `fields` on open, lets the
+// user fill them in (or upload a document), and writes back to the resources
+// table when Done is clicked. Also bumps `status` based on what was filled.
+function SetupModal({ resource, onClose, onSaved }: {
+  resource: Resource;
+  onClose: () => void;
+  onSaved: (updated: Resource) => void;
+}) {
+  const modalKey = resource.modal_key ?? "";
   const cfg = MODALS[modalKey];
+  const [showManual, setShowManual] = useState(false);
+  // Snapshot field values keyed by prompt label. We store as a flat
+  // Record<string, string> in `resources.fields` to keep the schema simple.
+  const initialFields = useMemo(() => {
+    const f = (resource.fields ?? {}) as Record<string, unknown>;
+    const out: Record<string, string> = {};
+    if (cfg) for (const p of cfg.prompts) out[p.label] = typeof f[p.label] === "string" ? f[p.label] as string : "";
+    return out;
+  }, [resource.fields, cfg]);
+  const [fields, setFields]   = useState<Record<string, string>>(initialFields);
+  const [saving, setSaving]   = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError]     = useState<string | null>(null);
+
+  // Auto-open the manual editor whenever the resource already has some data —
+  // re-opening a partial card should let the user pick up where they left off
+  // without an extra click.
+  useEffect(() => {
+    if (Object.values(initialFields).some(v => v.trim().length > 0)) setShowManual(true);
+  }, [initialFields]);
+
   if (!cfg) return null;
 
   function openAsh() {
@@ -429,6 +527,63 @@ function SetupModal({ modalKey, onClose }: { modalKey: string; onClose: () => vo
     }));
     onClose();
   }
+
+  async function handleUpload(file: File) {
+    setUploading(true); setError(null);
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setError("Not authenticated."); return; }
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${user.id}/${resource.id}-${Date.now()}-${safe}`;
+      const { error: upErr } = await supabase.storage
+        .from("resources")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) { setError(upErr.message); return; }
+      const { data: urlData } = supabase.storage.from("resources").getPublicUrl(path);
+      const nextUrls = [...(resource.file_urls ?? []), urlData.publicUrl];
+      const { data, error: dbErr } = await supabase.from("resources")
+        .update({ file_urls: nextUrls, meta: resource.meta || file.name, status: "complete" })
+        .eq("id", resource.id).select().single();
+      if (dbErr) { setError(dbErr.message); return; }
+      onSaved(data as Resource);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleDone() {
+    setSaving(true); setError(null);
+    try {
+      const supabase = createClient();
+      // Merge in case there were keys outside the prompt set we don't want to
+      // clobber (e.g. fields written by Ash or by a future schema change).
+      const merged = { ...((resource.fields ?? {}) as Record<string, unknown>), ...fields };
+      const filledCount = Object.values(fields).filter(v => v.trim().length > 0).length;
+      const total       = cfg.prompts.length;
+      const hasFiles    = (resource.file_urls?.length ?? 0) > 0;
+      const status: ResourceItemStatus =
+        filledCount === total || (filledCount > 0 && hasFiles) ? "complete"
+        : filledCount > 0 || hasFiles                          ? "partial"
+        : "empty";
+      // For structured cards, mirror progress into preview_data so the card
+      // surface updates without a page reload.
+      const previewData = resource.preview_type === "partial" || (status === "partial" && resource.item_type === "structured")
+        ? { ...(resource.preview_data as Record<string, unknown>), filled: filledCount, total }
+        : resource.preview_data;
+      const previewType = (status === "partial" && resource.item_type === "structured") ? "partial" : resource.preview_type;
+      const { data, error: dbErr } = await supabase.from("resources")
+        .update({ fields: merged, status, preview_data: previewData, preview_type: previewType })
+        .eq("id", resource.id).select().single();
+      if (dbErr) { setError(dbErr.message); return; }
+      onSaved(data as Resource);
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const currentFiles = resource.file_urls ?? [];
 
   return (
     <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
@@ -481,23 +636,61 @@ function SetupModal({ modalKey, onClose }: { modalKey: string; onClose: () => vo
               {cfg.prompts.map((p, i) => (
                 <div key={i} style={{ marginBottom:12 }}>
                   <div style={{ fontSize:11, fontWeight:600, color:"var(--color-charcoal)", marginBottom:4 }}>{p.label}</div>
-                  <textarea placeholder={p.placeholder} rows={p.rows} style={{ width:"100%", background:"var(--color-cream)", border:"0.5px solid var(--color-border)", borderRadius:6, padding:"7px 10px", fontSize:11, color:"var(--color-charcoal)", fontFamily:"inherit", lineHeight:1.4, resize:"none", outline:"none" }} />
+                  <textarea
+                    value={fields[p.label] ?? ""}
+                    onChange={e => setFields(f => ({ ...f, [p.label]: e.target.value }))}
+                    placeholder={p.placeholder} rows={p.rows}
+                    style={{ width:"100%", background:"var(--color-cream)", border:"0.5px solid var(--color-border)", borderRadius:6, padding:"7px 10px", fontSize:11, color:"var(--color-charcoal)", fontFamily:"inherit", lineHeight:1.4, resize:"vertical", outline:"none" }} />
                 </div>
               ))}
+
+              {currentFiles.length > 0 && (
+                <>
+                  <div style={{ margin:"16px 0", height:"0.5px", background:"var(--color-border)" }} />
+                  <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", color:"var(--color-grey)", marginBottom:8 }}>Stored files</div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                    {currentFiles.map((url, i) => (
+                      <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                        style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 9px", background:"var(--color-cream)", border:"0.5px solid var(--color-border)", borderRadius:6, fontSize:11, color:"var(--color-charcoal)", textDecoration:"none" }}>
+                        <IcFileSm />
+                        <span style={{ flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{url.split("/").pop()}</span>
+                        <span style={{ fontSize:10, color:C.darkAccent }}>Open ↗</span>
+                      </a>
+                    ))}
+                  </div>
+                </>
+              )}
+
               <div style={{ margin:"16px 0", height:"0.5px", background:"var(--color-border)" }} />
-              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", color:"var(--color-grey)", marginBottom:8 }}>Or upload an existing document</div>
-              <label style={{ display:"block", border:"0.5px dashed var(--color-border)", borderRadius:8, padding:16, textAlign:"center", cursor:"pointer" }}>
-                <input type="file" accept=".pdf,.doc,.docx,.pages,.txt" style={{ display:"none" }} />
-                <div style={{ fontSize:11, color:"var(--color-grey)" }}>Click to upload</div>
-                <div style={{ fontSize:10, color:"var(--color-grey)", marginTop:2 }}>PDF, Word, Pages, or plain text</div>
+              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", color:"var(--color-grey)", marginBottom:8 }}>
+                {currentFiles.length > 0 ? "Add another file" : "Or upload an existing document"}
+              </div>
+              <label style={{ display:"block", border:"0.5px dashed var(--color-border)", borderRadius:8, padding:16, textAlign:"center", cursor: uploading ? "default" : "pointer", opacity: uploading ? 0.6 : 1 }}>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.pages,.txt,.png,.jpg,.jpeg,.svg,.gif,.webp"
+                  style={{ display:"none" }}
+                  disabled={uploading}
+                  onChange={e => {
+                    const f = e.target.files?.[0];
+                    if (f) handleUpload(f);
+                    e.target.value = "";
+                  }}
+                />
+                <div style={{ fontSize:11, color:"var(--color-grey)" }}>{uploading ? "Uploading…" : "Click to upload"}</div>
+                <div style={{ fontSize:10, color:"var(--color-grey)", marginTop:2 }}>PDF, Word, Pages, plain text, or images</div>
               </label>
             </div>
           )}
+
+          {error && <p style={{ fontSize:11, color:"var(--color-red-orange)", marginTop:10 }}>{error}</p>}
         </div>
 
         <div style={{ padding:"12px 20px", borderTop:"0.5px solid var(--color-border)", display:"flex", gap:7 }}>
-          <button onClick={onClose} style={{ flex:1, padding:"7px 0", fontSize:11, border:"0.5px solid var(--color-border)", borderRadius:6, background:"transparent", color:"var(--color-grey)", cursor:"pointer", fontFamily:"inherit" }}>Cancel</button>
-          <button onClick={onClose} style={{ flex:1.5, padding:"7px 0", fontSize:11, border:"none", borderRadius:6, background:"var(--color-sage)", color:"white", fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>Done</button>
+          <button onClick={onClose} disabled={saving || uploading} style={{ flex:1, padding:"7px 0", fontSize:11, border:"0.5px solid var(--color-border)", borderRadius:6, background:"transparent", color:"var(--color-grey)", cursor:"pointer", fontFamily:"inherit" }}>Cancel</button>
+          <button onClick={handleDone} disabled={saving || uploading} style={{ flex:1.5, padding:"7px 0", fontSize:11, border:"none", borderRadius:6, background:"var(--color-sage)", color:"white", fontWeight:500, cursor:"pointer", fontFamily:"inherit", opacity: saving || uploading ? 0.6 : 1 }}>
+            {saving ? "Saving…" : "Done"}
+          </button>
         </div>
       </div>
     </div>
@@ -568,7 +761,7 @@ function CategoryNav({ active, resources, links, onSelect, search, onSearchChang
         </div>
       </div>
 
-      <div style={{ flex:1, overflowY:"auto", padding:"8px 0" }}>
+      <div style={{ flex:1, overflowY:"auto", padding:"8px 0" }} data-tour-target="resources.categories">
         <div style={{ fontSize:9, fontWeight:600, color:"var(--color-grey)", textTransform:"uppercase", letterSpacing:"0.07em", padding:"8px 14px 3px" }}>Categories</div>
 
         {CAT_IDS.map(id => {
@@ -592,7 +785,7 @@ function CategoryNav({ active, resources, links, onSelect, search, onSearchChang
         <div style={{ height:"0.5px", background:"var(--color-border)", margin:"6px 12px" }} />
         <div style={{ fontSize:9, fontWeight:600, color:"var(--color-grey)", textTransform:"uppercase", letterSpacing:"0.07em", padding:"8px 14px 3px" }}>Linked</div>
 
-        <div onClick={() => onSelect("links")} className="flex items-center gap-2"
+        <div data-tour-target="resources.links-nav" onClick={() => onSelect("links")} className="flex items-center gap-2"
           style={{ padding:"8px 14px", cursor:"pointer", borderLeft:`2.5px solid ${active==="links"?"var(--color-sage)":"transparent"}`, background:active==="links"?"var(--color-cream)":undefined }}
           onMouseEnter={e => { if (active !== "links") (e.currentTarget as HTMLElement).style.background = "var(--color-cream)"; }}
           onMouseLeave={e => { if (active !== "links") (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
@@ -611,8 +804,12 @@ function CategoryNav({ active, resources, links, onSelect, search, onSearchChang
 export default function ResourcesClient({ initialResources, initialLinks }: { initialResources: Resource[]; initialLinks: ResourceLink[] }) {
   const [cat, setCat]           = useState<CatId>("operations");
   const [view, setView]         = useState<"grid" | "list">("grid");
-  const [modal, setModal]       = useState<string | null>(null);
+  // Track the active resource row so SetupModal can read its fields and
+  // write back to the right id. We resolve the row from modal_key when a
+  // card is clicked.
+  const [activeResourceId, setActiveResourceId] = useState<string | null>(null);
   const [showAddLink, setShowAddLink] = useState(false);
+  const [resources, setResources] = useState<Resource[]>(initialResources);
   const [links, setLinks]       = useState<ResourceLink[]>(initialLinks);
   const [search, setSearch]     = useState("");
 
@@ -620,7 +817,7 @@ export default function ResourcesClient({ initialResources, initialLinks }: { in
   const catKey  = cat as Exclude<CatId, "links">;
   const catMeta = !isLinks ? CAT_META[catKey] : null;
 
-  const allCatCards = !isLinks ? initialResources.filter(r => r.category === cat).map(resourceToCard) : [];
+  const allCatCards = !isLinks ? resources.filter(r => r.category === cat).map(resourceToCard) : [];
 
   // Search filtering
   const catCards = useMemo(() => {
@@ -635,7 +832,39 @@ export default function ResourcesClient({ initialResources, initialLinks }: { in
     return links.filter(l => l.name.toLowerCase().includes(q) || l.url.toLowerCase().includes(q));
   }, [links, search]);
 
-  const [healthFilled, healthTotal] = !isLinks ? catHealth(initialResources, cat) : [0, 0];
+  const [healthFilled, healthTotal] = !isLinks ? catHealth(resources, cat) : [0, 0];
+
+  const activeResource = activeResourceId ? resources.find(r => r.id === activeResourceId) ?? null : null;
+
+  // Open the SetupModal for a card given its modal_key. Each modal_key
+  // currently maps to exactly one row per user (see migration), so a name
+  // lookup is unambiguous, but we also scope by category to be safe.
+  function openModalByKey(modalKey: string) {
+    const match = resources.find(r => r.modal_key === modalKey);
+    if (match) setActiveResourceId(match.id);
+  }
+
+  // Upload a file straight from a card-level Action button. Bypasses the
+  // SetupModal — used for cards whose primary affordance is "drop a file".
+  async function uploadFileToResource(resourceId: string, file: File) {
+    const target = resources.find(r => r.id === resourceId);
+    if (!target) return;
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${user.id}/${target.id}-${Date.now()}-${safe}`;
+    const { error: upErr } = await supabase.storage
+      .from("resources")
+      .upload(path, file, { contentType: file.type, upsert: false });
+    if (upErr) return;
+    const { data: urlData } = supabase.storage.from("resources").getPublicUrl(path);
+    const nextUrls = [...(target.file_urls ?? []), urlData.publicUrl];
+    const { data } = await supabase.from("resources")
+      .update({ file_urls: nextUrls, status: "complete" })
+      .eq("id", target.id).select().single();
+    if (data) setResources(prev => prev.map(r => r.id === target.id ? data as Resource : r));
+  }
 
   const sectionMeta: Record<CatId, { title: string; sub: string }> = {
     operations: { title:"Operations", sub:"Legal, financial, and logistics documents" },
@@ -645,10 +874,14 @@ export default function ResourcesClient({ initialResources, initialLinks }: { in
     links:      { title:"Links",      sub:"External URLs and references" },
   };
 
+  function handleResourceSaved(updated: Resource) {
+    setResources(prev => prev.map(r => r.id === updated.id ? updated : r));
+  }
+
   return (
     <div className="flex h-full overflow-hidden">
       <CategoryNav
-        active={cat} resources={initialResources} links={links}
+        active={cat} resources={resources} links={links}
         onSelect={id => { setCat(id); setSearch(""); }}
         search={search} onSearchChange={setSearch}
       />
@@ -689,13 +922,13 @@ export default function ResourcesClient({ initialResources, initialLinks }: { in
           {!isLinks && catMeta && (
             <>
               {/* Health bar */}
-              <div className="flex items-center gap-3" style={{ padding:"10px 14px", background:"var(--color-off-white)", borderRadius:8, boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)", marginBottom:18 }}>
+              <div data-tour-target="resources.health" className="flex items-center gap-3" style={{ padding:"10px 14px", background:"var(--color-off-white)", borderRadius:8, boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)", marginBottom:18 }}>
                 <span style={{ fontSize:11, color:"var(--color-grey)", flex:1 }}>{catMeta.label} profile</span>
                 <div style={{ flex:2, height:4, background:"var(--color-cream)", borderRadius:3, overflow:"hidden" }}>
                   <div style={{ height:"100%", borderRadius:3, background:"var(--color-sage)", width:`${healthTotal > 0 ? (healthFilled/healthTotal)*100 : 0}%`, transition:"width 0.3s ease" }} />
                 </div>
                 <span style={{ fontSize:11, fontWeight:600, color:"var(--color-grey)" }}>{healthFilled} / {healthTotal}</span>
-                <button onClick={() => { const empty = catCards.find(c => c.status === "empty" && c.modalKey); if (empty?.modalKey) setModal(empty.modalKey); }}
+                <button onClick={() => { const empty = catCards.find(c => c.status === "empty" && c.modalKey); if (empty?.modalKey) openModalByKey(empty.modalKey); }}
                   style={{ fontSize:11, color:"var(--color-sage)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }}>
                   Fill in →
                 </button>
@@ -710,33 +943,56 @@ export default function ResourcesClient({ initialResources, initialLinks }: { in
 
               {view === "grid" && (
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(220px, 1fr))", gap:12 }}>
-                  {catCards.map(card => (
-                    <ResourceCardItem key={card.id} card={card} onOpenModal={setModal} />
+                  {catCards.map((card, i) => (
+                    <ResourceCardItem
+                      key={card.id}
+                      card={card}
+                      onOpenModal={openModalByKey}
+                      onUploadFile={uploadFileToResource}
+                      tourTarget={i === 0 ? "resources.first-card" : undefined}
+                    />
                   ))}
                 </div>
               )}
 
               {view === "list" && (
                 <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                  {catCards.map(card => (
-                    <div key={card.id} onClick={() => card.modalKey && setModal(card.modalKey)} className="flex items-center gap-4"
-                      style={{ padding:"11px 15px", background:"var(--color-off-white)", borderRadius:10, boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)", cursor:card.modalKey?"pointer":"default" }}>
-                      <div style={{ width:36, height:36, borderRadius:8, background:"var(--color-cream)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", color:"var(--color-grey)" }}>
-                        {card.status === "empty" ? <IcDocSm /> : card.status === "alias" ? <IcLink /> : <IcFile />}
+                  {catCards.map((card, i) => {
+                    const url = card.fileUrls[0] ?? card.externalUrl;
+                    const handleRowClick = () => {
+                      if (card.modalKey) openModalByKey(card.modalKey);
+                      else if (url) window.open(url, "_blank", "noopener,noreferrer");
+                    };
+                    const clickable = Boolean(card.modalKey || url);
+                    return (
+                      <div key={card.id} onClick={handleRowClick}
+                        data-tour-target={i === 0 ? "resources.first-card" : undefined}
+                        className="flex items-center gap-4"
+                        style={{ padding:"11px 15px", background:"var(--color-off-white)", borderRadius:10, boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)", cursor:clickable?"pointer":"default" }}>
+                        <div style={{ width:36, height:36, borderRadius:8, background:"var(--color-cream)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", color:"var(--color-grey)" }}>
+                          {card.status === "empty" ? <IcDocSm /> : card.status === "alias" ? <IcLink /> : <IcFile />}
+                        </div>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:12, fontWeight:600, color:"var(--color-charcoal)" }}>{card.name}</div>
+                          <div style={{ fontSize:10, color:"var(--color-grey)" }}>{card.meta || card.emptyWhy}</div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span style={{ fontSize:9, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.04em", padding:"2px 7px", borderRadius:10,
+                            background: card.status==="complete"?C.darkAccentL : card.status==="partial"?C.amberL : card.status==="alias"?C.accentL : "var(--color-cream)",
+                            color: card.status==="complete"?C.darkAccent : card.status==="partial"?C.amber : card.status==="alias"?C.darkAccent : "var(--color-grey)",
+                          }}>{card.status}</span>
+                          {card.actions[0] && (
+                            <ActionBtn
+                              action={card.actions[0]}
+                              onOpenModal={openModalByKey}
+                              onUpload={file => uploadFileToResource(card.id, file)}
+                              openUrl={url ?? undefined}
+                            />
+                          )}
+                        </div>
                       </div>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:12, fontWeight:600, color:"var(--color-charcoal)" }}>{card.name}</div>
-                        <div style={{ fontSize:10, color:"var(--color-grey)" }}>{card.meta || card.emptyWhy}</div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span style={{ fontSize:9, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.04em", padding:"2px 7px", borderRadius:10,
-                          background: card.status==="complete"?C.darkAccentL : card.status==="partial"?C.amberL : card.status==="alias"?C.accentL : "var(--color-cream)",
-                          color: card.status==="complete"?C.darkAccent : card.status==="partial"?C.amber : card.status==="alias"?C.darkAccent : "var(--color-grey)",
-                        }}>{card.status}</span>
-                        {card.actions[0] && <ActionBtn action={card.actions[0]} onOpenModal={setModal} />}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </>
@@ -744,7 +1000,13 @@ export default function ResourcesClient({ initialResources, initialLinks }: { in
         </div>
       </div>
 
-      {modal     && <SetupModal  modalKey={modal} onClose={() => setModal(null)} />}
+      {activeResource && (
+        <SetupModal
+          resource={activeResource}
+          onClose={() => setActiveResourceId(null)}
+          onSaved={handleResourceSaved}
+        />
+      )}
       {showAddLink && (
         <AddLinkModal
           onClose={() => setShowAddLink(false)}
