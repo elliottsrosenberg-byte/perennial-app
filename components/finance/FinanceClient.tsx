@@ -11,31 +11,10 @@ import BankingTab from "./BankingTab";
 import LogTimeModal from "./LogTimeModal";
 import AddExpenseModal from "./AddExpenseModal";
 import NewInvoiceModal from "./NewInvoiceModal";
-import { Plus } from "lucide-react";
+import { Plus, MoreHorizontal } from "lucide-react";
 import Button from "@/components/ui/Button";
-import AshMark from "@/components/ui/AshMark";
 import FinanceIntroModal from "@/components/tour/finance/FinanceIntroModal";
 import FinanceTooltipTour from "@/components/tour/finance/FinanceTooltipTour";
-
-const ASH_GRADIENT = "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)";
-function openAsh(message: string) {
-  window.dispatchEvent(new CustomEvent("open-ash", { detail: { message } }));
-}
-function AshBtn({ message }: { message: string }) {
-  return (
-    <button
-      onClick={() => openAsh(message)}
-      style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", fontSize: 11, fontWeight: 500, borderRadius: 6, background: "transparent", color: "var(--color-ash-dark)", border: "0.5px solid var(--color-border)", cursor: "pointer", fontFamily: "inherit", transition: "background 0.1s ease" }}
-      onMouseEnter={e => (e.currentTarget.style.background = "var(--color-ash-tint)")}
-      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-    >
-      <div style={{ width: 16, height: 16, borderRadius: "50%", background: ASH_GRADIENT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-        <AshMark size={9} variant="on-dark" />
-      </div>
-      Ask Ash
-    </button>
-  );
-}
 
 type Tab = "overview" | "time" | "expenses" | "invoices" | "banking";
 
@@ -59,6 +38,8 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
   const [showLogTime, setShowLogTime]       = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [showNewInvoice, setShowNewInvoice] = useState(false);
+  const [optionsOpen, setOptionsOpen]       = useState(false);
+  const optionsRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const now = new Date();
@@ -73,6 +54,19 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
     window.addEventListener("finance:set-tab", onSetTab);
     return () => window.removeEventListener("finance:set-tab", onSetTab);
   }, []);
+
+  // Close the 3-dots menu on outside click. Items will land here as the
+  // module grows — for now the menu is intentionally a placeholder.
+  useEffect(() => {
+    if (!optionsOpen) return;
+    function handler(e: MouseEvent) {
+      if (optionsRef.current && !optionsRef.current.contains(e.target as Node)) {
+        setOptionsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [optionsOpen]);
 
   // Timer tick
   useEffect(() => {
@@ -149,28 +143,18 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
 
   const tabActions: Record<Tab, React.ReactNode> = {
     overview: <>
-      <AshBtn message="How's my cash flow this month? What should I know about my financial health right now?" />
       <Button variant="secondary" onClick={() => setShowLogTime(true)}>Log time</Button>
       <Button variant="secondary" onClick={() => setShowAddExpense(true)}>Add expense</Button>
       <Button onClick={() => setShowNewInvoice(true)}><Plus size={12} />New invoice</Button>
     </>,
-    time:     <>
-      <AshBtn message="How many billable hours have I logged this month? Am I on track with my time goals?" />
-      <Button onClick={() => setShowLogTime(true)}><Plus size={12} />Log time</Button>
-    </>,
-    expenses: <>
-      <AshBtn message="What are my biggest expense categories this month? How can I reduce costs?" />
-      <span data-tour-target="finance.add-expense">
-        <Button onClick={() => setShowAddExpense(true)}><Plus size={12} />Add expense</Button>
-      </span>
-    </>,
-    invoices: <>
-      <AshBtn message="What invoices are outstanding or overdue? Help me draft a payment follow-up." />
-      <span data-tour-target="finance.new-invoice">
-        <Button onClick={() => setShowNewInvoice(true)}><Plus size={12} />New invoice</Button>
-      </span>
-    </>,
-    banking:  <AshBtn message="What does my cash flow look like based on recent transactions?" />,
+    time:     <Button onClick={() => setShowLogTime(true)}><Plus size={12} />Log time</Button>,
+    expenses: <span data-tour-target="finance.add-expense">
+      <Button onClick={() => setShowAddExpense(true)}><Plus size={12} />Add expense</Button>
+    </span>,
+    invoices: <span data-tour-target="finance.new-invoice">
+      <Button onClick={() => setShowNewInvoice(true)}><Plus size={12} />New invoice</Button>
+    </span>,
+    banking:  null,
   };
 
   return (
@@ -199,6 +183,48 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
         </div>
         <div className="flex items-center gap-2 ml-auto px-5 shrink-0">
           {tabActions[activeTab]}
+          <div ref={optionsRef} style={{ position: "relative" }}>
+            <button
+              type="button"
+              onClick={() => setOptionsOpen(v => !v)}
+              aria-label="Finance options"
+              title="Finance options"
+              style={{
+                width: 28, height: 28, borderRadius: 7,
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                background: optionsOpen ? "var(--color-surface-sunken)" : "transparent",
+                border: "none", cursor: "pointer",
+                color: "var(--color-text-secondary)",
+                transition: "background 0.12s ease",
+              }}
+              onMouseEnter={e => { if (!optionsOpen) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+              onMouseLeave={e => { if (!optionsOpen) e.currentTarget.style.background = "transparent"; }}
+            >
+              <MoreHorizontal size={16} strokeWidth={2} />
+            </button>
+            {optionsOpen && (
+              <div style={{
+                position: "absolute", right: 0, top: "calc(100% + 6px)",
+                width: 240, zIndex: 40,
+                background: "var(--color-surface-raised)",
+                border: "0.5px solid var(--color-border)",
+                borderRadius: 12,
+                boxShadow: "var(--shadow-overlay)",
+                overflow: "hidden",
+                padding: "10px 14px",
+              }}>
+                <p style={{
+                  fontSize: 10, fontWeight: 700, textTransform: "uppercase",
+                  letterSpacing: "0.08em", color: "var(--color-text-tertiary)",
+                }}>
+                  Finance options
+                </p>
+                <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 8, lineHeight: 1.5 }}>
+                  Settings will land here as the module grows.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
