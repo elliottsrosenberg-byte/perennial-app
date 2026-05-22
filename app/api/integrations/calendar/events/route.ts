@@ -40,7 +40,7 @@ interface CalendarEvent {
   // null for legacy connections that haven't been resynced yet.
   calendarId:  string | null;
   // Whether the parent calendar is writable. Drives whether the
-  // EventDetailPanel renders edit affordances or the read-only pill.
+  // EventCard renders edit affordances or the read-only pill.
   writable:    boolean;
   // Recurrence as RRULE strings (e.g. ["RRULE:FREQ=WEEKLY"]). Microsoft
   // Graph's patternedRecurrence object is translated to RRULE form so the

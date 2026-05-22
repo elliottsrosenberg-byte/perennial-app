@@ -8,8 +8,7 @@ import DatePicker from "@/components/ui/DatePicker";
 import EmptyState from "@/components/ui/EmptyState";
 import CalendarOptionsMenu from "./CalendarOptionsMenu";
 import CalendarSourcesPanel from "./CalendarSourcesPanel";
-import EventDetailPanel, { type CalendarEventLite } from "./EventDetailPanel";
-import NewEventModal from "./NewEventModal";
+import EventCard, { type EventCardEvent } from "./EventCard";
 import TaskQuickEditPopover from "./TaskQuickEditPopover";
 import QuickTaskCard, { type QuickTaskInput } from "./QuickTaskCard";
 import CalendarIntroModal from "@/components/tour/calendar/CalendarIntroModal";
@@ -762,6 +761,7 @@ interface CalEvent {
   accountName?: string | null;
   calendarId?: string | null;
   writable?:   boolean;
+  recurrence?: string[] | null;
 }
 
 // Google Calendar event colors (colorId → hex)
@@ -1038,7 +1038,7 @@ export default function CalendarClient({
       if (!detail?.event) return;
       // Optimistically merge the new event into the visible week without
       // waiting for the next aggregator round-trip. The refresh-events
-      // event also fires from NewEventModal and will reconcile shortly.
+      // event also fires from EventCard and will reconcile shortly.
       setGcalEvents((prev) => {
         if (prev.some((p) => p.id === detail.event!.id)) return prev;
         return [...prev, detail.event!];
@@ -1081,7 +1081,7 @@ export default function CalendarClient({
   }, [viewDate, viewMode, anyConnected, refreshNonce]);
 
   // ── Deep link: ?eventId=<encoded provider:external_id> opens the
-  // EventDetailPanel for that event once it lands in gcalEvents. Used
+  // EventCard for that event once it lands in gcalEvents. Used
   // by Ash references and shareable calendar links. We strip the query
   // immediately so refreshes don't re-fire on a stale id.
   const [pendingDeepLinkId, setPendingDeepLinkId] = useState<string | null>(null);
@@ -2213,6 +2213,14 @@ export default function CalendarClient({
                       // column node so descendant interactive elements win.
                       if (e.button !== 0) return;
                       if (e.target !== e.currentTarget) return;
+                      // If a create-card is currently open from a previous
+                      // drag, dismiss it before starting a new selection —
+                      // the new ghost rectangle takes over and the card
+                      // reappears at mouseup with the new time range.
+                      if (newEventOpen) {
+                        setNewEventOpen(false);
+                        setNewEventPrefill(null);
+                      }
                       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                       const y = e.clientY - rect.top;
                       setDragCreate({
@@ -2637,9 +2645,9 @@ export default function CalendarClient({
         />
       )}
 
-      {/* New event modal */}
+      {/* Unified create-event card (drag-create or "+ New event") */}
       {newEventOpen && (
-        <NewEventModal
+        <EventCard
           defaultStart={newEventPrefill?.start}
           defaultEnd={newEventPrefill?.end}
           defaultAllDay={newEventPrefill?.allDay}
@@ -2666,12 +2674,11 @@ export default function CalendarClient({
         </div>
       )}
 
-      {/* Read-only event detail popup (Phase D1). Write-back lands in a
-          follow-up — for now the panel surfaces all the metadata and
-          links out to the provider for edits. */}
+      {/* Unified view/edit event card. Same component as the create card —
+          edits PATCH, delete is single-click, click-outside dismisses. */}
       {openEvent && (
-        <EventDetailPanel
-          event={openEvent as unknown as CalendarEventLite}
+        <EventCard
+          event={openEvent as unknown as EventCardEvent}
           color={openEvent.colorId ? GCAL_COLORS[openEvent.colorId] : (openEvent.source === "microsoft" ? "#0078d4" : "#039BE5")}
           anchorRect={openEventAnchor}
           onClose={() => { setOpenEvent(null); setOpenEventAnchor(null); }}
