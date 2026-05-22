@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Opportunity } from "@/types/database";
 import PresenceIntroModal from "@/components/tour/presence/PresenceIntroModal";
 import PresenceTooltipTour from "@/components/tour/presence/PresenceTooltipTour";
+import { MoreHorizontal, Plus } from "lucide-react";
 
 function openAsh(message: string) {
   window.dispatchEvent(new CustomEvent("open-ash", { detail: { message } }));
@@ -315,9 +316,6 @@ const IcGlobe  = () => <svg width="13" height="13" viewBox="0 0 16 16" fill="non
 const IcIG     = () => <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="2" width="12" height="12" rx="3.5"/><circle cx="8" cy="8" r="2.5"/><circle cx="11.5" cy="4.5" r=".75" fill="currentColor" stroke="none"/></svg>;
 const IcMail   = () => <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg>;
 const IcTrend  = () => <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="2 10 6 5 9 8 14 3"/></svg>;
-const IcClock  = () => <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>;
-const IcTrash  = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M2 4h12M6 4V2.5a.5.5 0 01.5-.5h3a.5.5 0 01.5.5V4M3 4l1 10a1 1 0 001 1h6a1 1 0 001-1l1-10"/><path d="M6.5 7v4M9.5 7v4"/></svg>;
-const IcEdit   = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M3 13h10M11.6 2.4l-9 9M10 1.2L14.8 6"/></svg>;
 const IcImage  = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>;
 const IcPlus   = () => <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2v12M2 8h12"/></svg>;
 const IcList   = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="2" y1="3" x2="14" y2="3"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="13" x2="14" y2="13"/></svg>;
@@ -332,15 +330,6 @@ const IcEyeOff = () => <svg width="13" height="13" viewBox="0 0 16 16" fill="non
 const IcImgSm  = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>;
 
 // ─── Btn helpers ──────────────────────────────────────────────────────────────
-function BtnGhost({ children, small }: { children: React.ReactNode; small?: boolean }) {
-  return <button style={{ background:"transparent", border:"0.5px solid rgba(31,33,26,0.18)", borderRadius:6, padding:small?"3px 8px":"5px 11px", fontSize:small?10:11, color:"var(--color-grey)", cursor:"pointer", fontFamily:"inherit" }}>{children}</button>;
-}
-function BtnPrimary({ children, small, onClick }: { children: React.ReactNode; small?: boolean; onClick?: () => void }) {
-  return <button onClick={onClick} style={{ background:"var(--color-sage)", color:"white", border:"none", borderRadius:6, padding:small?"3px 8px":"5px 11px", fontSize:small?10:11, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>{children}</button>;
-}
-function BtnAccent({ children, small, onClick }: { children: React.ReactNode; small?: boolean; onClick?: () => void }) {
-  return <button onClick={onClick} style={{ background:"var(--color-sage)", color:"white", border:"none", borderRadius:6, padding:small?"3px 8px":"5px 11px", fontSize:small?10:11, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>{children}</button>;
-}
 
 function DateBlock({ month, day }: { month: string; day: string }) {
   return (
@@ -830,11 +819,59 @@ function WebsiteTab({ integration, onConnect, onDisconnect }: {
 // ═══════════════════════════════════════════════════════════════════════════════
 // SOCIALS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function SocialsTab({ instagram, onConnect, onDisconnect }: {
+interface IGRecentPost {
+  id: string;
+  likes: number;
+  comments: number;
+  timestamp: string;
+  type: string;
+  thumbnail_url: string | null;
+  permalink: string | null;
+  caption: string | null;
+}
+
+function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
   instagram: Integration | null;
   onConnect: () => void;
   onDisconnect: () => void;
+  onRefreshed: (next: Integration) => void;
 }) {
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Pull fresh stats + recent media from the Graph API on tab mount.
+  // The /api/integrations/instagram/stats endpoint already persists
+  // followers, engagement_rate, and recent_posts onto the integration row.
+  useEffect(() => {
+    if (!instagram) return;
+    let cancelled = false;
+    const lastFetched = instagram.metadata.last_fetched as string | undefined;
+    const stale = !lastFetched || (Date.now() - new Date(lastFetched).getTime()) > 30 * 60 * 1000;
+    if (!stale) return;
+    setRefreshing(true);
+    fetch("/api/integrations/instagram/stats")
+      .then(r => r.json())
+      .then((d: { connected?: boolean; followers?: number; engagement_rate?: number | null; recent_posts?: IGRecentPost[]; username?: string }) => {
+        if (cancelled || !d.connected) return;
+        onRefreshed({
+          ...instagram,
+          account_name: d.username ? `@${d.username}` : instagram.account_name,
+          last_synced_at: new Date().toISOString(),
+          metadata: {
+            ...instagram.metadata,
+            followers_count: d.followers ?? instagram.metadata.followers_count,
+            engagement_rate: d.engagement_rate ?? instagram.metadata.engagement_rate,
+            recent_posts:    d.recent_posts ?? instagram.metadata.recent_posts,
+            last_fetched:    new Date().toISOString(),
+          },
+        });
+      })
+      .finally(() => { if (!cancelled) setRefreshing(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instagram?.id]);
+
+  const recentPosts = (instagram?.metadata?.recent_posts as IGRecentPost[] | undefined) ?? [];
+
   return (
     <div className="flex-1 overflow-y-auto" style={{ display:"flex", flexDirection:"column" }}>
       <div style={{ display:"flex", gap:8, padding:"12px 24px", borderBottom:"0.5px solid var(--color-border)", flexWrap:"wrap", alignItems:"center", background:"var(--color-off-white)" }}>
@@ -843,7 +880,7 @@ function SocialsTab({ instagram, onConnect, onDisconnect }: {
             <div className="flex items-center justify-center rounded-md" style={{ width:18, height:18, background:C.purpleL }}><span style={{ color:C.purple }}><IcIG /></span></div>
             <div>
               <div style={{ fontSize:11, fontWeight:600 }}>{instagram.account_name ?? "@instagram"}</div>
-              <div style={{ fontSize:10, color:"var(--color-grey)" }}>{instagram.metadata.followers_count ? `${instagram.metadata.followers_count.toLocaleString()} followers` : "Instagram"}</div>
+              <div style={{ fontSize:10, color:"var(--color-grey)" }}>{instagram.metadata.followers_count ? `${(instagram.metadata.followers_count as number).toLocaleString()} followers` : "Instagram"}</div>
             </div>
             <div style={{ width:6, height:6, borderRadius:"50%", background:"var(--color-sage)" }} />
           </div>
@@ -883,95 +920,92 @@ function SocialsTab({ instagram, onConnect, onDisconnect }: {
       )}
       {instagram && (
       <>
-      {/* Surfaces below the stat row (Post queue, Top post, Follower growth,
-          Best times) are not yet wired to the Instagram Graph API — they
-          render demonstration content. Flag it so the user isn't misled. */}
-      <div style={{ padding:"10px 24px 0" }}>
-        <div className="rounded-md" style={{ padding:"7px 11px", border:"0.5px dashed rgba(31,33,26,0.18)", background:"var(--color-cream)", fontSize:10.5, color:"var(--color-grey)" }}>
-          Stat row above is live from your Instagram account. The panels below (post queue, top post, growth chart, best times) are demo content — full publisher integration is in progress.
-        </div>
-      </div>
       <div style={{ padding:"14px 24px", display:"flex", gap:12 }}>
-        <StatCard label="Followers"  value={instagram.metadata.followers_count ? String(instagram.metadata.followers_count) : "—"} sub={instagram.account_name ?? "Instagram"} detail="Total followers" helpText="Total people following you." askAsh ashMessage="How can I grow my Instagram following as a designer?" />
+        <StatCard label="Followers"  value={instagram.metadata.followers_count ? (instagram.metadata.followers_count as number).toLocaleString() : "—"} sub={instagram.account_name ?? "Instagram"} detail="Total followers" helpText="Total people following you." askAsh ashMessage="How can I grow my Instagram following as a designer?" />
         <StatCard label="Engagement" value={instagram.metadata.engagement_rate ? `${instagram.metadata.engagement_rate}%` : "—"} sub="Avg engagement rate" subUp={!!instagram.metadata.engagement_rate} detail="Industry avg: 1.8%" helpText="Likes + comments as % of followers." askAsh />
         <StatCard label="Media"      value={instagram.metadata.media_count ? String(instagram.metadata.media_count) : "—"} sub="Total posts" helpText="Posts on your account." askAsh />
-        <StatCard label="Last synced" value={instagram.last_synced_at ? new Date(instagram.last_synced_at).toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "—"} sub="Stats refresh" detail="Pull latest from Instagram" />
+        <StatCard label="Last synced" value={refreshing ? "Syncing…" : instagram.last_synced_at ? new Date(instagram.last_synced_at).toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "—"} sub="Stats refresh" detail="Pull latest from Instagram" />
       </div>
         <div style={{ display:"flex", gap:16, flex:1, minHeight:0, padding:"0 24px 24px" }}>
           <div style={{ flex:1, display:"flex", flexDirection:"column", gap:12, minWidth:0 }}>
+            {/* Recent posts — live from Instagram Graph API (via /api/integrations/instagram/stats). */}
             <div className={card()} style={cardStyle}>
-              <div style={cardHeadStyle}><span style={cardHeadTitle}>Post queue</span></div>
-              <div style={{ display:"flex", gap:6, padding:"10px 15px", borderBottom:"0.5px solid var(--color-border)" }}>
-                {[["Scheduled (2)",true],["Drafts (1)",false],["Published",false]].map(([label, active]) => (
-                  <div key={label as string} style={{ padding:"4px 10px", borderRadius:10, border:"0.5px solid rgba(31,33,26,0.12)", fontSize:11, cursor:"pointer", background:active?C.blueL:"transparent", color:active?C.blue:"var(--color-grey)", borderColor:active?C.blueL:"rgba(31,33,26,0.12)" }}>{label}</div>
-                ))}
+              <div style={cardHeadStyle}>
+                <span style={cardHeadTitle}>Recent posts</span>
+                <span style={{ fontSize:10, color:"var(--color-grey)" }}>Last {recentPosts.length || 6}</span>
               </div>
-              {[
-                { caption:"New work in the studio — the walnut slab series is coming together. Full reveal at ICFF, May 19–23 in New York. 🌿", when:"Tomorrow · Apr 18 · 7:30 PM" },
-                { caption:"Five years of making, distilled into a body of work. The brass wall series is the most resolved thing I've made yet.", when:"Apr 22 · 6:00 PM" },
-              ].map((post,i) => (
-                <div key={i} className="flex items-start gap-3" style={{ padding:"11px 15px", borderBottom:"0.5px solid var(--color-border)" }}>
-                  <div className="flex items-center justify-center rounded-lg shrink-0" style={{ width:56, height:56, background:"var(--color-cream)", color:"var(--color-grey)" }}><IcImage /></div>
-                  <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:4 }}>
-                    <div style={{ fontSize:12, color:"var(--color-grey)", lineHeight:1.4, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" as const, overflow:"hidden" }}>{post.caption}</div>
-                    <div style={{ fontSize:10, color:"var(--color-grey)" }}>{post.when}</div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="rounded-full" style={{ fontSize:9, fontWeight:600, padding:"2px 7px", background:C.blueL, color:C.blue }}>Scheduled</span>
-                    <button style={{ background:"none", border:"none", color:"var(--color-grey)", cursor:"pointer", padding:4 }}><IcEdit /></button>
-                    <button style={{ background:"none", border:"none", color:"var(--color-grey)", cursor:"pointer", padding:4 }}><IcTrash /></button>
-                  </div>
+              {refreshing && recentPosts.length === 0 ? (
+                <div style={{ padding:"22px 16px", textAlign:"center", fontSize:12, color:"var(--color-grey)" }}>Loading recent posts…</div>
+              ) : recentPosts.length === 0 ? (
+                <div style={{ padding:"22px 16px", textAlign:"center", display:"flex", flexDirection:"column", gap:6 }}>
+                  <p style={{ fontSize:12, color:"var(--color-grey)", lineHeight:1.55 }}>No posts to show yet. Once you publish, your recent posts and their engagement will appear here.</p>
                 </div>
-              ))}
-              <div className="flex items-center justify-center gap-2 cursor-pointer" style={{ padding:"11px 15px", border:"0.5px dashed rgba(31,33,26,0.15)", borderRadius:8, margin:"0 15px 12px", color:"var(--color-grey)", fontSize:12 }}><IcPlus /> Schedule new post</div>
+              ) : (
+                recentPosts.map((post, i) => {
+                  const ts = post.timestamp ? new Date(post.timestamp) : null;
+                  const captionPreview = (post.caption ?? "").split("\n")[0].slice(0, 120);
+                  return (
+                    <a
+                      key={post.id ?? i}
+                      href={post.permalink ?? "#"}
+                      target={post.permalink ? "_blank" : undefined}
+                      rel="noreferrer"
+                      onClick={e => { if (!post.permalink) e.preventDefault(); }}
+                      className="flex items-start gap-3"
+                      style={{ padding:"11px 15px", borderBottom: i === recentPosts.length - 1 ? "none" : "0.5px solid var(--color-border)", textDecoration:"none", color:"inherit", cursor: post.permalink ? "pointer" : "default" }}
+                    >
+                      {post.thumbnail_url ? (
+                        <img src={post.thumbnail_url} alt="" style={{ width:56, height:56, borderRadius:8, objectFit:"cover", flexShrink:0, background:"var(--color-cream)" }} />
+                      ) : (
+                        <div className="flex items-center justify-center rounded-lg shrink-0" style={{ width:56, height:56, background:"var(--color-cream)", color:"var(--color-grey)" }}><IcImage /></div>
+                      )}
+                      <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:4 }}>
+                        <div style={{ fontSize:12, color:"var(--color-charcoal)", lineHeight:1.4, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" as const, overflow:"hidden" }}>
+                          {captionPreview || <span style={{ color:"var(--color-grey)", fontStyle:"italic" }}>No caption</span>}
+                        </div>
+                        <div style={{ fontSize:10, color:"var(--color-grey)", display:"flex", gap:10 }}>
+                          <span>{post.likes.toLocaleString()} likes</span>
+                          <span>{post.comments.toLocaleString()} comments</span>
+                          {ts && <span>· {ts.toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>}
+                        </div>
+                      </div>
+                      {post.permalink && <span style={{ ...blueLink, alignSelf:"center", whiteSpace:"nowrap" }}>View →</span>}
+                    </a>
+                  );
+                })
+              )}
             </div>
+
+            {/* Publisher tools — explicitly not built yet. Honest empty state in
+                place of the previous mocked Post queue / Quick compose UI. */}
             <div className={card()} style={cardStyle}>
-              <div style={cardHeadStyle}><span style={cardHeadTitle}>Quick compose</span></div>
-              <div style={{ padding:"12px 15px" }}>
-                <textarea readOnly placeholder="What's happening in the studio..." style={{ width:"100%", minHeight:72, padding:12, borderRadius:8, border:"0.5px solid var(--color-border)", background:"var(--color-cream)", color:"var(--color-charcoal)", fontSize:12, fontFamily:"inherit", resize:"none" }} />
-                <div className="flex items-center gap-2 mt-2">
-                  <BtnGhost small>Add image</BtnGhost>
-                  <BtnGhost small>Add hashtags</BtnGhost>
-                  <span style={{ fontSize:11, color:"var(--color-grey)", marginLeft:"auto" }}>0 / 2,200</span>
-                </div>
+              <div style={cardHeadStyle}><span style={cardHeadTitle}>Post scheduling & composer</span></div>
+              <div style={{ padding:"18px 16px", display:"flex", flexDirection:"column", alignItems:"center", textAlign:"center", gap:6 }}>
+                <p style={{ fontSize:12, color:"var(--color-grey)", lineHeight:1.55, maxWidth:380 }}>
+                  Drafting, scheduling, and publishing posts from Perennial isn&apos;t live yet. When it ships, drafts and your queue will appear here.
+                </p>
+                <button onClick={() => openAsh("I want to plan my next Instagram post — help me think through the caption and a couple of angles.")} style={{ marginTop:4, padding:"6px 14px", borderRadius:6, border:"0.5px solid rgba(155,163,122,0.4)", background:"rgba(155,163,122,0.1)", color:"#5a7040", fontSize:11, cursor:"pointer", fontFamily:"inherit" }}>
+                  Brainstorm a post with Ash
+                </button>
               </div>
-              <div className="flex items-center gap-2" style={{ padding:"12px 15px", borderTop:"0.5px solid var(--color-border)" }}><BtnGhost small>Save as draft</BtnGhost><BtnPrimary small>Schedule →</BtnPrimary></div>
             </div>
           </div>
           <div style={{ width:280, flexShrink:0, display:"flex", flexDirection:"column", gap:12 }}>
+            <AshCard text={instagram.metadata.engagement_rate ? `Your engagement rate is ${instagram.metadata.engagement_rate}%. Want help thinking through what's resonating and what to post next?` : "Want help thinking through what to post next — angles, captions, cadence? I can riff on a few options."} buttonLabel="Talk it through" />
             <div className={card()} style={cardStyle}>
-              <div style={cardHeadStyle}><span style={cardHeadTitle}>Top post · Apr</span></div>
-              <div className="flex items-center justify-center" style={{ height:100, background:"var(--color-cream)", borderBottom:"0.5px solid var(--color-border)", color:"var(--color-grey)", fontSize:11, fontStyle:"italic" }}>Walnut slab detail</div>
-              <div style={{ padding:"12px 15px" }}>
-                <div style={{ fontSize:12, color:"var(--color-grey)", lineHeight:1.4, marginBottom:8 }}>Walnut slab detail — new series in the studio. Grain like this only comes around once.</div>
-                <div className="flex gap-4" style={{ fontSize:10, color:"var(--color-grey)", paddingBottom:8, borderBottom:"0.5px solid var(--color-border)" }}>
-                  <span>312 likes</span><span>28 comments</span><span>4.8% engagement</span>
-                </div>
-                <div style={{ fontSize:10, color:"var(--color-grey)", paddingTop:8 }}>Posted Apr 13 · <span style={blueLink}>View on Instagram →</span></div>
-              </div>
-            </div>
-            <div className={card()} style={cardStyle}>
-              <div style={cardHeadStyle}><span style={cardHeadTitle}>Follower growth</span><span style={{ fontSize:10, color:"var(--color-grey)" }}>Last 6 months</span></div>
-              <div style={{ padding:"12px 15px" }}>
-                <div style={{ display:"flex", gap:4, alignItems:"flex-end", height:60, marginBottom:12 }}>
-                  {[30,28,35,40,44,55].map((h,i) => <div key={i} style={{ flex:1, borderRadius:"2px 2px 0 0", height:`${h}px`, background:i===5?C.purple:C.purpleL }} />)}
-                </div>
-                <div style={{ fontSize:13, fontWeight:600, color:C.accent }}>+940 this month</div>
-                <div style={{ fontSize:11, color:"var(--color-grey)" }}>4,820 total</div>
-              </div>
-            </div>
-            <div className={card()} style={cardStyle}>
-              <div style={cardHeadStyle}><span style={cardHeadTitle}>Best times to post</span></div>
-              <div style={{ padding:"0 15px" }}>
-                {[{day:"Tuesday & Wednesday",hours:"7–9 PM",best:true},{day:"Saturday",hours:"10 AM–12 PM",best:false},{day:"Sunday",hours:"6–8 PM",best:false}].map(t => (
-                  <div key={t.day} className="flex items-center gap-2" style={{ padding:"9px 0", borderBottom:"0.5px solid var(--color-border)" }}>
-                    <IcClock />
-                    <span style={{ fontSize:11, color:"var(--color-grey)", flex:1 }}>{t.day}</span>
-                    <span style={{ fontSize:11, color:"var(--color-grey)" }}>{t.hours}</span>
-                    {t.best && <span className="rounded-full" style={{ fontSize:8, fontWeight:600, padding:"2px 6px", background:C.accentL, color:C.accent }}>Best</span>}
+              <div style={cardHeadStyle}><span style={cardHeadTitle}>Coming soon</span></div>
+              <div style={{ padding:"12px 15px", display:"flex", flexDirection:"column", gap:8 }}>
+                {[
+                  "Post queue & scheduling",
+                  "Follower growth chart",
+                  "Best times to post",
+                  "TikTok, Pinterest, LinkedIn",
+                ].map(label => (
+                  <div key={label} style={{ display:"flex", alignItems:"center", gap:8, fontSize:11, color:"var(--color-grey)" }}>
+                    <div style={{ width:5, height:5, borderRadius:"50%", background:"var(--color-border-strong, var(--color-border))" }} />
+                    <span>{label}</span>
                   </div>
                 ))}
-                <div style={{ fontSize:10, color:"var(--color-grey)", fontStyle:"italic", padding:"8px 0" }}>Based on your last 30 posts</div>
               </div>
             </div>
           </div>
@@ -1033,12 +1067,6 @@ function NewsletterTab({ integration, onConnect, onDisconnect }: {
           <button onClick={() => onDisconnect(integration.provider)} style={{ fontSize:11, color:"var(--color-grey)", background:"none", border:"none", cursor:"pointer" }}>Disconnect</button>
         </div>
         <div style={{ padding:"22px 24px", display:"flex", flexDirection:"column", gap:18, flex:1 }}>
-        {/* Stat cards below are live from your newsletter provider. The
-            Campaigns list, Next send, Subscriber growth chart, and Audience
-            panel are demo content until campaign-level data is wired up. */}
-        <div className="rounded-md" style={{ padding:"7px 11px", border:"0.5px dashed rgba(31,33,26,0.18)", background:"var(--color-cream)", fontSize:10.5, color:"var(--color-grey)" }}>
-          Subscribers and open rate above are live. Campaigns, next-send, growth chart, and audience breakdown are demo content — full integration coming soon.
-        </div>
         <div style={{ display:"flex", gap:12 }}>
           <StatCard label="Subscribers"
             value={integration.metadata.subscriber_count ? String(integration.metadata.subscriber_count) : integration.metadata.total_subscribers ? String(integration.metadata.total_subscribers) : integration.metadata.subscribers ? String(integration.metadata.subscribers) : "—"}
@@ -1058,62 +1086,47 @@ function NewsletterTab({ integration, onConnect, onDisconnect }: {
         </div>
         <div style={{ display:"flex", gap:16, flex:1, minHeight:0 }}>
           <div style={{ flex:1, display:"flex", flexDirection:"column", gap:12, minWidth:0 }}>
+            {/* Campaigns / next-send / growth panels intentionally not rendered
+                yet — campaign-level data isn't being pulled from each newsletter
+                provider's API in this pass. Honest empty state in their place. */}
             <div className={card()} style={cardStyle}>
-              <div style={cardHeadStyle}><span style={cardHeadTitle}>Campaigns</span><span style={{ fontSize:10, color:"var(--color-grey)" }}>All time</span><BtnAccent small>+ New</BtnAccent></div>
-              {[
-                { subject:"Pricing your work as a collectible maker",          date:"Apr 9",  open:"47%", click:"3.1%", sent:"312", best:true  },
-                { subject:"The gallery relationship — what they actually want", date:"Mar 12", open:"52%", click:"2.9%", sent:"298", best:true  },
-                { subject:"What I learned exhibiting at NYCxDesign",           date:"Mar 26", open:"41%", click:"3.3%", sent:"305", best:false },
-                { subject:"Studio update: brass series complete",               date:"Feb 28", open:"38%", click:"2.2%", sent:"291", best:false },
-                { subject:"Open calls worth applying to this spring",           date:"Feb 14", open:"44%", click:"2.8%", sent:"278", best:false },
-              ].map(c => (
-                <div key={c.date} style={{ padding:"11px 15px", borderBottom:"0.5px solid var(--color-border)", cursor:"pointer" }}>
-                  <div className="flex items-baseline gap-2 mb-1"><span style={{ fontSize:12, fontWeight:500, flex:1 }}>{c.subject}</span><span style={{ fontSize:10, color:"var(--color-grey)", whiteSpace:"nowrap" }}>{c.date}</span></div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full" style={{ fontSize:10, fontWeight:600, padding:"2px 8px", background:Number(c.open)>=45?C.accentL:"var(--color-cream)", color:Number(c.open)>=45?C.accent:"var(--color-grey)" }}>{c.open}</span>
-                    <span style={{ fontSize:10, color:"var(--color-grey)" }}>{c.click} · {c.sent} sent</span>
-                    {c.best && <span className="rounded-full ml-auto" style={{ fontSize:9, fontWeight:600, padding:"2px 7px", background:C.amberL, color:C.amber }}>Best ↑</span>}
-                  </div>
+              <div style={cardHeadStyle}><span style={cardHeadTitle}>Campaigns</span></div>
+              <div style={{ padding:"22px 16px", display:"flex", flexDirection:"column", alignItems:"center", gap:8, textAlign:"center" }}>
+                <div className="flex items-center justify-center rounded-lg" style={{ width:34, height:34, background:C.amberL, color:C.amber }}>
+                  <IcMail />
                 </div>
-              ))}
-              <div className="flex items-center justify-center" style={{ padding:"11px 15px", borderTop:"0.5px dashed var(--color-border)", color:"var(--color-grey)", fontSize:11, cursor:"pointer" }}>+ New campaign</div>
-            </div>
-            <div className={card()} style={{ ...cardStyle, padding:15 }}>
-              <div className="flex items-center gap-2 mb-3"><span style={{ ...cardHeadTitle, flex:1 }}>Next send</span><span className="rounded-full" style={{ fontSize:10, fontWeight:600, padding:"3px 10px", background:C.blueL, color:C.blue }}>Drafting</span></div>
-              <div style={{ marginBottom:12 }}><div style={{ fontSize:10, color:"var(--color-grey)", textTransform:"uppercase", fontWeight:600, letterSpacing:"0.04em", marginBottom:4 }}>Subject</div><div style={{ background:"var(--color-cream)", borderRadius:6, padding:"6px 10px", fontSize:12, border:"0.5px solid var(--color-border)" }}>May dispatch</div></div>
-              <div style={{ marginBottom:8, fontSize:11, color:"var(--color-grey)" }}><span style={{ fontWeight:600, color:"var(--color-charcoal)" }}>May 14</span> · 9:00 AM &nbsp;·&nbsp; All subscribers · 312</div>
-              <div className="flex items-center gap-2"><BtnGhost small>Edit draft</BtnGhost><BtnGhost small>Preview</BtnGhost><BtnGhost small>Send test</BtnGhost></div>
+                <div style={{ fontSize:13, fontWeight:600, color:"var(--color-charcoal)", fontFamily:"var(--font-display)" }}>
+                  Send history is coming
+                </div>
+                <p style={{ fontSize:11, color:"var(--color-grey)", lineHeight:1.55, maxWidth:380 }}>
+                  We pull subscribers and open rate from {PROVIDER_META[integration.provider as ConnectProvider]?.label ?? integration.provider} today. Per-send history, click-through, and a next-send drafter aren&apos;t wired up yet — we&apos;ll surface them here once they are.
+                </p>
+                {Boolean(integration.metadata.publication_id) && (
+                  <a href={integration.provider === "beehiiv" ? "https://app.beehiiv.com/" : integration.provider === "mailchimp" ? "https://admin.mailchimp.com/" : integration.provider === "kit" ? "https://app.kit.com/" : "https://substack.com/"} target="_blank" rel="noreferrer" style={{ ...blueLink, marginTop:4 }}>
+                    Open {PROVIDER_META[integration.provider as ConnectProvider]?.label ?? "provider"} dashboard →
+                  </a>
+                )}
+              </div>
             </div>
           </div>
           <div style={{ width:280, flexShrink:0, display:"flex", flexDirection:"column", gap:12 }}>
-            <div className={card()} style={{ ...cardStyle, padding:15 }}>
-              <div className="flex items-center gap-2 mb-3"><span style={cardHeadTitle}>Subscriber growth</span><span style={{ fontSize:10, color:"var(--color-grey)" }}>Last 6 months</span></div>
-              <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"space-between", gap:6, height:80, marginBottom:4 }}>
-                {[28,32,30,38,44,46,52].map((h,i) => <div key={i} style={{ flex:1, borderRadius:"2px 2px 0 0", height:`${h}px`, background:i===6?C.amber:C.amberL }} />)}
-              </div>
-              <div className="flex justify-between" style={{ fontSize:9, color:"var(--color-grey)", marginBottom:12 }}>
-                {["Oct","Nov","Dec","Jan","Feb","Mar","Apr"].map(m => <span key={m}>{m}</span>)}
-              </div>
-              <div style={{ fontSize:13, fontWeight:600, color:C.accent }}>+14 this month</div>
-              <div style={{ fontSize:11, color:"var(--color-grey)" }}>312 total</div>
-              <div style={{ fontSize:10, color:"var(--color-grey)", marginTop:8 }}>Unsubscribes this month: 2</div>
-            </div>
-            <div className={card()} style={{ ...cardStyle, padding:15 }}>
-              <div style={{ ...cardHeadTitle, marginBottom:12 }}>Audience</div>
-              {[
-                { label:"Avg read time",            value:"4m 12s" },
-                { label:"Most engaged segment",     value:<span className="rounded-full" style={{ fontSize:10, fontWeight:600, padding:"2px 8px", background:C.accentL, color:C.accent }}>Past clients</span> },
-                { label:"Top location",             value:"New York, NY" },
-                { label:"Platform",                 value:"Substack Web (64%) · Email (36%)" },
-                { label:"Paid subscribers",         value:<span>0 (Free) <span style={blueLink}>Upgrade</span></span> },
-              ].map((r,i) => (
-                <div key={i} className="flex justify-between items-center" style={{ padding:"9px 0", borderBottom:"0.5px solid var(--color-border)" }}>
-                  <span style={{ fontSize:11, color:"var(--color-grey)" }}>{r.label}</span>
-                  <span style={{ fontSize:11, fontWeight:500 }}>{r.value}</span>
-                </div>
-              ))}
-            </div>
             <AshCard text="Want help thinking through a newsletter strategy? I can help you outline cadence, topics that build collector trust, and what to write next." buttonLabel="Brainstorm with Ash" />
+            <div className={card()} style={cardStyle}>
+              <div style={cardHeadStyle}><span style={cardHeadTitle}>Coming soon</span></div>
+              <div style={{ padding:"12px 15px", display:"flex", flexDirection:"column", gap:8 }}>
+                {[
+                  "Send history with open rate per campaign",
+                  "Subscriber growth over time",
+                  "Audience breakdown (location, segment)",
+                  "Drafting your next send",
+                ].map(label => (
+                  <div key={label} style={{ display:"flex", alignItems:"center", gap:8, fontSize:11, color:"var(--color-grey)" }}>
+                    <div style={{ width:5, height:5, borderRadius:"50%", background:"var(--color-border-strong, var(--color-border))" }} />
+                    <span>{label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
         </div>
@@ -1594,23 +1607,26 @@ const TABS: { key: Tab; label: string }[] = [
   { key:"opportunities", label:"Opportunities" },
 ];
 
-// Tab-level actions in the Presence topbar. Kept intentionally minimal —
-// post scheduling, manual opportunity add, and "+ new campaign" are all
-// deferred until the underlying flows exist. Today the only real action
-// per tab is an external link out to the user's published surface.
-const TAB_ACTIONS: Record<Tab, React.ReactNode> = {
-  overview:      null,
-  website:       null, // Visit-site link rendered inline in WebsiteTab when connected.
-  socials:       null,
-  newsletter:    null,
-  opportunities: null,
-};
-
 export default function PresenceClient({ initialOpportunities }: { initialOpportunities: Opportunity[] }) {
   const [tab, setTab] = useState<Tab>("overview");
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [connectModal, setConnectModal] = useState<ConnectProvider | null>(null);
   const [deepLinkOppId, setDeepLinkOppId] = useState<string | null>(null);
+  const [optionsOpen, setOptionsOpen]   = useState(false);
+  const optionsRef = useRef<HTMLDivElement>(null);
+
+  // Close the 3-dots menu on outside click. Settings will land here as
+  // the module grows — for now this is intentionally a placeholder hook.
+  useEffect(() => {
+    if (!optionsOpen) return;
+    function handler(e: MouseEvent) {
+      if (optionsRef.current && !optionsRef.current.contains(e.target as Node)) {
+        setOptionsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [optionsOpen]);
 
   const now = new Date();
   const period = now.toLocaleString("en-US", { month:"short", year:"numeric" });
@@ -1662,6 +1678,12 @@ export default function PresenceClient({ initialOpportunities }: { initialOpport
   const newsletter = (["beehiiv","kit","mailchimp","substack"] as const)
     .map(p => getInt(p)).find(Boolean) ?? null;
 
+  const allConnected = !!(instagram && plausible && newsletter);
+
+  function updateIntegration(next: Integration) {
+    setIntegrations(prev => prev.map(i => i.id === next.id ? next : i));
+  }
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <header className="flex items-stretch shrink-0" style={{ height:44, borderBottom:"0.5px solid rgba(31,33,26,0.18)", background:"var(--color-off-white)" }}>
@@ -1679,7 +1701,94 @@ export default function PresenceClient({ initialOpportunities }: { initialOpport
             >{t.label}</button>
           ))}
         </div>
-        <div className="flex items-center gap-2 shrink-0" style={{ padding:"0 16px" }}>{TAB_ACTIONS[tab]}</div>
+        <div className="flex items-center gap-2 shrink-0" style={{ padding:"0 14px" }}>
+          {/* Secondary CTA — fires an Ash hand-off so the user can describe a
+              listing they want tracked. Stand-in for the deferred user-submitted
+              opportunity flow (see project_deferred_todos.md "Manual opportunity
+              submission"). */}
+          <button
+            onClick={() => openAsh("I'd like to suggest a fair, open call, grant, or residency that should be tracked in Perennial — and tell you what I'd want to keep an eye on. Help me describe it.")}
+            style={{
+              padding: "6px 12px", fontSize: 12, fontWeight: 500,
+              borderRadius: 7, cursor: "pointer",
+              background: "transparent", color: "var(--color-grey)",
+              border: "0.5px solid var(--color-border)",
+              fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 6,
+              transition: "background 0.12s ease",
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+            title="Suggest a fair, open call, grant, or residency to track"
+          >
+            Suggest a listing
+          </button>
+
+          {/* Primary CTA — jumps to Settings → Integrations, where every channel
+              (Instagram, GA4, Newsletter) can be connected from one place.
+              Most useful when nothing's connected; we keep it visible always
+              so adding a second / third channel stays one click away. */}
+          <button
+            onClick={() => { window.location.href = "/settings?section=integrations"; }}
+            style={{
+              padding: "6px 12px", fontSize: 12, fontWeight: 500,
+              borderRadius: 7, border: "none", cursor: "pointer",
+              background: "var(--color-sage)", color: "white",
+              fontFamily: "inherit",
+              display: "inline-flex", alignItems: "center", gap: 6,
+              transition: "background 0.12s ease",
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-sage-hover, var(--color-sage))")}
+            onMouseLeave={e => (e.currentTarget.style.background = "var(--color-sage)")}
+            title={allConnected ? "Manage your connected channels" : "Connect a channel (Instagram, GA4, newsletter)"}
+          >
+            <Plus size={12} />
+            {allConnected ? "Manage channels" : "Connect channel"}
+          </button>
+
+          {/* 3-dot options menu — placeholder, matches Finance / Calendar pattern. */}
+          <div ref={optionsRef} style={{ position: "relative" }}>
+            <button
+              type="button"
+              onClick={() => setOptionsOpen(v => !v)}
+              aria-label="Presence options"
+              title="Presence options"
+              style={{
+                width: 28, height: 28, borderRadius: 7,
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                background: optionsOpen ? "var(--color-surface-sunken)" : "transparent",
+                border: "none", cursor: "pointer",
+                color: "var(--color-text-secondary)",
+                transition: "background 0.12s ease",
+              }}
+              onMouseEnter={e => { if (!optionsOpen) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+              onMouseLeave={e => { if (!optionsOpen) e.currentTarget.style.background = "transparent"; }}
+            >
+              <MoreHorizontal size={16} strokeWidth={2} />
+            </button>
+            {optionsOpen && (
+              <div style={{
+                position: "absolute", right: 0, top: "calc(100% + 6px)",
+                width: 240, zIndex: 40,
+                background: "var(--color-surface-raised)",
+                border: "0.5px solid var(--color-border)",
+                borderRadius: 12,
+                boxShadow: "var(--shadow-overlay)",
+                overflow: "hidden",
+                padding: "10px 14px",
+              }}>
+                <p style={{
+                  fontSize: 10, fontWeight: 700, textTransform: "uppercase",
+                  letterSpacing: "0.08em", color: "var(--color-text-tertiary)",
+                }}>
+                  Presence options
+                </p>
+                <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 8, lineHeight: 1.5 }}>
+                  Settings will land here as the module grows.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       </header>
 
       {tab === "overview"      && (
@@ -1704,6 +1813,7 @@ export default function PresenceClient({ initialOpportunities }: { initialOpport
           instagram={instagram}
           onConnect={() => window.location.href = "/api/auth/instagram"}
           onDisconnect={() => disconnectIntegration("instagram")}
+          onRefreshed={updateIntegration}
         />
       )}
       {tab === "newsletter"    && (
