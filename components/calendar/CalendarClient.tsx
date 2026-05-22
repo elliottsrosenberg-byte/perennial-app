@@ -28,7 +28,11 @@ const DAY_HDR_H    = 64;   // fixed height used for sticky top offsets
 // horizontally instead of collapsing the columns. 52px gutter + 7 × ~90px
 // columns ≈ 700px is the threshold below which event chips lose their
 // time labels.
-const WEEK_MIN_WIDTH = 700;
+// 52px gutter + 7 day columns at ~107px each — readable floor for narrow
+// viewports without forcing horizontal scroll at typical desktop widths.
+// Week-to-week navigation is gesture-driven (trackpad horizontal swipe /
+// shift+wheel — see the wheel handler) rather than viewport-scroll.
+const WEEK_MIN_WIDTH = 800;
 
 const DOW_SHORT   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
@@ -1028,6 +1032,42 @@ export default function CalendarClient({
     gridWrapRef.current?.scrollTo({ top: Math.max(0, y - 160) });
   }, []);
 
+  // ── Horizontal trackpad / shift-wheel pages weeks (or months in Month
+  //    view). Trackpad two-finger horizontal swipe sends deltaX directly;
+  //    shift+wheel maps deltaY → deltaX in most browsers. We accumulate
+  //    deltaX with a threshold + cooldown so a fast swipe steps once and
+  //    not five times. preventDefault stops the browser from sideways-
+  //    scrolling the page while the gesture is going. */
+  useEffect(() => {
+    const el = gridWrapRef.current;
+    if (!el) return;
+    let accum = 0;
+    let cooldownUntil = 0;
+    const THRESHOLD = 80;
+    const COOLDOWN_MS = 240;
+    function onWheel(e: WheelEvent) {
+      // Only react to genuinely horizontal gestures. Vertical scroll
+      // belongs to the time grid.
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      const now = Date.now();
+      if (now < cooldownUntil) return;
+      accum += e.deltaX;
+      if (accum >= THRESHOLD) {
+        accum = 0;
+        cooldownUntil = now + COOLDOWN_MS;
+        nextWeek();
+      } else if (accum <= -THRESHOLD) {
+        accum = 0;
+        cooldownUntil = now + COOLDOWN_MS;
+        prevWeek();
+      }
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]);
+
   // ── Fetch calendar events (Google + Outlook) when week changes. The
   // aggregator route hits every connected provider in parallel and
   // returns one merged list. Also re-fires when the options-menu
@@ -1534,7 +1574,7 @@ export default function CalendarClient({
           {!anyConnected && (
             <div data-tour-target="calendar.integrations" className="mx-3 mt-5 mb-3 flex flex-col gap-2">
               <button
-                onClick={() => window.location.href = "/api/auth/google-calendar"}
+                onClick={() => window.location.href = "/api/auth/google?next=/calendar"}
                 className="w-full flex items-center gap-2 p-3 rounded-lg transition-colors text-left"
                 style={{ background: "var(--color-cream)", border: "0.5px solid var(--color-border)" }}
                 onMouseEnter={e => e.currentTarget.style.borderColor = "var(--color-sage)"}
@@ -1746,7 +1786,7 @@ export default function CalendarClient({
               body="Bring your real calendar in and add tasks for anything you don't want to forget. Perennial keeps both side-by-side, so the next thing to do is always in sight."
               action={{
                 label: "Connect Google Calendar",
-                onClick: () => { window.location.href = "/api/auth/google-calendar"; },
+                onClick: () => { window.location.href = "/api/auth/google?next=/calendar"; },
               }}
               secondaryAction={{
                 label: "Connect Outlook",
