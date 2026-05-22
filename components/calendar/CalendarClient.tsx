@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, Plus, CheckSquare, MoreHorizontal, CalendarC
 import DatePicker from "@/components/ui/DatePicker";
 import EmptyState from "@/components/ui/EmptyState";
 import CalendarOptionsMenu from "./CalendarOptionsMenu";
+import CalendarSettingsModal from "./CalendarSettingsModal";
 import CalendarSourcesPanel from "./CalendarSourcesPanel";
 import EventCard, { type EventCardEvent } from "./EventCard";
 import TaskQuickEditPopover from "./TaskQuickEditPopover";
@@ -853,6 +854,7 @@ export default function CalendarClient({
   const [nowY,            setNowY]            = useState<number | null>(null);
   const [gcalEvents,      setGcalEvents]      = useState<CalEvent[]>([]);
   const [optionsOpen,     setOptionsOpen]     = useState(false);
+  const [settingsOpen,    setSettingsOpen]    = useState(false);
   const [showWeekends,    setShowWeekends]    = useState(true);
   const [showDeclined,    setShowDeclined]    = useState(true);
   const [openEvent,       setOpenEvent]       = useState<CalEvent | null>(null);
@@ -1689,6 +1691,7 @@ export default function CalendarClient({
                   onToggleShowWeekends={() => setShowWeekends(v => !v)}
                   showDeclined={showDeclined}
                   onToggleShowDeclined={() => setShowDeclined(v => !v)}
+                  onManage={() => setSettingsOpen(true)}
                   onClose={() => setOptionsOpen(false)}
                 />
               )}
@@ -2717,6 +2720,10 @@ export default function CalendarClient({
         >
           {createError}
         </div>
+      )}
+
+      {settingsOpen && (
+        <CalendarSettingsModal onClose={() => setSettingsOpen(false)} />
       )}
 
       <CalendarIntroModal />

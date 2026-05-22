@@ -5,19 +5,24 @@
 // re-syncs calendar lists from every connected provider.
 
 import { useEffect, useRef, useState } from "react";
-import { RefreshCw, EyeOff, CalendarDays } from "lucide-react";
+import { RefreshCw, EyeOff, CalendarDays, Settings } from "lucide-react";
 
 interface Props {
   showWeekends: boolean;
   onToggleShowWeekends: () => void;
   showDeclined: boolean;
   onToggleShowDeclined: () => void;
+  /** Opens the stub Calendar settings modal. Real settings persist as a
+   *  deferred TODO; the menu surface exists so users can see where the
+   *  larger config UI will land. */
+  onManage: () => void;
   onClose: () => void;
 }
 
 export default function CalendarOptionsMenu({
   showWeekends, onToggleShowWeekends,
   showDeclined, onToggleShowDeclined,
+  onManage,
   onClose,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
@@ -102,6 +107,28 @@ export default function CalendarOptionsMenu({
         />
 
         <div style={{ height: 1, background: "var(--color-border)", margin: "6px 4px" }} />
+
+        <button
+          onClick={() => { onClose(); onManage(); }}
+          style={{
+            width: "100%", display: "flex", alignItems: "center", gap: 10,
+            padding: "8px 10px", borderRadius: 7, border: "none",
+            background: "transparent", cursor: "pointer",
+            fontFamily: "inherit", textAlign: "left",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-surface-sunken)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        >
+          <Settings size={13} strokeWidth={1.75} style={{ color: "var(--color-text-secondary)", flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-primary)" }}>
+              Manage
+            </p>
+            <p style={{ fontSize: 10.5, color: "var(--color-text-tertiary)", marginTop: 1 }}>
+              Accounts, conferencing, working hours, notifications.
+            </p>
+          </div>
+        </button>
 
         <button
           onClick={refreshCalendars}
