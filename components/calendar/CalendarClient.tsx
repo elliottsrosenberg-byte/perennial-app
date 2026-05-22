@@ -817,12 +817,25 @@ function parseOppDate(s: string | null): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+// Categories we intentionally hide from the Perennial Feed in this pass.
+// "award" is being reworked from ongoing submission protocols to a
+// deadline-based UX (see deferred TODOs); until that ships, awards are
+// dropped from the visible feed + all-day row so they don't read as
+// recurring blocks.
+const HIDDEN_FEED_CATEGORIES = new Set<string>(["award"]);
+
 export default function CalendarClient({
   initialTasks, initialProjects, initialContacts,
-  initialOpportunities = [],
+  initialOpportunities: initialOpportunitiesRaw = [],
   googleConnected = false,
   outlookConnected = false,
 }: Props) {
+  // Drop the categories we don't surface in this pass before they reach
+  // the feed list, the all-day row, or any cross-derived state.
+  const initialOpportunities = useMemo(
+    () => initialOpportunitiesRaw.filter(o => !HIDDEN_FEED_CATEGORIES.has(o.category)),
+    [initialOpportunitiesRaw],
+  );
   const [viewDate,        setViewDate]        = useState(new Date());
   const [tasks,           setTasks]           = useState<Task[]>(initialTasks);
   const [newTaskOpen,     setNewTaskOpen]     = useState(false);
@@ -2269,6 +2282,15 @@ export default function CalendarClient({
                               overflow:     "hidden",
                               textAlign:    "left",
                               fontFamily:   "inherit",
+                              // Title + time stack from the top of the chip;
+                              // for short chips this keeps the title visible
+                              // instead of vertically centering it into the
+                              // time text below.
+                              display:         "flex",
+                              flexDirection:   "column",
+                              justifyContent:  "flex-start",
+                              alignItems:      "stretch",
+                              gap:             1,
                             }}
                             title={`${e.title}${e.location ? ` · ${e.location}` : ""}`}
                           >

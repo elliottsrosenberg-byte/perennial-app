@@ -28,6 +28,10 @@ export interface NormalizedCalendarEvent {
   colorId:     string | null;
   source:      "google" | "microsoft";
   accountName: string | null;
+  /** Array of RRULE strings (e.g. ["RRULE:FREQ=WEEKLY"]). Google returns
+   *  this verbatim; Microsoft Graph's patternedRecurrence object is
+   *  translated to a single RRULE entry for UI parity. Null/empty = one-off. */
+  recurrence:  string[] | null;
 }
 
 export interface CalendarEventInput {
@@ -46,6 +50,11 @@ export interface CalendarEventInput {
   /** Single popup reminder in minutes before start. 0 disables overrides
    *  and falls back to the calendar default. */
   reminder_minutes?: number | null;
+  /** Recurrence rules as RRULE strings. Google's API takes this array
+   *  verbatim. For Microsoft we translate the first RRULE into Graph's
+   *  patternedRecurrence shape. Pass null/[] to clear an existing
+   *  recurrence (one-off event). */
+  recurrence?: string[] | null;
 }
 
 export type CalendarWriteResult =
@@ -188,6 +197,10 @@ function googleBody(input: Partial<CalendarEventInput>): Record<string, unknown>
       };
     }
   }
+  if (input.recurrence !== undefined) {
+    // Google takes the recurrence array verbatim — empty array clears it.
+    body.recurrence = input.recurrence ?? [];
+  }
   return body;
 }
 
@@ -280,6 +293,7 @@ function normalizeGoogleEvent(e: GCalApiEvent, accountName: string | null): Norm
     colorId:     e.colorId ?? null,
     source:      "google",
     accountName,
+    recurrence:  e.recurrence && e.recurrence.length > 0 ? e.recurrence : null,
   };
 }
 
@@ -292,6 +306,7 @@ interface GCalApiEvent {
   htmlLink?:    string;
   start?:       { dateTime?: string; date?: string };
   end?:         { dateTime?: string; date?: string };
+  recurrence?:  string[];
 }
 
 // ── Microsoft ──────────────────────────────────────────────────────────────
@@ -333,7 +348,74 @@ function microsoftBody(input: Partial<CalendarEventInput>): Record<string, unkno
     body.reminderMinutesBeforeStart = input.reminder_minutes;
     body.isReminderOn               = true;
   }
+  if (input.recurrence !== undefined) {
+    if (!input.recurrence || input.recurrence.length === 0) {
+      // Graph clears a recurrence by sending recurrence: null on the
+      // event body during PATCH.
+      body.recurrence = null;
+    } else {
+      const startDateOnly = input.start_iso ? input.start_iso.slice(0, 10) : null;
+      const patterned = rrulesToPatternedRecurrence(input.recurrence, startDateOnly);
+      if (patterned) body.recurrence = patterned;
+    }
+  }
   return body;
+}
+
+/** Translate a single RRULE string into Graph's patternedRecurrence object.
+ *  We only support the basic FREQ-only kinds we expose in the UI; anything
+ *  more elaborate (BYDAY, COUNT, UNTIL, every-N) is deferred to the custom
+ *  RRULE editor TODO. */
+function rrulesToPatternedRecurrence(
+  rrules: string[],
+  startDate: string | null,
+): { pattern: Record<string, unknown>; range: Record<string, unknown> } | null {
+  const first = rrules.find(r => /^RRULE:/i.test(r));
+  if (!first) return null;
+  const m = first.match(/FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)/i);
+  if (!m) return null;
+  const freq = m[1].toUpperCase();
+  const typeMap: Record<string, string> = {
+    DAILY:   "daily",
+    WEEKLY:  "weekly",
+    MONTHLY: "absoluteMonthly",
+    YEARLY:  "absoluteYearly",
+  };
+  const sd = startDate ?? new Date().toISOString().slice(0, 10);
+  const sDate = new Date(sd + "T00:00:00");
+  const pattern: Record<string, unknown> = { type: typeMap[freq], interval: 1 };
+  if (freq === "WEEKLY") {
+    const dow = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+    pattern.daysOfWeek = [dow[sDate.getDay()]];
+  }
+  if (freq === "MONTHLY") {
+    pattern.dayOfMonth = sDate.getDate();
+  }
+  if (freq === "YEARLY") {
+    pattern.dayOfMonth = sDate.getDate();
+    pattern.month      = sDate.getMonth() + 1;
+  }
+  return {
+    pattern,
+    range: { type: "noEnd", startDate: sd },
+  };
+}
+
+/** Translate a Graph patternedRecurrence into an RRULE array so the UI
+ *  surface is provider-agnostic. Returns null for missing/unparseable. */
+function patternedRecurrenceToRrules(p: GraphPatternedRecurrence | undefined): string[] | null {
+  if (!p?.pattern?.type) return null;
+  const map: Record<string, string> = {
+    daily:           "DAILY",
+    weekly:          "WEEKLY",
+    absoluteMonthly: "MONTHLY",
+    relativeMonthly: "MONTHLY",
+    absoluteYearly:  "YEARLY",
+    relativeYearly:  "YEARLY",
+  };
+  const freq = map[p.pattern.type];
+  if (!freq) return null;
+  return [`RRULE:FREQ=${freq}`];
 }
 
 async function createMicrosoftEvent(lookup: CalendarLookup, input: CalendarEventInput): Promise<CalendarWriteResult> {
@@ -423,9 +505,14 @@ function normalizeMicrosoftEvent(e: GraphApiEvent, accountName: string | null): 
     colorId:     null,
     source:      "microsoft",
     accountName,
+    recurrence:  patternedRecurrenceToRrules(e.recurrence),
   };
 }
 
+interface GraphPatternedRecurrence {
+  pattern?: { type?: string; interval?: number; daysOfWeek?: string[]; dayOfMonth?: number; month?: number };
+  range?:   { type?: string; startDate?: string };
+}
 interface GraphApiEvent {
   id:           string;
   subject?:     string;
@@ -435,4 +522,5 @@ interface GraphApiEvent {
   location?:    { displayName?: string };
   start?:       { dateTime?: string; timeZone?: string };
   end?:         { dateTime?: string; timeZone?: string };
+  recurrence?:  GraphPatternedRecurrence;
 }

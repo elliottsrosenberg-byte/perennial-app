@@ -25,6 +25,7 @@ interface PatchBody {
   description?:  string | null;
   location?:     string | null;
   attendees?:    string[];
+  recurrence?:   string[] | null;
 }
 
 function decodeEventRef(encoded: string): { provider: string; externalId: string } | null {
@@ -57,6 +58,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ encodedId: st
     description: body.description,
     location:    body.location,
     attendees:   body.attendees,
+    recurrence:  body.recurrence ?? undefined,
   });
 
   if (result.kind === "ok")        return NextResponse.json({ event: result.event });

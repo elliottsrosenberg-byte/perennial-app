@@ -42,6 +42,10 @@ interface CalendarEvent {
   // Whether the parent calendar is writable. Drives whether the
   // EventDetailPanel renders edit affordances or the read-only pill.
   writable:    boolean;
+  // Recurrence as RRULE strings (e.g. ["RRULE:FREQ=WEEKLY"]). Microsoft
+  // Graph's patternedRecurrence object is translated to RRULE form so the
+  // UI is provider-agnostic. Null/empty = one-off.
+  recurrence:  string[] | null;
 }
 
 // ── Legacy gcal token refresh (mirror of the existing events route) ──────
@@ -121,6 +125,7 @@ async function fetchGoogleEvents(
         accountName,
         calendarId:  cal.rowId,
         writable:    cal.writable,
+        recurrence:  e.recurrence && e.recurrence.length > 0 ? e.recurrence : null,
       })),
   );
 }
@@ -132,7 +137,7 @@ async function fetchMicrosoftEvents(
   endIso: string,
   calendars: CalendarMeta[] | null = null,
 ): Promise<CalendarEvent[]> {
-  const select = encodeURIComponent("id,subject,bodyPreview,start,end,location,webLink,isAllDay,isCancelled");
+  const select = encodeURIComponent("id,subject,bodyPreview,start,end,location,webLink,isAllDay,isCancelled,recurrence");
   async function fetchOne(path: string): Promise<GraphApiEvent[]> {
     const url =
       `https://graph.microsoft.com/v1.0${path}` +
@@ -195,6 +200,7 @@ function normalizeGraphEvent(
     accountName,
     calendarId,
     writable,
+    recurrence:  patternedToRrulesAggregator(e.recurrence),
   };
 }
 
@@ -329,6 +335,7 @@ interface CreateBody {
   attendees?:    string[];
   conferencing?:    "google_meet" | "teams" | "none";
   reminder_minutes?: number | null;
+  recurrence?:      string[] | null;
 }
 
 export async function POST(req: Request) {
@@ -354,6 +361,7 @@ export async function POST(req: Request) {
     attendees:        body.attendees ?? [],
     conferencing:     body.conferencing,
     reminder_minutes: body.reminder_minutes ?? undefined,
+    recurrence:       body.recurrence ?? undefined,
   });
 
   if (result.kind === "ok") return NextResponse.json({ event: result.event });
@@ -390,8 +398,13 @@ interface GCalApiEvent {
   htmlLink?:    string;
   start:        { dateTime?: string; date?: string };
   end:          { dateTime?: string; date?: string };
+  recurrence?:  string[];
 }
 
+interface GraphPatternedRecurrence {
+  pattern?: { type?: string; interval?: number; daysOfWeek?: string[]; dayOfMonth?: number; month?: number };
+  range?:   { type?: string; startDate?: string };
+}
 interface GraphApiEvent {
   id:           string;
   subject?:     string;
@@ -402,4 +415,20 @@ interface GraphApiEvent {
   location?:    { displayName?: string };
   start?:       { dateTime?: string; timeZone?: string };
   end?:         { dateTime?: string; timeZone?: string };
+  recurrence?:  GraphPatternedRecurrence;
+}
+
+function patternedToRrulesAggregator(p: GraphPatternedRecurrence | undefined): string[] | null {
+  if (!p?.pattern?.type) return null;
+  const map: Record<string, string> = {
+    daily:           "DAILY",
+    weekly:          "WEEKLY",
+    absoluteMonthly: "MONTHLY",
+    relativeMonthly: "MONTHLY",
+    absoluteYearly:  "YEARLY",
+    relativeYearly:  "YEARLY",
+  };
+  const freq = map[p.pattern.type];
+  if (!freq) return null;
+  return [`RRULE:FREQ=${freq}`];
 }

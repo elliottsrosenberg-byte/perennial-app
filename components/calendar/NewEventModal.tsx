@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { UserCalendar } from "@/types/database";
 import {
   X, Users, Video, MapPin, FileText, Bell, ArrowRight, ChevronDown,
-  ChevronUp,
+  ChevronUp, Repeat as RepeatIcon, Clock,
 } from "lucide-react";
 
 interface CreatedEvent {
@@ -86,6 +86,33 @@ function fmtDateChip(dateStr: string): string {
   return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
+export type RecurrenceKind = "none" | "daily" | "weekly" | "monthly" | "yearly";
+
+/** RRULE string for a basic recurrence kind. We emit FREQ-only rules; the
+ *  custom-RRULE editor (every-N-days, BYDAY, UNTIL, COUNT) is deferred. */
+export function rruleFor(kind: RecurrenceKind): string | null {
+  switch (kind) {
+    case "daily":   return "RRULE:FREQ=DAILY";
+    case "weekly":  return "RRULE:FREQ=WEEKLY";
+    case "monthly": return "RRULE:FREQ=MONTHLY";
+    case "yearly":  return "RRULE:FREQ=YEARLY";
+    default:        return null;
+  }
+}
+
+/** Parse the first RRULE in a recurrence array (or a Graph patternedRecurrence
+ *  type string) back into a RecurrenceKind for the dropdown. Unrecognised
+ *  rules fall back to "none" — better than silently overwriting a custom
+ *  recurrence on save. */
+export function recurrenceKindFromRrules(rrules: string[] | null | undefined): RecurrenceKind {
+  if (!rrules || rrules.length === 0) return "none";
+  const first = rrules.find(r => /^RRULE:/i.test(r));
+  if (!first) return "none";
+  const m = first.match(/FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)/i);
+  if (!m) return "none";
+  return m[1].toLowerCase() as RecurrenceKind;
+}
+
 const REMINDER_CHOICES: { label: string; minutes: number | null }[] = [
   { label: "None",            minutes: null },
   { label: "At start",        minutes: 0 },
@@ -120,6 +147,10 @@ export default function NewEventModal({
   const [addConference, setAddConference] = useState(false);
   const [reminderIdx,   setReminderIdx]   = useState(4); // 30 min before
   const [calMenuOpen,   setCalMenuOpen]   = useState(false);
+  // Recurrence — "none" | "daily" | "weekly" | "monthly" | "yearly".
+  // Sent to the API as a single RRULE string; the API translates to
+  // Microsoft Graph's patternedRecurrence shape for Outlook calendars.
+  const [recurrence,    setRecurrence]    = useState<RecurrenceKind>("none");
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]           = useState<string | null>(null);
@@ -223,6 +254,7 @@ export default function NewEventModal({
             ? (isMicrosoft ? "teams" : "google_meet")
             : "none",
           reminder_minutes: REMINDER_CHOICES[reminderIdx].minutes,
+          recurrence:       rruleFor(recurrence) ? [rruleFor(recurrence)!] : null,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -276,10 +308,7 @@ export default function NewEventModal({
         padding: "10px 14px",
         borderBottom: "0.5px solid var(--color-border)",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)" }}>Event</span>
-          <ChevronDown size={11} style={{ color: "var(--color-text-tertiary)" }} />
-        </div>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)" }}>Event</span>
         <button
           onClick={onClose}
           style={{ width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, color: "var(--color-grey)", background: "transparent", border: "none", cursor: "pointer" }}
@@ -333,17 +362,22 @@ export default function NewEventModal({
         )}
       </div>
 
-      {/* All-day / Time zone / Repeat strip — Time zone + Repeat inert for now */}
-      <div style={{ padding: "4px 14px 10px", display: "flex", alignItems: "center", gap: 4 }}>
-        <PillButton
-          active={allDay}
-          onClick={() => {
-            setAllDay(!allDay);
-            if (!allDay) setEndDate(startDate); // first toggle on: collapse to same day
-          }}
-        >All-day</PillButton>
-        <PillButton inert title="Time-zone selection — coming soon">Time zone</PillButton>
-        <PillButton inert title="Recurring events — coming soon">Repeat</PillButton>
+      {/* All-day + Repeat — stacked rows. Time-zone selector was removed
+          (always uses the browser zone). All-day is a true toggle; Repeat
+          is a basic FREQ-only dropdown (custom RRULE editor deferred). */}
+      <div style={{ padding: "4px 14px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
+        <SettingRow icon={<Clock size={12} />} label="All-day">
+          <ToggleSwitch
+            checked={allDay}
+            onChange={(next) => {
+              setAllDay(next);
+              if (next) setEndDate(startDate);
+            }}
+          />
+        </SettingRow>
+        <SettingRow icon={<RepeatIcon size={12} />} label="Repeat">
+          <RepeatSelect value={recurrence} onChange={setRecurrence} />
+        </SettingRow>
       </div>
 
       <div style={{ height: 1, background: "var(--color-border)" }} />
@@ -578,27 +612,84 @@ function Section({ icon, label, children }: { icon: React.ReactNode; label: stri
   );
 }
 
-function PillButton({ active, inert, onClick, children, title }: {
-  active?: boolean; inert?: boolean; onClick?: () => void; children: React.ReactNode; title?: string;
+function SettingRow({ icon, label, children }: {
+  icon: React.ReactNode; label: string; children: React.ReactNode;
 }) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 8,
+      padding: "4px 2px",
+    }}>
+      <span style={{ color: "var(--color-text-tertiary)", display: "inline-flex", flexShrink: 0 }}>{icon}</span>
+      <span style={{ flex: 1, fontSize: 12, color: "var(--color-text-primary)" }}>{label}</span>
+      <div style={{ flexShrink: 0 }}>{children}</div>
+    </div>
+  );
+}
+
+function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (next: boolean) => void }) {
   return (
     <button
       type="button"
-      onClick={inert ? undefined : onClick}
-      title={title}
-      disabled={inert}
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
       style={{
-        padding: "3px 10px", fontSize: 11, borderRadius: 9999,
-        background: active ? "var(--color-cream)" : "transparent",
-        border: `0.5px solid ${active ? "var(--color-charcoal)" : "var(--color-border)"}`,
-        color: inert ? "var(--color-text-tertiary)" : (active ? "var(--color-charcoal)" : "var(--color-text-secondary)"),
-        fontFamily: "inherit",
-        cursor: inert ? "default" : "pointer",
-        opacity: inert ? 0.6 : 1,
+        width: 26, height: 14, borderRadius: 999, border: "none",
+        background: checked ? "var(--color-sage)" : "var(--color-border-strong)",
+        position: "relative", cursor: "pointer", padding: 0,
+        transition: "background 0.15s ease",
       }}
     >
-      {children}
+      <span style={{
+        position: "absolute",
+        top: 1, left: checked ? 13 : 1,
+        width: 12, height: 12, borderRadius: 999,
+        background: "white",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.18)",
+        transition: "left 0.15s ease",
+      }} />
     </button>
+  );
+}
+
+const REPEAT_LABELS: Record<RecurrenceKind, string> = {
+  none:    "Doesn't repeat",
+  daily:   "Daily",
+  weekly:  "Weekly",
+  monthly: "Monthly",
+  yearly:  "Yearly",
+};
+
+function RepeatSelect({ value, onChange }: {
+  value: RecurrenceKind; onChange: (v: RecurrenceKind) => void;
+}) {
+  return (
+    <label
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 4,
+        padding: "3px 8px", borderRadius: 6,
+        background: value === "none" ? "transparent" : "var(--color-cream)",
+        border: `0.5px solid ${value === "none" ? "var(--color-border)" : "var(--color-charcoal)"}`,
+        fontSize: 11, color: "var(--color-text-primary)",
+        cursor: "pointer", position: "relative",
+      }}
+    >
+      <span>{REPEAT_LABELS[value]}</span>
+      <ChevronDown size={10} style={{ color: "var(--color-text-tertiary)" }} />
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as RecurrenceKind)}
+        style={{
+          position: "absolute", inset: 0,
+          opacity: 0, cursor: "pointer", fontFamily: "inherit",
+        }}
+      >
+        {(Object.keys(REPEAT_LABELS) as RecurrenceKind[]).map((k) => (
+          <option key={k} value={k}>{REPEAT_LABELS[k]}</option>
+        ))}
+      </select>
+    </label>
   );
 }
 
