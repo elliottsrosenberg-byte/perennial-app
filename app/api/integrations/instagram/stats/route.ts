@@ -35,7 +35,7 @@ export async function GET() {
 
   // Fetch recent media for engagement calculation
   const mediaRes = await fetch(
-    `https://graph.instagram.com/${igId}/media?fields=id,like_count,comments_count,timestamp,media_type&limit=12&access_token=${token}`
+    `https://graph.instagram.com/${igId}/media?fields=id,like_count,comments_count,timestamp,media_type,media_url,thumbnail_url,permalink,caption&limit=12&access_token=${token}`
   );
   let engagementRate: number | null = null;
   let recentPosts: RecentPost[] = [];
@@ -44,11 +44,14 @@ export async function GET() {
     const mediaData = await mediaRes.json() as { data: MediaItem[] };
     const posts = mediaData.data ?? [];
     recentPosts = posts.slice(0, 6).map(p => ({
-      id:        p.id,
-      likes:     p.like_count ?? 0,
-      comments:  p.comments_count ?? 0,
-      timestamp: p.timestamp,
-      type:      p.media_type,
+      id:            p.id,
+      likes:         p.like_count ?? 0,
+      comments:      p.comments_count ?? 0,
+      timestamp:     p.timestamp,
+      type:          p.media_type,
+      thumbnail_url: p.thumbnail_url ?? p.media_url ?? null,
+      permalink:     p.permalink ?? null,
+      caption:       p.caption ?? null,
     }));
 
     if (posts.length > 0 && profile.followers_count) {
@@ -88,6 +91,10 @@ interface MediaItem {
   comments_count?: number;
   timestamp: string;
   media_type: string;
+  media_url?: string;
+  thumbnail_url?: string;
+  permalink?: string;
+  caption?: string;
 }
 
 interface RecentPost {
@@ -96,4 +103,7 @@ interface RecentPost {
   comments: number;
   timestamp: string;
   type: string;
+  thumbnail_url: string | null;
+  permalink: string | null;
+  caption: string | null;
 }
