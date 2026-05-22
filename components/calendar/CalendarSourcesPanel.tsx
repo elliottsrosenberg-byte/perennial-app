@@ -297,7 +297,25 @@ function CalendarRow({
   onRemove: () => void;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const [hovered, setHovered] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<{ top: number; left: number } | null>(null);
+
+  // Compute the menu's fixed position from the trigger's viewport rect when
+  // the menu opens. Using fixed positioning lets the menu escape the rail's
+  // overflow-x: hidden so it can extend past the rail's right edge without
+  // triggering a horizontal scroll on the toolbar.
+  useEffect(() => {
+    if (!menuOpen) { setMenuAnchor(null); return; }
+    const btn = triggerRef.current;
+    if (!btn) return;
+    const r = btn.getBoundingClientRect();
+    const MENU_W = 240;
+    // Prefer anchoring under the trigger, but stay onscreen.
+    const left = Math.min(window.innerWidth - MENU_W - 8, Math.max(8, r.left));
+    const top  = r.bottom + 4;
+    setMenuAnchor({ top, left });
+  }, [menuOpen]);
 
   // Settings link maps to the user-facing provider settings page; falls back
   // to /settings#integrations for providers without a public settings URL.
@@ -346,6 +364,7 @@ function CalendarRow({
       {/* 3-dot — only on hover, sits between name and eye to mirror Notion */}
       {(hovered || menuOpen) && (
         <button
+          ref={triggerRef}
           onClick={(e) => { e.stopPropagation(); onToggleMenu(); }}
           aria-label="Calendar options"
           style={{
@@ -382,10 +401,11 @@ function CalendarRow({
         {cal.visible ? <Eye size={12} strokeWidth={1.75} /> : <EyeOff size={12} strokeWidth={1.75} />}
       </button>
 
-      {menuOpen && (
+      {menuOpen && menuAnchor && (
         <RowMenu
           cal={cal}
           color={color}
+          anchor={menuAnchor}
           settingsHref={settingsHref}
           onClose={onCloseMenu}
           onColor={onColor}
@@ -399,10 +419,11 @@ function CalendarRow({
 }
 
 function RowMenu({
-  cal, color, settingsHref, onClose, onColor, onShowOnly, onToggleVisible, onRemove,
+  cal, color, anchor, settingsHref, onClose, onColor, onShowOnly, onToggleVisible, onRemove,
 }: {
   cal: UserCalendar;
   color: string;
+  anchor: { top: number; left: number };
   settingsHref: string;
   onClose: () => void;
   onColor: (hex: string) => void;
@@ -425,11 +446,11 @@ function RowMenu({
 
   return (
     <>
-      <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 80 }} />
       <div style={{
-        position: "absolute",
-        left: 28, top: "calc(100% - 2px)",
-        zIndex: 41, minWidth: 240,
+        position: "fixed",
+        top: anchor.top, left: anchor.left,
+        zIndex: 81, minWidth: 240,
         background: "var(--color-surface-raised)",
         border: "0.5px solid var(--color-border)",
         borderRadius: 10,

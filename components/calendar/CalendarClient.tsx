@@ -732,15 +732,14 @@ function parseOppDate(s: string | null): Date | null {
 export default function CalendarClient({
   initialTasks, initialProjects, initialContacts,
   initialOpportunities = [],
-  googleConnected = false, googleAccountName,
-  outlookConnected = false, outlookAccountName,
+  googleConnected = false,
+  outlookConnected = false,
 }: Props) {
   const [viewDate,        setViewDate]        = useState(new Date());
   const [tasks,           setTasks]           = useState<Task[]>(initialTasks);
   const [newTaskOpen,     setNewTaskOpen]     = useState(false);
   const [nowY,            setNowY]            = useState<number | null>(null);
   const [gcalEvents,      setGcalEvents]      = useState<CalEvent[]>([]);
-  const [gcalLoading,     setGcalLoading]     = useState(false);
   const [optionsOpen,     setOptionsOpen]     = useState(false);
   const [showWeekends,    setShowWeekends]    = useState(true);
   const [showDeclined,    setShowDeclined]    = useState(true);
@@ -916,16 +915,14 @@ export default function CalendarClient({
     }
     const start = startDate.toISOString().split("T")[0];
     const end   = endDate.toISOString().split("T")[0];
-    setGcalLoading(true);
     let cancelled = false;
     fetch(`/api/integrations/calendar/events?startDate=${start}&endDate=${end}`)
       .then(r => r.json())
       .then((d: { events?: CalEvent[] }) => {
         if (cancelled) return;
         setGcalEvents(d.events ?? []);
-        setGcalLoading(false);
       })
-      .catch(() => { if (!cancelled) setGcalLoading(false); });
+      .catch(() => { /* swallow — failure leaves the previous events in place */ });
     return () => { cancelled = true; };
   }, [viewDate, viewMode, anyConnected, refreshNonce]);
 
@@ -1246,23 +1243,13 @@ export default function CalendarClient({
             <CalendarSourcesPanel refreshNonce={refreshNonce} />
           )}
 
-          {/* Calendar integrations panel — covers Google + Outlook. The
-              tour anchors its first step to this whole block so the user
-              sees both options at once. */}
-          <div data-tour-target="calendar.integrations" className="mx-3 mt-5 mb-3 flex flex-col gap-2">
-            {googleConnected ? (
-              <div className="p-3 rounded-lg" style={{ background: "rgba(155,163,122,0.1)", border: "0.5px solid rgba(155,163,122,0.25)" }}>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <div className="w-2 h-2 rounded-full shrink-0" style={{ background: "var(--color-sage)" }} />
-                  <p className="text-[11px] font-medium" style={{ color: "var(--color-charcoal)" }}>Google Calendar</p>
-                  {gcalLoading && <span className="text-[9px] ml-auto" style={{ color: "var(--color-grey)" }}>Syncing…</span>}
-                </div>
-                <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>
-                  {googleAccountName ?? "Connected"} · {gcalEvents.filter(e => e.source !== "microsoft").length} event{gcalEvents.filter(e => e.source !== "microsoft").length !== 1 ? "s" : ""} this week
-                </p>
-                <a href="/settings?section=integrations&provider=google" className="text-[10px] mt-2 inline-block" style={{ color: "var(--color-grey)" }}>Manage</a>
-              </div>
-            ) : (
+          {/* Calendar integrations connect-CTAs — only shown when the user
+              has nothing connected yet. The connected-state status cards
+              were removed; CalendarSourcesPanel handles per-account UI for
+              connected users. The tour anchors here so a brand-new user
+              still gets a clear "connect something" pointer. */}
+          {!anyConnected && (
+            <div data-tour-target="calendar.integrations" className="mx-3 mt-5 mb-3 flex flex-col gap-2">
               <button
                 onClick={() => window.location.href = "/api/auth/google-calendar"}
                 className="w-full flex items-center gap-2 p-3 rounded-lg transition-colors text-left"
@@ -1278,20 +1265,7 @@ export default function CalendarClient({
                   <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>Read-only · events alongside tasks</p>
                 </div>
               </button>
-            )}
 
-            {outlookConnected ? (
-              <div className="p-3 rounded-lg" style={{ background: "rgba(0,120,212,0.08)", border: "0.5px solid rgba(0,120,212,0.22)" }}>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <div className="w-2 h-2 rounded-full shrink-0" style={{ background: "#0078d4" }} />
-                  <p className="text-[11px] font-medium" style={{ color: "var(--color-charcoal)" }}>Outlook Calendar</p>
-                </div>
-                <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>
-                  {outlookAccountName ?? "Connected"} · {gcalEvents.filter(e => e.source === "microsoft").length} event{gcalEvents.filter(e => e.source === "microsoft").length !== 1 ? "s" : ""} this week
-                </p>
-                <a href="/settings?section=integrations&provider=microsoft" className="text-[10px] mt-2 inline-block" style={{ color: "var(--color-grey)" }}>Manage</a>
-              </div>
-            ) : (
               <button
                 onClick={() => window.location.href = "/api/auth/microsoft?next=/calendar"}
                 className="w-full flex items-center gap-2 p-3 rounded-lg transition-colors text-left"
@@ -1310,8 +1284,8 @@ export default function CalendarClient({
                   <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>Read-only · events alongside tasks</p>
                 </div>
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Add task */}

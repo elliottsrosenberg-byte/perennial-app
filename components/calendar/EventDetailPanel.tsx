@@ -9,7 +9,7 @@
 // the "Open in Google/Outlook" escape hatch.
 
 import { useEffect, useRef, useState } from "react";
-import { X, MapPin, ExternalLink, Clock, Calendar as CalendarIcon, Trash2 } from "lucide-react";
+import { X, MapPin, Clock, Calendar as CalendarIcon, Trash2 } from "lucide-react";
 import DatePicker from "@/components/ui/DatePicker";
 
 export interface CalendarEventLite {
@@ -634,17 +634,19 @@ export default function EventDetailPanel({ event: initialEvent, color, onClose, 
           )}
         </div>
 
-        {/* Footer actions */}
-        <div
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
-            padding: "10px 16px",
-            borderTop: "0.5px solid var(--color-border)",
-            background: "var(--color-warm-white)",
-            flexShrink: 0,
-          }}
-        >
-          {writable ? (
+        {/* Footer actions — only renders when there's a writable Delete to
+            show. The "Open in <provider>" escape hatch was removed; the
+            inline body content covers everything we surfaced there. */}
+        {writable && (
+          <div
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 8,
+              padding: "10px 16px",
+              borderTop: "0.5px solid var(--color-border)",
+              background: "var(--color-warm-white)",
+              flexShrink: 0,
+            }}
+          >
             <button
               onClick={deleteEvent}
               disabled={saving}
@@ -664,29 +666,8 @@ export default function EventDetailPanel({ event: initialEvent, color, onClose, 
               <Trash2 size={12} strokeWidth={1.75} />
               Delete
             </button>
-          ) : <span />}
-
-          {event.htmlLink && (
-            <a
-              href={event.htmlLink}
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                padding: "7px 14px", borderRadius: 8,
-                background: writable ? "transparent" : "var(--color-sage)",
-                color: writable ? "var(--color-text-secondary)" : "white",
-                border: writable ? "0.5px solid var(--color-border)" : "none",
-                fontSize: 12, fontWeight: 500, textDecoration: "none",
-                fontFamily: "inherit",
-                transition: "background 0.12s ease",
-              }}
-            >
-              <ExternalLink size={12} strokeWidth={2} />
-              Open in {providerLabel}
-            </a>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </>
   );
