@@ -3,6 +3,12 @@
 import { useState, useMemo, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Resource, ResourceLink, ResourceItemStatus } from "@/types/database";
+import {
+  LINKED_FILE_GROUPS,
+  deepLinkForLinkedFile,
+  type LinkedFile,
+  type LinkedFileSource,
+} from "@/lib/resources/linked-files";
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
@@ -14,7 +20,32 @@ const C = {
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type CatId = "operations" | "brand" | "press" | "design" | "links";
+// CatId is what's selected in the left rail. The four seeded categories +
+// "links" (Resource links) + one virtual id per cross-module file source
+// ("linked-contact" / "linked-organization" / "linked-project"). The
+// "linked-*" surfaces are read-only views of files owned by another module.
+type CatId =
+  | "operations" | "brand" | "press" | "design"
+  | "links"
+  | "linked-contact" | "linked-organization" | "linked-project";
+
+// Visibility key per rail group / sub-group. Persisted in localStorage so the
+// user's left-rail config follows them across sessions.
+const LINKED_VIS_KEY = "perennial:resources-linked-visibility";
+const ONBOARD_BANNER_KEY = "perennial:resources-onboarding-banner-dismissed";
+
+function linkedCatId(s: LinkedFileSource): CatId {
+  return `linked-${s}` as CatId;
+}
+function isLinkedCat(c: CatId): boolean {
+  return c === "linked-contact" || c === "linked-organization" || c === "linked-project";
+}
+function linkedCatToSource(c: CatId): LinkedFileSource | null {
+  if (c === "linked-contact")      return "contact";
+  if (c === "linked-organization") return "organization";
+  if (c === "linked-project")      return "project";
+  return null;
+}
 
 interface CardAction {
   label: string;
@@ -38,13 +69,14 @@ interface ResourceCard {
   modalKey?: string;
 }
 
-const CAT_META: Record<Exclude<CatId,"links">, { label: string; sub: string; iconBg: string; iconColor: string; iconSvg: string }> = {
+type SeedCatId = "operations" | "brand" | "press" | "design";
+const CAT_META: Record<SeedCatId, { label: string; sub: string; iconBg: string; iconColor: string; iconSvg: string }> = {
   operations: { label:"Operations", sub:"Legal, financial, and logistics documents",    iconBg:C.amberL,      iconColor:C.amber,  iconSvg:`<rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 5h6M5 8h4M5 11h3"/>` },
   brand:      { label:"Brand",      sub:"Identity assets, positioning, and templates",   iconBg:C.purpleL,     iconColor:C.purple, iconSvg:`<circle cx="8" cy="8" r="5"/><path d="M8 4v2M8 10v2M4 8h2M10 8h2"/>` },
   press:      { label:"Press",      sub:"Media kit, pitch decks, and press coverage",   iconBg:C.accentL,     iconColor:C.darkAccent, iconSvg:`<path d="M2 2h12v9H2z"/><path d="M5 6h6M5 9h4"/>` },
   design:     { label:"Design",     sub:"Templates, product photos, and working files", iconBg:C.darkAccentL, iconColor:C.darkAccent, iconSvg:`<path d="M2 12L10 4l4 4-8 8-4 0 0-4z"/>` },
 };
-const CAT_IDS: Exclude<CatId,"links">[] = ["operations","brand","press","design"];
+const CAT_IDS: SeedCatId[] = ["operations","brand","press","design"];
 
 function resourceToCard(r: Resource): ResourceCard {
   return {
@@ -740,16 +772,35 @@ function LinksView({ links, onAddLink }: { links: ResourceLink[]; onAddLink: () 
 }
 
 // ─── Category nav ─────────────────────────────────────────────────────────────
-function CategoryNav({ active, resources, links, onSelect, search, onSearchChange }: {
-  active: CatId; resources: Resource[]; links: ResourceLink[];
-  onSelect: (id: CatId) => void; search: string; onSearchChange: (v: string) => void;
+function CategoryNav({
+  active, resources, links, linkedFiles,
+  linkedVisible, onToggleLinked, onSelect, search, onSearchChange,
+}: {
+  active: CatId;
+  resources: Resource[];
+  links: ResourceLink[];
+  linkedFiles: LinkedFile[];
+  /** Per-source visibility map for "Linked from elsewhere" sub-groups. */
+  linkedVisible: Record<LinkedFileSource, boolean>;
+  onToggleLinked: (source: LinkedFileSource) => void;
+  onSelect: (id: CatId) => void;
+  search: string;
+  onSearchChange: (v: string) => void;
 }) {
+  // Count by source so the rail can hide groups with zero files (unless the
+  // user has explicitly pinned the group visible).
+  const countBySource: Record<LinkedFileSource, number> = {
+    contact:      linkedFiles.filter(f => f.source === "contact").length,
+    organization: linkedFiles.filter(f => f.source === "organization").length,
+    project:      linkedFiles.filter(f => f.source === "project").length,
+  };
+  const anyLinked = linkedFiles.length > 0;
   return (
     <div style={{ width:204, flexShrink:0, background:"var(--color-off-white)", borderRight:"0.5px solid var(--color-border)", display:"flex", flexDirection:"column", overflow:"hidden" }}>
       {/* Header */}
       <div style={{ padding:"14px 16px 10px", borderBottom:"0.5px solid var(--color-border)", flexShrink:0 }}>
         <div style={{ fontSize:14, fontWeight:700, color:"var(--color-charcoal)" }}>Resources</div>
-        <div style={{ fontSize:11, color:"var(--color-grey)", marginTop:2 }}>Your business, in one place</div>
+        <div style={{ fontSize:11, color:"var(--color-grey)", marginTop:2 }}>Your studio&apos;s reference library</div>
         <div className="flex items-center gap-2" style={{ marginTop:10, background:"var(--color-cream)", border:"0.5px solid var(--color-border)", borderRadius:6, padding:"5px 9px" }}>
           <span style={{ color:"var(--color-grey)" }}><IcSearch /></span>
           <input
@@ -795,13 +846,306 @@ function CategoryNav({ active, resources, links, onSelect, search, onSearchChang
           <span style={{ fontSize:12, flex:1, fontWeight:active==="links"?600:400, color:active==="links"?"var(--color-charcoal)":"var(--color-grey)" }}>Links</span>
           <span style={{ fontSize:9, color:"var(--color-grey)" }}>{links.length}</span>
         </div>
+
+        {/* Linked from elsewhere — cross-module file index.
+            Sub-groups are hidden when their count is 0 unless the user has
+            pinned them visible (eye-toggle). Pattern mirrors how Tasks groups
+            collapse empty buckets. */}
+        {(anyLinked || linkedVisible.contact || linkedVisible.organization || linkedVisible.project) && (
+          <>
+            <div style={{ height:"0.5px", background:"var(--color-border)", margin:"6px 12px" }} />
+            <div className="flex items-center" style={{ padding:"8px 14px 3px", gap:6 }}>
+              <div style={{ fontSize:9, fontWeight:600, color:"var(--color-grey)", textTransform:"uppercase", letterSpacing:"0.07em", flex:1 }}>
+                Linked from elsewhere
+              </div>
+            </div>
+            {LINKED_FILE_GROUPS.map(g => {
+              const count = countBySource[g.source];
+              const visiblePref = linkedVisible[g.source];
+              // Hide groups with zero files unless the user has toggled them on.
+              if (count === 0 && !visiblePref) return null;
+              const id = linkedCatId(g.source);
+              return (
+                <div key={g.source} onClick={() => onSelect(id)} className="flex items-center gap-2"
+                  style={{ padding:"7px 14px", cursor:"pointer", borderLeft:`2.5px solid ${active===id?"var(--color-sage)":"transparent"}`, background:active===id?"var(--color-cream)":undefined }}
+                  onMouseEnter={e => { if (active !== id) (e.currentTarget as HTMLElement).style.background = "var(--color-cream)"; }}
+                  onMouseLeave={e => { if (active !== id) (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+                  <div style={{ width:18, height:18, borderRadius:5, background:"var(--color-cream)", color:"var(--color-grey)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <IcFolderSm />
+                  </div>
+                  <span style={{ fontSize:11, flex:1, fontWeight:active===id?600:400, color:active===id?"var(--color-charcoal)":"var(--color-grey)" }}>{g.label}</span>
+                  <span style={{ fontSize:9, color:"var(--color-grey)" }}>{count}</span>
+                  <button
+                    onClick={e => { e.stopPropagation(); onToggleLinked(g.source); }}
+                    title={visiblePref ? "Hide when empty" : "Always show"}
+                    style={{ background:"none", border:"none", color: visiblePref ? "var(--color-sage)" : "var(--color-grey)", cursor:"pointer", opacity: visiblePref ? 1 : 0.5, padding:2 }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+                      <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5S1 8 1 8z"/>
+                      <circle cx="8" cy="8" r="2"/>
+                    </svg>
+                  </button>
+                </div>
+              );
+            })}
+          </>
+        )}
       </div>
     </div>
   );
 }
 
+// ─── Category-level upload affordance ─────────────────────────────────────────
+// Prominent "+ Upload file" / "+ Add link" row pinned to the top of every
+// category view. When the user drags a file from their OS, the row turns into
+// a drop zone. The chosen file gets uploaded to the `resources` Storage bucket
+// and registered as a brand-new file resource in the current category — so
+// the user doesn't need to find the exact card their file belongs in.
+//
+// `onCategoryUpload` is wired in the main component. It inserts a `resources`
+// row (item_type="file", status="complete") and returns the new row so the UI
+// can append it. The card surface then renders identically to a seeded file
+// card, with the same Open / replace affordances.
+function CategoryUploadBar({
+  category, onUploaded, onAddLink, empty,
+}: {
+  category: SeedCatId;
+  onUploaded: (resource: Resource) => void;
+  onAddLink: () => void;
+  /** Render the bigger drag-drop empty-state when the category has no resources. */
+  empty?: boolean;
+}) {
+  const [dragOver, setDragOver]   = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+  const inputId = "resources-cat-upload";
+
+  async function handleFile(file: File) {
+    setUploading(true); setError(null);
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setError("Not authenticated."); return; }
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${user.id}/cat-${category}-${Date.now()}-${safe}`;
+      const { error: upErr } = await supabase.storage
+        .from("resources")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) { setError(upErr.message); return; }
+      const { data: urlData } = supabase.storage.from("resources").getPublicUrl(path);
+      // Insert a brand-new file resource. We give it a sensible preview_type
+      // ("file") and let CardPreview render the generic file tile.
+      const { data, error: dbErr } = await supabase.from("resources")
+        .insert({
+          user_id:      user.id,
+          category,
+          name:         file.name,
+          meta:         "",
+          item_type:    "file",
+          status:       "complete",
+          preview_type: "file",
+          preview_data: { label: file.name.split(".").pop()?.toUpperCase() ?? "FILE", color: C.darkAccent, bg: C.darkAccentL },
+          fields:       {},
+          file_urls:    [urlData.publicUrl],
+          actions:      [{ label: "Open", variant: "primary" }],
+          position:     9999,
+        })
+        .select().single();
+      if (dbErr) { setError(dbErr.message); return; }
+      onUploaded(data as Resource);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFile(file);
+  }
+
+  // Compact pinned row when the category has some resources, fuller
+  // drag-drop tile when empty.
+  if (empty) {
+    return (
+      <div
+        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onDrop}
+        style={{
+          marginBottom: 18,
+          padding: "28px 20px",
+          border: `1px dashed ${dragOver ? "var(--color-sage)" : "var(--color-border)"}`,
+          background: dragOver ? "rgba(155,163,122,0.08)" : "var(--color-cream)",
+          borderRadius: 12,
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+          transition: "background 0.12s",
+        }}
+      >
+        <div style={{ width:40, height:40, borderRadius:10, background:"var(--color-off-white)", border:"0.5px solid var(--color-border)", display:"flex", alignItems:"center", justifyContent:"center", color:"var(--color-grey)" }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 3v14M5 10l7-7 7 7M5 21h14"/></svg>
+        </div>
+        <div style={{ fontSize:13, fontWeight:600, color:"var(--color-charcoal)" }}>
+          Drag and drop a file, or click to upload
+        </div>
+        <div style={{ fontSize:11, color:"var(--color-grey)" }}>
+          PDF, Word, Pages, images — anything you want to keep in this section
+        </div>
+        <div className="flex" style={{ gap:8, marginTop:6 }}>
+          <input id={inputId} type="file" style={{ display:"none" }} disabled={uploading}
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
+          <label htmlFor={inputId}
+            style={{ padding:"6px 12px", fontSize:12, fontWeight:500, borderRadius:7, cursor: uploading ? "default" : "pointer", border:"none", background:"var(--color-sage)", color:"white", opacity: uploading ? 0.6 : 1 }}>
+            {uploading ? "Uploading…" : "+ Upload file"}
+          </label>
+          <button onClick={onAddLink}
+            style={{ padding:"6px 12px", fontSize:12, fontWeight:500, borderRadius:7, cursor:"pointer", border:"0.5px solid var(--color-border)", background:"transparent", color:"var(--color-grey)", fontFamily:"inherit" }}>
+            + Add link
+          </button>
+        </div>
+        {error && <p style={{ fontSize:11, color:"var(--color-red-orange)", marginTop:4 }}>{error}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={onDrop}
+      className="flex items-center"
+      style={{
+        marginBottom: 14,
+        padding: "10px 14px",
+        border: `0.5px dashed ${dragOver ? "var(--color-sage)" : "var(--color-border)"}`,
+        background: dragOver ? "rgba(155,163,122,0.08)" : "var(--color-off-white)",
+        borderRadius: 10,
+        gap: 12,
+        transition: "background 0.12s, border-color 0.12s",
+      }}
+    >
+      <div style={{ width:28, height:28, borderRadius:7, background:"var(--color-cream)", color:"var(--color-grey)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 3v14M5 10l7-7 7 7"/></svg>
+      </div>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontSize:12, fontWeight:600, color:"var(--color-charcoal)" }}>Add to this section</div>
+        <div style={{ fontSize:10, color:"var(--color-grey)" }}>Drop a file anywhere on this row, or use the buttons</div>
+      </div>
+      <input id={inputId} type="file" style={{ display:"none" }} disabled={uploading}
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
+      <label htmlFor={inputId}
+        style={{ padding:"5px 11px", fontSize:11, fontWeight:500, borderRadius:6, cursor: uploading ? "default" : "pointer", border:"none", background:"var(--color-sage)", color:"white", opacity: uploading ? 0.6 : 1, whiteSpace:"nowrap" }}>
+        {uploading ? "Uploading…" : "+ Upload file"}
+      </label>
+      <button onClick={onAddLink}
+        style={{ padding:"5px 11px", fontSize:11, fontWeight:500, borderRadius:6, cursor:"pointer", border:"0.5px solid var(--color-border)", background:"transparent", color:"var(--color-grey)", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+        + Add link
+      </button>
+      {error && <span style={{ fontSize:10, color:"var(--color-red-orange)" }}>{error}</span>}
+    </div>
+  );
+}
+
+// ─── Linked-files view ────────────────────────────────────────────────────────
+// Read-only list of files owned by other modules. Click filename → open. The
+// "View in <Source>" link jumps to the parent entity's panel so the user can
+// edit / delete the file at its source of truth.
+function LinkedFilesView({ source, files }: { source: LinkedFileSource; files: LinkedFile[] }) {
+  const sourceLabel = source === "contact" ? "Contact" : source === "organization" ? "Organization" : "Project";
+  if (files.length === 0) {
+    return (
+      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:200, gap:8, color:"var(--color-grey)" }}>
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" opacity="0.4"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+        <p style={{ fontSize:12 }}>No files attached to {sourceLabel.toLowerCase()}s yet</p>
+        <p style={{ fontSize:11 }}>Files you attach to a {sourceLabel.toLowerCase()} will appear here automatically.</p>
+      </div>
+    );
+  }
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+      {files.map(f => (
+        <div key={f.id} className="flex items-center gap-3"
+          style={{ padding:"11px 15px", background:"var(--color-off-white)", borderRadius:10, boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)" }}>
+          <a href={f.file_url} target="_blank" rel="noreferrer"
+            className="flex items-center gap-3"
+            style={{ flex:1, minWidth:0, textDecoration:"none", color:"inherit" }}>
+            <div style={{ width:28, height:28, borderRadius:7, background:C.darkAccentL, color:C.darkAccent, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              <IcFileSm />
+            </div>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:12, fontWeight:600, color:"var(--color-charcoal)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.file_name}</div>
+              <div style={{ fontSize:10, color:"var(--color-grey)" }}>
+                {sourceLabel}: {f.source_name} · {new Date(f.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
+              </div>
+            </div>
+          </a>
+          <a href={deepLinkForLinkedFile(f)}
+            style={{ fontSize:10, color:"var(--color-grey)", textDecoration:"none", padding:"4px 9px", border:"0.5px solid var(--color-border)", borderRadius:6, whiteSpace:"nowrap" }}>
+            View in {sourceLabel} →
+          </a>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Onboarding hand-off banner ───────────────────────────────────────────────
+// Surfaces at the top of any category view when the user has onboarding data
+// we can hydrate from. Reminds them where they left off and offers a one-click
+// jump into the brand-identity setup.
+function OnboardingBanner({ studioName, onDismiss, onJumpToBrand }: {
+  studioName: string | null; onDismiss: () => void; onJumpToBrand: () => void;
+}) {
+  return (
+    <div
+      className="flex items-center gap-3"
+      style={{
+        marginBottom: 14,
+        padding: "12px 16px",
+        background: "linear-gradient(135deg, rgba(155,163,122,0.16) 0%, rgba(155,163,122,0.06) 100%)",
+        border: "0.5px solid rgba(155,163,122,0.4)",
+        borderRadius: 10,
+      }}
+    >
+      <div style={{ width:30, height:30, borderRadius:8, background:"var(--color-off-white)", color:"var(--color-sage)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2v6M12 22v-6M2 12h6M22 12h-6M4.93 4.93l4.24 4.24M19.07 4.93l-4.24 4.24M19.07 19.07l-4.24-4.24M4.93 19.07l4.24-4.24"/></svg>
+      </div>
+      <div style={{ flex:1 }}>
+        <div style={{ fontSize:12, fontWeight:600, color:"var(--color-charcoal)" }}>
+          {studioName ? `Continue building ${studioName}` : "Continue building your brand"}
+        </div>
+        <div style={{ fontSize:11, color:"var(--color-grey)", marginTop:1 }}>
+          We&apos;ve pre-filled what you told us in onboarding. Pick up where you left off.
+        </div>
+      </div>
+      <button onClick={onJumpToBrand}
+        style={{ padding:"5px 11px", fontSize:11, fontWeight:500, borderRadius:6, cursor:"pointer", border:"none", background:"var(--color-sage)", color:"white", fontFamily:"inherit" }}>
+        Open brand →
+      </button>
+      <button onClick={onDismiss} title="Dismiss"
+        style={{ background:"none", border:"none", cursor:"pointer", color:"var(--color-grey)", padding:4 }}>
+        <IcX />
+      </button>
+    </div>
+  );
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
-export default function ResourcesClient({ initialResources, initialLinks }: { initialResources: Resource[]; initialLinks: ResourceLink[] }) {
+export default function ResourcesClient({
+  initialResources, initialLinks,
+  initialLinkedFiles = [], showOnboardingBanner = false, studioName = null,
+}: {
+  initialResources: Resource[];
+  initialLinks: ResourceLink[];
+  /** Cross-module file index, server-aggregated from contact/org/project files. */
+  initialLinkedFiles?: LinkedFile[];
+  /** True if the user has onboarding data we can surface as a "continue your
+   *  brand setup" prompt. The client decides whether to actually show the
+   *  banner based on a localStorage dismissal flag. */
+  showOnboardingBanner?: boolean;
+  studioName?: string | null;
+}) {
   const [cat, setCat]           = useState<CatId>("operations");
   const [view, setView]         = useState<"grid" | "list">("grid");
   // Track the active resource row so SetupModal can read its fields and
@@ -813,11 +1157,55 @@ export default function ResourcesClient({ initialResources, initialLinks }: { in
   const [links, setLinks]       = useState<ResourceLink[]>(initialLinks);
   const [search, setSearch]     = useState("");
 
-  const isLinks = cat === "links";
-  const catKey  = cat as Exclude<CatId, "links">;
-  const catMeta = !isLinks ? CAT_META[catKey] : null;
+  // Per-source visibility for the "Linked from elsewhere" rail. Persisted in
+  // localStorage. Defaults to all-false: groups only appear when they have
+  // files OR when the user has explicitly pinned them visible.
+  const [linkedVisible, setLinkedVisible] = useState<Record<LinkedFileSource, boolean>>({
+    contact: false, organization: false, project: false,
+  });
+  // Onboarding banner dismissal flag (localStorage).
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
-  const allCatCards = !isLinks ? resources.filter(r => r.category === cat).map(resourceToCard) : [];
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LINKED_VIS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setLinkedVisible(v => ({ ...v, ...parsed }));
+      }
+    } catch {}
+    if (localStorage.getItem(ONBOARD_BANNER_KEY) === "1") setBannerDismissed(true);
+  }, []);
+
+  function toggleLinkedVis(source: LinkedFileSource) {
+    setLinkedVisible(prev => {
+      const next = { ...prev, [source]: !prev[source] };
+      try { localStorage.setItem(LINKED_VIS_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
+
+  function dismissBanner() {
+    setBannerDismissed(true);
+    try { localStorage.setItem(ONBOARD_BANNER_KEY, "1"); } catch {}
+  }
+
+  const isLinks      = cat === "links";
+  const isLinkedView = isLinkedCat(cat);
+  const catKey       = !isLinks && !isLinkedView ? (cat as SeedCatId) : null;
+  const catMeta      = catKey ? CAT_META[catKey] : null;
+
+  const allCatCards = catKey ? resources.filter(r => r.category === catKey).map(resourceToCard) : [];
+
+  // Cross-module files for the currently selected linked sub-group.
+  const linkedSourceForCat = linkedCatToSource(cat);
+  const visibleLinkedFiles = useMemo(() => {
+    if (!linkedSourceForCat) return [];
+    const list = initialLinkedFiles.filter(f => f.source === linkedSourceForCat);
+    if (!search.trim()) return list;
+    const q = search.toLowerCase();
+    return list.filter(f => f.file_name.toLowerCase().includes(q) || f.source_name.toLowerCase().includes(q));
+  }, [initialLinkedFiles, linkedSourceForCat, search]);
 
   // Search filtering
   const catCards = useMemo(() => {
@@ -832,7 +1220,7 @@ export default function ResourcesClient({ initialResources, initialLinks }: { in
     return links.filter(l => l.name.toLowerCase().includes(q) || l.url.toLowerCase().includes(q));
   }, [links, search]);
 
-  const [healthFilled, healthTotal] = !isLinks ? catHealth(resources, cat) : [0, 0];
+  const [healthFilled, healthTotal] = catKey ? catHealth(resources, catKey) : [0, 0];
 
   const activeResource = activeResourceId ? resources.find(r => r.id === activeResourceId) ?? null : null;
 
@@ -872,6 +1260,9 @@ export default function ResourcesClient({ initialResources, initialLinks }: { in
     press:      { title:"Press",      sub:"Media kit, pitch decks, and press coverage" },
     design:     { title:"Design",     sub:"Templates, product photos, and working files" },
     links:      { title:"Links",      sub:"External URLs and references" },
+    "linked-contact":      { title:"From contacts",      sub:"Files attached to a contact in your network — view in Contacts to edit" },
+    "linked-organization": { title:"From organizations", sub:"Files attached to an organization — view in Organizations to edit" },
+    "linked-project":      { title:"From projects",      sub:"Files attached to a project — view in Projects to edit" },
   };
 
   function handleResourceSaved(updated: Resource) {
@@ -882,6 +1273,9 @@ export default function ResourcesClient({ initialResources, initialLinks }: { in
     <div className="flex h-full overflow-hidden">
       <CategoryNav
         active={cat} resources={resources} links={links}
+        linkedFiles={initialLinkedFiles}
+        linkedVisible={linkedVisible}
+        onToggleLinked={toggleLinkedVis}
         onSelect={id => { setCat(id); setSearch(""); }}
         search={search} onSearchChange={setSearch}
       />
@@ -893,7 +1287,7 @@ export default function ResourcesClient({ initialResources, initialLinks }: { in
             <div style={{ fontSize:14, fontWeight:700, color:"var(--color-charcoal)" }}>{sectionMeta[cat].title}</div>
             <div style={{ fontSize:11, color:"var(--color-grey)" }}>{sectionMeta[cat].sub}</div>
           </div>
-          {!isLinks && (
+          {catKey && (
             <div style={{ display:"flex", border:"0.5px solid var(--color-border)", borderRadius:6, overflow:"hidden" }}>
               {(["grid","list"] as const).map(v => (
                 <button key={v} onClick={() => setView(v)} style={{ padding:"4px 9px", fontSize:11, color:view===v?"var(--color-charcoal)":"var(--color-grey)", cursor:"pointer", background:view===v?"var(--color-cream)":"transparent", border:"none", display:"flex", alignItems:"center" }}>
@@ -912,6 +1306,15 @@ export default function ResourcesClient({ initialResources, initialLinks }: { in
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto" style={{ padding:20 }}>
+          {/* Onboarding hand-off banner — visible on any category view */}
+          {showOnboardingBanner && !bannerDismissed && catKey && (
+            <OnboardingBanner
+              studioName={studioName}
+              onDismiss={dismissBanner}
+              onJumpToBrand={() => setCat("brand")}
+            />
+          )}
+
           {isLinks && (
             <LinksView
               links={filteredLinks}
@@ -919,7 +1322,11 @@ export default function ResourcesClient({ initialResources, initialLinks }: { in
             />
           )}
 
-          {!isLinks && catMeta && (
+          {isLinkedView && linkedSourceForCat && (
+            <LinkedFilesView source={linkedSourceForCat} files={visibleLinkedFiles} />
+          )}
+
+          {catKey && catMeta && (
             <>
               {/* Health bar */}
               <div data-tour-target="resources.health" className="flex items-center gap-3" style={{ padding:"10px 14px", background:"var(--color-off-white)", borderRadius:8, boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)", marginBottom:18 }}>
@@ -933,6 +1340,16 @@ export default function ResourcesClient({ initialResources, initialLinks }: { in
                   Fill in →
                 </button>
               </div>
+
+              {/* Prominent upload + add-link affordance pinned above the cards. */}
+              {catKey && (
+                <CategoryUploadBar
+                  category={catKey}
+                  empty={catCards.length === 0 && !search}
+                  onAddLink={() => setShowAddLink(true)}
+                  onUploaded={r => setResources(prev => [...prev, r])}
+                />
+              )}
 
               {/* Search results label */}
               {search && (
