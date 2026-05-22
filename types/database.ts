@@ -44,6 +44,11 @@ export interface Task {
   title:           string;
   completed:       boolean;
   due_date:        string | null;
+  /** Optional time-of-day. When set, the calendar promotes the task from
+   *  the all-day tasks ribbon into the time grid at this exact moment.
+   *  Should be kept consistent with due_date (due_at::date === due_date).
+   *  Null = date-only / no time. */
+  due_at:          string | null;
   priority:        "high" | "medium" | "low" | null;
   notes:           string | null;
   created_at:      string;

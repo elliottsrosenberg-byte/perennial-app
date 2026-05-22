@@ -11,6 +11,7 @@ import CalendarSourcesPanel from "./CalendarSourcesPanel";
 import EventDetailPanel, { type CalendarEventLite } from "./EventDetailPanel";
 import NewEventModal from "./NewEventModal";
 import TaskQuickEditPopover from "./TaskQuickEditPopover";
+import QuickTaskCard, { type QuickTaskInput } from "./QuickTaskCard";
 import CalendarIntroModal from "@/components/tour/calendar/CalendarIntroModal";
 import CalendarTooltipTour from "@/components/tour/calendar/CalendarTooltipTour";
 
@@ -164,10 +165,20 @@ function fmtDate(date: Date, opts: Intl.DateTimeFormatOptions): string {
   return date.toLocaleDateString("en-US", opts);
 }
 
-/** Tasks store due_date as a YYYY-MM-DD string (date-only, no time). Parse
- *  it as local midnight so timezone offsets don't push the day forward. */
+/** Resolve a task to a local Date — preferring due_at (timestamptz) if
+ *  present, falling back to due_date (YYYY-MM-DD, parsed as local
+ *  midnight so timezone offsets don't push the day forward). Used
+ *  everywhere we need to bucket a task into a day cell. */
 function parseTaskDueDate(due: string): Date | null {
-  const d = new Date(due + "T00:00:00");
+  // due_date-style input (YYYY-MM-DD). Append local midnight; new Date()
+  // would otherwise treat the bare string as UTC.
+  if (due.length === 10) {
+    const d = new Date(due + "T00:00:00");
+    return isNaN(d.getTime()) ? null : d;
+  }
+  // due_at-style input (ISO timestamp). Date() parses local-vs-UTC
+  // correctly from the offset.
+  const d = new Date(due);
   return isNaN(d.getTime()) ? null : d;
 }
 
@@ -857,6 +868,10 @@ export default function CalendarClient({
   const [newEventOpen,    setNewEventOpen]    = useState(false);
   const [newEventPrefill, setNewEventPrefill] = useState<{ start?: Date; end?: Date; allDay?: boolean } | null>(null);
   const [quickTask,       setQuickTask]       = useState<{ task: Task; x: number; y: number } | null>(null);
+  // Quick-create task card. Triggered from a tasks-ribbon empty cell or
+  // from a time-grid drag-create when the user picks "Create task"
+  // instead of an event. Anchored to the clicked cell's rect.
+  const [quickTaskCreate, setQuickTaskCreate] = useState<{ day: Date; anchorRect: DOMRect | null; defaultTime?: string; defaultEndTime?: string } | null>(null);
   const [viewMode,        setViewMode]        = useState<"Week" | "Month">("Week");
   const [monthDayOverlay, setMonthDayOverlay] = useState<{ date: Date; x: number; y: number } | null>(null);
 
@@ -919,16 +934,12 @@ export default function CalendarClient({
   const anyConnected = googleConnected || outlookConnected;
 
   const gridWrapRef  = useRef<HTMLDivElement>(null);
-  const undoTimers   = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const supabase     = createClient();
 
   const allWeekDays = getWeekDays(viewDate);
   const weekDays    = showWeekends
     ? allWeekDays
     : allWeekDays.filter((d) => d.getDay() !== 0 && d.getDay() !== 6);
-
-  // ── Timers cleanup
-  useEffect(() => () => { undoTimers.current.forEach(clearTimeout); }, []);
 
   // ── Drag-to-create: global mousemove/mouseup while a drag is active.
   // We keep the per-column hit testing in the column's own mousedown so
@@ -1146,17 +1157,6 @@ export default function CalendarClient({
       ? `${MONTH_NAMES[ws.getMonth()]} ${ws.getDate()}–${we.getDate()}, ${ws.getFullYear()}`
       : `${fmtDate(ws, { month: "short", day: "numeric" })} – ${fmtDate(we, { month: "short", day: "numeric", year: "numeric" })}`;
 
-  // ── Completion with linger + undo
-  function scheduleRemoval(id: string) {
-    const existing = undoTimers.current.get(id);
-    if (existing) clearTimeout(existing);
-    const t = setTimeout(() => {
-      setTasks(prev => prev.filter(r => r.id !== id));
-      undoTimers.current.delete(id);
-    }, 5000);
-    undoTimers.current.set(id, t);
-  }
-
   // ── Drag-to-reschedule: drop a task pill in a different day cell. We
   // optimistically write the new due_date and persist in the background.
   async function rescheduleTask(id: string, dueDateIso: string | null) {
@@ -1164,15 +1164,22 @@ export default function CalendarClient({
     await supabase.from("tasks").update({ due_date: dueDateIso }).eq("id", id);
   }
 
+  // ── Completion: drop the task from the visible list immediately. The
+  // server-side filter (.eq("completed", false)) already excludes
+  // completed tasks on next page load, but the previous "linger + undo"
+  // behavior kept the row in local state for 5s, which the user read as
+  // "completed tasks aren't going away." Removing in-state on completion
+  // makes the calendar surface match its semantics.
   async function markComplete(id: string) {
-    setTasks(prev => prev.map(r => r.id === id ? { ...r, completed: true } : r));
+    setTasks(prev => prev.filter(r => r.id !== id));
     await supabase.from("tasks").update({ completed: true }).eq("id", id);
-    scheduleRemoval(id);
   }
 
+  // Restore a task that was just marked complete. Used by the rail's Undo
+  // link when the row is still present in local state at the moment of
+  // the click (it's gone for good once removed, which is fine — the user
+  // can recover it from Tasks).
   async function undoComplete(id: string) {
-    const t = undoTimers.current.get(id);
-    if (t) { clearTimeout(t); undoTimers.current.delete(id); }
     setTasks(prev => prev.map(r => r.id === id ? { ...r, completed: false } : r));
     await supabase.from("tasks").update({ completed: false }).eq("id", id);
   }
@@ -1224,6 +1231,41 @@ export default function CalendarClient({
     window.dispatchEvent(new Event("calendar:new-task-opened"));
   }
 
+  // Quick-create from the tasks ribbon (or any anchored entry point).
+  // Supports the optional time-of-day via due_at — when set, the task
+  // renders in the time grid; when null, it stays in the ribbon.
+  async function quickCreateTask(input: QuickTaskInput) {
+    try {
+      const { data: { user }, error: userErr } = await supabase.auth.getUser();
+      if (userErr || !user) {
+        setCreateError("Couldn't save — you may need to sign in again.");
+        return;
+      }
+      const payload: Record<string, unknown> = {
+        user_id:    user.id,
+        title:      input.title,
+        completed:  false,
+        due_date:   input.dueDate,
+        due_at:     input.dueAt,
+        notes:      input.description,
+      };
+      const { data, error } = await supabase
+        .from("tasks")
+        .insert(payload)
+        .select("*, project:projects(id, title), contact:contacts(id, first_name, last_name)")
+        .single();
+      if (error || !data) {
+        console.error("[calendar.quickCreateTask] insert failed:", error);
+        setCreateError("Couldn't save that task. Try again — if it keeps failing, refresh the page.");
+        return;
+      }
+      setTasks(prev => [data as Task, ...prev]);
+    } catch (err) {
+      console.error("[calendar.quickCreateTask] unexpected error:", err);
+      setCreateError("Something went wrong saving that task.");
+    }
+  }
+
   // ── Derived lists ────────────────────────────────────────────────────────────
   // Tasks store due_date as a date (no time) — so everything renders as
   // all-day on the week grid. Time-of-day reminders are gone with the
@@ -1233,6 +1275,14 @@ export default function CalendarClient({
 
   const scheduledTasks   = useMemo(() => tasks.filter(t => t.due_date), [tasks]);
   const unscheduledTasks = useMemo(() => tasks.filter(t => !t.due_date), [tasks]);
+  // Ribbon tasks: have a due_date but NO due_at (day-only). These render
+  // in the tasks ribbon above the time grid, as they always have.
+  const ribbonTasks      = useMemo(() => tasks.filter(t => t.due_date && !t.due_at), [tasks]);
+  // Timed tasks: have a due_at. These promote into the time grid as
+  // copper-toned chips with a checkbox icon so they read as tasks, not
+  // events. due_date may or may not also be set — we don't rely on it
+  // for time-grid placement.
+  const timedTasks       = useMemo(() => tasks.filter(t => !!t.due_at), [tasks]);
 
   // Top rail: today + overdue tasks. The user asked for a "task section at
   // the top" — this is where it lives.
@@ -1895,13 +1945,22 @@ export default function CalendarClient({
               Tasks
             </div>
             {weekDays.map((day, i) => {
-              const dayTasks = scheduledTasks.filter((t) => {
+              // Ribbon only shows day-only tasks now. Timed tasks (due_at)
+              // render in the time grid below as chips.
+              const dayTasks = ribbonTasks.filter((t) => {
                 const d = parseTaskDueDate(t.due_date!);
                 return d ? isSameDay(d, day) : false;
               });
               return (
                 <div
                   key={i}
+                  onClick={(e) => {
+                    // Empty-cell click → open the quick-create task card
+                    // anchored to this cell, pre-filled with the day.
+                    if (e.target !== e.currentTarget) return;
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    setQuickTaskCreate({ day, anchorRect: rect });
+                  }}
                   onDragOver={(e) => {
                     if (taskDrag) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }
                   }}
@@ -1916,6 +1975,7 @@ export default function CalendarClient({
                     flex: 1, borderLeft: "0.5px solid var(--color-border)",
                     padding: "3px 3px", display: "flex", flexDirection: "column", gap: 2,
                     background: taskDrag ? "rgba(155,163,122,0.04)" : "transparent",
+                    cursor: "pointer",
                   }}
                 >
                   {dayTasks.map((t) => {
@@ -2331,8 +2391,68 @@ export default function CalendarClient({
                       });
                     })()}
 
-                    {/* Tasks have no time-of-day — they render in the all-day
-                        strip above, not in the time grid. */}
+                    {/* Timed tasks — render as copper-toned chips with a
+                        checkbox icon so they read as tasks, not events.
+                        Tasks without a due_at stay in the tasks ribbon
+                        above. Click opens the quick-edit popover. */}
+                    {(() => {
+                      const dayTimedTasks = timedTasks.filter((t) => {
+                        const d = t.due_at ? new Date(t.due_at) : null;
+                        return d ? isSameDay(d, day) : false;
+                      });
+                      return dayTimedTasks.map((t) => {
+                        const at = new Date(t.due_at!);
+                        const y  = timeToY(at.getHours(), at.getMinutes());
+                        if (y < 0 || y > GRID_HEIGHT) return null;
+                        const h  = 32;
+                        // Copper-tone palette — keeps tasks visually
+                        // distinct from the cool-toned event chips.
+                        const fg     = "#a85a1f";
+                        const bg     = "rgba(168,90,31,0.10)";
+                        const border = "rgba(168,90,31,0.30)";
+                        return (
+                          <button
+                            key={`tt-${t.id}`}
+                            onClick={(ev) => { ev.stopPropagation(); openQuickTask(ev, t); }}
+                            style={{
+                              position: "absolute",
+                              top:    `${y}px`,
+                              left:   "4px",
+                              right:  "4px",
+                              height: `${h}px`,
+                              borderRadius: 4,
+                              borderLeft:   `2.5px solid ${fg}`,
+                              borderTop:    "none",
+                              borderRight:  "none",
+                              borderBottom: "none",
+                              background:   bg,
+                              padding:      "3px 6px",
+                              cursor:       "pointer",
+                              zIndex:       3,
+                              overflow:     "hidden",
+                              textAlign:    "left",
+                              fontFamily:   "inherit",
+                              display: "flex", alignItems: "flex-start", gap: 5,
+                              outline: `0.5px solid ${border}`,
+                              outlineOffset: "-0.5px",
+                              opacity: t.completed ? 0.5 : 1,
+                            }}
+                            title={t.title}
+                          >
+                            <CheckSquare size={10} strokeWidth={2} style={{ color: fg, flexShrink: 0, marginTop: 1 }} />
+                            <span style={{
+                              flex: 1, minWidth: 0,
+                              fontSize: 11, fontWeight: 500, color: fg,
+                              lineHeight: 1.25,
+                              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                              textDecoration: t.completed ? "line-through" : "none",
+                            }}>
+                              {t.title}
+                            </span>
+                          </button>
+                        );
+                      });
+                    })()}
                   </div>
                 );
               })}
@@ -2492,12 +2612,28 @@ export default function CalendarClient({
           onClose={() => setQuickTask(null)}
           onUpdated={(t) => setTasks((prev) => prev.map((p) => (p.id === t.id ? t : p)))}
           onCompleted={(id, completed) => {
-            // mark/undo flow handles linger; we mirror the immediate state
-            // change here so the rail badge updates without re-fetching.
-            setTasks((prev) => prev.map((p) => (p.id === id ? { ...p, completed } : p)));
-            if (completed) scheduleRemoval(id);
+            // Drop from local state immediately when completed (the server
+            // filter already hides completed tasks on next load). On undo
+            // (completed=false) just flip the boolean so the row reappears.
+            if (completed) {
+              setTasks((prev) => prev.filter((p) => p.id !== id));
+            } else {
+              setTasks((prev) => prev.map((p) => (p.id === id ? { ...p, completed } : p)));
+            }
           }}
           onDeleted={(id) => setTasks((prev) => prev.filter((p) => p.id !== id))}
+        />
+      )}
+
+      {/* Quick-create task card (ribbon empty-cell click) */}
+      {quickTaskCreate && (
+        <QuickTaskCard
+          day={quickTaskCreate.day}
+          anchorRect={quickTaskCreate.anchorRect}
+          defaultTime={quickTaskCreate.defaultTime}
+          defaultEndTime={quickTaskCreate.defaultEndTime}
+          onClose={() => setQuickTaskCreate(null)}
+          onCreate={quickCreateTask}
         />
       )}
 
