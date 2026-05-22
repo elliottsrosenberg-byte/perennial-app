@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Task, Contact } from "@/types/database";
-import { ChevronLeft, ChevronRight, Plus, CheckSquare, MoreHorizontal, CalendarClock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, CheckSquare, MoreHorizontal, CalendarClock, Eye, EyeOff } from "lucide-react";
 import DatePicker from "@/components/ui/DatePicker";
 import EmptyState from "@/components/ui/EmptyState";
 import CalendarOptionsMenu from "./CalendarOptionsMenu";
@@ -798,6 +798,19 @@ function oppPalette(category: string) {
   return OPP_PALETTE[category] ?? OPP_PALETTE._default;
 }
 
+const OPP_CATEGORY_LABELS: Record<string, string> = {
+  fair:      "Fairs",
+  openCall:  "Open calls",
+  grant:     "Grants",
+  award:     "Awards",
+  residency: "Residencies",
+};
+function oppCategoryLabel(cat: string): string {
+  return OPP_CATEGORY_LABELS[cat] ?? (cat.charAt(0).toUpperCase() + cat.slice(1));
+}
+
+const OPP_VIS_STORAGE_KEY = "perennial:cal-opp-visibility";
+
 function parseOppDate(s: string | null): Date | null {
   if (!s) return null;
   const d = new Date(s + "T00:00:00");
@@ -833,6 +846,27 @@ export default function CalendarClient({
   const [quickTask,       setQuickTask]       = useState<{ task: Task; x: number; y: number } | null>(null);
   const [viewMode,        setViewMode]        = useState<"Week" | "Month">("Week");
   const [monthDayOverlay, setMonthDayOverlay] = useState<{ date: Date; x: number; y: number } | null>(null);
+
+  // Per-category visibility for the Perennial Feed opportunities ribbon.
+  // We store hidden categories (not visible ones) so a fresh user who's
+  // never touched the toggles sees everything. localStorage round-trips
+  // on every change, gated on window so SSR doesn't choke.
+  const [hiddenOppCats, setHiddenOppCats] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = window.localStorage.getItem(OPP_VIS_STORAGE_KEY);
+      if (!raw) return new Set();
+      const arr = JSON.parse(raw) as unknown;
+      if (!Array.isArray(arr)) return new Set();
+      return new Set(arr.filter((x): x is string => typeof x === "string"));
+    } catch { return new Set(); }
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(OPP_VIS_STORAGE_KEY, JSON.stringify(Array.from(hiddenOppCats)));
+    } catch { /* quota / safari private mode — ignore */ }
+  }, [hiddenOppCats]);
 
   // Drag-to-reschedule task pills. Tracks the in-flight drag so we can
   // hide the source pill slightly while it follows the cursor.
@@ -1340,6 +1374,93 @@ export default function CalendarClient({
             <CalendarSourcesPanel refreshNonce={refreshNonce} />
           )}
 
+          {/* Perennial Feed — per-category toggles for the opportunity
+              bars that float in from Presence. Categories with no rows
+              are hidden so the list stays honest. */}
+          {(() => {
+            const counts: Record<string, number> = {};
+            for (const o of initialOpportunities) {
+              counts[o.category] = (counts[o.category] ?? 0) + 1;
+            }
+            const cats = Object.keys(counts).sort((a, b) =>
+              oppCategoryLabel(a).localeCompare(oppCategoryLabel(b)),
+            );
+            if (cats.length === 0) return null;
+            const allHidden = cats.every(c => hiddenOppCats.has(c));
+            return (
+              <div data-tour-target="calendar.opportunities" style={{ padding: "10px 0 4px" }}>
+                <div style={{
+                  padding: "0 14px 6px",
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                }}>
+                  <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--color-grey)" }}>
+                    Perennial Feed
+                  </span>
+                  <button
+                    onClick={() => {
+                      setHiddenOppCats(() => allHidden ? new Set() : new Set(cats));
+                    }}
+                    style={{
+                      background: "transparent", border: "none",
+                      fontSize: 10, color: "var(--color-grey)",
+                      cursor: "pointer", fontFamily: "inherit", padding: 0,
+                    }}
+                  >
+                    {allHidden ? "Show all" : "Hide all"}
+                  </button>
+                </div>
+                {cats.map(cat => {
+                  const visible = !hiddenOppCats.has(cat);
+                  const pal     = oppPalette(cat);
+                  return (
+                    <div
+                      key={cat}
+                      onClick={() => {
+                        setHiddenOppCats(prev => {
+                          const next = new Set(prev);
+                          if (next.has(cat)) next.delete(cat); else next.add(cat);
+                          return next;
+                        });
+                      }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8,
+                        padding: "4px 14px 4px 14px",
+                        cursor: "pointer",
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
+                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <span style={{
+                        width: 10, height: 10, borderRadius: 9999,
+                        background: visible ? pal.fg : "transparent",
+                        border: visible ? "none" : `1.5px solid ${pal.fg}`,
+                        flexShrink: 0,
+                      }} />
+                      <span style={{
+                        flex: 1, minWidth: 0,
+                        fontSize: 11.5,
+                        color: visible ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                      }}>
+                        {oppCategoryLabel(cat)}
+                      </span>
+                      <span style={{
+                        fontSize: 10, color: "var(--color-text-tertiary)",
+                        flexShrink: 0,
+                      }}>
+                        {counts[cat]}
+                      </span>
+                      {visible
+                        ? <Eye    size={12} strokeWidth={1.75} style={{ color: "var(--color-text-secondary)", flexShrink: 0 }} />
+                        : <EyeOff size={12} strokeWidth={1.75} style={{ color: "var(--color-text-tertiary)", flexShrink: 0 }} />
+                      }
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
           {/* Calendar integrations connect-CTAs — only shown when the user
               has nothing connected yet. The connected-state status cards
               were removed; CalendarSourcesPanel handles per-account UI for
@@ -1825,7 +1946,10 @@ export default function CalendarClient({
           {(() => {
             // Compute opportunity spans visible in this week. startIdx/endIdx
             // are clamped to 0..6 so a multi-week opp still shows correctly.
+            // Categories the user has toggled off via the left-rail
+            // Perennial Feed panel are filtered out at the source.
             const oppSpans = initialOpportunities
+              .filter(o => !hiddenOppCats.has(o.category))
               .map(o => {
                 const s = parseOppDate(o.start_date);
                 if (!s) return null;

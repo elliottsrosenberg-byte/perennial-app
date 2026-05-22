@@ -1,92 +1,86 @@
 "use client";
 
-// Tier 2: progressive tooltips that run after "Get started" on the intro
-// modal. Same spotlight-ring visual language as the other module tours.
+// Tier 2: progressive tooltips that run after "Get started" on the Finance
+// intro modal. Same spotlight-ring visual language as the other module
+// tours so the experience feels unified.
 //
-// Conditional skip: if the user already has at least one calendar
-// integration connected at tour-start, the connect-integration step is
-// dropped (mirrors hasPipelinesAtStart in OutreachTooltipTour).
+// All steps are Next-driven. Finance has multiple sub-tabs, so rather than
+// orchestrate action events across tabs (timer start / expense create /
+// invoice draft / bank connect) we walk the user across the tab strip and
+// point at the primary affordances. A final Ash handoff offers to draft a
+// finance setup checklist tuned to the user's practice.
 //
-// Triggers (window events fired from CalendarClient):
-//   calendar:integration-connected → integration-connect step → next
-//   calendar:new-task-opened       → new-task-button step → next
-//   calendar:task-created          → in-modal step → next
+// The tour switches the active tab as it advances so the anchors are
+// always visible — it dispatches `finance:set-tab` events that
+// FinanceClient listens for.
 //
-// Persistence: profiles.tour_visited.calendar_tour set when the tour ends.
+// Persistence: profiles.tour_visited.finance_tour set when the tour ends.
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { X as XIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import AshMark from "@/components/ui/AshMark";
 import { type TourVisited } from "@/lib/tour";
 
-type AdvanceMode =
-  | "integration-connected"
-  | "open-new-task"
-  | "task-created"
-  | "next";
+type Tab = "overview" | "time" | "expenses" | "invoices" | "banking";
 
 interface Step {
-  id:          string;
-  anchor:      string | null;
-  title:       string;
-  body:        string;
-  hint?:       string;
-  advance:     AdvanceMode;
-  spotlight?:  boolean;
-  freeRoam?:   boolean;
-  /** Step only runs if the user has NO calendar integration at tour-start.
-   *  When `hasIntegrationAtStart === true`, all `requiresEmpty` steps are
-   *  filtered out of the rendered sequence. */
-  requiresEmpty?: boolean;
-  finalCta?:   { label: string; action: "ash-plan-week" };
+  id:        string;
+  anchor:    string | null;
+  /** Switch to this tab before measuring the anchor. */
+  tab?:      Tab;
+  title:     string;
+  body:      string;
+  spotlight?: boolean;
+  /** Final-step CTA that opens Ash with a setup prompt. */
+  finalCta?: { label: string; action: "ash-finance-setup" };
 }
 
 const W = 300;
 
 const STEPS: Step[] = [
   {
-    id:      "connect-integration",
-    anchor:  '[data-tour-target="calendar.integrations"]',
-    title:   "Connect Google or Outlook",
-    body:    "Pull your real calendar in so it lives next to your tasks. Both providers are read-only by default — Perennial reads events to display them and to log meeting activity against matched contacts. Once you connect, the Calendars panel here in the rail handles per-calendar visibility, color, and the \"+ Add calendar account\" entry for stacking multiple logins.",
-    hint:    "Waiting for you to connect a calendar… (or hit Skip below)",
-    advance: "integration-connected",
-    requiresEmpty: true,
+    id:      "topbar-tabs",
+    anchor:  '[data-tour-target="finance.tabs"]',
+    tab:     "overview",
+    title:   "Five tabs, one studio ledger",
+    body:    "Overview is your daily glance. Time, Expenses, and Invoices are where the work goes in. Banking is the connected real-money side. They share data — log time, then pull it into an invoice without retyping.",
   },
   {
-    id:      "new-task-button",
-    anchor:  '[data-tour-target="calendar.new-task-button"]',
-    title:   "Two CTAs: task or event",
-    body:    "New task drops a check-box on any day. New event (the sage button next to it) opens a Notion-style side card to create a calendar event without leaving this view. Tasks ride in their own ribbon above the all-day row so the day's to-dos read first.",
-    hint:    "Waiting for you to click + New task…",
-    advance: "open-new-task",
+    id:      "timer",
+    anchor:  '[data-tour-target="finance.timer-bar"]',
+    tab:     "time",
+    title:   "Start the timer",
+    body:    "Type what you're working on, pick a project, and Start. The timer keeps running across reloads — there's also a quick Start in the app topbar so it's always one click away. Stop the timer and the hours land here as a time entry.",
   },
   {
-    id:      "in-modal",
-    anchor:  '[data-tour-target="calendar.new-task-modal"]',
-    title:   "Title and date are enough",
-    body:    "Link it to a project or contact later from the task detail. The point is to capture it so it shows up where you'll see it.",
-    hint:    "Waiting for the task to be created…",
-    advance: "task-created",
-    spotlight: false,
+    id:      "expenses",
+    anchor:  '[data-tour-target="finance.add-expense"]',
+    tab:     "expenses",
+    title:   "Add an expense",
+    body:    "Log studio costs as they happen — categorize, attach to a project, drop a receipt photo. The sidebar rolls everything up by category and project, and the warning bar flags anything sitting unattached.",
   },
   {
-    id:       "explore",
-    anchor:   null,
-    title:    "Take it in.",
-    body:     "Left rail: mini-month, upcoming tasks, the Calendars panel for synced accounts, and the Perennial Feed toggles that hide/show opportunity bars by category. Main view: the tasks ribbon up top, opportunity bars in the all-day row, synced events laid out side-by-side when they overlap. Click any event for a side preview card (no scrim — the grid stays visible).",
-    advance:  "next",
-    freeRoam: true,
+    id:      "invoices",
+    anchor:  '[data-tour-target="finance.new-invoice"]',
+    tab:     "invoices",
+    title:   "Build an invoice",
+    body:    "Pick a client, link a project, and create the draft. Once it's open you can ↓ Pull from project time to convert billable hours into line items, or add anything manually. Send it through Perennial when it's ready.",
+  },
+  {
+    id:      "banking",
+    anchor:  '[data-tour-target="finance.connect-bank"]',
+    tab:     "banking",
+    title:   "Connect a bank (optional)",
+    body:    "Teller pulls balances and recent transactions read-only — Perennial never moves money. It's optional, but useful for seeing what cash is actually in the account vs. what's invoiced but not collected.",
   },
   {
     id:       "ash-handoff",
     anchor:   null,
-    title:    "Let Ash plan your week",
-    body:     "Ash sees your calendar, project deadlines, outreach follow-ups, and Presence opportunities together. Ask it to plan your week, surface what's slipping, or block time for deep work on a specific project.",
-    advance:  "next",
+    title:    "Let Ash draft your finance setup",
+    body:     "Ash knows your practice and your selling channels. Ask it to suggest the first three things to set up in Finance — a rate to log against, the categories of expenses you'll actually use, and an invoice template tuned to how you bill.",
     spotlight: false,
-    finalCta: { label: "Plan my week", action: "ash-plan-week" },
+    finalCta: { label: "Plan my finance setup", action: "ash-finance-setup" },
   },
 ];
 
@@ -117,7 +111,6 @@ function ringRadiusFor(el: HTMLElement, pad: number): number {
   const found = findRadius(el, 3);
   if (!found) return pad;
   const { radius: raw, rect: srcRect } = found;
-
   const sourceFillsParent =
     srcRect.width  >= parentRect.width  * 0.8 &&
     srcRect.height >= parentRect.height * 0.8;
@@ -128,24 +121,15 @@ function ringRadiusFor(el: HTMLElement, pad: number): number {
   return raw + pad;
 }
 
-interface Props {
-  /** If the user already has any calendar (Google or Outlook) connected
-   *  at tour-start, the integration-connect step is filtered out. */
-  hasIntegrationAtStart: boolean;
-}
-
-export default function CalendarTooltipTour({ hasIntegrationAtStart }: Props) {
-  const [active,   setActive]   = useState(false);
-  const [stepIdx,  setStepIdx]  = useState(0);
+export default function FinanceTooltipTour() {
+  const [active,    setActive]    = useState(false);
+  const [stepIdx,   setStepIdx]   = useState(0);
   const [highlight, setHighlight] = useState<Highlight | null>(null);
-  const [pos,      setPos]      = useState<CalloutPos | null>(null);
-  const [hidden,   setHidden]   = useState(false);
-  const taskRef = useRef<{ id: string; title: string } | null>(null);
+  const [pos,       setPos]       = useState<CalloutPos | null>(null);
+  const [hidden,    setHidden]    = useState(false);
 
-  const [steps] = useState<Step[]>(() =>
-    hasIntegrationAtStart ? STEPS.filter((s) => !s.requiresEmpty) : STEPS,
-  );
-
+  // Init: gate by tour_dismissed / finance_tour, then listen for the
+  // intro modal's "get started" event.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -159,58 +143,32 @@ export default function CalendarTooltipTour({ hasIntegrationAtStart }: Props) {
         .maybeSingle();
       if (cancelled) return;
       const visited = (data?.tour_visited ?? {}) as TourVisited;
-      if (data?.tour_dismissed || visited.calendar_tour) {
+      if (data?.tour_dismissed || visited.finance_tour) {
         setHidden(true);
       }
     })();
 
     function start() { setActive(true); setStepIdx(0); setHidden(false); }
-    window.addEventListener("calendar-tooltips-start", start);
+    window.addEventListener("finance-tooltips-start", start);
     return () => {
       cancelled = true;
-      window.removeEventListener("calendar-tooltips-start", start);
+      window.removeEventListener("finance-tooltips-start", start);
     };
   }, []);
 
+  // Switch tabs as the active step changes
   useEffect(() => {
     if (!active || hidden) return;
-
-    function onIntegrationConnected() {
-      if (steps[stepIdx]?.advance === "integration-connected") setStepIdx((i) => i + 1);
+    const step = STEPS[stepIdx];
+    if (step.tab) {
+      window.dispatchEvent(new CustomEvent("finance:set-tab", { detail: { tab: step.tab } }));
     }
-    function onNewTaskOpen() {
-      if (steps[stepIdx]?.advance === "open-new-task") setStepIdx((i) => i + 1);
-    }
-    function onTaskCreated(e: Event) {
-      const detail = (e as CustomEvent<{ id?: string; title?: string }>).detail;
-      if (detail?.id && detail.title) {
-        taskRef.current = { id: detail.id, title: detail.title };
-      }
-      if (steps[stepIdx]?.advance === "task-created") setStepIdx((i) => i + 1);
-    }
+  }, [active, hidden, stepIdx]);
 
-    window.addEventListener("calendar:integration-connected", onIntegrationConnected);
-    window.addEventListener("calendar:new-task-opened",       onNewTaskOpen);
-    window.addEventListener("calendar:task-created",          onTaskCreated);
-    return () => {
-      window.removeEventListener("calendar:integration-connected", onIntegrationConnected);
-      window.removeEventListener("calendar:new-task-opened",       onNewTaskOpen);
-      window.removeEventListener("calendar:task-created",          onTaskCreated);
-    };
-  }, [active, hidden, stepIdx, steps]);
-
+  // Position the spotlight + callout
   const reposition = useCallback(() => {
     if (!active || hidden) { setHighlight(null); setPos(null); return; }
-    const step = steps[stepIdx];
-    if (!step) { setHighlight(null); setPos(null); return; }
-
-    if (step.freeRoam) {
-      setHighlight(null);
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      setPos({ top: vh - 240, left: vw - W - 24 });
-      return;
-    }
+    const step = STEPS[stepIdx];
 
     if (!step.anchor) {
       setHighlight(null);
@@ -249,7 +207,7 @@ export default function CalendarTooltipTour({ hasIntegrationAtStart }: Props) {
     top  = Math.max(20, Math.min(vh - 60, top));
 
     setPos({ top, left });
-  }, [active, hidden, stepIdx, steps]);
+  }, [active, hidden, stepIdx]);
 
   useEffect(() => {
     reposition();
@@ -271,7 +229,7 @@ export default function CalendarTooltipTour({ hasIntegrationAtStart }: Props) {
       .select("tour_visited")
       .eq("user_id", user.id)
       .maybeSingle();
-    const next = { ...((data?.tour_visited ?? {}) as TourVisited), calendar_tour: new Date().toISOString() };
+    const next = { ...((data?.tour_visited ?? {}) as TourVisited), finance_tour: new Date().toISOString() };
     await supabase.from("profiles").update({ tour_visited: next }).eq("user_id", user.id);
     window.dispatchEvent(new CustomEvent("tour-visited", { detail: { visited: next } }));
   }
@@ -283,40 +241,34 @@ export default function CalendarTooltipTour({ hasIntegrationAtStart }: Props) {
   }
 
   function nextStep() {
-    if (stepIdx >= steps.length - 1) { dismiss(); return; }
+    if (stepIdx >= STEPS.length - 1) { dismiss(); return; }
     setStepIdx((i) => i + 1);
   }
 
-  function planWeek() {
-    const taskLine = taskRef.current
-      ? `I just added a task: "${taskRef.current.title}". Use that as one signal.`
-      : "";
+  function ashFinanceSetup() {
     const prompt = [
-      "Help me plan this week using my calendar.",
-      taskLine,
+      "I'm setting up the Finance module in Perennial and want your help thinking it through.",
       "",
-      "Please do the following, in order:",
-      "1. Look at what's on my calendar this week (tasks, project deadlines, outreach follow-ups, synced events).",
-      "2. Call out the 2–3 highest-leverage items I should make sure I actually do.",
-      "3. If anything is slipping (overdue tasks, outreach that's gone quiet, projects with deadlines without scheduled work), name it.",
-      "4. Suggest where in the week I should block focused time, based on what's already on my schedule.",
-      "Be concrete and short — bullet points, no fluff.",
-    ].filter(Boolean).join("\n");
+      "Based on my practice (use my onboarding profile — what I make, how I sell, where I am, years in practice, my hourly rate if I set one), please:",
+      "1. Suggest the first three things I should configure or log in Finance this week — be specific, not generic.",
+      "2. Tell me which of materials / travel / production / software / other expense categories I'll actually use most, and what kinds of receipts to capture.",
+      "3. Suggest an invoice template (line item structure + payment terms) that fits how I bill — flat fees, hourly, or hybrid.",
+      "End with one sentence on the single piece of finance hygiene I should commit to weekly.",
+    ].join("\n");
 
     window.dispatchEvent(new CustomEvent("open-ash", { detail: { message: prompt } }));
     dismiss();
   }
 
   if (!active || hidden) return null;
-  const step   = steps[stepIdx];
-  if (!step) return null;
+  const step   = STEPS[stepIdx];
   if (step.anchor && !pos) return null;
-  const isLast = stepIdx === steps.length - 1;
-  const isActionStep = step.advance !== "next";
-  const centered = !step.anchor && !step.freeRoam;
+  const isLast = stepIdx === STEPS.length - 1;
+  const centered = !step.anchor;
 
   return (
     <>
+      {/* Spotlight ring + dim */}
       {highlight && (
         <div
           aria-hidden
@@ -335,6 +287,7 @@ export default function CalendarTooltipTour({ hasIntegrationAtStart }: Props) {
         />
       )}
 
+      {/* Centered backdrop dim for anchor-less steps */}
       {centered && (
         <div
           aria-hidden
@@ -349,7 +302,7 @@ export default function CalendarTooltipTour({ hasIntegrationAtStart }: Props) {
 
       <div
         role="dialog"
-        aria-label={`Calendar tour step ${stepIdx + 1}: ${step.title}`}
+        aria-label={`Finance tour step ${stepIdx + 1}: ${step.title}`}
         style={{
           position: "fixed",
           top:  centered ? "50%" : pos!.top,
@@ -368,7 +321,7 @@ export default function CalendarTooltipTour({ hasIntegrationAtStart }: Props) {
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(245,241,233,0.5)" }}>
-            Calendar tour · {stepIdx + 1} of {steps.length}
+            Finance tour · {stepIdx + 1} of {STEPS.length}
           </span>
           <button
             onClick={dismiss}
@@ -391,21 +344,15 @@ export default function CalendarTooltipTour({ hasIntegrationAtStart }: Props) {
           fontSize: 11.5,
           color: "rgba(245,241,233,0.78)",
           lineHeight: 1.55,
-          marginBottom: step.hint || step.finalCta || !isActionStep ? 10 : 0,
+          marginBottom: 10,
         }}>
           {step.body}
         </p>
 
-        {step.hint && (
-          <p style={{ fontSize: 10, color: "rgba(245,241,233,0.42)", lineHeight: 1.4, fontStyle: "italic" }}>
-            {step.hint}
-          </p>
-        )}
-
-        {isLast && step.finalCta?.action === "ash-plan-week" ? (
+        {isLast && step.finalCta?.action === "ash-finance-setup" ? (
           <>
             <button
-              onClick={planWeek}
+              onClick={ashFinanceSetup}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                 width: "100%", padding: "8px 12px",
@@ -432,7 +379,7 @@ export default function CalendarTooltipTour({ hasIntegrationAtStart }: Props) {
               I&apos;ll explore on my own
             </button>
           </>
-        ) : !isActionStep ? (
+        ) : (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 4, gap: 8 }}>
             <button
               type="button"
@@ -456,32 +403,6 @@ export default function CalendarTooltipTour({ hasIntegrationAtStart }: Props) {
               }}
             >
               Next →
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => nextStep()}
-              style={{
-                background: "none", border: "none", padding: "4px 6px",
-                fontSize: 10.5, color: "rgba(245,241,233,0.55)",
-                cursor: "pointer", fontFamily: "inherit",
-              }}
-            >
-              Skip this step
-            </button>
-            <button
-              type="button"
-              onClick={dismiss}
-              style={{
-                background: "none", border: "none", padding: "4px 6px",
-                fontSize: 10.5, color: "rgba(245,241,233,0.55)",
-                cursor: "pointer", fontFamily: "inherit",
-                textDecoration: "underline", textUnderlineOffset: 2,
-              }}
-            >
-              Skip tour
             </button>
           </div>
         )}

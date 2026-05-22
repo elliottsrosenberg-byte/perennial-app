@@ -45,7 +45,6 @@ interface Integration {
 type ConnectProvider = "beehiiv" | "kit" | "mailchimp" | "substack";
 
 const PROVIDER_META: Record<ConnectProvider, { label: string; color: string; bg: string; placeholder: string; needsDomain?: boolean; isManual?: boolean }> = {
-  // plausible removed — replaced by GA4 (free, no API key needed)
   beehiiv:   { label:"Beehiiv",    color:"#FF6B35", bg:"rgba(255,107,53,0.1)", placeholder:"Enter your Beehiiv API key" },
   kit:       { label:"Kit",        color:"#FB6970", bg:"rgba(251,105,112,0.1)",placeholder:"Enter your Kit API key" },
   mailchimp: { label:"Mailchimp",  color:"#FFE01B", bg:"rgba(255,224,27,0.12)",placeholder:"Enter your Mailchimp API key (key-dc##)" },
@@ -145,7 +144,6 @@ function ConnectIntegrationModal({ provider, onClose, onConnected }: {
                   onKeyDown={e => { if (e.key === "Enter") handleConnect(); }}
                   className={inputCls} style={inputStyle} />
                 <p style={{ fontSize:10, color:"var(--color-grey)", marginTop:4 }}>
-                  {provider === "beehiiv"    && "Find this in Beehiiv → Settings → API (already shown above)"}
                   {provider === "beehiiv"    && "Find this in Beehiiv → Settings → API"}
                   {provider === "kit"        && "Find this in Kit → Settings → Advanced → API Key"}
                   {provider === "mailchimp"  && "Find this in Mailchimp → Account → Extras → API keys. Key format: xxxxxxxx-usXX"}
@@ -389,24 +387,63 @@ function OverviewTab({ onTabChange, opps, instagram, plausible, newsletter, onCo
 
   return (
     <div className="flex-1 overflow-y-auto" style={{ padding:"22px 24px", display:"flex", flexDirection:"column", gap:18 }}>
-      {/* Connected accounts strip */}
+      {/* Connected accounts strip — real integrations only. Empty hint when none. */}
       <div className={card()} style={cardStyle}>
         <div style={{ display:"flex", gap:8, padding:"12px 15px", flexWrap:"wrap", alignItems:"center" }}>
-          {[
-            { icon:<IcGlobe />, color:C.blue,   name:"perennial.design",  handle:"Squarespace" },
-            { icon:<IcIG />,    color:C.purple,  name:"@perennial.design", handle:"Instagram" },
-            { icon:<IcMail />,  color:C.amber,   name:"Perennial Notes",   handle:"Substack · 312 subscribers" },
-          ].map(({ icon, color, name, handle }) => (
-            <div key={name} className="flex items-center gap-2 rounded-full" style={{ padding:"5px 10px", border:"0.5px solid rgba(31,33,26,0.13)", background:"var(--color-cream)", cursor:"pointer" }}>
+          {plausible && (
+            <div className="flex items-center gap-2 rounded-full" style={{ padding:"5px 10px", border:"0.5px solid rgba(31,33,26,0.13)", background:"var(--color-cream)", cursor:"pointer" }}
+              onClick={() => onTabChange("website")}
+            >
               <div style={{ width:6, height:6, borderRadius:"50%", background:C.accent, flexShrink:0 }} />
-              <span style={{ color, display:"flex" }}>{icon}</span>
-              <span style={{ fontSize:11, fontWeight:500 }}>{name}</span>
-              <span style={{ fontSize:10, color:"var(--color-grey)" }}>{handle}</span>
+              <span style={{ color:C.blue, display:"flex" }}><IcGlobe /></span>
+              <span style={{ fontSize:11, fontWeight:500 }}>{(plausible.metadata.property_name as string) ?? plausible.account_name ?? "Google Analytics"}</span>
+              <span style={{ fontSize:10, color:"var(--color-grey)" }}>GA4</span>
             </div>
-          ))}
-          <div className="flex items-center gap-2 rounded-full" style={{ padding:"5px 10px", border:`0.5px dashed rgba(37,99,171,0.4)`, background:"transparent", cursor:"pointer", color:C.blue }}>
-            <IcPlus /><span style={{ fontSize:11 }}>Connect account</span>
-          </div>
+          )}
+          {instagram && (
+            <div className="flex items-center gap-2 rounded-full" style={{ padding:"5px 10px", border:"0.5px solid rgba(31,33,26,0.13)", background:"var(--color-cream)", cursor:"pointer" }}
+              onClick={() => onTabChange("socials")}
+            >
+              <div style={{ width:6, height:6, borderRadius:"50%", background:C.accent, flexShrink:0 }} />
+              <span style={{ color:C.purple, display:"flex" }}><IcIG /></span>
+              <span style={{ fontSize:11, fontWeight:500 }}>{instagram.account_name ?? "Instagram"}</span>
+              <span style={{ fontSize:10, color:"var(--color-grey)" }}>
+                {instagram.metadata.followers_count ? `${(instagram.metadata.followers_count as number).toLocaleString()} followers` : "Instagram"}
+              </span>
+            </div>
+          )}
+          {newsletter && (
+            <div className="flex items-center gap-2 rounded-full" style={{ padding:"5px 10px", border:"0.5px solid rgba(31,33,26,0.13)", background:"var(--color-cream)", cursor:"pointer" }}
+              onClick={() => onTabChange("newsletter")}
+            >
+              <div style={{ width:6, height:6, borderRadius:"50%", background:C.accent, flexShrink:0 }} />
+              <span style={{ color:C.amber, display:"flex" }}><IcMail /></span>
+              <span style={{ fontSize:11, fontWeight:500 }}>{newsletter.account_name ?? PROVIDER_META[newsletter.provider as ConnectProvider]?.label ?? "Newsletter"}</span>
+              <span style={{ fontSize:10, color:"var(--color-grey)" }}>
+                {(newsletter.metadata.subscriber_count ?? newsletter.metadata.total_subscribers ?? newsletter.metadata.subscribers)
+                  ? `${(newsletter.metadata.subscriber_count ?? newsletter.metadata.total_subscribers ?? newsletter.metadata.subscribers) as number} subscribers`
+                  : (PROVIDER_META[newsletter.provider as ConnectProvider]?.label ?? newsletter.provider)}
+              </span>
+            </div>
+          )}
+          {!plausible && !instagram && !newsletter && (
+            <span style={{ fontSize:11, color:"var(--color-grey)", padding:"3px 0" }}>
+              No accounts connected yet — connect Google Analytics, Instagram, or your newsletter below to start tracking your audience.
+            </span>
+          )}
+          {(!plausible || !instagram || !newsletter) && (
+            <button
+              onClick={() => {
+                if (!plausible)        onTabChange("website");
+                else if (!instagram)   onTabChange("socials");
+                else if (!newsletter)  onTabChange("newsletter");
+              }}
+              className="flex items-center gap-2 rounded-full"
+              style={{ padding:"5px 10px", border:"0.5px dashed rgba(37,99,171,0.4)", background:"transparent", cursor:"pointer", color:C.blue, fontFamily:"inherit" }}
+            >
+              <IcPlus /><span style={{ fontSize:11 }}>Connect account</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -458,29 +495,26 @@ function OverviewTab({ onTabChange, opps, instagram, plausible, newsletter, onCo
         {/* Activity feed */}
         <div style={{ flex:1, display:"flex", flexDirection:"column", gap:12, minWidth:0 }}>
           <div className={card()} style={cardStyle}>
-            <div style={cardHeadStyle}><span style={cardHeadTitle}>Recent activity</span><span style={blueLink}>View all →</span></div>
-            {[
-              { icon:<IcIG />, iconBg:C.purpleL, iconColor:C.purple, type:"Post", typeColor:C.purple, channel:"Instagram", time:"2 days ago", text:'"Walnut slab detail — new series in the studio. Grain like this only comes around once."', meta:["↑ 312 likes","28 comments","4.8% engagement"], metaUp:[true,false,false] },
-              { icon:<IcMail />, iconBg:C.amberL, iconColor:C.amber, type:"Newsletter", typeColor:C.amber, channel:"Substack", time:"Apr 9", text:"April dispatch — pricing your work as a collectible maker", meta:["47% open rate","3.1% click-through","312 delivered"], metaUp:[true,false,false] },
-              { icon:<IcTrend />, iconBg:C.blueL, iconColor:C.blue, type:"Traffic spike", typeColor:C.blue, channel:"perennial.design", time:"Apr 7", text:"340 visits in one day — 6× daily average", meta:["Source: Sight Unseen feature","Top page: /work/brass-series"], metaUp:[false,true] },
-              { icon:<IcIG />, iconBg:C.purpleL, iconColor:C.purple, type:"Post", typeColor:C.purple, channel:"Instagram", time:"Apr 3", text:'"ICFF booth sneak peek — see you in New York, May 19–23."', meta:["248 likes","19 comments"], metaUp:[false,false] },
-              { icon:<IcMail />, iconBg:C.amberL, iconColor:C.amber, type:"Newsletter", typeColor:C.amber, channel:"Substack", time:"Mar 26", text:"March dispatch — what I learned exhibiting at NYCxDesign", meta:["41% open rate","2.8% click-through"], metaUp:[false,false] },
-            ].map((item, i) => (
-              <div key={i} className="flex gap-3" style={{ padding:"11px 15px", borderBottom:"0.5px solid var(--color-border)", cursor:"pointer" }}>
-                <div className="flex items-center justify-center rounded-lg shrink-0 mt-px" style={{ width:28, height:28, background:item.iconBg, color:item.iconColor }}>{item.icon}</div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div className="flex items-baseline gap-2 mb-1">
-                    <span style={{ fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em", color:item.typeColor }}>{item.type}</span>
-                    <span style={{ fontSize:10, color:"var(--color-grey)" }}>{item.channel}</span>
-                    <span style={{ fontSize:10, color:"var(--color-grey)", marginLeft:"auto", whiteSpace:"nowrap", flexShrink:0 }}>{item.time}</span>
-                  </div>
-                  <div style={{ fontSize:12, color:"var(--color-grey)", lineHeight:1.4, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{item.text}</div>
-                  <div style={{ fontSize:10, color:"var(--color-grey)", marginTop:2 }}>
-                    {item.meta.map((m,j) => <span key={j} style={{ display:"inline-block", marginRight:10, color:item.metaUp[j] ? C.accent : "var(--color-grey)" }}>{m}</span>)}
-                  </div>
-                </div>
+            <div style={cardHeadStyle}><span style={cardHeadTitle}>Recent activity</span></div>
+            {/* Real per-channel activity feed is deferred until publishers (post
+                composer, send-newsletter, etc.) are built. For now, render a
+                truthful empty state — no fabricated "Walnut slab detail"
+                placeholder content. */}
+            <div style={{ padding:"22px 16px", display:"flex", flexDirection:"column", alignItems:"center", gap:8, textAlign:"center" }}>
+              <div className="flex items-center justify-center rounded-lg" style={{ width:34, height:34, background:"var(--color-cream)", color:"var(--color-grey)" }}>
+                <IcTrend />
               </div>
-            ))}
+              <div style={{ fontSize:13, fontWeight:600, color:"var(--color-charcoal)", fontFamily:"var(--font-display)" }}>
+                {(instagram || plausible || newsletter)
+                  ? "Activity feed is on its way"
+                  : "Connect a channel to see activity"}
+              </div>
+              <p style={{ fontSize:11, color:"var(--color-grey)", lineHeight:1.55, maxWidth:340 }}>
+                {(instagram || plausible || newsletter)
+                  ? "Once you start posting or sending campaigns, your top moments — big traffic days, strong opens, viral posts — will land here. We're still wiring this up."
+                  : "Connect Instagram, Google Analytics, or your newsletter and Presence will summarize the highlights here — posts, traffic spikes, and campaign performance in one feed."}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -489,11 +523,21 @@ function OverviewTab({ onTabChange, opps, instagram, plausible, newsletter, onCo
           {/* Coming up */}
           <div className={card()} style={cardStyle}>
             <div style={cardHeadStyle}><span style={cardHeadTitle}>Coming up</span><span style={blueLink} onClick={() => onTabChange("opportunities")}>View all →</span></div>
+            {opps.length === 0 && (
+              <div style={{ padding:"18px 16px", textAlign:"center" }}>
+                <p style={{ fontSize:11, color:"var(--color-grey)", lineHeight:1.55 }}>
+                  No upcoming opportunities right now. The Perennial team curates fairs, open calls, grants, residencies, and awards — new entries land here as the feed updates.
+                </p>
+              </div>
+            )}
             {opps.slice(0, 4).map((o, i) => {
               const start = parseDate(o.start_date);
-              const isLast = i === 3;
+              const isLast = i === Math.min(opps.length, 4) - 1;
               return (
-                <div key={o.id} className="flex items-start gap-3" style={{ padding:"11px 15px", borderBottom: isLast ? "none" : "0.5px solid var(--color-border)", cursor:"pointer" }}>
+                <div key={o.id}
+                  onClick={() => onTabChange("opportunities")}
+                  className="flex items-start gap-3" style={{ padding:"11px 15px", borderBottom: isLast ? "none" : "0.5px solid var(--color-border)", cursor:"pointer" }}
+                >
                   <DateBlock month={start ? start.toLocaleString("en-US",{month:"short"}) : "—"} day={start ? String(start.getDate()) : "—"} />
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontSize:12, fontWeight:600, marginBottom:2 }}>{o.title}</div>
@@ -503,7 +547,6 @@ function OverviewTab({ onTabChange, opps, instagram, plausible, newsletter, onCo
                 </div>
               );
             })}
-            <div style={{ padding:"9px 15px", borderTop:"0.5px solid var(--color-border)" }}><span style={blueLink}>+ Add event</span></div>
           </div>
 
           {/* Ash card */}
@@ -683,18 +726,22 @@ function WebsiteTab({ integration, onConnect, onDisconnect }: {
         <button onClick={onDisconnect} style={{ fontSize:11, color:"var(--color-grey)", background:"none", border:"none", cursor:"pointer" }}>Disconnect</button>
       </div>
       <div style={{ padding:"22px 24px", display:"flex", flexDirection:"column", gap:18, flex:1 }}>
-        <div className="rounded-xl" style={{ border:"0.5px solid var(--color-border)", padding:"12px 16px", display:"flex", gap:12, ...cardStyle }}>
+        <button
+          onClick={() => openAsh("Look at my Google Analytics traffic data and tell me what stands out — top pages, traffic sources, spikes worth investigating, and one or two things I should do this week to grow my audience.")}
+          className="rounded-xl"
+          style={{ border:"0.5px solid var(--color-border)", padding:"12px 16px", display:"flex", gap:12, ...cardStyle, cursor:"pointer", textAlign:"left", fontFamily:"inherit", width:"100%" }}
+        >
           <div style={{ display:"flex", alignItems:"flex-start", gap:8, flex:1 }}>
             <div style={{ color:C.accent, flexShrink:0, marginTop:2 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/><path d="M12 12c-2-1.5-3-3-2-5"/><path d="M12 12c2-1.5 3-3 2-5"/></svg>
             </div>
             <div>
-              <div style={{ fontSize:10, textTransform:"uppercase", color:"var(--color-grey)", fontWeight:600, letterSpacing:"0.04em" }}>Ash Insight</div>
-              <div style={{ fontSize:13, color:"var(--color-charcoal)", lineHeight:1.5, marginTop:2 }}>Traffic spike on Apr 7 was 6× your daily average — Sight Unseen featured your brass series. Consider reaching out to thank the editor; it can warm the relationship for future coverage.</div>
+              <div style={{ fontSize:10, textTransform:"uppercase", color:"var(--color-grey)", fontWeight:600, letterSpacing:"0.04em" }}>Ash</div>
+              <div style={{ fontSize:13, color:"var(--color-charcoal)", lineHeight:1.5, marginTop:2 }}>Want a read on this month&apos;s traffic? I&apos;ll look at your top pages, sources, and what to focus on next.</div>
             </div>
           </div>
           <span style={{ ...blueLink, whiteSpace:"nowrap", flexShrink:0, alignSelf:"flex-start" }}>Ask Ash →</span>
-        </div>
+        </button>
         <div style={{ display:"flex", gap:12 }}>
           {loadingStats ? (
             [1,2,3,4].map(i => (
@@ -834,6 +881,14 @@ function SocialsTab({ instagram, onConnect, onDisconnect }: {
       )}
       {instagram && (
       <>
+      {/* Surfaces below the stat row (Post queue, Top post, Follower growth,
+          Best times) are not yet wired to the Instagram Graph API — they
+          render demonstration content. Flag it so the user isn't misled. */}
+      <div style={{ padding:"10px 24px 0" }}>
+        <div className="rounded-md" style={{ padding:"7px 11px", border:"0.5px dashed rgba(31,33,26,0.18)", background:"var(--color-cream)", fontSize:10.5, color:"var(--color-grey)" }}>
+          Stat row above is live from your Instagram account. The panels below (post queue, top post, growth chart, best times) are demo content — full publisher integration is in progress.
+        </div>
+      </div>
       <div style={{ padding:"14px 24px", display:"flex", gap:12 }}>
         <StatCard label="Followers"  value={instagram.metadata.followers_count ? String(instagram.metadata.followers_count) : "—"} sub={instagram.account_name ?? "Instagram"} detail="Total followers" helpText="Total people following you." askAsh ashMessage="How can I grow my Instagram following as a designer?" />
         <StatCard label="Engagement" value={instagram.metadata.engagement_rate ? `${instagram.metadata.engagement_rate}%` : "—"} sub="Avg engagement rate" subUp={!!instagram.metadata.engagement_rate} detail="Industry avg: 1.8%" helpText="Likes + comments as % of followers." askAsh />
@@ -976,6 +1031,12 @@ function NewsletterTab({ integration, onConnect, onDisconnect }: {
           <button onClick={() => onDisconnect(integration.provider)} style={{ fontSize:11, color:"var(--color-grey)", background:"none", border:"none", cursor:"pointer" }}>Disconnect</button>
         </div>
         <div style={{ padding:"22px 24px", display:"flex", flexDirection:"column", gap:18, flex:1 }}>
+        {/* Stat cards below are live from your newsletter provider. The
+            Campaigns list, Next send, Subscriber growth chart, and Audience
+            panel are demo content until campaign-level data is wired up. */}
+        <div className="rounded-md" style={{ padding:"7px 11px", border:"0.5px dashed rgba(31,33,26,0.18)", background:"var(--color-cream)", fontSize:10.5, color:"var(--color-grey)" }}>
+          Subscribers and open rate above are live. Campaigns, next-send, growth chart, and audience breakdown are demo content — full integration coming soon.
+        </div>
         <div style={{ display:"flex", gap:12 }}>
           <StatCard label="Subscribers"
             value={integration.metadata.subscriber_count ? String(integration.metadata.subscriber_count) : integration.metadata.total_subscribers ? String(integration.metadata.total_subscribers) : integration.metadata.subscribers ? String(integration.metadata.subscribers) : "—"}
@@ -1050,7 +1111,7 @@ function NewsletterTab({ integration, onConnect, onDisconnect }: {
                 </div>
               ))}
             </div>
-            <AshCard text="Your 'gallery relationship' send had your highest open rate (52%). Want me to outline a follow-up piece on pitching collectors directly?" />
+            <AshCard text="Want help thinking through a newsletter strategy? I can help you outline cadence, topics that build collector trust, and what to write next." buttonLabel="Brainstorm with Ash" />
           </div>
         </div>
         </div>
@@ -1380,12 +1441,27 @@ function OppDetail({ opp, onClose, onDismiss, onStatusChange }: {
   );
 }
 
-function OpportunitiesTab({ opps: initialOpps }: { opps: Opportunity[] }) {
+function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportunity[]; deepLinkOppId?: string | null }) {
   const [filter, setFilter]       = useState<OppFilter>("all");
   const [view, setView]           = useState<OppView>("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [localOpps, setLocalOpps] = useState<Opportunity[]>(initialOpps);
+
+  // Honor `?opportunityId=` deep-link on mount (Calendar bars link this way).
+  // Open the matching opp's detail panel and scroll it into view.
+  useEffect(() => {
+    if (!deepLinkOppId) return;
+    const match = initialOpps.find(o => o.id === deepLinkOppId);
+    if (!match) return;
+    setSelectedId(deepLinkOppId);
+    // Clear the query so a refresh or back-nav doesn't re-trigger.
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("opportunityId");
+      window.history.replaceState({}, "", url.toString());
+    } catch { /* noop */ }
+  }, [deepLinkOppId, initialOpps]);
 
   const opps = localOpps;
   const dismiss = (id: string) => { setDismissed(prev => new Set([...prev, id])); setLocalOpps(prev => prev.filter(o => o.id !== id)); };
@@ -1516,18 +1592,23 @@ const TABS: { key: Tab; label: string }[] = [
   { key:"opportunities", label:"Opportunities" },
 ];
 
+// Tab-level actions in the Presence topbar. Kept intentionally minimal —
+// post scheduling, manual opportunity add, and "+ new campaign" are all
+// deferred until the underlying flows exist. Today the only real action
+// per tab is an external link out to the user's published surface.
 const TAB_ACTIONS: Record<Tab, React.ReactNode> = {
-  overview:      <><BtnGhost>Connect account</BtnGhost><BtnPrimary>+ New post</BtnPrimary></>,
-  website:       <BtnGhost>View site ↗</BtnGhost>,
-  socials:       <><BtnGhost>Schedule</BtnGhost><BtnPrimary>+ New post</BtnPrimary></>,
-  newsletter:    <><BtnGhost>View on Substack ↗</BtnGhost><BtnPrimary>+ New campaign</BtnPrimary></>,
-  opportunities: <><BtnGhost>Sync calendar</BtnGhost><BtnPrimary>+ Add opportunity</BtnPrimary></>,
+  overview:      null,
+  website:       null, // Visit-site link rendered inline in WebsiteTab when connected.
+  socials:       null,
+  newsletter:    null,
+  opportunities: null,
 };
 
 export default function PresenceClient({ initialOpportunities }: { initialOpportunities: Opportunity[] }) {
   const [tab, setTab] = useState<Tab>("overview");
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [connectModal, setConnectModal] = useState<ConnectProvider | null>(null);
+  const [deepLinkOppId, setDeepLinkOppId] = useState<string | null>(null);
 
   const now = new Date();
   const period = now.toLocaleString("en-US", { month:"short", year:"numeric" });
@@ -1536,6 +1617,22 @@ export default function PresenceClient({ initialOpportunities }: { initialOpport
     initialOpportunities.filter(o => oppSection(o) !== null),
     [initialOpportunities]
   );
+
+  // Deep-link: `?opportunityId=<id>` (and `?tab=<tab>`) — used by Calendar's
+  // multi-day opportunity bars, and by any future Ash/notification linkbacks.
+  // Selects the right tab and surfaces the matching opportunity's detail panel.
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const queryTab = sp.get("tab") as Tab | null;
+    const oppId = sp.get("opportunityId");
+    if (queryTab && (["overview","website","socials","newsletter","opportunities"] as Tab[]).includes(queryTab)) {
+      setTab(queryTab);
+    }
+    if (oppId) {
+      setTab("opportunities");
+      setDeepLinkOppId(oppId);
+    }
+  }, []);
 
   // Load connected integrations on mount
   useEffect(() => {
@@ -1609,7 +1706,7 @@ export default function PresenceClient({ initialOpportunities }: { initialOpport
           onDisconnect={(p) => disconnectIntegration(p)}
         />
       )}
-      {tab === "opportunities" && <OpportunitiesTab opps={upcomingOpps} />}
+      {tab === "opportunities" && <OpportunitiesTab opps={upcomingOpps} deepLinkOppId={deepLinkOppId} />}
 
       {connectModal && (
         <ConnectIntegrationModal
