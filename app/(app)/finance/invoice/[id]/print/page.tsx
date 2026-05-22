@@ -41,6 +41,21 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
   const total = invoiceTotal(inv);
   const isOverdue = inv.status === "sent" && !!inv.due_at && inv.due_at < new Date().toISOString().split("T")[0];
 
+  // Studio identity for the "From" header — pulled from profiles so the
+  // printable invoice reflects the user's real studio name + email rather
+  // than placeholder copy.
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: profile } = user
+    ? await supabase
+        .from("profiles")
+        .select("studio_name, display_name, location, website")
+        .eq("user_id", user.id)
+        .maybeSingle()
+    : { data: null };
+  const studioName = profile?.studio_name?.trim() || profile?.display_name?.trim() || "Your studio";
+  const studioContact = user?.email ?? "";
+  const studioLocation = profile?.location ?? null;
+
   return (
     <>
       <PrintTrigger />
@@ -144,8 +159,11 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
         {/* Header */}
         <div className="header">
           <div>
-            <div className="studio-mark">Perennial</div>
-            <div className="studio-sub">Your studio · your@email.com</div>
+            <div className="studio-mark">{studioName}</div>
+            <div className="studio-sub">
+              {studioContact}
+              {studioLocation ? ` · ${studioLocation}` : ""}
+            </div>
           </div>
           <div>
             <div className="inv-label">Invoice</div>

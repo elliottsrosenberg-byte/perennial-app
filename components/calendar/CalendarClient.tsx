@@ -502,7 +502,7 @@ interface MonthGridProps {
   tasks:           Task[];
   projects:        { id: string; title: string; due_date: string | null; status: string }[];
   showWeekends:    boolean;
-  onEventClick:    (e: CalEvent) => void;
+  onEventClick:    (e: CalEvent, rect: DOMRect | null) => void;
   onTaskClick:     (e: React.MouseEvent, t: Task) => void;
   onEmptyCellClick:(date: Date) => void;
   onDayNumberClick:(date: Date) => void;
@@ -642,7 +642,11 @@ function MonthGrid({
                   return (
                     <button
                       key={`e-${e.id}-${i}`}
-                      onClick={(ev) => { ev.stopPropagation(); onEventClick(e); }}
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+                        onEventClick(e, rect);
+                      }}
                       style={{
                         textAlign: "left",
                         background: `${color}18`, color,
@@ -815,6 +819,14 @@ export default function CalendarClient({
   const [showWeekends,    setShowWeekends]    = useState(true);
   const [showDeclined,    setShowDeclined]    = useState(true);
   const [openEvent,       setOpenEvent]       = useState<CalEvent | null>(null);
+  const [openEventAnchor, setOpenEventAnchor] = useState<DOMRect | null>(null);
+  /** Open an event's preview panel anchored to the clicked chip's rect.
+   *  Falls back to right-edge anchoring when called without a rect (deep
+   *  links, month overlay rows). */
+  function openEventAt(ev: CalEvent, rect: DOMRect | null) {
+    setOpenEvent(ev);
+    setOpenEventAnchor(rect);
+  }
   const [createError,     setCreateError]     = useState<string | null>(null);
   const [newEventOpen,    setNewEventOpen]    = useState(false);
   const [newEventPrefill, setNewEventPrefill] = useState<{ start?: Date; end?: Date; allDay?: boolean } | null>(null);
@@ -843,6 +855,10 @@ export default function CalendarClient({
     startY:    number;
     currentY:  number;
     allDay:    boolean;
+    /** false once mouseup has fired and the create card is open — the
+     *  ghost stays drawn but stops tracking the cursor and the global
+     *  mousemove/mouseup listeners detach. */
+    active:    boolean;
   } | null>(null);
   // Distinguish a click on the empty grid (single-slot 30 min add) from a
   // genuine drag — if the user releases within this px threshold of where
@@ -872,7 +888,7 @@ export default function CalendarClient({
   // we can capture the originating column index and starting offset; the
   // global listeners just update currentY and finalize on release.
   useEffect(() => {
-    if (!dragCreate) return;
+    if (!dragCreate || !dragCreate.active) return;
 
     function onMove(e: MouseEvent) {
       if (!dragCreate) return;
@@ -904,7 +920,16 @@ export default function CalendarClient({
       const startDate = dayWithMinutes(drag.day, startMin);
       const endDate   = dayWithMinutes(drag.day, endMin);
 
-      setDragCreate(null);
+      // Keep the drag ghost rendered so the user can see what area they
+      // just selected while the create card is open. We snap startY /
+      // currentY back to the finalized minute boundaries so the ghost
+      // matches the prefilled times exactly. `active: false` detaches the
+      // global listeners so the ghost stops tracking the cursor; it's
+      // cleared entirely when the card closes (cancel / submit /
+      // click-outside).
+      const finalStartY = (startMin / 60) * PX_PER_HOUR;
+      const finalEndY   = (endMin   / 60) * PX_PER_HOUR;
+      setDragCreate({ ...drag, startY: finalStartY, currentY: finalEndY, active: false });
       setNewEventPrefill({ start: startDate, end: endDate, allDay: drag.allDay });
       setNewEventOpen(true);
     }
@@ -1619,7 +1644,7 @@ export default function CalendarClient({
             tasks={scheduledTasks}
             projects={initialProjects}
             showWeekends={showWeekends}
-            onEventClick={setOpenEvent}
+            onEventClick={openEventAt}
             onTaskClick={openQuickTask}
             onEmptyCellClick={(date) => {
               const start = new Date(date); start.setHours(0, 0, 0, 0);
@@ -1875,7 +1900,10 @@ export default function CalendarClient({
                         return (
                           <button
                             key={e.id}
-                            onClick={() => setOpenEvent(e)}
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              openEventAt(e, (ev.currentTarget as HTMLElement).getBoundingClientRect());
+                            }}
                             className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate text-left"
                             style={{
                               background: `${color}18`, color,
@@ -1989,6 +2017,7 @@ export default function CalendarClient({
                         startY:    y,
                         currentY:  y,
                         allDay:    e.shiftKey,
+                        active:    true,
                       });
                     }}
                     style={{
@@ -2321,7 +2350,13 @@ export default function CalendarClient({
           defaultStart={newEventPrefill?.start}
           defaultEnd={newEventPrefill?.end}
           defaultAllDay={newEventPrefill?.allDay}
-          onClose={() => { setNewEventOpen(false); setNewEventPrefill(null); }}
+          onClose={() => {
+            setNewEventOpen(false);
+            setNewEventPrefill(null);
+            // Closing the create card always clears the drag-create ghost
+            // (whether opened via cancel, submit, click-outside, or Esc).
+            setDragCreate(null);
+          }}
         />
       )}
 

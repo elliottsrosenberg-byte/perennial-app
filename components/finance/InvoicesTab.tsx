@@ -86,11 +86,6 @@ function SendInvoiceModal({ invoice, onClose, onSent }: {
               <textarea value={message} onChange={e => setMessage(e.target.value)} rows={5}
                 className={inputCls} style={{ ...inputStyle, resize: "none" }} />
             </div>
-            {!process.env.NEXT_PUBLIC_APP_URL && (
-              <p className="text-[11px] px-3 py-2 rounded-lg" style={{ background: "rgba(184,134,11,0.08)", color: "#b8860b", border: "0.5px solid rgba(184,134,11,0.3)" }}>
-                Add RESEND_API_KEY to .env.local to enable email sending.
-              </p>
-            )}
             {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
           </div>
         )}
