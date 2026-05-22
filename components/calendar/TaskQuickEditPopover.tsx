@@ -91,7 +91,9 @@ export default function TaskQuickEditPopover({
   }
 
   async function del() {
-    if (!window.confirm("Delete this task?")) return;
+    // Single-click delete — matches the new event-card behavior. The
+    // calendar surfaces undo via the rail's linger when needed; for the
+    // quick-edit deletion path the click is the commit.
     await supabase.from("tasks").delete().eq("id", task.id);
     onDeleted?.(task.id);
     onClose();

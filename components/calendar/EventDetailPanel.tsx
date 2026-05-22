@@ -297,7 +297,9 @@ export default function EventDetailPanel({ event: initialEvent, color, onClose, 
 
   async function deleteEvent() {
     if (!writable || !event.calendarId) return;
-    if (!window.confirm("Delete this event? This can't be undone.")) return;
+    // Per Phase F: no confirm dialog — the click is the commit. If the
+    // user wanted to bail they wouldn't have clicked. Restored confirms
+    // would just be an extra interruption between intent and action.
     setSaving(true);
     setErr(null);
     try {
