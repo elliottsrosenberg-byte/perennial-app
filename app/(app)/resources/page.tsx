@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import ResourcesClient from "@/components/resources/ResourcesClient";
+import ResourcesIntroModal from "@/components/tour/resources/ResourcesIntroModal";
+import ResourcesTooltipTour from "@/components/tour/resources/ResourcesTooltipTour";
 import type { Resource, ResourceLink } from "@/types/database";
 
 export default async function ResourcesPage() {
@@ -16,6 +18,8 @@ export default async function ResourcesPage() {
         initialResources={(resources ?? []) as Resource[]}
         initialLinks={(links ?? []) as ResourceLink[]}
       />
+      <ResourcesIntroModal />
+      <ResourcesTooltipTour />
     </div>
   );
 }
