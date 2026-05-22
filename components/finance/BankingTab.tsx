@@ -148,10 +148,6 @@ export default function BankingTab() {
     .filter(a => a.type === "credit")
     .reduce((s, a) => s + Math.abs(a.balance_current ?? 0), 0);
 
-  const recentIncome  = transactions.filter(t => t.type === "credit" && t.status === "posted").slice(0, 5);
-  const recentExpense = transactions.filter(t => t.type === "debit"  && t.status === "posted").slice(0, 5);
-
-  const inputStyle = { background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)" };
 
   return (
     <>

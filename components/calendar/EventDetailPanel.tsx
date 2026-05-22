@@ -36,6 +36,11 @@ interface Props {
   onUpdated?: (event: CalendarEventLite) => void;
   /** Called after a successful DELETE so the parent can drop the event. */
   onDeleted?: (eventId: string) => void;
+  /** Viewport-space rect of the chip the user clicked. The panel anchors
+   *  to its right edge (and flips to the left edge if it would overflow);
+   *  if omitted (e.g. deep-link open with no chip), the panel falls back
+   *  to the previous right-edge behavior. */
+  anchorRect?: { top: number; left: number; right: number; bottom: number; width: number; height: number } | null;
 }
 
 function pad(n: number): string { return n.toString().padStart(2, "0"); }
@@ -75,7 +80,7 @@ function encodeRef(event: CalendarEventLite): string {
   return encodeURIComponent(`${provider}:${event.id}`);
 }
 
-export default function EventDetailPanel({ event: initialEvent, color, onClose, onUpdated, onDeleted }: Props) {
+export default function EventDetailPanel({ event: initialEvent, color, onClose, onUpdated, onDeleted, anchorRect }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [event, setEvent] = useState(initialEvent);
   const writable = !!event.writable && !!event.calendarId;
@@ -233,8 +238,42 @@ export default function EventDetailPanel({ event: initialEvent, color, onClose, 
 
   const providerLabel = event.source === "microsoft" ? "Outlook" : event.source === "google" ? "Google Calendar" : "External";
 
-  // Non-blocking right-edge preview card — no scrim, so the calendar grid
-  // stays visible while the user reads or edits an event.
+  // Panel width — matches NewEventModal so the create + view surfaces
+  // sit at the same scale.
+  const PANEL_W = 340;
+  const MAX_H_PX = typeof window !== "undefined" ? window.innerHeight - 80 : 600;
+
+  // Compute panel position. With an anchorRect we anchor to the right edge
+  // of the clicked chip (flipping to the left if it would overflow); on
+  // overflow at the bottom we shift up. Without a rect we fall back to the
+  // historical top-right corner placement.
+  const positionStyle: React.CSSProperties = (() => {
+    if (!anchorRect || typeof window === "undefined") {
+      return { top: 64, right: 16 };
+    }
+    const GAP = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    // Horizontal: prefer right of the chip; flip to left side if it would
+    // overflow the viewport.
+    let left: number;
+    if (anchorRect.right + GAP + PANEL_W + 8 <= vw) {
+      left = anchorRect.right + GAP;
+    } else if (anchorRect.left - GAP - PANEL_W >= 8) {
+      left = anchorRect.left - GAP - PANEL_W;
+    } else {
+      // Neither side fits — clamp to the right edge of the viewport.
+      left = Math.max(8, vw - PANEL_W - 8);
+    }
+    // Vertical: try to center on the chip's top, clamped to the viewport
+    // with an 8px margin top/bottom and the max-height in mind.
+    const desiredTop = anchorRect.top - 8;
+    const top = Math.max(8, Math.min(vh - Math.min(MAX_H_PX, 560) - 8, desiredTop));
+    return { top, left };
+  })();
+
+  // Non-blocking preview card — no scrim, so the calendar grid stays
+  // visible while the user reads or edits an event.
   return (
     <>
       <div
@@ -243,9 +282,8 @@ export default function EventDetailPanel({ event: initialEvent, color, onClose, 
         aria-modal={false}
         style={{
           position: "fixed",
-          top: 64,
-          right: 16,
-          width: 380,
+          ...positionStyle,
+          width: PANEL_W,
           maxHeight: "calc(100vh - 80px)",
           zIndex: 70,
           background: "var(--color-off-white)",

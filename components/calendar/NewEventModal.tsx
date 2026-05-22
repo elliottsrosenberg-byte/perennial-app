@@ -126,7 +126,28 @@ export default function NewEventModal({
   const [needsReconnect, setNeedsReconnect] = useState<{ url: string; provider: string } | null>(null);
 
   const titleRef = useRef<HTMLInputElement>(null);
+  const cardRef  = useRef<HTMLDivElement>(null);
   useEffect(() => { titleRef.current?.focus(); }, []);
+
+  // Click-outside to close. Skipped on the very first frame so the same
+  // mouseup that opened the card (from drag-create on the time grid) is
+  // not interpreted as an outside click. We capture-phase listen so menus
+  // anchored elsewhere don't intercept the click first.
+  useEffect(() => {
+    let armed = false;
+    const arm = window.setTimeout(() => { armed = true; }, 0);
+    function onDown(e: MouseEvent) {
+      if (!armed) return;
+      if (!cardRef.current) return;
+      if (cardRef.current.contains(e.target as Node)) return;
+      onClose();
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => {
+      window.clearTimeout(arm);
+      document.removeEventListener("mousedown", onDown);
+    };
+  }, [onClose]);
 
   useEffect(() => {
     let cancelled = false;
@@ -232,11 +253,12 @@ export default function NewEventModal({
 
   return (
     <div
+      ref={cardRef}
       style={{
         position: "fixed",
         top: 64,
         right: 16,
-        width: 380,
+        width: 340,
         maxHeight: "calc(100vh - 80px)",
         overflowY: "auto",
         background: "var(--color-off-white)",
