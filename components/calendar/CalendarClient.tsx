@@ -22,6 +22,12 @@ const GRID_END     = 23;
 const GRID_HOURS   = GRID_END - GRID_START;
 const GRID_HEIGHT  = GRID_HOURS * PX_PER_HOUR;
 const DAY_HDR_H    = 64;   // fixed height used for sticky top offsets
+// Minimum legible width for the 7-column week grid. At narrower window
+// widths the inner rows keep this width and the scroll container pans
+// horizontally instead of collapsing the columns. 52px gutter + 7 × ~90px
+// columns ≈ 700px is the threshold below which event chips lose their
+// time labels.
+const WEEK_MIN_WIDTH = 700;
 
 const DOW_SHORT   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
@@ -86,6 +92,71 @@ function dayWithMinutes(day: Date, minutes: number): Date {
   const out = new Date(day);
   out.setHours(GRID_START, 0, 0, 0);
   out.setMinutes(minutes);
+  return out;
+}
+
+/** Compute side-by-side column layout for a set of time-grid events that
+ *  share a day. Walks events in start-time order, batching them into
+ *  *transitive* overlap groups (A overlaps B, B overlaps C → all in one
+ *  group even if A and C don't directly overlap). Within a group each
+ *  event gets an index + total so the renderer can compute
+ *  left = idx/total and width = 1/total. */
+interface ChipLayout {
+  startMs: number;
+  endMs:   number;
+  groupSize: number;
+  columnIdx: number;
+}
+function layoutDayEvents<T extends { start: string; end: string }>(events: T[]): Map<T, ChipLayout> {
+  const out  = new Map<T, ChipLayout>();
+  if (events.length === 0) return out;
+  // Sort by start ascending, then by end descending so longer events take
+  // the leftmost column first — gives the most stable visual when many
+  // chips share a slot.
+  const sorted = [...events].sort((a, b) => {
+    const sa = new Date(a.start).getTime();
+    const sb = new Date(b.start).getTime();
+    if (sa !== sb) return sa - sb;
+    return new Date(b.end).getTime() - new Date(a.end).getTime();
+  });
+  // Greedy: extend the current group as long as the next event overlaps
+  // *any* event in the group (tracked by the group's max end).
+  let groupStart = 0;
+  let groupMaxEnd = new Date(sorted[0].end).getTime();
+  for (let i = 1; i <= sorted.length; i++) {
+    const startMs = i < sorted.length ? new Date(sorted[i].start).getTime() : Infinity;
+    if (startMs < groupMaxEnd) {
+      groupMaxEnd = Math.max(groupMaxEnd, new Date(sorted[i].end).getTime());
+      continue;
+    }
+    // Close out the group [groupStart, i). Assign column indices by
+    // sweeping the group and giving each event the lowest column index
+    // not currently occupied by an earlier overlapping event in the
+    // group.
+    const group = sorted.slice(groupStart, i);
+    const columnEnds: number[] = []; // column → end ms of the event currently in that column
+    const cols: number[] = [];
+    for (const ev of group) {
+      const s = new Date(ev.start).getTime();
+      let col = columnEnds.findIndex((end) => end <= s);
+      if (col === -1) { col = columnEnds.length; columnEnds.push(0); }
+      columnEnds[col] = new Date(ev.end).getTime();
+      cols.push(col);
+    }
+    const groupSize = columnEnds.length;
+    group.forEach((ev, j) => {
+      out.set(ev, {
+        startMs:   new Date(ev.start).getTime(),
+        endMs:     new Date(ev.end).getTime(),
+        groupSize,
+        columnIdx: cols[j],
+      });
+    });
+    if (i < sorted.length) {
+      groupStart  = i;
+      groupMaxEnd = new Date(sorted[i].end).getTime();
+    }
+  }
   return out;
 }
 
@@ -1560,10 +1631,13 @@ export default function CalendarClient({
             onShowMore={(date, x, y) => setMonthDayOverlay({ date, x, y })}
           />
         ) : (
-        /* ── Single scroll container: day headers + all-day + time grid all share same width ── */
+        /* ── Single scroll container: day headers + all-day + time grid all share same width ──
+            overflow-x: auto lets the user pan sideways at narrow widths;
+            inner rows pick up a minWidth so the columns stay legible
+            instead of collapsing to ~20px each. */
         <div
           ref={gridWrapRef}
-          className="flex-1 overflow-y-auto overflow-x-hidden"
+          className="flex-1 overflow-y-auto overflow-x-auto"
           style={{ position: "relative", background: "var(--color-off-white)" }}
         >
 
@@ -1577,6 +1651,7 @@ export default function CalendarClient({
               background: "var(--color-off-white)",
               borderBottom: "0.5px solid var(--color-border)",
               height: `${DAY_HDR_H}px`,
+              minWidth: WEEK_MIN_WIDTH,
             }}
           >
             <div
@@ -1638,6 +1713,7 @@ export default function CalendarClient({
               background: "var(--color-warm-white)",
               borderBottom: "0.5px solid var(--color-border)",
               minHeight: 26,
+              minWidth: WEEK_MIN_WIDTH,
             }}
           >
             <div
@@ -1755,6 +1831,7 @@ export default function CalendarClient({
                   gridAutoRows: "min-content",
                   rowGap: 2,
                   minHeight: 30,
+                  minWidth: WEEK_MIN_WIDTH,
                   paddingBottom: oppSpans.length > 0 ? 4 : 0,
                 }}
               >
@@ -1861,7 +1938,7 @@ export default function CalendarClient({
           })()}
 
           {/* Time grid — not sticky, scrolls with the container */}
-          <div style={{ display: "flex", height: `${GRID_HEIGHT}px`, position: "relative" }}>
+          <div style={{ display: "flex", height: `${GRID_HEIGHT}px`, position: "relative", minWidth: WEEK_MIN_WIDTH }}>
 
             {/* Time gutter */}
             <div style={{ width: "52px", flexShrink: 0, position: "relative", height: `${GRID_HEIGHT}px` }}>
@@ -1982,14 +2059,18 @@ export default function CalendarClient({
                       </div>
                     )}
 
-                    {/* Google Calendar events */}
-                    {gcalEvents
-                      .filter(e => {
+                    {/* Google Calendar events — laid out side-by-side when
+                        they overlap so each chip stays legible. The
+                        layoutDayEvents helper builds transitive overlap
+                        groups; within a group every chip gets a column
+                        index and groupSize to compute left/width. */}
+                    {(() => {
+                      const dayEvents = gcalEvents.filter(e => {
                         if (e.allDay) return false;
-                        const start = new Date(e.start);
-                        return isSameDay(start, day);
-                      })
-                      .map((e, ei) => {
+                        return isSameDay(new Date(e.start), day);
+                      });
+                      const layout = layoutDayEvents(dayEvents);
+                      return dayEvents.map((e, ei) => {
                         const start = new Date(e.start);
                         const end   = new Date(e.end);
                         const y     = timeToY(start.getHours(), start.getMinutes());
@@ -1997,6 +2078,18 @@ export default function CalendarClient({
                         const h     = Math.max(24, endY - y);
                         const color = e.colorId ? GCAL_COLORS[e.colorId] : (e.source === "microsoft" ? "#0078d4" : "#039BE5");
                         if (y < 0 || y > GRID_HEIGHT) return null;
+                        const slot = layout.get(e);
+                        const groupSize = slot?.groupSize ?? 1;
+                        const colIdx    = slot?.columnIdx ?? 0;
+                        const GAP_PX    = 2;
+                        // Width is a percentage of the column; we leave a
+                        // tiny gap between adjacent chips so the eye reads
+                        // them as separate items.
+                        const widthPct  = 100 / groupSize;
+                        const leftPct   = colIdx * widthPct;
+                        // Short chips (≤30 min) only have room for one line;
+                        // longer ones get the two-line clamp.
+                        const titleLines = h < 36 ? 1 : 2;
                         return (
                           <button
                             key={e.id}
@@ -2004,8 +2097,8 @@ export default function CalendarClient({
                             style={{
                               position: "absolute",
                               top:    `${y}px`,
-                              left:   "4px",
-                              right:  "4px",
+                              left:   `calc(${leftPct}% + ${colIdx === 0 ? 4 : GAP_PX / 2}px)`,
+                              width:  `calc(${widthPct}% - ${colIdx === 0 || colIdx === groupSize - 1 ? GAP_PX + 4 : GAP_PX}px)`,
                               height: `${h}px`,
                               borderRadius: "4px",
                               borderLeft:   `2.5px solid ${color}`,
@@ -2022,17 +2115,36 @@ export default function CalendarClient({
                             }}
                             title={`${e.title}${e.location ? ` · ${e.location}` : ""}`}
                           >
-                            <p className="text-[11px] font-medium truncate" style={{ color, lineHeight: "1.25" }}>
+                            <p
+                              className="text-[11px] font-medium"
+                              style={{
+                                color, lineHeight: "1.25",
+                                display: "-webkit-box",
+                                WebkitLineClamp: titleLines,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
+                                wordBreak: "break-word",
+                              }}
+                            >
                               {e.title}
                             </p>
-                            <p className="text-[9px]" style={{ color, opacity: 0.8 }}>
+                            <p
+                              className="text-[9px]"
+                              style={{
+                                color, opacity: 0.8,
+                                display: "-webkit-box",
+                                WebkitLineClamp: 1,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
+                              }}
+                            >
                               {start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
                               {e.location ? ` · ${e.location}` : ""}
                             </p>
                           </button>
                         );
-                      })
-                    }
+                      });
+                    })()}
 
                     {/* Tasks have no time-of-day — they render in the all-day
                         strip above, not in the time grid. */}
