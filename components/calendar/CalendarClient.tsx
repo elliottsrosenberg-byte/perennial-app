@@ -18,8 +18,11 @@ import CalendarTooltipTour from "@/components/tour/calendar/CalendarTooltipTour"
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const PX_PER_HOUR  = 64;
-const GRID_START   = 6;
-const GRID_END     = 23;
+// Full 24-hour grid (12 AM → 12 AM next day). Mount-time scroll lands on
+// the current time so the user doesn't open to a wall of empty midnight
+// hours.
+const GRID_START   = 0;
+const GRID_END     = 24;
 const GRID_HOURS   = GRID_END - GRID_START;
 const GRID_HEIGHT  = GRID_HOURS * PX_PER_HOUR;
 const DAY_HDR_H    = 64;   // fixed height used for sticky top offsets
