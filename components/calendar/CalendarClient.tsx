@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Task, Contact } from "@/types/database";
+import type { Task, Contact, UserCalendar } from "@/types/database";
 import { ChevronLeft, ChevronRight, Plus, CheckSquare, MoreHorizontal, CalendarClock, Eye, EyeOff } from "lucide-react";
 import DatePicker from "@/components/ui/DatePicker";
 import EmptyState from "@/components/ui/EmptyState";
@@ -863,6 +863,12 @@ export default function CalendarClient({
   const [showDeclined,    setShowDeclined]    = useState(true);
   const [openEvent,       setOpenEvent]       = useState<CalEvent | null>(null);
   const [openEventAnchor, setOpenEventAnchor] = useState<DOMRect | null>(null);
+  const [eventsLoading,   setEventsLoading]   = useState(false);
+  // Map of user_calendars.id → row, used to colour event chips by the
+  // calendar the user chose in the left rail rather than by the per-event
+  // Google colorId. Refreshes on `calendar:refresh-events` so a colour
+  // change in the sources panel reflects on the grid immediately.
+  const [calendarsById,   setCalendarsById]   = useState<Record<string, UserCalendar>>({});
   /** Open an event's preview panel anchored to the clicked chip's rect.
    *  Falls back to right-edge anchoring when called without a rect (deep
    *  links, month overlay rows). */
@@ -1112,15 +1118,49 @@ export default function CalendarClient({
     const start = startDate.toISOString().split("T")[0];
     const end   = endDate.toISOString().split("T")[0];
     let cancelled = false;
+    setEventsLoading(true);
     fetch(`/api/integrations/calendar/events?startDate=${start}&endDate=${end}`)
       .then(r => r.json())
       .then((d: { events?: CalEvent[] }) => {
         if (cancelled) return;
         setGcalEvents(d.events ?? []);
       })
-      .catch(() => { /* swallow — failure leaves the previous events in place */ });
+      .catch(() => { /* swallow — failure leaves the previous events in place */ })
+      .finally(() => { if (!cancelled) setEventsLoading(false); });
     return () => { cancelled = true; };
   }, [viewDate, viewMode, anyConnected, refreshNonce]);
+
+  // Fetch the user_calendars list so we can colour each event chip by the
+  // calendar's chosen colour. Re-fetches on `calendar:refresh-events`
+  // (dispatched after sources panel toggles, account connects, etc.).
+  useEffect(() => {
+    let cancelled = false;
+    function load() {
+      fetch("/api/integrations/calendar/calendars")
+        .then(r => r.json())
+        .then((d: { calendars?: UserCalendar[] }) => {
+          if (cancelled) return;
+          const map: Record<string, UserCalendar> = {};
+          for (const c of d.calendars ?? []) map[c.id] = c;
+          setCalendarsById(map);
+        })
+        .catch(() => {});
+    }
+    load();
+    function onRefresh() { load(); }
+    window.addEventListener("calendar:refresh-events", onRefresh);
+    return () => { cancelled = true; window.removeEventListener("calendar:refresh-events", onRefresh); };
+  }, []);
+
+  // Per-event colour: prefer the user_calendars colour the user picked in
+  // the left rail; fall back to the per-event Google colorId; final
+  // fallback is the provider's default tint.
+  function eventColor(e: CalEvent): string {
+    const cal = e.calendarId ? calendarsById[e.calendarId] : null;
+    if (cal?.color) return cal.color;
+    if (e.colorId)  return GCAL_COLORS[e.colorId] ?? (e.source === "microsoft" ? "#0078d4" : "#039BE5");
+    return e.source === "microsoft" ? "#0078d4" : "#039BE5";
+  }
 
   // ── Deep link: ?eventId=<encoded provider:external_id> opens the
   // EventCard for that event once it lands in gcalEvents. Used
@@ -1657,7 +1697,28 @@ export default function CalendarClient({
             >
               {weekLabel}
             </span>
+            {eventsLoading && (
+              <span
+                aria-label="Syncing calendars"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  fontSize: 11, color: "var(--color-text-tertiary)",
+                  fontFamily: "inherit",
+                }}
+              >
+                <span
+                  style={{
+                    width: 10, height: 10, borderRadius: 9999,
+                    border: "1.5px solid var(--color-border-strong)",
+                    borderTopColor: "var(--color-sage)",
+                    animation: "perennialCalSpin 0.8s linear infinite",
+                  }}
+                />
+                Syncing…
+              </span>
+            )}
           </div>
+          <style>{`@keyframes perennialCalSpin { to { transform: rotate(360deg); } }`}</style>
 
           <div className="flex items-center gap-2">
             <button onClick={goToday}
@@ -2143,7 +2204,7 @@ export default function CalendarClient({
                       }}
                     >
                       {dayGcalAllDay.map(e => {
-                        const color = e.colorId ? GCAL_COLORS[e.colorId] : (e.source === "microsoft" ? "#0078d4" : "#039BE5");
+                        const color = eventColor(e);
                         return (
                           <button
                             key={e.id}
@@ -2360,7 +2421,7 @@ export default function CalendarClient({
                         const y     = timeToY(start.getHours(), start.getMinutes());
                         const endY  = timeToY(end.getHours(), end.getMinutes());
                         const h     = Math.max(24, endY - y);
-                        const color = e.colorId ? GCAL_COLORS[e.colorId] : (e.source === "microsoft" ? "#0078d4" : "#039BE5");
+                        const color = eventColor(e);
                         if (y < 0 || y > GRID_HEIGHT) return null;
                         const slot = layout.get(e);
                         const groupSize = slot?.groupSize ?? 1;
@@ -2587,7 +2648,7 @@ export default function CalendarClient({
               )}
 
               {dayEvents.map((e) => {
-                const color = e.colorId ? GCAL_COLORS[e.colorId] : (e.source === "microsoft" ? "#0078d4" : "#039BE5");
+                const color = eventColor(e);
                 const time  = e.allDay ? "all day" : new Date(e.start).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
                 return (
                   <button
@@ -2722,7 +2783,7 @@ export default function CalendarClient({
       {openEvent && (
         <EventCard
           event={openEvent as unknown as EventCardEvent}
-          color={openEvent.colorId ? GCAL_COLORS[openEvent.colorId] : (openEvent.source === "microsoft" ? "#0078d4" : "#039BE5")}
+          color={eventColor(openEvent)}
           anchorRect={openEventAnchor}
           onClose={() => { setOpenEvent(null); setOpenEventAnchor(null); }}
           onUpdated={(updated) => {
