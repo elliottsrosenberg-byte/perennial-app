@@ -67,9 +67,13 @@ export async function GET(req: Request) {
     last_synced_at:   new Date().toISOString(),
   }, { onConflict: "user_id,provider,account_id" });
 
-  // Seed per-account calendar list. Fire-and-forget so the redirect
-  // doesn't block on a Google API round-trip.
-  void syncUserCalendarList(user.id).catch((err) => {
+  // Seed per-account calendar list. AWAITed (capped at 5s) so rows
+  // exist before the user lands on /calendar — see the matching note
+  // in the unified google callback for the bug this prevents.
+  await Promise.race([
+    syncUserCalendarList(user.id),
+    new Promise<{ count: number }>((resolve) => setTimeout(() => resolve({ count: 0 }), 5000)),
+  ]).catch((err) => {
     console.error("[oauth/google-calendar/callback] calendar list sync failed:", err);
   });
 
