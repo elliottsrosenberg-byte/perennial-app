@@ -17,7 +17,7 @@
 //     all fields are disabled and footer is hidden; only the Close X
 //     remains in the header.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { UserCalendar } from "@/types/database";
 import {
   X, Users, Video, MapPin, FileText, Bell, ArrowRight, ChevronDown,
@@ -418,8 +418,20 @@ export default function EventCard({
   }
 
   // Position the card next to the clicked chip (edit mode) or at the
-  // top-right corner (create mode).
+  // top-right corner (create mode). The vertical clamp uses the card's
+  // measured height — without that, a tall card near the bottom of the
+  // viewport gets clipped at the bottom edge.
   const PANEL_W = 340;
+  const [cardHeight, setCardHeight] = useState(0);
+  useLayoutEffect(() => {
+    if (!cardRef.current) return;
+    setCardHeight(cardRef.current.offsetHeight);
+    const ro = new ResizeObserver(() => {
+      if (cardRef.current) setCardHeight(cardRef.current.offsetHeight);
+    });
+    ro.observe(cardRef.current);
+    return () => ro.disconnect();
+  }, []);
   const positionStyle: React.CSSProperties = (() => {
     if (!anchorRect || typeof window === "undefined") {
       return { top: 64, right: 16 };
@@ -435,8 +447,11 @@ export default function EventCard({
     } else {
       left = Math.max(8, vw - PANEL_W - 8);
     }
+    // First paint before measurement: assume max card height (the CSS
+    // maxHeight cap) so we never start in a position that'll overflow.
+    const measured = cardHeight > 0 ? cardHeight : Math.min(vh - 80, 720);
     const desiredTop = anchorRect.top - 8;
-    const top = Math.max(8, Math.min(vh - 560 - 8, desiredTop));
+    const top = Math.max(8, Math.min(vh - measured - 8, desiredTop));
     return { top, left };
   })();
 
