@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { UserCalendar } from "@/types/database";
-import { ChevronDown, ChevronRight, Eye, EyeOff, MoreHorizontal, Plus, ExternalLink, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, EyeOff, MoreHorizontal, Plus, ExternalLink, Trash2, Star } from "lucide-react";
 
 interface Props {
   /** Bumped by parent on connect/refresh so we re-fetch the list. */
@@ -55,6 +55,7 @@ function groupLabel(c: UserCalendar): { account: string; provider: string } {
 
 export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
   const [calendars, setCalendars] = useState<UserCalendar[]>([]);
+  const [defaultId, setDefaultId] = useState<string | null>(null);
   const [loading,   setLoading]   = useState(true);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -65,14 +66,31 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
     setLoading(true);
     fetch("/api/integrations/calendar/calendars")
       .then((r) => r.json())
-      .then((d: { calendars?: UserCalendar[] }) => {
+      .then((d: { calendars?: UserCalendar[]; default_calendar_id?: string | null }) => {
         if (cancelled) return;
         setCalendars(d.calendars ?? []);
+        setDefaultId(d.default_calendar_id ?? null);
         setLoading(false);
       })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [refreshNonce]);
+
+  async function setDefault(cal: UserCalendar) {
+    const prev = defaultId;
+    setDefaultId(cal.id);
+    try {
+      const res = await fetch("/api/integrations/calendar/calendars", {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ id: cal.id, set_default: true }),
+      });
+      if (!res.ok) throw new Error("PATCH failed");
+      window.dispatchEvent(new Event("calendar:default-changed"));
+    } catch {
+      setDefaultId(prev);
+    }
+  }
 
   const groups = useMemo(() => {
     const map = new Map<string, UserCalendar[]>();
@@ -213,6 +231,7 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
                   key={c.id}
                   cal={c}
                   color={color}
+                  isDefault={c.id === defaultId}
                   menuOpen={isOpen}
                   onToggleMenu={() => setOpenMenuId(isOpen ? null : c.id)}
                   onCloseMenu={() => setOpenMenuId(null)}
@@ -220,6 +239,7 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
                   onColor={(v) => setColor(c, v)}
                   onShowOnly={() => showOnlyThis(c)}
                   onRemove={() => removeFromList(c)}
+                  onSetDefault={() => setDefault(c)}
                 />
               );
             })}
@@ -283,11 +303,12 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
 // ── Row ───────────────────────────────────────────────────────────────────────
 
 function CalendarRow({
-  cal, color, menuOpen, onToggleMenu, onCloseMenu,
-  onToggleVisible, onColor, onShowOnly, onRemove,
+  cal, color, isDefault, menuOpen, onToggleMenu, onCloseMenu,
+  onToggleVisible, onColor, onShowOnly, onRemove, onSetDefault,
 }: {
   cal: UserCalendar;
   color: string;
+  isDefault: boolean;
   menuOpen: boolean;
   onToggleMenu: () => void;
   onCloseMenu: () => void;
@@ -295,6 +316,7 @@ function CalendarRow({
   onColor: (hex: string) => void;
   onShowOnly: () => void;
   onRemove: () => void;
+  onSetDefault: () => void;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -349,17 +371,34 @@ function CalendarRow({
 
       {/* Name */}
       <span
-        title={cal.name}
+        title={isDefault ? `${cal.name} — default for new events` : cal.name}
         style={{
           fontSize: 11.5,
           color: cal.visible ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
-          fontWeight: cal.is_primary ? 500 : 400,
+          fontWeight: cal.is_primary || isDefault ? 500 : 400,
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
           flex: 1, minWidth: 0,
         }}
       >
         {cal.name}
       </span>
+
+      {/* Default-calendar marker — small ring around the colour dot's
+          inverse. Unimposing: same colour as the calendar's, so it reads
+          as "this row is highlighted" rather than a separate icon. */}
+      {isDefault && (
+        <span
+          aria-label="Default calendar"
+          title="Default for new events"
+          style={{
+            width: 6, height: 6, borderRadius: 9999,
+            background: color,
+            boxShadow: `0 0 0 1.5px ${color}`,
+            marginRight: -2,
+            flexShrink: 0,
+          }}
+        />
+      )}
 
       {/* 3-dot — only on hover, sits between name and eye to mirror Notion */}
       {(hovered || menuOpen) && (
@@ -405,6 +444,7 @@ function CalendarRow({
         <RowMenu
           cal={cal}
           color={color}
+          isDefault={isDefault}
           anchor={menuAnchor}
           settingsHref={settingsHref}
           onClose={onCloseMenu}
@@ -412,6 +452,7 @@ function CalendarRow({
           onShowOnly={onShowOnly}
           onToggleVisible={onToggleVisible}
           onRemove={onRemove}
+          onSetDefault={onSetDefault}
         />
       )}
     </div>
@@ -419,10 +460,11 @@ function CalendarRow({
 }
 
 function RowMenu({
-  cal, color, anchor, settingsHref, onClose, onColor, onShowOnly, onToggleVisible, onRemove,
+  cal, color, isDefault, anchor, settingsHref, onClose, onColor, onShowOnly, onToggleVisible, onRemove, onSetDefault,
 }: {
   cal: UserCalendar;
   color: string;
+  isDefault: boolean;
   anchor: { top: number; left: number };
   settingsHref: string;
   onClose: () => void;
@@ -430,6 +472,7 @@ function RowMenu({
   onShowOnly: () => void;
   onToggleVisible: () => void;
   onRemove: () => void;
+  onSetDefault: () => void;
 }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
@@ -485,6 +528,12 @@ function RowMenu({
         <div style={{ height: 1, background: "var(--color-border)", margin: "4px 0" }} />
 
         <MenuRow
+          label={isDefault ? "Default for new events" : "Make default"}
+          icon={<Star size={12} fill={isDefault ? "currentColor" : "none"} />}
+          onClick={() => { if (!isDefault) onSetDefault(); onClose(); }}
+          disabled={isDefault}
+        />
+        <MenuRow
           label={cal.visible ? "Hide from calendar" : "Show on calendar"}
           icon={cal.visible ? <EyeOff size={12} /> : <Eye size={12} />}
           onClick={() => { onToggleVisible(); onClose(); }}
@@ -518,25 +567,30 @@ function RowMenu({
   );
 }
 
-function MenuRow({ label, icon, onClick, danger, rightHint }: {
+function MenuRow({ label, icon, onClick, danger, rightHint, disabled }: {
   label: string;
   icon: React.ReactNode;
   onClick: () => void;
   danger?: boolean;
   rightHint?: string;
+  disabled?: boolean;
 }) {
   return (
     <button
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
       style={{
         width: "100%", display: "flex", alignItems: "center", gap: 10,
         padding: "7px 10px", borderRadius: 6, border: "none",
-        background: "transparent", cursor: "pointer", fontFamily: "inherit",
+        background: "transparent",
+        cursor: disabled ? "default" : "pointer",
+        fontFamily: "inherit",
         textAlign: "left",
         fontSize: 12,
+        opacity: disabled ? 0.6 : 1,
         color: danger ? "var(--color-red-orange)" : "var(--color-text-primary)",
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-surface-sunken)")}
+      onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
     >
       <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 14, color: danger ? "var(--color-red-orange)" : "var(--color-text-tertiary)" }}>

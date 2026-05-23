@@ -251,14 +251,19 @@ export default function EventCard({
     let cancelled = false;
     fetch("/api/integrations/calendar/calendars")
       .then((r) => r.json())
-      .then((d: { calendars?: UserCalendar[] }) => {
+      .then((d: { calendars?: UserCalendar[]; default_calendar_id?: string | null }) => {
         if (cancelled) return;
         const writable = (d.calendars ?? []).filter((c) => c.writable);
         setCalendars(writable);
         setCalsLoading(false);
         if (!isEdit && !defaultCalendarId) {
-          const primary = writable.find((c) => c.is_primary) ?? writable[0];
-          if (primary) setCalendarId(primary.id);
+          // Prefer the user's chosen default (from profiles); fall back to
+          // an account's primary; final fallback is the first writable.
+          const userDefault = d.default_calendar_id
+            ? writable.find((c) => c.id === d.default_calendar_id)
+            : null;
+          const pick = userDefault ?? writable.find((c) => c.is_primary) ?? writable[0];
+          if (pick) setCalendarId(pick.id);
         }
       })
       .catch(() => { if (!cancelled) setCalsLoading(false); });
