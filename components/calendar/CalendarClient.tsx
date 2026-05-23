@@ -23,16 +23,26 @@ const GRID_END     = 23;
 const GRID_HOURS   = GRID_END - GRID_START;
 const GRID_HEIGHT  = GRID_HOURS * PX_PER_HOUR;
 const DAY_HDR_H    = 64;   // fixed height used for sticky top offsets
-// Minimum legible width for the 7-column week grid. At narrower window
-// widths the inner rows keep this width and the scroll container pans
-// horizontally instead of collapsing the columns. 52px gutter + 7 × ~90px
-// columns ≈ 700px is the threshold below which event chips lose their
-// time labels.
-// 52px gutter + 7 day columns at ~107px each — readable floor for narrow
-// viewports without forcing horizontal scroll at typical desktop widths.
-// Week-to-week navigation is gesture-driven (trackpad horizontal swipe /
-// shift+wheel — see the wheel handler) rather than viewport-scroll.
-const WEEK_MIN_WIDTH = 800;
+// Continuous-pan week view: render a sliding window of days at a fixed
+// pixel width and let the user scroll horizontally to traverse smoothly.
+// `WEEK_VISIBLE_COLS` columns fit in the viewport at any moment; the
+// total window is `PAN_DAYS_INITIAL` wide and grows in 7-day chunks as
+// the user nears either edge.
+const WEEK_VISIBLE_COLS = 7;
+const PAN_DAYS_BEFORE   = 14;
+const PAN_DAYS_AFTER    = 21;
+const PAN_DAYS_INITIAL  = PAN_DAYS_BEFORE + PAN_DAYS_AFTER; // 35
+const PAN_EXTEND_CHUNK  = 7;
+const PAN_EDGE_THRESHOLD_DAYS = 7;
+const DAY_MIN_PX        = 96; // floor so chips stay legible on tiny screens
+// Continuous-pan month view: render a long vertical strip of weeks.
+const MONTH_WEEKS_BEFORE = 6;
+const MONTH_WEEKS_AFTER  = 12;
+const MONTH_WEEKS_INITIAL = MONTH_WEEKS_BEFORE + MONTH_WEEKS_AFTER; // 18
+const MONTH_WEEK_ROW_PX   = 116;
+const MONTH_VISIBLE_ROWS  = 6;
+const MONTH_EXTEND_CHUNK  = 4;
+const MONTH_EDGE_THRESHOLD_WEEKS = 2;
 
 const DOW_SHORT   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
@@ -66,6 +76,35 @@ function getWeekDays(anchor: Date): Date[] {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(start);
     d.setDate(start.getDate() + i);
+    return d;
+  });
+}
+
+/** Build a sliding window of N consecutive days starting `daysBefore`
+ *  before the week-start of `anchor`. Used for the continuous-pan week
+ *  view: the visible 7 columns are whatever's in the viewport at the
+ *  current scroll offset, not a snapped week. */
+function buildPanDays(anchor: Date, daysBefore: number, totalDays: number): Date[] {
+  const weekStart = getWeekStart(anchor);
+  const start = new Date(weekStart);
+  start.setDate(start.getDate() - daysBefore);
+  return Array.from({ length: totalDays }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return d;
+  });
+}
+
+/** Build a sliding window of N consecutive weeks (rows) for the month
+ *  continuous-vertical-scroll view. `weeksBefore` rows precede the first
+ *  week containing `anchor`. */
+function buildPanWeeks(anchor: Date, weeksBefore: number, totalWeeks: number): Date[] {
+  const weekStart = getWeekStart(anchor);
+  const start = new Date(weekStart);
+  start.setDate(start.getDate() - weeksBefore * 7);
+  return Array.from({ length: totalWeeks }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i * 7);
     return d;
   });
 }
@@ -512,11 +551,14 @@ function ContactPicker({
 // Day-number click drops the user into Week view for that date.
 
 interface MonthGridProps {
-  viewDate:        Date;
+  panWeeks:        Date[];   // week-start dates (Sun)
+  monthLabel:      Date;     // the "current" month for the dimmer treatment
   events:          CalEvent[];
   tasks:           Task[];
   projects:        { id: string; title: string; due_date: string | null; status: string }[];
   showWeekends:    boolean;
+  rowHeightPx:     number;
+  scrollRef:       React.RefObject<HTMLDivElement | null>;
   onEventClick:    (e: CalEvent, rect: DOMRect | null) => void;
   onTaskClick:     (e: React.MouseEvent, t: Task) => void;
   onEmptyCellClick:(date: Date) => void;
@@ -525,27 +567,38 @@ interface MonthGridProps {
 }
 
 function MonthGrid({
-  viewDate, events, tasks, projects, showWeekends,
+  panWeeks, monthLabel, events, tasks, projects, showWeekends,
+  rowHeightPx, scrollRef,
   onEventClick, onTaskClick, onEmptyCellClick, onDayNumberClick, onShowMore,
 }: MonthGridProps) {
-  const first      = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
-  const gridStart  = getWeekStart(first);
-  const cells      = Array.from({ length: 42 }, (_, i) => {
-    const d = new Date(gridStart);
-    d.setDate(d.getDate() + i);
-    return d;
-  });
+  // Flatten panWeeks → days. Each row is 7 days starting at the week's
+  // Sunday. With showWeekends off we still keep the row but drop the
+  // weekend cells.
+  const cells = useMemo(() => {
+    const out: Date[] = [];
+    for (const w of panWeeks) {
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(w);
+        d.setDate(w.getDate() + i);
+        out.push(d);
+      }
+    }
+    return out;
+  }, [panWeeks]);
   const visibleCols = showWeekends ? 7 : 5;
   const dowHeaders  = showWeekends
     ? ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
     : ["Mon","Tue","Wed","Thu","Fri"];
+  const curMonth = monthLabel.getMonth();
+  const curYear  = monthLabel.getFullYear();
 
   return (
     <div
       className="flex-1 flex flex-col overflow-hidden"
       style={{ background: "var(--color-off-white)" }}
     >
-      {/* Header row */}
+      {/* Header row — sticky at the top of the page so the DOW labels
+          stay visible while the user pans weeks vertically. */}
       <div
         style={{
           display: "grid",
@@ -571,13 +624,18 @@ function MonthGrid({
         ))}
       </div>
 
-      {/* 6-row grid */}
+      {/* Vertically-scrolling week strip — each row is rowHeightPx tall;
+          the user pans weeks smoothly instead of snapping to month
+          boundaries. The container's scroll position drives the visible
+          month label up in the topbar. */}
       <div
+        ref={scrollRef}
         style={{
           flex: 1, display: "grid",
           gridTemplateColumns: `repeat(${visibleCols}, 1fr)`,
-          gridTemplateRows: "repeat(6, minmax(0, 1fr))",
-          overflow: "hidden",
+          gridAutoRows: `${rowHeightPx}px`,
+          overflowY: "auto",
+          overflowX: "hidden",
         }}
       >
         {cells.map((date, idx) => {
@@ -585,7 +643,10 @@ function MonthGrid({
           // weeks, never half-show.
           if (!showWeekends && (date.getDay() === 0 || date.getDay() === 6)) return null;
 
-          const isCurrentMonth = date.getMonth() === viewDate.getMonth();
+          // "Current month" — driven by the month label (which tracks
+          // the topmost visible week's middle day), so cells outside the
+          // visible month dim correctly as the user pans.
+          const isCurrentMonth = date.getMonth() === curMonth && date.getFullYear() === curYear;
           const today          = isToday(date);
           const dayEvents      = events.filter((e) => {
             if (e.allDay) {
@@ -946,12 +1007,76 @@ export default function CalendarClient({
   const anyConnected = googleConnected || outlookConnected;
 
   const gridWrapRef  = useRef<HTMLDivElement>(null);
+  const monthWrapRef = useRef<HTMLDivElement>(null);
   const supabase     = createClient();
 
-  const allWeekDays = getWeekDays(viewDate);
-  const weekDays    = showWeekends
-    ? allWeekDays
-    : allWeekDays.filter((d) => d.getDay() !== 0 && d.getDay() !== 6);
+  // The 7-day Sun-Sat slice the visible-range label / MiniCalendar align
+  // to. Updated continuously by the scroll handler as the user pans —
+  // the leftmost visible day becomes the start of this label window.
+  const [labelAnchor, setLabelAnchor] = useState<Date>(() => getWeekStart(new Date()));
+  // Sliding window for the continuous-pan week view. Rebuilt whenever
+  // viewDate jumps (Today button, MiniCalendar click, deep link) or when
+  // we extend at an edge.
+  const [panDays, setPanDays] = useState<Date[]>(() =>
+    buildPanDays(new Date(), PAN_DAYS_BEFORE, PAN_DAYS_INITIAL),
+  );
+  // Fixed pixel width per day column. Computed so WEEK_VISIBLE_COLS
+  // (= 7) days fit in the visible viewport minus the 52px time gutter.
+  // ResizeObserver keeps this current across window resizes.
+  const [dayPx, setDayPx] = useState<number>(0);
+  // Track whether the user has scrolled the pan container at all yet —
+  // we suppress the scroll handler's label updates until after the
+  // initial centering scroll lands so we don't briefly flash "May 12"
+  // before the centering effect runs.
+  const initialScrollDoneRef = useRef(false);
+  // Suppress edge-extension stabilization side effects when WE are the
+  // ones moving scrollLeft (centering, Today, extending). Native scroll
+  // resumes normal handling on the next user gesture.
+  const programmaticScrollRef = useRef(false);
+
+  // showWeekends filter applies AFTER we choose the visible window — we
+  // simply drop Sat/Sun from the column list. With continuous scroll the
+  // ratio stays the same; the visible viewport still holds 5 columns of
+  // the same dayPx, just no weekend.
+  const visiblePanDays = useMemo(
+    () => showWeekends
+      ? panDays
+      : panDays.filter(d => d.getDay() !== 0 && d.getDay() !== 6),
+    [panDays, showWeekends],
+  );
+
+  // Month-view sliding window (weeks). Each entry is a week-start (Sun).
+  const [panWeeks, setPanWeeks] = useState<Date[]>(() =>
+    buildPanWeeks(new Date(), MONTH_WEEKS_BEFORE, MONTH_WEEKS_INITIAL),
+  );
+  const initialMonthScrollDoneRef = useRef(false);
+  const programmaticMonthScrollRef = useRef(false);
+  // Month label tracks the topmost visible week's middle day's month.
+  const [monthLabel, setMonthLabel] = useState<Date>(new Date());
+
+  // Convenience: which dates does the data fetch need to cover? In Week
+  // mode it's the full pan window; in Month mode it's all 18 weeks.
+  const fetchRange = useMemo(() => {
+    if (viewMode === "Month") {
+      const start = panWeeks[0];
+      const end   = new Date(panWeeks[panWeeks.length - 1]);
+      end.setDate(end.getDate() + 6);
+      return { start, end };
+    }
+    return { start: panDays[0], end: panDays[panDays.length - 1] };
+  }, [viewMode, panDays, panWeeks]);
+
+  // weekDays — the 7-day slice the visible-range label / mini calendar
+  // align to. Derived from labelAnchor so it tracks the user's scroll.
+  const weekDays = useMemo(() => {
+    const days: Date[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(labelAnchor);
+      d.setDate(labelAnchor.getDate() + i);
+      days.push(d);
+    }
+    return showWeekends ? days : days.filter(d => d.getDay() !== 0 && d.getDay() !== 6);
+  }, [labelAnchor, showWeekends]);
 
   // ── Drag-to-create: global mousemove/mouseup while a drag is active.
   // We keep the per-column hit testing in the column's own mousedown so
@@ -1038,41 +1163,208 @@ export default function CalendarClient({
     gridWrapRef.current?.scrollTo({ top: Math.max(0, y - 160) });
   }, []);
 
-  // ── Horizontal trackpad / shift-wheel pages weeks (or months in Month
-  //    view). Trackpad two-finger horizontal swipe sends deltaX directly;
-  //    shift+wheel maps deltaY → deltaX in most browsers. We accumulate
-  //    deltaX with a threshold + cooldown so a fast swipe steps once and
-  //    not five times. preventDefault stops the browser from sideways-
-  //    scrolling the page while the gesture is going. */
+  // ── Continuous-pan: compute the fixed per-day pixel width so
+  //    WEEK_VISIBLE_COLS days fit in the visible viewport minus the
+  //    52px time gutter. ResizeObserver keeps this current across window
+  //    resizes; the time grid columns and all-day grid template both
+  //    consume `dayPx` so every row stays aligned.
   useEffect(() => {
+    if (viewMode !== "Week") return;
     const el = gridWrapRef.current;
     if (!el) return;
-    let accum = 0;
-    let cooldownUntil = 0;
-    const THRESHOLD = 80;
-    const COOLDOWN_MS = 240;
-    function onWheel(e: WheelEvent) {
-      // Only react to genuinely horizontal gestures. Vertical scroll
-      // belongs to the time grid.
-      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
-      e.preventDefault();
-      const now = Date.now();
-      if (now < cooldownUntil) return;
-      accum += e.deltaX;
-      if (accum >= THRESHOLD) {
-        accum = 0;
-        cooldownUntil = now + COOLDOWN_MS;
-        nextWeek();
-      } else if (accum <= -THRESHOLD) {
-        accum = 0;
-        cooldownUntil = now + COOLDOWN_MS;
-        prevWeek();
+    const cols = showWeekends ? 7 : 5;
+    function measure() {
+      if (!el) return;
+      const w = el.clientWidth;
+      if (w <= 0) return;
+      const avail = Math.max(0, w - 52);
+      const next  = Math.max(DAY_MIN_PX, Math.floor(avail / cols));
+      setDayPx(prev => (prev === next ? prev : next));
+    }
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [viewMode, showWeekends]);
+
+  // ── Continuous-pan: when viewDate jumps (Today click, MiniCalendar
+  //    select, deep link), rebuild the pan window centered on it and
+  //    reset labelAnchor + the initial-scroll flag so the centering
+  //    effect runs again. We DON'T rebuild on every render — only when
+  //    the viewDate moves outside the current window, or when the user
+  //    explicitly jumped via a button (signaled by initial-scroll being
+  //    reset elsewhere).
+  useEffect(() => {
+    setPanDays((prev) => {
+      const has = prev.some(d => isSameDay(d, viewDate));
+      if (has) return prev; // user is panning naturally — leave the window alone
+      return buildPanDays(viewDate, PAN_DAYS_BEFORE, PAN_DAYS_INITIAL);
+    });
+    setLabelAnchor(getWeekStart(viewDate));
+    initialScrollDoneRef.current = false;
+  }, [viewDate]);
+
+  // Same for the month view — rebuild the week strip when viewDate
+  // moves outside the current window.
+  useEffect(() => {
+    if (viewMode !== "Month") return;
+    setPanWeeks((prev) => {
+      const has = prev.some(w => {
+        const e = new Date(w); e.setDate(e.getDate() + 6);
+        return viewDate >= w && viewDate <= e;
+      });
+      if (has) return prev;
+      return buildPanWeeks(viewDate, MONTH_WEEKS_BEFORE, MONTH_WEEKS_INITIAL);
+    });
+    initialMonthScrollDoneRef.current = false;
+  }, [viewDate, viewMode]);
+
+  // ── Initial-centering: place the user at viewDate. We align the
+  //    visible viewport so the week containing viewDate is at the left
+  //    edge — that matches the historic "Sunday is leftmost when you
+  //    open the app" feel without imposing snap-to-Sunday on subsequent
+  //    panning.
+  useEffect(() => {
+    if (viewMode !== "Week") return;
+    if (dayPx <= 0) return;
+    if (initialScrollDoneRef.current) return;
+    const el = gridWrapRef.current;
+    if (!el) return;
+    const weekStart = getWeekStart(viewDate);
+    const idx = panDays.findIndex(d => isSameDay(d, weekStart));
+    if (idx < 0) return;
+    programmaticScrollRef.current = true;
+    el.scrollLeft = idx * dayPx;
+    initialScrollDoneRef.current = true;
+    setLabelAnchor(weekStart);
+    // Release the programmatic flag on the next frame so genuine user
+    // scroll events resume normal handling.
+    requestAnimationFrame(() => { programmaticScrollRef.current = false; });
+  }, [viewMode, dayPx, panDays, viewDate]);
+
+  // ── Scroll listener: update the visible-range label as the user
+  //    pans, and trigger edge-extension when within
+  //    PAN_EDGE_THRESHOLD_DAYS of either end of the window. Extension
+  //    stabilizes scrollLeft so the user doesn't see a jump.
+  useEffect(() => {
+    if (viewMode !== "Week") return;
+    const el = gridWrapRef.current;
+    if (!el) return;
+    if (dayPx <= 0) return;
+
+    function onScroll() {
+      if (!el || dayPx <= 0) return;
+      if (programmaticScrollRef.current) return;
+      const leftDayIdx = Math.max(0, Math.round(el.scrollLeft / dayPx));
+      const anchor = panDays[Math.min(leftDayIdx, panDays.length - 1)];
+      if (anchor && !isSameDay(anchor, labelAnchor)) {
+        setLabelAnchor(anchor);
+      }
+      // Edge extension. Compute how many days of the window are still to
+      // the right of the visible viewport; if either side is below the
+      // threshold, append a chunk and re-stabilize scrollLeft.
+      const visibleDayCount = Math.max(1, Math.floor(el.clientWidth / dayPx));
+      const daysLeftAhead   = panDays.length - leftDayIdx - visibleDayCount;
+      if (leftDayIdx < PAN_EDGE_THRESHOLD_DAYS) {
+        // Prepend a chunk.
+        setPanDays((prev) => {
+          const first = prev[0];
+          const prepend: Date[] = [];
+          for (let i = PAN_EXTEND_CHUNK; i > 0; i--) {
+            const d = new Date(first);
+            d.setDate(first.getDate() - i);
+            prepend.push(d);
+          }
+          return [...prepend, ...prev];
+        });
+        // Compensate scroll so the visible content doesn't jump.
+        programmaticScrollRef.current = true;
+        el.scrollLeft = el.scrollLeft + PAN_EXTEND_CHUNK * dayPx;
+        requestAnimationFrame(() => { programmaticScrollRef.current = false; });
+      } else if (daysLeftAhead < PAN_EDGE_THRESHOLD_DAYS) {
+        setPanDays((prev) => {
+          const last = prev[prev.length - 1];
+          const append: Date[] = [];
+          for (let i = 1; i <= PAN_EXTEND_CHUNK; i++) {
+            const d = new Date(last);
+            d.setDate(last.getDate() + i);
+            append.push(d);
+          }
+          return [...prev, ...append];
+        });
       }
     }
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode]);
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [viewMode, dayPx, panDays, labelAnchor]);
+
+  // ── Month: ResizeObserver isn't needed (rows are 1fr columns of the
+  //    container width). Initial vertical centering scrolls to the week
+  //    containing viewDate as the topmost row.
+  useEffect(() => {
+    if (viewMode !== "Month") return;
+    if (initialMonthScrollDoneRef.current) return;
+    const el = monthWrapRef.current;
+    if (!el) return;
+    const weekStart = getWeekStart(viewDate);
+    const idx = panWeeks.findIndex(w => isSameDay(w, weekStart));
+    if (idx < 0) return;
+    programmaticMonthScrollRef.current = true;
+    el.scrollTop = idx * MONTH_WEEK_ROW_PX;
+    initialMonthScrollDoneRef.current = true;
+    const middleDay = new Date(weekStart); middleDay.setDate(middleDay.getDate() + 3);
+    setMonthLabel(middleDay);
+    requestAnimationFrame(() => { programmaticMonthScrollRef.current = false; });
+  }, [viewMode, panWeeks, viewDate]);
+
+  // ── Month: scroll handler for label + vertical edge extension.
+  useEffect(() => {
+    if (viewMode !== "Month") return;
+    const el = monthWrapRef.current;
+    if (!el) return;
+    function onScroll() {
+      if (!el) return;
+      if (programmaticMonthScrollRef.current) return;
+      const topRowIdx = Math.max(0, Math.round(el.scrollTop / MONTH_WEEK_ROW_PX));
+      const wk = panWeeks[Math.min(topRowIdx, panWeeks.length - 1)];
+      if (wk) {
+        const middleDay = new Date(wk); middleDay.setDate(middleDay.getDate() + 3);
+        if (middleDay.getMonth() !== monthLabel.getMonth() || middleDay.getFullYear() !== monthLabel.getFullYear()) {
+          setMonthLabel(middleDay);
+        }
+      }
+      const visibleRows = Math.max(1, Math.floor(el.clientHeight / MONTH_WEEK_ROW_PX));
+      const rowsLeftAhead = panWeeks.length - topRowIdx - visibleRows;
+      if (topRowIdx < MONTH_EDGE_THRESHOLD_WEEKS) {
+        setPanWeeks((prev) => {
+          const first = prev[0];
+          const prepend: Date[] = [];
+          for (let i = MONTH_EXTEND_CHUNK; i > 0; i--) {
+            const d = new Date(first);
+            d.setDate(first.getDate() - i * 7);
+            prepend.push(d);
+          }
+          return [...prepend, ...prev];
+        });
+        programmaticMonthScrollRef.current = true;
+        el.scrollTop = el.scrollTop + MONTH_EXTEND_CHUNK * MONTH_WEEK_ROW_PX;
+        requestAnimationFrame(() => { programmaticMonthScrollRef.current = false; });
+      } else if (rowsLeftAhead < MONTH_EDGE_THRESHOLD_WEEKS) {
+        setPanWeeks((prev) => {
+          const last = prev[prev.length - 1];
+          const append: Date[] = [];
+          for (let i = 1; i <= MONTH_EXTEND_CHUNK; i++) {
+            const d = new Date(last);
+            d.setDate(last.getDate() + i * 7);
+            append.push(d);
+          }
+          return [...prev, ...append];
+        });
+      }
+    }
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [viewMode, panWeeks, monthLabel]);
 
   // ── Fetch calendar events (Google + Outlook) when week changes. The
   // aggregator route hits every connected provider in parallel and
@@ -1101,20 +1393,12 @@ export default function CalendarClient({
   }, []);
   useEffect(() => {
     if (!anyConnected) return;
-    // Month view fetches a 6-week window (always the full month-grid
-    // visible range) so the cells don't miss events that straddle the
-    // first or last visible day. Week view fetches the standard Sun-Sat.
-    let startDate: Date, endDate: Date;
-    if (viewMode === "Month") {
-      const first = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
-      startDate = getWeekStart(first);
-      endDate   = new Date(startDate);
-      endDate.setDate(endDate.getDate() + 41); // 6 rows × 7 cols - 1
-    } else {
-      const days = getWeekDays(viewDate);
-      startDate = days[0];
-      endDate   = days[6];
-    }
+    // Continuous-pan: fetch the full pan window (35 days in Week, 18
+    // weeks in Month). Re-fires when the window extends at either edge
+    // (panDays/panWeeks length grows), keeping events in step with what
+    // the user can scroll into view.
+    const startDate = fetchRange.start;
+    const endDate   = fetchRange.end;
     const start = startDate.toISOString().split("T")[0];
     const end   = endDate.toISOString().split("T")[0];
     let cancelled = false;
@@ -1128,7 +1412,7 @@ export default function CalendarClient({
       .catch(() => { /* swallow — failure leaves the previous events in place */ })
       .finally(() => { if (!cancelled) setEventsLoading(false); });
     return () => { cancelled = true; };
-  }, [viewDate, viewMode, anyConnected, refreshNonce]);
+  }, [fetchRange, viewMode, anyConnected, refreshNonce]);
 
   // Fetch the user_calendars list so we can colour each event chip by the
   // calendar's chosen colour. Re-fetches on `calendar:refresh-events`
@@ -1208,33 +1492,76 @@ export default function CalendarClient({
     }
   }, []);
 
-  // ── Navigation
+  // ── Navigation. With continuous scroll the buttons animate the
+  //    scroll container by one viewport's worth — the user gets the
+  //    "page a week" affordance back without breaking the smooth-pan
+  //    feel. If the target is outside the current window we fall back
+  //    to jumping viewDate (which rebuilds the window).
   function prevWeek() {
-    setViewDate((d) => {
-      const n = new Date(d);
-      if (viewMode === "Month") n.setMonth(n.getMonth() - 1);
-      else                       n.setDate(n.getDate() - 7);
-      return n;
-    });
+    if (viewMode === "Month") {
+      const el = monthWrapRef.current;
+      if (el) {
+        el.scrollBy({ top: -MONTH_VISIBLE_ROWS * MONTH_WEEK_ROW_PX, behavior: "smooth" });
+        return;
+      }
+      setViewDate((d) => { const n = new Date(d); n.setMonth(n.getMonth() - 1); return n; });
+      return;
+    }
+    const el = gridWrapRef.current;
+    if (el && dayPx > 0) {
+      el.scrollBy({ left: -WEEK_VISIBLE_COLS * dayPx, behavior: "smooth" });
+      return;
+    }
+    setViewDate((d) => { const n = new Date(d); n.setDate(n.getDate() - 7); return n; });
   }
   function nextWeek() {
-    setViewDate((d) => {
-      const n = new Date(d);
-      if (viewMode === "Month") n.setMonth(n.getMonth() + 1);
-      else                       n.setDate(n.getDate() + 7);
-      return n;
-    });
+    if (viewMode === "Month") {
+      const el = monthWrapRef.current;
+      if (el) {
+        el.scrollBy({ top: MONTH_VISIBLE_ROWS * MONTH_WEEK_ROW_PX, behavior: "smooth" });
+        return;
+      }
+      setViewDate((d) => { const n = new Date(d); n.setMonth(n.getMonth() + 1); return n; });
+      return;
+    }
+    const el = gridWrapRef.current;
+    if (el && dayPx > 0) {
+      el.scrollBy({ left: WEEK_VISIBLE_COLS * dayPx, behavior: "smooth" });
+      return;
+    }
+    setViewDate((d) => { const n = new Date(d); n.setDate(n.getDate() + 7); return n; });
   }
-  function goToday()  { setViewDate(new Date()); }
+  function goToday() {
+    const now = new Date();
+    if (viewMode === "Month") {
+      // Re-anchor the strip on today and scroll to it. The pan-window
+      // rebuild happens in the viewDate effect.
+      setViewDate(now);
+      // Force a recenter even if today is already in the window.
+      initialMonthScrollDoneRef.current = false;
+      return;
+    }
+    const el = gridWrapRef.current;
+    const idx = panDays.findIndex(d => isSameDay(d, getWeekStart(now)));
+    if (el && dayPx > 0 && idx >= 0) {
+      programmaticScrollRef.current = true;
+      el.scrollTo({ left: idx * dayPx, behavior: "smooth" });
+      setLabelAnchor(getWeekStart(now));
+      setTimeout(() => { programmaticScrollRef.current = false; }, 400);
+      return;
+    }
+    // Today is outside the current pan window — rebuild around it.
+    setViewDate(now);
+    initialScrollDoneRef.current = false;
+  }
 
-  // ── Week label uses the full Sun-Sat span even when weekends are
-  // hidden — the label describes the whole week the user is paging
-  // through, not just the visible columns. In Month view we show just
-  // the month name + year.
-  const ws = allWeekDays[0];
-  const we = allWeekDays[6];
+  // ── Week label tracks the leftmost-visible 7 days as the user pans.
+  //    In Month view it shows the month of the topmost visible week's
+  //    middle day, updated live by the month scroll handler.
+  const ws = labelAnchor;
+  const we = new Date(labelAnchor); we.setDate(we.getDate() + 6);
   const weekLabel = viewMode === "Month"
-    ? `${MONTH_NAMES[viewDate.getMonth()]} ${viewDate.getFullYear()}`
+    ? `${MONTH_NAMES[monthLabel.getMonth()]} ${monthLabel.getFullYear()}`
     : ws.getMonth() === we.getMonth()
       ? `${MONTH_NAMES[ws.getMonth()]} ${ws.getDate()}–${we.getDate()}, ${ws.getFullYear()}`
       : `${fmtDate(ws, { month: "short", day: "numeric" })} – ${fmtDate(we, { month: "short", day: "numeric", year: "numeric" })}`;
@@ -1667,10 +1994,11 @@ export default function CalendarClient({
 
       {/* ── Main calendar ───────────────────────────────────────────────────────
           minWidth: 0 is critical — without it the flex item's intrinsic
-          min-content (≥WEEK_MIN_WIDTH of the time grid below) prevents the
-          column from shrinking under that width, which means the calendar
-          pushes the viewport instead of letting `overflow-x: auto` on the
-          inner grid wrapper kick in. */}
+          min-content (≥ the time grid below, which is now N × dayPx wide
+          for the full pan window) prevents the column from shrinking
+          under that width, which means the calendar pushes the viewport
+          instead of letting `overflow-x: auto` on the inner grid wrapper
+          kick in. */}
       <div className="flex flex-col flex-1 overflow-hidden" style={{ minWidth: 0 }}>
 
         {/* Topbar — matches Projects/People standard: title left, date
@@ -1933,7 +2261,10 @@ export default function CalendarClient({
 
         {viewMode === "Month" ? (
           <MonthGrid
-            viewDate={viewDate}
+            panWeeks={panWeeks}
+            monthLabel={monthLabel}
+            rowHeightPx={MONTH_WEEK_ROW_PX}
+            scrollRef={monthWrapRef}
             events={gcalEvents}
             tasks={scheduledTasks}
             projects={initialProjects}
@@ -1950,19 +2281,26 @@ export default function CalendarClient({
             onShowMore={(date, x, y) => setMonthDayOverlay({ date, x, y })}
           />
         ) : (
-        /* ── Single scroll container: day headers + all-day + time grid all share same width ──
-            The outer wrapper provides BOTH axes of scroll. A single inner
-            block carries minWidth: WEEK_MIN_WIDTH so every row shares the
-            exact same horizontal scroll offset — day headers, tasks
-            ribbon, all-day row, and time grid all pan together. Without
-            the shared parent the sticky rows would compute their own
-            min-width contexts and drift apart on narrow viewports. */
+        /* ── Continuous-pan scroll container ─────────────────────────────────
+            The outer wrapper provides both axes of scroll. The inner
+            block sizes to the full pan-window width (gutter + N × dayPx)
+            so day headers, tasks ribbon, all-day row, and time grid
+            share one horizontal scroll context — everything pans
+            together as the user swipes. The visible 7 columns at any
+            moment are just whatever's in the viewport at the current
+            scrollLeft; Sunday is no longer pinned to the left edge. */
         <div
           ref={gridWrapRef}
           className="flex-1 overflow-y-auto overflow-x-auto"
           style={{ position: "relative", background: "var(--color-off-white)" }}
         >
-        <div style={{ minWidth: WEEK_MIN_WIDTH, position: "relative" }}>
+        <div style={{
+          // Total inner width: gutter + every column at the computed
+          // dayPx. The visible-7 fit-in-viewport math runs in the
+          // ResizeObserver effect.
+          width: dayPx > 0 ? 52 + visiblePanDays.length * dayPx : "100%",
+          position: "relative",
+        }}>
 
           {/* Day headers — sticky at top of scroll container */}
           <div
@@ -1982,17 +2320,21 @@ export default function CalendarClient({
                 display: "flex", alignItems: "flex-end", justifyContent: "flex-end",
                 paddingRight: "8px", paddingBottom: "8px",
                 fontSize: "9px", color: "var(--color-grey)", userSelect: "none",
+                position: "sticky", left: 0, zIndex: 1,
+                background: "var(--color-off-white)",
               }}
             >
               {Intl.DateTimeFormat(undefined, { timeZoneName: "short" }).formatToParts(new Date()).find(p => p.type === "timeZoneName")?.value ?? ""}
             </div>
-            {weekDays.map((day, i) => {
+            {visiblePanDays.map((day, i) => {
               const today = isToday(day);
               return (
                 <div
                   key={i}
-                  className="flex-1 flex flex-col items-center justify-center cursor-pointer"
+                  className="flex flex-col items-center justify-center cursor-pointer"
                   style={{
+                    width: dayPx > 0 ? `${dayPx}px` : undefined,
+                    flex: dayPx > 0 ? "0 0 auto" : 1,
                     borderLeft: "0.5px solid var(--color-border)",
                     background: today ? "rgba(155,163,122,0.07)" : "transparent",
                   }}
@@ -2044,11 +2386,13 @@ export default function CalendarClient({
                 paddingRight: 8, paddingTop: 6,
                 fontSize: 9, color: "var(--color-grey)",
                 textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600,
+                position: "sticky", left: 0, zIndex: 1,
+                background: "var(--color-warm-white)",
               }}
             >
               Tasks
             </div>
-            {weekDays.map((day, i) => {
+            {visiblePanDays.map((day, i) => {
               // Ribbon only shows day-only tasks now. Timed tasks (due_at)
               // render in the time grid below as chips.
               const dayTasks = ribbonTasks.filter((t) => {
@@ -2076,7 +2420,9 @@ export default function CalendarClient({
                     setTaskDrag(null);
                   }}
                   style={{
-                    flex: 1, borderLeft: "0.5px solid var(--color-border)",
+                    width: dayPx > 0 ? `${dayPx}px` : undefined,
+                    flex: dayPx > 0 ? "0 0 auto" : 1,
+                    borderLeft: "0.5px solid var(--color-border)",
                     padding: "3px 3px", display: "flex", flexDirection: "column", gap: 2,
                     background: taskDrag ? "rgba(155,163,122,0.04)" : "transparent",
                     cursor: "pointer",
@@ -2132,18 +2478,20 @@ export default function CalendarClient({
             // are clamped to 0..6 so a multi-week opp still shows correctly.
             // Categories the user has toggled off via the left-rail
             // Perennial Feed panel are filtered out at the source.
+            const N = visiblePanDays.length;
+            const lastIdx = N - 1;
             const oppSpans = initialOpportunities
               .filter(o => !hiddenOppCats.has(o.category))
               .map(o => {
                 const s = parseOppDate(o.start_date);
                 if (!s) return null;
                 const e = parseOppDate(o.end_date) ?? s;
-                const startIdx = weekDays.findIndex(d => isSameDay(d, s) || d > s);
-                const endIdx   = weekDays.findIndex(d => isSameDay(d, e) || d > e);
-                const inferStart = startIdx === -1 ? -1 : (s < weekDays[0] ? 0 : startIdx);
-                const inferEnd   = e   < weekDays[0]               ? -1
-                                 : e   > weekDays[weekDays.length - 1] ? 6
-                                 : endIdx === -1 ? 6 : (isSameDay(weekDays[endIdx], e) ? endIdx : Math.max(0, endIdx - 1));
+                const startIdx = visiblePanDays.findIndex(d => isSameDay(d, s) || d > s);
+                const endIdx   = visiblePanDays.findIndex(d => isSameDay(d, e) || d > e);
+                const inferStart = startIdx === -1 ? -1 : (s < visiblePanDays[0] ? 0 : startIdx);
+                const inferEnd   = e   < visiblePanDays[0]        ? -1
+                                 : e   > visiblePanDays[lastIdx]  ? lastIdx
+                                 : endIdx === -1 ? lastIdx : (isSameDay(visiblePanDays[endIdx], e) ? endIdx : Math.max(0, endIdx - 1));
                 if (inferStart < 0 || inferEnd < 0 || inferEnd < inferStart) return null;
                 return { opp: o, startIdx: inferStart, endIdx: inferEnd };
               })
@@ -2161,7 +2509,9 @@ export default function CalendarClient({
                   background: "var(--color-off-white)",
                   borderBottom: "0.5px solid var(--color-border)",
                   display: "grid",
-                  gridTemplateColumns: "52px repeat(7, 1fr)",
+                  gridTemplateColumns: dayPx > 0
+                    ? `52px repeat(${N}, ${dayPx}px)`
+                    : `52px repeat(${N}, 1fr)`,
                   gridAutoRows: "min-content",
                   rowGap: 2,
                   minHeight: 30,
@@ -2174,6 +2524,8 @@ export default function CalendarClient({
                     display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
                     paddingRight: 8, paddingTop: 6,
                     fontSize: 9, color: "var(--color-grey)",
+                    position: "sticky", left: 0, zIndex: 1,
+                    background: "var(--color-off-white)",
                   }}
                 >
                   All day
@@ -2181,7 +2533,7 @@ export default function CalendarClient({
 
                 {/* Per-day cells: single-day items (gcal all-day, project
                     deadlines). Multi-day opps move to rows below. */}
-                {weekDays.map((day, i) => {
+                {visiblePanDays.map((day, i) => {
                   const dayProjects   = initialProjects.filter(p => p.due_date && isSameDay(new Date(p.due_date + "T00:00:00"), day));
                   const dayGcalAllDay = gcalEvents.filter(e => e.allDay && isSameDay(new Date(e.start), day));
                   return (
@@ -2239,8 +2591,8 @@ export default function CalendarClient({
                   const pal = oppPalette(span.opp.category);
                   const s = parseOppDate(span.opp.start_date);
                   const e = parseOppDate(span.opp.end_date) ?? s;
-                  const startsBeforeWeek = s && s < weekDays[0];
-                  const endsAfterWeek    = e && e > weekDays[weekDays.length - 1];
+                  const startsBeforeWeek = s && s < visiblePanDays[0];
+                  const endsAfterWeek    = e && e > visiblePanDays[lastIdx];
                   return (
                     <a
                       key={span.opp.id}
@@ -2276,8 +2628,14 @@ export default function CalendarClient({
           {/* Time grid — not sticky, scrolls with the container */}
           <div style={{ display: "flex", height: `${GRID_HEIGHT}px`, position: "relative" }}>
 
-            {/* Time gutter */}
-            <div style={{ width: "52px", flexShrink: 0, position: "relative", height: `${GRID_HEIGHT}px` }}>
+            {/* Time gutter — sticky on the left so hour labels stay in
+                view while the user pans horizontally. */}
+            <div style={{
+              width: "52px", flexShrink: 0,
+              position: "sticky", left: 0, zIndex: 6,
+              background: "var(--color-off-white)",
+              height: `${GRID_HEIGHT}px`,
+            }}>
               {Array.from({ length: GRID_HOURS + 1 }, (_, i) => {
                 const h = GRID_START + i;
                 return (
@@ -2302,7 +2660,7 @@ export default function CalendarClient({
 
             {/* Day columns */}
             <div style={{ flex: 1, display: "flex", position: "relative" }}>
-              {weekDays.map((day, colIdx) => {
+              {visiblePanDays.map((day, colIdx) => {
                 const today = isToday(day);
                 const dragHere = dragCreate?.columnIdx === colIdx ? dragCreate : null;
                 return (
@@ -2337,7 +2695,8 @@ export default function CalendarClient({
                       });
                     }}
                     style={{
-                      flex: 1,
+                      width: dayPx > 0 ? `${dayPx}px` : undefined,
+                      flex: dayPx > 0 ? "0 0 auto" : 1,
                       borderLeft: "0.5px solid var(--color-border)",
                       position: "relative",
                       height: `${GRID_HEIGHT}px`,
