@@ -976,68 +976,31 @@ export default function SettingsPage() {
                   <>
                     <GroupTitle>Connected</GroupTitle>
                     <div className="space-y-3 mb-6">
-                      {visibleIntegrations.map((intg) => (
-                        <div
-                          key={intg.id}
-                          className="flex items-center gap-4 p-4 rounded-xl"
-                          style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}
-                        >
-                          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: "var(--color-cream)" }}>
-                            <ProviderIcon provider={intg.provider} size={18} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[13px] font-medium truncate" style={{ color: "var(--color-charcoal)" }}>
-                              {PROVIDER_DISPLAY[intg.provider] ?? intg.provider.replace(/_/g, " ")}
-                            </p>
-                            {intg.account_name && (
-                              <p className="text-[11px] truncate" style={{ color: "var(--color-grey)" }}>{intg.account_name}</p>
-                            )}
-                            {intg.last_synced_at && (
-                              <p className="text-[10px] mt-0.5 truncate" style={{ color: "var(--color-text-tertiary)" }}>
-                                Synced {formatRelative(intg.last_synced_at)}
-                              </p>
-                            )}
-                            {intg.status === "error" && intg.last_error && (
-                              <p className="text-[10px] mt-1 truncate" style={{ color: "var(--color-red-orange)" }} title={intg.last_error}>
-                                Sync error — see logs
-                              </p>
-                            )}
-                          </div>
-                          {/* Action group — shrink-0 wrapper keeps all the
-                              buttons together on the right and prevents the
-                              text column from wrapping the date awkwardly
-                              when the row gets tight. */}
-                          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                            {(intg.provider === "google" || intg.provider === "microsoft") && intg.status !== "disconnected" && (
-                              <>
-                                <SyncNowButton          provider={intg.provider} onDone={reloadIntegrations} />
-                                <ImportContactsButton   provider={intg.provider} />
-                                {intg.provider === "google" && (
-                                  <BrowseDriveButton />
-                                )}
-                              </>
-                            )}
-                          {intg.status === "error" ? (
-                            <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(220,62,13,0.12)", color: "var(--color-red-orange)" }}>
-                              Error
-                            </span>
-                          ) : intg.status === "disconnected" ? (
-                            <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "var(--color-cream)", color: "var(--color-grey)" }}>
-                              Disconnected
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(141,208,71,0.15)", color: "#3d6b4f" }}>
-                              Connected
-                            </span>
-                          )}
-                          <DisconnectButton
-                            integrationId={intg.id}
-                            providerLabel={PROVIDER_DISPLAY[intg.provider] ?? intg.provider}
-                            onDone={reloadIntegrations}
+                      {(() => {
+                        // Group connected integrations by provider so a user
+                        // with several Google accounts sees one Google card
+                        // instead of N stacked cards. Order preserved by
+                        // first-seen, which matches connected_at ordering
+                        // (set by the parent select).
+                        const byProvider = new Map<string, IntegrationRow[]>();
+                        for (const intg of visibleIntegrations) {
+                          // Treat the legacy "google_calendar" provider as
+                          // its own group so it doesn't collide with the
+                          // unified Google card.
+                          const key = intg.provider;
+                          const arr = byProvider.get(key) ?? [];
+                          arr.push(intg);
+                          byProvider.set(key, arr);
+                        }
+                        return Array.from(byProvider.entries()).map(([provider, intgs]) => (
+                          <ProviderCard
+                            key={provider}
+                            provider={provider}
+                            integrations={intgs}
+                            onReload={reloadIntegrations}
                           />
-                          </div>
-                        </div>
-                      ))}
+                        ));
+                      })()}
                     </div>
                   </>
                 )}
@@ -1183,6 +1146,109 @@ export default function SettingsPage() {
 /** Triggers an on-demand mail+calendar sync for the given provider and
  *  surfaces the result inline. The parent passes `onDone` so it can
  *  refresh the integration row to show the new last_synced_at + status. */
+// One card per provider — when a user has multiple accounts for the
+// same provider (e.g. three Google logins), they all collapse under a
+// single card with sub-rows. Avoids the previous truncation where a
+// stack of action buttons crushed the account-name column.
+function ProviderCard({ provider, integrations, onReload }: {
+  provider: string;
+  integrations: IntegrationRow[];
+  onReload: () => void | Promise<void>;
+}) {
+  const label = PROVIDER_DISPLAY[provider] ?? provider.replace(/_/g, " ");
+  // Provider-level actions (Sync now / Import contacts / Browse Drive)
+  // operate over every account of that provider; the per-account row only
+  // carries status + disconnect.
+  const showProviderActions = (provider === "google" || provider === "microsoft");
+  return (
+    <div
+      className="rounded-xl"
+      style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}
+    >
+      {/* Header — provider icon + name + provider-level actions */}
+      <div
+        className="flex items-center gap-3 px-4 py-3"
+        style={integrations.length > 0 ? { borderBottom: "0.5px solid var(--color-border)" } : undefined}
+      >
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: "var(--color-cream)" }}>
+          <ProviderIcon provider={provider} size={18} />
+        </div>
+        <p className="text-[13px] font-medium flex-1 min-w-0" style={{ color: "var(--color-charcoal)" }}>
+          {label}
+        </p>
+        {showProviderActions && (
+          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            <SyncNowButton        provider={provider as "google" | "microsoft"} onDone={onReload} />
+            <ImportContactsButton provider={provider as "google" | "microsoft"} />
+            {provider === "google" && <BrowseDriveButton />}
+          </div>
+        )}
+      </div>
+
+      {/* Account rows — one per integration. Sub-row layout puts the
+          email at full width with status + disconnect on the right. */}
+      <div className="divide-y" style={{ borderColor: "var(--color-border)" }}>
+        {integrations.map((intg) => (
+          <div
+            key={intg.id}
+            className="flex items-center gap-3 px-4 py-3"
+            style={{ borderTop: "0.5px solid transparent" }}
+          >
+            <span
+              aria-hidden
+              className="w-1.5 h-1.5 rounded-full shrink-0"
+              style={{
+                background:
+                  intg.status === "error"        ? "var(--color-red-orange)"
+                  : intg.status === "disconnected" ? "var(--color-grey)"
+                  : "var(--color-sage)",
+              }}
+            />
+            <div className="flex-1 min-w-0">
+              <p
+                className="text-[12.5px] font-medium truncate"
+                style={{ color: "var(--color-charcoal)" }}
+                title={intg.account_name ?? undefined}
+              >
+                {intg.account_name ?? "Connected"}
+              </p>
+              {(intg.last_synced_at || intg.status === "error") && (
+                <p
+                  className="text-[10.5px] mt-0.5 truncate"
+                  style={{ color: intg.status === "error" ? "var(--color-red-orange)" : "var(--color-text-tertiary)" }}
+                  title={intg.status === "error" ? (intg.last_error ?? undefined) : undefined}
+                >
+                  {intg.status === "error"
+                    ? "Sync error — see logs"
+                    : intg.last_synced_at
+                      ? `Synced ${formatRelative(intg.last_synced_at)}`
+                      : ""}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {intg.status === "error" ? (
+                <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(220,62,13,0.12)", color: "var(--color-red-orange)" }}>
+                  Error
+                </span>
+              ) : (
+                <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(141,208,71,0.15)", color: "#3d6b4f" }}>
+                  Connected
+                </span>
+              )}
+              <DisconnectButton
+                integrationId={intg.id}
+                providerLabel={`${label}${intg.account_name ? ` (${intg.account_name})` : ""}`}
+                onDone={onReload}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SyncNowButton({ provider, onDone }: { provider: "google" | "microsoft"; onDone: () => void | Promise<void> }) {
   const [busy,    setBusy]    = useState(false);
   const [message, setMessage] = useState<string | null>(null);

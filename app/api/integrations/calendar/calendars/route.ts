@@ -14,32 +14,60 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  let { data: cals } = await supabase
-    .from("user_calendars")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("removed", false)
-    .order("account_email", { ascending: true })
-    .order("is_primary",    { ascending: false })
-    .order("name",          { ascending: true });
+  async function readCalendars() {
+    const { data } = await supabase
+      .from("user_calendars")
+      .select("*")
+      .eq("user_id", user!.id)
+      .eq("removed", false)
+      .order("account_email", { ascending: true })
+      .order("is_primary",    { ascending: false })
+      .order("name",          { ascending: true });
+    return data ?? [];
+  }
 
-  // First load after a fresh integration may have zero rows — sync once
-  // and re-read so the UI sees something useful immediately. A user
-  // with only tombstoned rows (everything removed) will also fall into
-  // this branch; that's fine because sync preserves the `removed` flag
-  // for existing rows, so the re-read still returns nothing.
-  if (!cals || cals.length === 0) {
-    const sync = await syncUserCalendarList(user.id);
-    if (sync.count > 0) {
-      const reread = await supabase
-        .from("user_calendars")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("removed", false)
-        .order("account_email", { ascending: true })
-        .order("is_primary",    { ascending: false })
-        .order("name",          { ascending: true });
-      cals = reread.data ?? [];
+  let cals = await readCalendars();
+
+  // Self-heal: if any connected calendar integration has no matching
+  // user_calendars rows under its account name, run a sync. This covers:
+  //   - first-load after a fresh OAuth (the callback already awaits sync
+  //     but its 5s cap may have fired)
+  //   - any prior connection whose sync silently errored (transient
+  //     Google API hiccup; the catch in syncUserCalendarList logs but
+  //     doesn't surface)
+  //   - users with `removed=false` rows on one account but a brand-new
+  //     account that has none yet
+  // Cheap O(N integrations) check; only fans out to the network when a
+  // skew is detected. Tombstoned-only users still hit this when they
+  // connect a new account, which is correct.
+  const { data: integrations } = await supabase
+    .from("integrations")
+    .select("provider, account_name, status, scopes")
+    .eq("user_id", user.id)
+    .in("provider", ["google", "google_calendar", "microsoft"]);
+
+  const haveAccounts = new Set<string>();
+  for (const c of cals) haveAccounts.add(`${c.provider}::${c.account_email ?? "primary"}`);
+
+  const needsSync = (integrations ?? []).some((intg) => {
+    if (intg.status && intg.status !== "active") return false;
+    // For legacy google_calendar there's no scopes column; for unified
+    // providers, only count rows that actually have the calendar scope.
+    if (intg.provider !== "google_calendar") {
+      const scopes = (intg.scopes ?? {}) as Record<string, boolean>;
+      if (!scopes.calendar) return false;
+    }
+    const provider = intg.provider as "google" | "google_calendar" | "microsoft";
+    const key = `${provider}::${intg.account_name ?? "primary"}`;
+    return !haveAccounts.has(key);
+  });
+
+  if (needsSync) {
+    try {
+      await syncUserCalendarList(user.id);
+      cals = await readCalendars();
+    } catch (e) {
+      console.error("[calendars GET] self-heal sync failed:", e);
     }
   }
 
