@@ -38,13 +38,26 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json({ calendars: cals ?? [] });
+  // Read the user's default_calendar_id from profiles so the rail can
+  // mark the right row. Stored on profiles (not user_calendars) because
+  // it's a user-level singleton across all accounts.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("default_calendar_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const defaultId = (profile?.default_calendar_id as string | null | undefined) ?? null;
+
+  return NextResponse.json({ calendars: cals ?? [], default_calendar_id: defaultId });
 }
 
 interface PatchBody {
-  id?:      string;
-  visible?: boolean;
-  color?:   string | null;
+  id?:          string;
+  visible?:     boolean;
+  color?:       string | null;
+  /** Mark this calendar as the user's default for new events. Writes to
+   *  profiles.default_calendar_id, not user_calendars. */
+  set_default?: boolean;
 }
 
 export async function PATCH(req: Request) {
@@ -55,22 +68,48 @@ export async function PATCH(req: Request) {
   const body = (await req.json().catch(() => ({}))) as PatchBody;
   if (!body.id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  // set_default is a profiles-side write, so handle it independently of
+  // the user_calendars patch (which may still also be in the payload).
+  if (body.set_default === true) {
+    // Confirm the calendar belongs to the user before pointing profiles at it.
+    const { data: cal } = await supabase
+      .from("user_calendars")
+      .select("id")
+      .eq("id", body.id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!cal) return NextResponse.json({ error: "calendar not found" }, { status: 404 });
+
+    const { error: pErr } = await supabase
+      .from("profiles")
+      .update({ default_calendar_id: body.id })
+      .eq("user_id", user.id);
+    if (pErr) return NextResponse.json({ error: pErr.message }, { status: 400 });
+  }
+
+  const patch: Record<string, unknown> = {};
   if (typeof body.visible === "boolean") patch.visible = body.visible;
   if (body.color !== undefined)          patch.color   = body.color;
 
-  const { data, error } = await supabase
-    .from("user_calendars")
-    .update(patch)
-    .eq("id", body.id)
-    .eq("user_id", user.id)
-    .select()
-    .single();
-
-  if (error || !data) {
-    return NextResponse.json({ error: error?.message ?? "Update failed" }, { status: 400 });
+  let updated = null;
+  if (Object.keys(patch).length > 0) {
+    patch.updated_at = new Date().toISOString();
+    const { data, error } = await supabase
+      .from("user_calendars")
+      .update(patch)
+      .eq("id", body.id)
+      .eq("user_id", user.id)
+      .select()
+      .single();
+    if (error || !data) {
+      return NextResponse.json({ error: error?.message ?? "Update failed" }, { status: 400 });
+    }
+    updated = data;
+  } else if (body.set_default !== true) {
+    return NextResponse.json({ error: "nothing to update" }, { status: 400 });
   }
-  return NextResponse.json({ calendar: data });
+
+  return NextResponse.json({ calendar: updated, ok: true });
 }
 
 // Remove a single calendar from the user's list. The OAuth credential stays

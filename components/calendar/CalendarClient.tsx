@@ -35,6 +35,11 @@ const PAN_DAYS_INITIAL  = PAN_DAYS_BEFORE + PAN_DAYS_AFTER; // 35
 const PAN_EXTEND_CHUNK  = 7;
 const PAN_EDGE_THRESHOLD_DAYS = 7;
 const DAY_MIN_PX        = 96; // floor so chips stay legible on tiny screens
+
+// Sat + Sun get a subtle grey tint so the work-week reads first. Stays
+// soft enough that an event chip on a weekend doesn't get visually muted.
+const WEEKEND_BG = "rgba(31,33,26,0.035)";
+function isWeekend(d: Date): boolean { const g = d.getDay(); return g === 0 || g === 6; }
 // Continuous-pan month view: render a long vertical strip of weeks.
 const MONTH_WEEKS_BEFORE = 6;
 const MONTH_WEEKS_AFTER  = 12;
@@ -1752,7 +1757,15 @@ export default function CalendarClient({
         className="flex flex-col shrink-0 overflow-hidden"
         style={{ width: "216px", borderRight: "0.5px solid var(--color-border)", background: "var(--color-warm-white)" }}
       >
-        <MiniCalendar selectedDate={viewDate} onSelect={setViewDate} />
+        {/* The mini follows the user's pan: in Week view it tracks the
+            leftmost-visible day (labelAnchor); in Month view it tracks
+            the topmost visible week's anchor month (monthLabel). Clicking
+            a day in the mini still jumps viewDate, which rebuilds the
+            pan window around that date. */}
+        <MiniCalendar
+          selectedDate={viewMode === "Month" ? monthLabel : labelAnchor}
+          onSelect={setViewDate}
+        />
         <div style={{ height: "0.5px", background: "var(--color-border)", flexShrink: 0 }} />
 
         <div className="flex-1 overflow-y-auto">
@@ -2355,6 +2368,8 @@ export default function CalendarClient({
             </div>
             {visiblePanDays.map((day, i) => {
               const today = isToday(day);
+              const wknd  = isWeekend(day);
+              const restBg = today ? "rgba(155,163,122,0.07)" : (wknd ? WEEKEND_BG : "transparent");
               return (
                 <div
                   key={i}
@@ -2363,11 +2378,11 @@ export default function CalendarClient({
                     width: dayPx > 0 ? `${dayPx}px` : undefined,
                     flex: dayPx > 0 ? "0 0 auto" : 1,
                     borderLeft: "0.5px solid var(--color-border)",
-                    background: today ? "rgba(155,163,122,0.07)" : "transparent",
+                    background: restBg,
                   }}
                   onClick={() => setViewDate(day)}
                   onMouseEnter={e => { if (!today) e.currentTarget.style.background = "var(--color-warm-white)"; }}
-                  onMouseLeave={e => { if (!today) e.currentTarget.style.background = today ? "rgba(155,163,122,0.07)" : "transparent"; }}
+                  onMouseLeave={e => { if (!today) e.currentTarget.style.background = restBg; }}
                 >
                   <span
                     className="text-[10px] font-semibold uppercase tracking-wider mb-[3px]"
@@ -2451,7 +2466,9 @@ export default function CalendarClient({
                     flex: dayPx > 0 ? "0 0 auto" : 1,
                     borderLeft: "0.5px solid var(--color-border)",
                     padding: "3px 3px", display: "flex", flexDirection: "column", gap: 2,
-                    background: taskDrag ? "rgba(155,163,122,0.04)" : "transparent",
+                    background: taskDrag
+                      ? "rgba(155,163,122,0.04)"
+                      : (isWeekend(day) ? WEEKEND_BG : "transparent"),
                     cursor: "pointer",
                   }}
                 >
@@ -2580,6 +2597,7 @@ export default function CalendarClient({
                         display: "flex", flexDirection: "column", gap: 2,
                         cursor: "pointer",
                         minHeight: 28,
+                        background: isWeekend(day) ? WEEKEND_BG : undefined,
                       }}
                     >
                       {dayGcalAllDay.map(e => {
@@ -2727,7 +2745,9 @@ export default function CalendarClient({
                       borderLeft: "0.5px solid var(--color-border)",
                       position: "relative",
                       height: `${GRID_HEIGHT}px`,
-                      background: today ? "rgba(155,163,122,0.05)" : "transparent",
+                      background: today
+                        ? "rgba(155,163,122,0.05)"
+                        : (isWeekend(day) ? WEEKEND_BG : "transparent"),
                       cursor: "crosshair",
                       userSelect: dragCreate ? "none" : "auto",
                     }}
