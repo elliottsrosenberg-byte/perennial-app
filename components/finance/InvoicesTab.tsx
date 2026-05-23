@@ -12,6 +12,7 @@ interface Props {
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
   onInvoiceUpdated: (inv: Invoice) => void;
   onInvoiceSent: (invoiceId: string) => void;
+  onNewInvoice: () => void;
 }
 
 // ── Send Invoice Modal ────────────────────────────────────────────────────────
@@ -143,7 +144,7 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }>
   overdue: { bg: "rgba(220,62,13,0.1)", color: "var(--color-red-orange)",  label: "Overdue" },
 };
 
-export default function InvoicesTab({ invoices, timeEntries, projects, onInvoiceUpdated, onInvoiceSent }: Props) {
+export default function InvoicesTab({ invoices, timeEntries, projects, onInvoiceUpdated, onInvoiceSent, onNewInvoice }: Props) {
   const [filter, setFilter]                   = useState<Filter>("all");
   const [selectedId, setSelectedId]           = useState<string | null>(invoices[0]?.id ?? null);
   const [addingLine, setAddingLine]           = useState(false);
@@ -333,11 +334,11 @@ export default function InvoicesTab({ invoices, timeEntries, projects, onInvoice
                 icon="🧾"
                 heading="Create your first invoice"
                 body="Perennial invoices are linked to clients and projects. Log time and expenses first, then pull them into an invoice with one click."
-                ashPrompt="Walk me through how invoicing works in Perennial. How do I go from tracked time to a sent invoice?"
+                action={{ label: "New invoice", onClick: onNewInvoice }}
                 tips={[
                   "Start by logging time against a project with a client rate — that time auto-populates into new invoices.",
                   "Invoices move through Draft → Sent → Paid. Mark as paid when you receive payment.",
-                  "Ask Ash what's outstanding or overdue — it tracks all your invoice statuses.",
+                  "Track outstanding and overdue invoices from this list — statuses update as you send and mark paid.",
                 ]}
               />
             </div>

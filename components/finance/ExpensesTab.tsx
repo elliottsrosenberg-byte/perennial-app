@@ -9,6 +9,7 @@ interface Props {
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
   onExpenseCreated: (e: Expense) => void;
   onExpenseDeleted: (id: string) => void;
+  onAddExpense: () => void;
 }
 
 const CAT_CONFIG: Record<ExpenseCategory, { color: string; bg: string; label: string; initial: string }> = {
@@ -23,7 +24,7 @@ function fmtCurrency(n: number) {
   return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
-export default function ExpensesTab({ expenses, projects, onExpenseCreated, onExpenseDeleted }: Props) {
+export default function ExpensesTab({ expenses, projects, onExpenseCreated, onExpenseDeleted, onAddExpense }: Props) {
   const [filterProject, setFilterProject] = useState("all");
   const [filterCat, setFilterCat]         = useState("all");
   const [filterPeriod, setFilterPeriod]   = useState("month");
@@ -157,7 +158,7 @@ export default function ExpensesTab({ expenses, projects, onExpenseCreated, onEx
               icon="🧾"
               heading="Log your studio expenses"
               body="Track materials, travel, software, production costs, and other expenses by project. Expenses feed into your financial overview and can be included in client invoices."
-              ashPrompt="What expenses should I be tracking as a designer? How do expenses connect to invoicing in Perennial?"
+              action={{ label: "Add expense", onClick: onAddExpense }}
               tips={[
                 "Log expenses by category: materials, travel, production, software, or other.",
                 "Link an expense to a project to track per-project profitability.",

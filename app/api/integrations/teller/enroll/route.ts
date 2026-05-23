@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { tellerFetch, TellerNotConfiguredError } from "@/lib/integrations/teller";
+
+// Run on the Node runtime so we can attach the mTLS Agent — Edge can't
+// install client certificates.
+export const runtime = "nodejs";
 
 // Exchange a Teller enrollment (temporary token) for stored access credentials
 // Called after Teller Connect completes in the browser
@@ -19,16 +24,21 @@ export async function POST(req: Request) {
   }
 
   const env = process.env.TELLER_ENVIRONMENT ?? "sandbox";
-  const apiBase = env === "sandbox"
-    ? "https://api.teller.io"
-    : "https://api.teller.io";
 
-  // Fetch accounts from Teller using the new access token
-  const accountsRes = await fetch(`${apiBase}/accounts`, {
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${accessToken}:`).toString("base64")}`,
-    },
-  });
+  // Fetch accounts from Teller using the new access token. Teller requires
+  // mTLS on every API call (yes — even in sandbox); without the client
+  // certificate the TLS handshake fails before the request lands. Routes
+  // surface a clean 503 when the cert isn't installed so the UI can
+  // explain it instead of silently 502'ing.
+  let accountsRes: Response;
+  try {
+    accountsRes = await tellerFetch("/accounts", accessToken);
+  } catch (e) {
+    if (e instanceof TellerNotConfiguredError) {
+      return NextResponse.json({ error: e.message }, { status: 503 });
+    }
+    throw e;
+  }
 
   if (!accountsRes.ok) {
     const err = await accountsRes.text();
