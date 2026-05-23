@@ -1025,6 +1025,17 @@ export default function CalendarClient({
   // in (so a horizontal wiggle doesn't bleed into the next day) and the
   // raw start/current Y in column-local pixels. Snap-to-15-min happens
   // on render of the ghost and at drop time.
+  // Horizontal drag across the all-day row → multi-day all-day event.
+  // While `active`, mousemove updates currentIdx (the column under the
+  // cursor); mouseup with currentIdx !== startIdx opens the create card
+  // with all_day=true and the span pre-filled. A pure click (no move)
+  // is a no-op.
+  const [allDayDrag, setAllDayDrag] = useState<{
+    startIdx: number;
+    currentIdx: number;
+    active: boolean;
+  } | null>(null);
+
   const [dragCreate, setDragCreate] = useState<{
     columnIdx: number;
     day:       Date;
@@ -1172,6 +1183,60 @@ export default function CalendarClient({
       window.removeEventListener("mouseup",   onUp);
     };
   }, [dragCreate]);
+
+  // ── All-day drag handlers — mirror dragCreate's pattern but for the
+  //    horizontal all-day row. The column under the cursor is identified
+  //    by `data-allday-col` on the per-day backdrop.
+  useEffect(() => {
+    if (!allDayDrag || !allDayDrag.active) return;
+    function onMove(e: MouseEvent) {
+      const target = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+      const cell   = target?.closest<HTMLElement>("[data-allday-col]");
+      if (!cell) return;
+      const idx = Number(cell.dataset.alldayCol);
+      if (Number.isNaN(idx)) return;
+      setAllDayDrag((prev) => (prev && prev.currentIdx !== idx ? { ...prev, currentIdx: idx } : prev));
+    }
+    function onUp() {
+      const drag = allDayDrag;
+      if (!drag) return;
+      // A pure click (no move) is a no-op, matching the time-grid rule.
+      if (drag.startIdx === drag.currentIdx) {
+        setAllDayDrag(null);
+        return;
+      }
+      const lo = Math.min(drag.startIdx, drag.currentIdx);
+      const hi = Math.max(drag.startIdx, drag.currentIdx);
+      const startDay = visiblePanDays[lo];
+      const endDay   = visiblePanDays[hi];
+      if (!startDay || !endDay) {
+        setAllDayDrag(null);
+        return;
+      }
+      const start = new Date(startDay); start.setHours(0, 0, 0, 0);
+      // End is exclusive (Google/Graph convention) — the day after hi.
+      const end   = new Date(endDay);   end.setHours(0, 0, 0, 0); end.setDate(end.getDate() + 1);
+      // Detach the listeners so the ghost stops following the cursor;
+      // clear the ghost entirely when the create card closes.
+      setAllDayDrag({ ...drag, active: false });
+      setNewEventPrefill({ start, end, allDay: true });
+      setNewEventOpen(true);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup",   onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup",   onUp);
+    };
+  }, [allDayDrag, visiblePanDays]);
+
+  // Clear the all-day ghost when the create card closes (cancel / submit
+  // / outside click) — matches the time-grid dragCreate clearing path.
+  useEffect(() => {
+    if (!newEventOpen && allDayDrag && !allDayDrag.active) {
+      setAllDayDrag(null);
+    }
+  }, [newEventOpen, allDayDrag]);
 
   // ── Auto-dismiss the create-task error banner after a few seconds.
   useEffect(() => {
@@ -2586,31 +2651,65 @@ export default function CalendarClient({
           </div>
 
           {/* All-day row — sits below the tasks ribbon. Uses CSS grid so
-              multi-day opportunity bars can span columns natively without
-              percentage-math. Per-day chips occupy the first grid row;
-              each multi-day bar gets its own row beneath, sized to the
-              visible window for this week. */}
+              all-day events (single and multi-day) and opportunity bars
+              span columns natively. Per-day cells only hold project
+              deadlines; everything else lives as a bar spanning its
+              actual date range. */}
           {(() => {
-            // Compute opportunity spans visible in this week. startIdx/endIdx
-            // are clamped to 0..6 so a multi-week opp still shows correctly.
-            // Categories the user has toggled off via the left-rail
-            // Perennial Feed panel are filtered out at the source.
             const N = visiblePanDays.length;
             const lastIdx = N - 1;
+
+            // Helper: a provider-normalized all-day event has e.start as
+            // "YYYY-MM-DD" (Google) or "YYYY-MM-DDTHH:MM:SS" (legacy/MS).
+            // e.end is exclusive — May 21 → 22 means a 1-day event on
+            // May 21. We reduce to inclusive last-day for span math.
+            function inclusiveAllDayRange(ev: CalEvent): { s: Date; e: Date } | null {
+              if (!ev.allDay) return null;
+              const sStr = ev.start.length === 10 ? `${ev.start}T00:00:00` : ev.start;
+              const eStr = ev.end.length   === 10 ? `${ev.end}T00:00:00`   : ev.end;
+              const s = new Date(sStr);
+              const eExcl = new Date(eStr);
+              if (Number.isNaN(s.getTime())) return null;
+              const e = new Date(eExcl);
+              e.setDate(e.getDate() - 1);
+              if (Number.isNaN(e.getTime()) || e < s) return { s, e: s };
+              return { s, e };
+            }
+            function clampSpan(s: Date, e: Date): { startIdx: number; endIdx: number } | null {
+              const startIdx = visiblePanDays.findIndex(d => isSameDay(d, s) || d > s);
+              const endIdx   = visiblePanDays.findIndex(d => isSameDay(d, e) || d > e);
+              const inferStart = startIdx === -1 ? -1 : (s < visiblePanDays[0] ? 0 : startIdx);
+              const inferEnd   = e   < visiblePanDays[0]        ? -1
+                               : e   > visiblePanDays[lastIdx]  ? lastIdx
+                               : endIdx === -1 ? lastIdx : (isSameDay(visiblePanDays[endIdx], e) ? endIdx : Math.max(0, endIdx - 1));
+              if (inferStart < 0 || inferEnd < 0 || inferEnd < inferStart) return null;
+              return { startIdx: inferStart, endIdx: inferEnd };
+            }
+
+            // All-day events as spans (single-day → 1-column bar, multi-day
+            // → wider bar). Replaces the old per-day chip render so a 3-day
+            // event correctly appears on all three days, not just the first.
+            const allDaySpans = gcalEvents
+              .map(ev => {
+                const r = inclusiveAllDayRange(ev);
+                if (!r) return null;
+                const span = clampSpan(r.s, r.e);
+                if (!span) return null;
+                return { event: ev, ...span, startsBefore: r.s < visiblePanDays[0], endsAfter: r.e > visiblePanDays[lastIdx] };
+              })
+              .filter((x): x is NonNullable<typeof x> => x !== null)
+              .sort((a, b) => (b.endIdx - b.startIdx) - (a.endIdx - a.startIdx));
+
+            // Compute opportunity spans the same way as before.
             const oppSpans = initialOpportunities
               .filter(o => !hiddenOppCats.has(o.category))
               .map(o => {
                 const s = parseOppDate(o.start_date);
                 if (!s) return null;
                 const e = parseOppDate(o.end_date) ?? s;
-                const startIdx = visiblePanDays.findIndex(d => isSameDay(d, s) || d > s);
-                const endIdx   = visiblePanDays.findIndex(d => isSameDay(d, e) || d > e);
-                const inferStart = startIdx === -1 ? -1 : (s < visiblePanDays[0] ? 0 : startIdx);
-                const inferEnd   = e   < visiblePanDays[0]        ? -1
-                                 : e   > visiblePanDays[lastIdx]  ? lastIdx
-                                 : endIdx === -1 ? lastIdx : (isSameDay(visiblePanDays[endIdx], e) ? endIdx : Math.max(0, endIdx - 1));
-                if (inferStart < 0 || inferEnd < 0 || inferEnd < inferStart) return null;
-                return { opp: o, startIdx: inferStart, endIdx: inferEnd };
+                const span = clampSpan(s, e);
+                if (!span) return null;
+                return { opp: o, ...span };
               })
               .filter((x): x is NonNullable<typeof x> => x !== null)
               // Longest first so the most prominent bars settle into the
@@ -2648,14 +2747,22 @@ export default function CalendarClient({
                   All day
                 </div>
 
-                {/* Per-day cells: single-day items (gcal all-day, project
-                    deadlines). Multi-day opps move to rows below. */}
+                {/* Per-day backdrops: hold project deadlines + pick up
+                    the mousedown for drag-to-create. All-day events and
+                    opp bars sit on the rows below via gridColumn spans. */}
                 {visiblePanDays.map((day, i) => {
                   const dayProjects   = initialProjects.filter(p => p.due_date && isSameDay(new Date(p.due_date + "T00:00:00"), day));
-                  const dayGcalAllDay = gcalEvents.filter(e => e.allDay && isSameDay(new Date(e.start), day));
                   return (
                     <div
                       key={i}
+                      data-allday-col={i}
+                      onMouseDown={(e) => {
+                        if (e.button !== 0) return;
+                        // Project chips are interactive; only start a drag
+                        // when the user grabs the empty backdrop.
+                        if (e.target !== e.currentTarget) return;
+                        setAllDayDrag({ startIdx: i, currentIdx: i, active: true });
+                      }}
                       style={{
                         gridColumn: i + 2, gridRow: 1,
                         borderLeft: "0.5px solid var(--color-border)",
@@ -2663,28 +2770,10 @@ export default function CalendarClient({
                         display: "flex", flexDirection: "column", gap: 2,
                         minHeight: 28,
                         background: isWeekend(day) ? WEEKEND_BG : undefined,
+                        cursor: allDayDrag ? "ew-resize" : "default",
+                        userSelect: allDayDrag ? "none" : "auto",
                       }}
                     >
-                      {dayGcalAllDay.map(e => {
-                        const color = eventColor(e);
-                        return (
-                          <button
-                            key={e.id}
-                            onClick={(ev) => {
-                              ev.stopPropagation();
-                              openEventAt(e, (ev.currentTarget as HTMLElement).getBoundingClientRect());
-                            }}
-                            className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate text-left"
-                            style={{
-                              background: `${color}18`, color,
-                              border: `0.5px solid ${color}44`,
-                              cursor: "pointer", fontFamily: "inherit",
-                            }}
-                          >
-                            {e.title}
-                          </button>
-                        );
-                      })}
                       {dayProjects.map(p => (
                         <div key={p.id} className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate"
                           style={{ background: "rgba(155,163,122,0.14)", color: "#5a7040", border: "0.5px solid rgba(155,163,122,0.25)" }}
@@ -2694,15 +2783,49 @@ export default function CalendarClient({
                   );
                 })}
 
-                {/* Multi-day opp bars — one per row, spanning the visible
-                    range of the opportunity. Title shows at the left edge of
-                    the bar; the bar stretches to indicate the duration. */}
+                {/* All-day event bars — span each event's actual date
+                    range so multi-day events appear on every day they
+                    cover, not just the start day. */}
+                {allDaySpans.map((span, idx) => {
+                  const color = eventColor(span.event);
+                  return (
+                    <button
+                      key={span.event.id}
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        openEventAt(span.event, (ev.currentTarget as HTMLElement).getBoundingClientRect());
+                      }}
+                      title={span.event.title}
+                      style={{
+                        gridColumn: `${span.startIdx + 2} / ${span.endIdx + 3}`,
+                        gridRow: idx + 2,
+                        marginLeft: 2, marginRight: 2,
+                        background: `${color}18`, color,
+                        border: `0.5px solid ${color}44`,
+                        borderTopLeftRadius:    span.startsBefore ? 0 : 4,
+                        borderBottomLeftRadius: span.startsBefore ? 0 : 4,
+                        borderTopRightRadius:   span.endsAfter    ? 0 : 4,
+                        borderBottomRightRadius: span.endsAfter   ? 0 : 4,
+                        padding: "1px 6px",
+                        fontSize: 10, fontWeight: 500,
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                        textAlign: "left",
+                        cursor: "pointer", fontFamily: "inherit",
+                      }}
+                    >
+                      {span.startsBefore && "← "}{span.event.title}{span.endsAfter && " →"}
+                    </button>
+                  );
+                })}
+
+                {/* Multi-day opp bars — same span pattern as all-day
+                    events, just with the Perennial Feed palette. */}
                 {oppSpans.map((span, idx) => {
                   const pal = oppPalette(span.opp.category);
                   const s = parseOppDate(span.opp.start_date);
                   const e = parseOppDate(span.opp.end_date) ?? s;
-                  const startsBeforeWeek = s && s < visiblePanDays[0];
-                  const endsAfterWeek    = e && e > visiblePanDays[lastIdx];
+                  const startsBeforeWeek = !!(s && s < visiblePanDays[0]);
+                  const endsAfterWeek    = !!(e && e > visiblePanDays[lastIdx]);
                   return (
                     <a
                       key={span.opp.id}
@@ -2710,12 +2833,10 @@ export default function CalendarClient({
                       title={`${span.opp.title}${span.opp.location ? ` · ${span.opp.location}` : ""}`}
                       style={{
                         gridColumn: `${span.startIdx + 2} / ${span.endIdx + 3}`,
-                        gridRow: idx + 2,
+                        gridRow: idx + 2 + allDaySpans.length,
                         marginLeft: 2, marginRight: 2,
                         background: pal.bg, color: pal.fg,
                         border: `0.5px dashed ${pal.border}`,
-                        // Round outside edges; flat where the bar continues
-                        // beyond this week so the user can tell it's a span.
                         borderTopLeftRadius:    startsBeforeWeek ? 0 : 4,
                         borderBottomLeftRadius: startsBeforeWeek ? 0 : 4,
                         borderTopRightRadius:   endsAfterWeek    ? 0 : 4,
@@ -2731,6 +2852,35 @@ export default function CalendarClient({
                     </a>
                   );
                 })}
+
+                {/* In-flight all-day drag ghost — spans the cells the
+                    user has dragged across, in the default-calendar
+                    colour. Visible whether the drag is active or has
+                    just landed (the create card is still open). */}
+                {allDayDrag && (() => {
+                  const lo = Math.min(allDayDrag.startIdx, allDayDrag.currentIdx);
+                  const hi = Math.max(allDayDrag.startIdx, allDayDrag.currentIdx);
+                  return (
+                    <div
+                      key="allday-ghost"
+                      style={{
+                        gridColumn: `${lo + 2} / ${hi + 3}`,
+                        gridRow: 1,
+                        margin: "3px 2px",
+                        background: `${defaultCalColor}22`,
+                        border: `1px solid ${defaultCalColor}`,
+                        borderRadius: 4,
+                        padding: "1px 6px",
+                        fontSize: 10, fontWeight: 500,
+                        color: defaultCalColor,
+                        pointerEvents: "none",
+                        zIndex: 5,
+                      }}
+                    >
+                      New event · {hi - lo + 1}d
+                    </div>
+                  );
+                })()}
               </div>
             );
           })()}

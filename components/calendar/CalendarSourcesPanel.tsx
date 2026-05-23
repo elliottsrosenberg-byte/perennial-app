@@ -63,7 +63,11 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    // Only show the loading state on the very first fetch. Subsequent
+    // refetches (visibility toggle, color change, account add/remove)
+    // happen silently so the list doesn't blank out mid-sync — the
+    // optimistic local mutation has already updated the UI; we just
+    // reconcile with the server in the background.
     fetch("/api/integrations/calendar/calendars")
       .then((r) => r.json())
       .then((d: { calendars?: UserCalendar[]; default_calendar_id?: string | null }) => {
