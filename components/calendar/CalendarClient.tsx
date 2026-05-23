@@ -1066,18 +1066,6 @@ export default function CalendarClient({
     return { start: panDays[0], end: panDays[panDays.length - 1] };
   }, [viewMode, panDays, panWeeks]);
 
-  // weekDays — the 7-day slice the visible-range label / mini calendar
-  // align to. Derived from labelAnchor so it tracks the user's scroll.
-  const weekDays = useMemo(() => {
-    const days: Date[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(labelAnchor);
-      d.setDate(labelAnchor.getDate() + i);
-      days.push(d);
-    }
-    return showWeekends ? days : days.filter(d => d.getDay() !== 0 && d.getDay() !== 6);
-  }, [labelAnchor, showWeekends]);
-
   // ── Drag-to-create: global mousemove/mouseup while a drag is active.
   // We keep the per-column hit testing in the column's own mousedown so
   // we can capture the originating column index and starting offset; the
@@ -1231,16 +1219,22 @@ export default function CalendarClient({
     const el = gridWrapRef.current;
     if (!el) return;
     const weekStart = getWeekStart(viewDate);
-    const idx = panDays.findIndex(d => isSameDay(d, weekStart));
+    // Center on the week containing viewDate. When weekends are hidden,
+    // index against visiblePanDays (the actually-rendered list) so the
+    // pixel math lines up; Monday of that week becomes the leftmost.
+    const targetDate = showWeekends
+      ? weekStart
+      : (() => { const m = new Date(weekStart); m.setDate(m.getDate() + 1); return m; })();
+    const idx = visiblePanDays.findIndex(d => isSameDay(d, targetDate));
     if (idx < 0) return;
     programmaticScrollRef.current = true;
     el.scrollLeft = idx * dayPx;
     initialScrollDoneRef.current = true;
-    setLabelAnchor(weekStart);
+    setLabelAnchor(visiblePanDays[idx]);
     // Release the programmatic flag on the next frame so genuine user
     // scroll events resume normal handling.
     requestAnimationFrame(() => { programmaticScrollRef.current = false; });
-  }, [viewMode, dayPx, panDays, viewDate]);
+  }, [viewMode, dayPx, panDays, visiblePanDays, viewDate, showWeekends]);
 
   // ── Scroll listener: update the visible-range label as the user
   //    pans, and trigger edge-extension when within
@@ -1255,18 +1249,31 @@ export default function CalendarClient({
     function onScroll() {
       if (!el || dayPx <= 0) return;
       if (programmaticScrollRef.current) return;
-      const leftDayIdx = Math.max(0, Math.round(el.scrollLeft / dayPx));
-      const anchor = panDays[Math.min(leftDayIdx, panDays.length - 1)];
+      // scrollLeft / dayPx → index into the *visible* (post-weekend-
+      // filter) day list, since that's what the DOM actually renders.
+      const visibleIdx = Math.max(0, Math.round(el.scrollLeft / dayPx));
+      const anchor = visiblePanDays[Math.min(visibleIdx, visiblePanDays.length - 1)];
       if (anchor && !isSameDay(anchor, labelAnchor)) {
         setLabelAnchor(anchor);
       }
-      // Edge extension. Compute how many days of the window are still to
-      // the right of the visible viewport; if either side is below the
-      // threshold, append a chunk and re-stabilize scrollLeft.
+      // Edge extension is measured against the underlying panDays (the
+      // strip we extend by date, not by visible index — extending by
+      // weekday count would leave gaps when weekends are hidden).
+      // We translate the visible-index back to a panDays-index by
+      // finding the same date in the underlying window.
+      const leftDate = visiblePanDays[Math.min(visibleIdx, visiblePanDays.length - 1)];
+      const leftDayIdx = leftDate ? panDays.findIndex(d => isSameDay(d, leftDate)) : 0;
       const visibleDayCount = Math.max(1, Math.floor(el.clientWidth / dayPx));
       const daysLeftAhead   = panDays.length - leftDayIdx - visibleDayCount;
       if (leftDayIdx < PAN_EDGE_THRESHOLD_DAYS) {
-        // Prepend a chunk.
+        // Prepend a chunk and stabilize scroll. The horizontal space
+        // the chunk consumes depends on showWeekends: when weekends are
+        // hidden, prepended Sat/Sun render nothing, so we compensate
+        // by the count of weekday cells the DOM actually adds. The
+        // scroll adjustment runs after the next paint so the new
+        // panDays cells are already in the DOM and scrollWidth has
+        // grown to accommodate them.
+        let prependRendered = 0;
         setPanDays((prev) => {
           const first = prev[0];
           const prepend: Date[] = [];
@@ -1274,13 +1281,17 @@ export default function CalendarClient({
             const d = new Date(first);
             d.setDate(first.getDate() - i);
             prepend.push(d);
+            if (showWeekends || (d.getDay() !== 0 && d.getDay() !== 6)) prependRendered++;
           }
           return [...prepend, ...prev];
         });
-        // Compensate scroll so the visible content doesn't jump.
         programmaticScrollRef.current = true;
-        el.scrollLeft = el.scrollLeft + PAN_EXTEND_CHUNK * dayPx;
-        requestAnimationFrame(() => { programmaticScrollRef.current = false; });
+        const targetShift = prependRendered * dayPx;
+        requestAnimationFrame(() => {
+          if (!el) return;
+          el.scrollLeft = el.scrollLeft + targetShift;
+          requestAnimationFrame(() => { programmaticScrollRef.current = false; });
+        });
       } else if (daysLeftAhead < PAN_EDGE_THRESHOLD_DAYS) {
         setPanDays((prev) => {
           const last = prev[prev.length - 1];
@@ -1296,7 +1307,7 @@ export default function CalendarClient({
     }
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
-  }, [viewMode, dayPx, panDays, labelAnchor]);
+  }, [viewMode, dayPx, panDays, visiblePanDays, labelAnchor, showWeekends]);
 
   // ── Month: ResizeObserver isn't needed (rows are 1fr columns of the
   //    container width). Initial vertical centering scrolls to the week
@@ -1347,8 +1358,12 @@ export default function CalendarClient({
           return [...prepend, ...prev];
         });
         programmaticMonthScrollRef.current = true;
-        el.scrollTop = el.scrollTop + MONTH_EXTEND_CHUNK * MONTH_WEEK_ROW_PX;
-        requestAnimationFrame(() => { programmaticMonthScrollRef.current = false; });
+        const targetShift = MONTH_EXTEND_CHUNK * MONTH_WEEK_ROW_PX;
+        requestAnimationFrame(() => {
+          if (!el) return;
+          el.scrollTop = el.scrollTop + targetShift;
+          requestAnimationFrame(() => { programmaticMonthScrollRef.current = false; });
+        });
       } else if (rowsLeftAhead < MONTH_EDGE_THRESHOLD_WEEKS) {
         setPanWeeks((prev) => {
           const last = prev[prev.length - 1];
@@ -1542,11 +1557,15 @@ export default function CalendarClient({
       return;
     }
     const el = gridWrapRef.current;
-    const idx = panDays.findIndex(d => isSameDay(d, getWeekStart(now)));
+    const weekStart = getWeekStart(now);
+    const targetDate = showWeekends
+      ? weekStart
+      : (() => { const m = new Date(weekStart); m.setDate(m.getDate() + 1); return m; })();
+    const idx = visiblePanDays.findIndex(d => isSameDay(d, targetDate));
     if (el && dayPx > 0 && idx >= 0) {
       programmaticScrollRef.current = true;
       el.scrollTo({ left: idx * dayPx, behavior: "smooth" });
-      setLabelAnchor(getWeekStart(now));
+      setLabelAnchor(visiblePanDays[idx]);
       setTimeout(() => { programmaticScrollRef.current = false; }, 400);
       return;
     }
