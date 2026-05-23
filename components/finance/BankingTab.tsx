@@ -88,6 +88,14 @@ export default function BankingTab() {
       fetch("/api/integrations/teller/accounts"),
       fetch("/api/integrations/teller/transactions"),
     ]);
+    // 503 from either route means the server is missing the Teller
+    // mTLS cert — surface the dev-facing message rather than failing
+    // silently (no accounts) which masks the real cause.
+    if (acctRes.status === 503 || txRes.status === 503) {
+      const res = acctRes.status === 503 ? acctRes : txRes;
+      const body = await res.json().catch(() => ({}));
+      setError(body?.error ?? "Teller isn't fully configured yet.");
+    }
     if (acctRes.ok) { const { accounts: a } = await acctRes.json(); setAccounts(a ?? []); }
     if (txRes.ok)   { const { transactions: t } = await txRes.json(); setTransactions(t ?? []); }
     setSyncing(false);

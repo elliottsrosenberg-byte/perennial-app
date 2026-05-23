@@ -13,6 +13,7 @@ interface Props {
   onStartTimer: (projectId: string | null, description: string) => void;
   onEntryCreated: (entry: TimeEntry) => void;
   onEntryDeleted: (id: string) => void;
+  onLogTime: () => void;
 }
 
 const PROJ_COLORS = ["#2563ab","#6d4fa3","#148c8c","#3d6b4f","#b8860b","#dc3e0d"];
@@ -138,7 +139,7 @@ function StartTimerBar({ activeTimer, timerSeconds, projects, onStartTimer, onSt
   );
 }
 
-export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projects, onStopTimer, onStartTimer, onEntryCreated, onEntryDeleted }: Props) {
+export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projects, onStopTimer, onStartTimer, onEntryCreated, onEntryDeleted, onLogTime }: Props) {
   const [filterProject, setFilterProject] = useState("all");
   const [billableOnly, setBillableOnly]   = useState(false);
   const [weekOffset, setWeekOffset]       = useState(0);
@@ -302,7 +303,7 @@ export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projec
             icon="⏱"
             heading="Start tracking your time"
             body="Every hour you log builds a picture of how your practice actually runs — what projects take how long, what's billable, and what you can invoice."
-            ashPrompt="How should I think about tracking time as a designer? What's worth logging and how does it connect to invoicing?"
+            action={{ label: "Log time", onClick: onLogTime }}
             tips={[
               "Use the timer to track time live, or log it after the fact with 'Log time'.",
               "Mark time as billable to include it in client invoices automatically.",

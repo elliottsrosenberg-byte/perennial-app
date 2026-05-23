@@ -182,7 +182,6 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
           ))}
         </div>
         <div className="flex items-center gap-2 ml-auto px-5 shrink-0">
-          {tabActions[activeTab]}
           <div ref={optionsRef} style={{ position: "relative" }}>
             <button
               type="button"
@@ -225,6 +224,7 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
               </div>
             )}
           </div>
+          {tabActions[activeTab]}
         </div>
       </header>
 
@@ -239,6 +239,9 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
             invoices={invoices}
             onStopTimer={stopTimer}
             onSwitchTab={setActiveTab}
+            onLogTime={() => setShowLogTime(true)}
+            onAddExpense={() => setShowAddExpense(true)}
+            onNewInvoice={() => setShowNewInvoice(true)}
           />
         )}
         {activeTab === "time" && (
@@ -251,6 +254,7 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
             onStartTimer={startTimer}
             onEntryCreated={(e) => setTimeEntries((prev) => [e, ...prev])}
             onEntryDeleted={deleteTimeEntry}
+            onLogTime={() => setShowLogTime(true)}
           />
         )}
         {activeTab === "expenses" && (
@@ -259,6 +263,7 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
             projects={projects}
             onExpenseCreated={(e) => setExpenses((prev) => [e, ...prev])}
             onExpenseDeleted={deleteExpense}
+            onAddExpense={() => setShowAddExpense(true)}
           />
         )}
         {activeTab === "invoices" && (
@@ -268,6 +273,7 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
             projects={projects}
             onInvoiceUpdated={(inv) => setInvoices((prev) => prev.map((i) => i.id === inv.id ? inv : i))}
             onInvoiceSent={handleInvoiceSent}
+            onNewInvoice={() => setShowNewInvoice(true)}
           />
         )}
         {activeTab === "banking" && <BankingTab />}

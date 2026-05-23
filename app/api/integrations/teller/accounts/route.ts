@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { tellerFetch, TellerNotConfiguredError } from "@/lib/integrations/teller";
+
+export const runtime = "nodejs";
 
 // Refresh balances for all connected bank accounts
 export async function GET() {
@@ -24,12 +27,16 @@ export async function GET() {
     const accessToken = integration.access_token;
     if (!accessToken) continue;
 
-    // Fetch accounts from Teller
-    const accountsRes = await fetch("https://api.teller.io/accounts", {
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${accessToken}:`).toString("base64")}`,
-      },
-    });
+    // Fetch accounts from Teller via the mTLS-equipped client.
+    let accountsRes: Response;
+    try {
+      accountsRes = await tellerFetch("/accounts", accessToken);
+    } catch (e) {
+      if (e instanceof TellerNotConfiguredError) {
+        return NextResponse.json({ error: e.message }, { status: 503 });
+      }
+      throw e;
+    }
     if (!accountsRes.ok) continue;
 
     const tellerAccounts = await accountsRes.json() as TellerAccount[];
@@ -38,11 +45,7 @@ export async function GET() {
     const accountsWithBalances = await Promise.all(
       tellerAccounts.map(async (acct) => {
         try {
-          const balRes = await fetch(`https://api.teller.io/accounts/${acct.id}/balances`, {
-            headers: {
-              Authorization: `Basic ${Buffer.from(`${accessToken}:`).toString("base64")}`,
-            },
-          });
+          const balRes = await tellerFetch(`/accounts/${acct.id}/balances`, accessToken);
           const bal = balRes.ok ? await balRes.json() as TellerBalance : null;
           return { ...acct, balance: bal };
         } catch {

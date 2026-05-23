@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { tellerFetch, TellerNotConfiguredError } from "@/lib/integrations/teller";
+
+export const runtime = "nodejs";
 
 // Fetch and cache recent transactions for all connected accounts
 export async function GET() {
@@ -30,14 +33,15 @@ export async function GET() {
 
     for (const account of integrationAccounts) {
       try {
-        const txRes = await fetch(
-          `https://api.teller.io/accounts/${account.teller_id}/transactions?count=50`,
-          {
-            headers: {
-              Authorization: `Basic ${Buffer.from(`${accessToken}:`).toString("base64")}`,
-            },
+        let txRes: Response;
+        try {
+          txRes = await tellerFetch(`/accounts/${account.teller_id}/transactions?count=50`, accessToken);
+        } catch (e) {
+          if (e instanceof TellerNotConfiguredError) {
+            return NextResponse.json({ error: e.message }, { status: 503 });
           }
-        );
+          throw e;
+        }
         if (!txRes.ok) continue;
 
         const txList = await txRes.json() as TellerTransaction[];
