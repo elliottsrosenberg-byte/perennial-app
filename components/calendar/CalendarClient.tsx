@@ -1022,8 +1022,10 @@ export default function CalendarClient({
   );
   // Fixed pixel width per day column. Computed so WEEK_VISIBLE_COLS
   // (= 7) days fit in the visible viewport minus the 52px time gutter.
-  // ResizeObserver keeps this current across window resizes.
-  const [dayPx, setDayPx] = useState<number>(0);
+  // ResizeObserver keeps this current across window resizes. We seed
+  // with a sane default so the very first render doesn't squash all
+  // panDays into one viewport-width of `1fr` columns.
+  const [dayPx, setDayPx] = useState<number>(140);
   // Track whether the user has scrolled the pan container at all yet —
   // we suppress the scroll handler's label updates until after the
   // initial centering scroll lands so we don't briefly flash "May 12"
@@ -1249,6 +1251,11 @@ export default function CalendarClient({
     function onScroll() {
       if (!el || dayPx <= 0) return;
       if (programmaticScrollRef.current) return;
+      // Defer label/extension until the initial horizontal centering
+      // has landed — otherwise the mount-time scrollTo({top:…}) fires
+      // this listener at scrollLeft=0 and immediately drags the label
+      // to the leftmost prepended day.
+      if (!initialScrollDoneRef.current) return;
       // scrollLeft / dayPx → index into the *visible* (post-weekend-
       // filter) day list, since that's what the DOM actually renders.
       const visibleIdx = Math.max(0, Math.round(el.scrollLeft / dayPx));
@@ -1336,6 +1343,7 @@ export default function CalendarClient({
     function onScroll() {
       if (!el) return;
       if (programmaticMonthScrollRef.current) return;
+      if (!initialMonthScrollDoneRef.current) return;
       const topRowIdx = Math.max(0, Math.round(el.scrollTop / MONTH_WEEK_ROW_PX));
       const wk = panWeeks[Math.min(topRowIdx, panWeeks.length - 1)];
       if (wk) {
