@@ -988,6 +988,15 @@ export default function CalendarClient({
   const [quickTaskCreate, setQuickTaskCreate] = useState<{ day: Date; anchorRect: DOMRect | null; defaultTime?: string; defaultEndTime?: string } | null>(null);
   const [viewMode,        setViewMode]        = useState<"Week" | "Month">("Week");
   const [monthDayOverlay, setMonthDayOverlay] = useState<{ date: Date; x: number; y: number } | null>(null);
+  // Anchor for the "+N more" overlay that lists all-day events squeezed
+  // out of the visible row cap. `colIdx` keys back into visiblePanDays.
+  const [allDayOverflowAnchor, setAllDayOverflowAnchor] = useState<{
+    colIdx: number;
+    x: number;
+    y: number;
+    events: CalEvent[];
+    dayLabel: string;
+  } | null>(null);
 
   // Per-category visibility for the Perennial Feed opportunities ribbon.
   // We store hidden categories (not visible ones) so a fresh user who's
@@ -2689,7 +2698,30 @@ export default function CalendarClient({
             // All-day events as spans (single-day → 1-column bar, multi-day
             // → wider bar). Replaces the old per-day chip render so a 3-day
             // event correctly appears on all three days, not just the first.
-            const allDaySpans = gcalEvents
+            //
+            // Dedupe twice:
+            //   1) by event id — guards against the same event arriving
+            //      from two providers (e.g. a user with both the legacy
+            //      `google_calendar` integration and the unified `google`
+            //      one). Ids are provider-stable.
+            //   2) by (title + start + end) — guards against the same
+            //      logical holiday (Shavuot, etc.) appearing in two
+            //      different accounts' subscribed holiday calendars. Each
+            //      copy has a distinct id but identical title and range.
+            const seenIds = new Set<string>();
+            const seenSig = new Set<string>();
+            const dedupedAllDay: CalEvent[] = [];
+            for (const ev of gcalEvents) {
+              if (!ev.allDay) continue;
+              if (seenIds.has(ev.id)) continue;
+              const sig = `${ev.title}|${ev.start}|${ev.end}`;
+              if (seenSig.has(sig)) continue;
+              seenIds.add(ev.id);
+              seenSig.add(sig);
+              dedupedAllDay.push(ev);
+            }
+
+            const rawAllDaySpans = dedupedAllDay
               .map(ev => {
                 const r = inclusiveAllDayRange(ev);
                 if (!r) return null;
@@ -2697,11 +2729,10 @@ export default function CalendarClient({
                 if (!span) return null;
                 return { event: ev, ...span, startsBefore: r.s < visiblePanDays[0], endsAfter: r.e > visiblePanDays[lastIdx] };
               })
-              .filter((x): x is NonNullable<typeof x> => x !== null)
-              .sort((a, b) => (b.endIdx - b.startIdx) - (a.endIdx - a.startIdx));
+              .filter((x): x is NonNullable<typeof x> => x !== null);
 
             // Compute opportunity spans the same way as before.
-            const oppSpans = initialOpportunities
+            const rawOppSpans = initialOpportunities
               .filter(o => !hiddenOppCats.has(o.category))
               .map(o => {
                 const s = parseOppDate(o.start_date);
@@ -2711,10 +2742,63 @@ export default function CalendarClient({
                 if (!span) return null;
                 return { opp: o, ...span };
               })
-              .filter((x): x is NonNullable<typeof x> => x !== null)
-              // Longest first so the most prominent bars settle into the
-              // top rows; shorter ones stack underneath.
-              .sort((a, b) => (b.endIdx - b.startIdx) - (a.endIdx - a.startIdx));
+              .filter((x): x is NonNullable<typeof x> => x !== null);
+
+            // Interval-pack spans into rows: sort by start, then assign each
+            // span to the lowest-indexed row whose last span ends before
+            // this one starts. Non-overlapping spans share a row so the
+            // all-day strip only grows as tall as the worst overlap count.
+            function packSpans<T extends { startIdx: number; endIdx: number }>(spans: T[]): T[][] {
+              const sorted = [...spans].sort((a, b) =>
+                a.startIdx - b.startIdx || (b.endIdx - b.startIdx) - (a.endIdx - a.startIdx),
+              );
+              const rows: T[][] = [];
+              const lastEndPerRow: number[] = [];
+              for (const span of sorted) {
+                let placed = false;
+                for (let i = 0; i < rows.length; i++) {
+                  if (lastEndPerRow[i] < span.startIdx) {
+                    rows[i].push(span);
+                    lastEndPerRow[i] = span.endIdx;
+                    placed = true;
+                    break;
+                  }
+                }
+                if (!placed) {
+                  rows.push([span]);
+                  lastEndPerRow.push(span.endIdx);
+                }
+              }
+              return rows;
+            }
+
+            // Cap the visible all-day rows at MAX_ROWS; remaining events
+            // collapse into a per-column "+N more" badge. Notion Calendar
+            // does the same — bounded vertical real-estate beats a tall
+            // strip that pushes the time grid offscreen.
+            const MAX_ROWS = 5;
+            const allDayPackedRows = packSpans(rawAllDaySpans);
+            const oppPackedRows    = packSpans(rawOppSpans);
+            const visibleAllDayRows = allDayPackedRows.slice(0, MAX_ROWS);
+            const overflowAllDay    = allDayPackedRows.slice(MAX_ROWS).flat();
+            // Per-column overflow counts for the "+N more" badge.
+            const overflowCountByCol = new Array<number>(N).fill(0);
+            for (const span of overflowAllDay) {
+              for (let i = span.startIdx; i <= span.endIdx; i++) overflowCountByCol[i] += 1;
+            }
+            // Flatten back to (span, rowIdx) for render.
+            const allDaySpans = visibleAllDayRows.flatMap((row, rowIdx) =>
+              row.map(s => ({ ...s, rowIdx })),
+            );
+            const oppSpans = oppPackedRows.flatMap((row, rowIdx) =>
+              row.map(s => ({ ...s, rowIdx })),
+            );
+            const allDayRowCount = visibleAllDayRows.length;
+            const hasOverflow    = overflowAllDay.length > 0;
+            // When the overflow badge row is present, push opp rows down
+            // by one so they sit below the "+N more" affordance instead
+            // of overlapping it.
+            const oppRowOffset   = hasOverflow ? 1 : 0;
 
             return (
               <div
@@ -2786,7 +2870,7 @@ export default function CalendarClient({
                 {/* All-day event bars — span each event's actual date
                     range so multi-day events appear on every day they
                     cover, not just the start day. */}
-                {allDaySpans.map((span, idx) => {
+                {allDaySpans.map((span) => {
                   const color = eventColor(span.event);
                   return (
                     <button
@@ -2798,7 +2882,7 @@ export default function CalendarClient({
                       title={span.event.title}
                       style={{
                         gridColumn: `${span.startIdx + 2} / ${span.endIdx + 3}`,
-                        gridRow: idx + 2,
+                        gridRow: span.rowIdx + 2,
                         marginLeft: 2, marginRight: 2,
                         background: `${color}18`, color,
                         border: `0.5px solid ${color}44`,
@@ -2820,7 +2904,7 @@ export default function CalendarClient({
 
                 {/* Multi-day opp bars — same span pattern as all-day
                     events, just with the Perennial Feed palette. */}
-                {oppSpans.map((span, idx) => {
+                {oppSpans.map((span) => {
                   const pal = oppPalette(span.opp.category);
                   const s = parseOppDate(span.opp.start_date);
                   const e = parseOppDate(span.opp.end_date) ?? s;
@@ -2833,7 +2917,7 @@ export default function CalendarClient({
                       title={`${span.opp.title}${span.opp.location ? ` · ${span.opp.location}` : ""}`}
                       style={{
                         gridColumn: `${span.startIdx + 2} / ${span.endIdx + 3}`,
-                        gridRow: idx + 2 + allDaySpans.length,
+                        gridRow: span.rowIdx + 2 + allDayRowCount + oppRowOffset,
                         marginLeft: 2, marginRight: 2,
                         background: pal.bg, color: pal.fg,
                         border: `0.5px dashed ${pal.border}`,
@@ -2850,6 +2934,58 @@ export default function CalendarClient({
                     >
                       {startsBeforeWeek && "← "}{span.opp.title}{endsAfterWeek && " →"}
                     </a>
+                  );
+                })}
+
+                {/* "+N more" badges for all-day events squeezed out of
+                    the visible row cap. Per-column so a 5-day holiday
+                    overlap doesn't collapse into a single anchor that
+                    misrepresents which day the user is looking at. */}
+                {overflowCountByCol.map((n, i) => {
+                  if (n <= 0) return null;
+                  // The events that overlap this column from the overflow set.
+                  const eventsForCol = overflowAllDay
+                    .filter(s => s.startIdx <= i && s.endIdx >= i)
+                    .map(s => s.event);
+                  return (
+                    <button
+                      key={`overflow-${i}`}
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+                        const dayLabel = visiblePanDays[i].toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+                        setAllDayOverflowAnchor({
+                          colIdx: i,
+                          x: rect.left,
+                          y: rect.bottom + 4,
+                          events: eventsForCol,
+                          dayLabel,
+                        });
+                      }}
+                      title={`${n} more all-day event${n === 1 ? "" : "s"}`}
+                      style={{
+                        gridColumn: i + 2,
+                        // Sits between the all-day bars (rows 2..allDayRowCount+1)
+                        // and the opp-spans block (which we push down by one
+                        // row when overflow exists — see oppSpans render).
+                        gridRow: allDayRowCount + 2,
+                        margin: "1px 2px 2px",
+                        background: "transparent",
+                        border: "none",
+                        color: "var(--color-text-tertiary)",
+                        fontSize: 10, fontWeight: 500,
+                        fontFamily: "inherit",
+                        textAlign: "left",
+                        cursor: "pointer",
+                        padding: "0 4px",
+                        borderRadius: 3,
+                        whiteSpace: "nowrap",
+                      }}
+                      onMouseEnter={(ev) => (ev.currentTarget.style.background = "var(--color-cream)")}
+                      onMouseLeave={(ev) => (ev.currentTarget.style.background = "transparent")}
+                    >
+                      +{n} more
+                    </button>
                   );
                 })}
 
@@ -3331,6 +3467,81 @@ export default function CalendarClient({
                   <span style={{ fontSize: 11.5, color: "var(--color-text-primary)" }}>{p.title}</span>
                 </div>
               ))}
+            </div>
+          </>
+        );
+      })()}
+
+      {/* All-day "+N more" overlay — Notion-style; lists every all-day
+          event for the clicked day that was squeezed out of the visible
+          row cap on the all-day strip. */}
+      {allDayOverflowAnchor && (() => {
+        const W = 260;
+        const left = Math.min(allDayOverflowAnchor.x, window.innerWidth - W - 8);
+        const top  = Math.min(allDayOverflowAnchor.y, window.innerHeight - 320);
+        return (
+          <>
+            <div
+              onClick={() => setAllDayOverflowAnchor(null)}
+              style={{ position: "fixed", inset: 0, zIndex: 75 }}
+            />
+            <div
+              style={{
+                position: "fixed",
+                top: `${Math.max(8, top)}px`,
+                left: `${Math.max(8, left)}px`,
+                zIndex: 76,
+                width: W,
+                maxHeight: 320, overflowY: "auto",
+                background: "var(--color-off-white)",
+                border: "0.5px solid var(--color-border)",
+                borderRadius: 12,
+                boxShadow: "0 8px 32px rgba(0,0,0,0.16)",
+                padding: 12,
+                fontFamily: "inherit",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <p style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)" }}>
+                  {allDayOverflowAnchor.dayLabel} · all-day
+                </p>
+                <button
+                  onClick={() => setAllDayOverflowAnchor(null)}
+                  style={{
+                    width: 22, height: 22, borderRadius: 6,
+                    background: "transparent", border: "none",
+                    color: "var(--color-text-tertiary)", cursor: "pointer", fontSize: 15,
+                  }}
+                >×</button>
+              </div>
+              {allDayOverflowAnchor.events.map((e) => {
+                const color = eventColor(e);
+                return (
+                  <button
+                    key={e.id}
+                    onClick={(ev) => {
+                      const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+                      setAllDayOverflowAnchor(null);
+                      openEventAt(e, rect);
+                    }}
+                    style={{
+                      width: "100%", textAlign: "left",
+                      display: "flex", alignItems: "center", gap: 8,
+                      padding: "6px 8px", marginBottom: 2,
+                      background: "transparent", border: "none",
+                      borderLeft: `2.5px solid ${color}`,
+                      cursor: "pointer", fontFamily: "inherit",
+                      borderRadius: 4,
+                    }}
+                    onMouseEnter={(ev) => (ev.currentTarget.style.background = "var(--color-cream)")}
+                    onMouseLeave={(ev) => (ev.currentTarget.style.background = "transparent")}
+                  >
+                    <span style={{ fontSize: 11.5, color: "var(--color-text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {e.title}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </>
         );
