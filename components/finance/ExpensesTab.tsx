@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import type { Expense, Project, ExpenseCategory } from "@/types/database";
 import EmptyState from "@/components/ui/EmptyState";
+import { Receipt } from "lucide-react";
 
 interface Props {
   expenses: Expense[];
@@ -155,7 +156,7 @@ export default function ExpensesTab({ expenses, projects, onExpenseCreated, onEx
           })}
           {filtered.length === 0 && expenses.length === 0 && (
             <EmptyState
-              icon="🧾"
+              icon={<Receipt size={24} strokeWidth={1.5} color="var(--color-sage)" />}
               heading="Log your studio expenses"
               body="Track materials, travel, software, production costs, and other expenses by project. Expenses feed into your financial overview and can be included in client invoices."
               action={{ label: "Add expense", onClick: onAddExpense }}

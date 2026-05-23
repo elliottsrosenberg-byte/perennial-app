@@ -1,6 +1,8 @@
 "use client";
 
 import type { TimeEntry, ActiveTimer, Expense, Invoice } from "@/types/database";
+import EmptyState from "@/components/ui/EmptyState";
+import { Landmark } from "lucide-react";
 
 type Tab = "overview" | "time" | "expenses" | "invoices" | "banking";
 
@@ -116,98 +118,6 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
 
   return (
     <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
-      {isEmpty && (
-        <div
-          className="rounded-2xl p-6 flex flex-col gap-4"
-          style={{
-            background: "var(--color-warm-white)",
-            border: "0.5px solid var(--color-border)",
-          }}
-        >
-          <div>
-            <p
-              className="text-[10px] font-semibold uppercase tracking-widest mb-2"
-              style={{ color: "var(--color-sage)" }}
-            >
-              Welcome to Finance
-            </p>
-            <h2
-              className="text-[20px] font-semibold mb-2"
-              style={{
-                color: "var(--color-charcoal)",
-                fontFamily: "var(--font-display)",
-                letterSpacing: "-0.01em",
-              }}
-            >
-              Start with the picture that matters most
-            </h2>
-            <p className="text-[13px] leading-relaxed" style={{ color: "var(--color-grey)" }}>
-              Connect your bank so balances and transactions flow in automatically — then log time, add expenses, and send invoices as you work. Everything ties back to your projects.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => onSwitchTab("banking")}
-              className="px-4 py-2 text-[12px] font-medium rounded-lg text-white"
-              style={{ background: "var(--color-sage)", border: "none", cursor: "pointer", fontFamily: "inherit" }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-sage-hover)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-sage)")}
-            >
-              Connect bank
-            </button>
-            <button
-              type="button"
-              onClick={onLogTime}
-              className="px-4 py-2 text-[12px] rounded-lg"
-              style={{
-                color: "var(--color-charcoal)",
-                background: "transparent",
-                border: "0.5px solid var(--color-border)",
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            >
-              Log time
-            </button>
-            <button
-              type="button"
-              onClick={onAddExpense}
-              className="px-4 py-2 text-[12px] rounded-lg"
-              style={{
-                color: "var(--color-charcoal)",
-                background: "transparent",
-                border: "0.5px solid var(--color-border)",
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            >
-              Add expense
-            </button>
-            <button
-              type="button"
-              onClick={onNewInvoice}
-              className="px-4 py-2 text-[12px] rounded-lg"
-              style={{
-                color: "var(--color-charcoal)",
-                background: "transparent",
-                border: "0.5px solid var(--color-border)",
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            >
-              New invoice
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Stat cards */}
       <div className="grid grid-cols-4 gap-3">
         {[
@@ -364,6 +274,25 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
           </div>
         </div>
       </div>
+
+      {/* Welcome onboarding — only on a truly empty Finance module. Sits
+          below the stat cards so the empty zeros still establish the
+          information architecture before the prompt. Matches the
+          EmptyState pattern used elsewhere in the app for consistency. */}
+      {isEmpty && (
+        <EmptyState
+          icon={<Landmark size={24} strokeWidth={1.5} color="var(--color-sage)" />}
+          heading="Start with the picture that matters most"
+          body="Connect your bank so balances and transactions flow in automatically — then log time, add expenses, and send invoices as you work. Everything ties back to your projects."
+          action={{ label: "Connect bank", onClick: () => onSwitchTab("banking") }}
+          secondaryAction={{ label: "Log time", onClick: onLogTime }}
+          tips={[
+            "Add expenses with the “+ Add expense” button — link them to projects to track per-project profitability.",
+            "Pull tracked time into invoices in one click; status moves Draft → Sent → Paid.",
+            "Once a bank is connected, Banking shows real balances and transactions alongside your invoices.",
+          ]}
+        />
+      )}
     </div>
   );
 }

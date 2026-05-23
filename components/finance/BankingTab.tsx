@@ -104,6 +104,33 @@ export default function BankingTab() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Poll for window.TellerConnect as a fallback for the Next/Script
+  // onLoad callback. In practice <Script strategy="afterInteractive">'s
+  // onLoad can miss for cached responses, adblockers that delay the
+  // script, or strict-CSP environments — leaving the Connect bank
+  // button permanently disabled. The poll guarantees the button flips
+  // to enabled the moment the global appears (or surfaces an error if
+  // 15s pass without it).
+  useEffect(() => {
+    if (scriptReady) return;
+    if (typeof window === "undefined") return;
+    if (window.TellerConnect) { setScriptReady(true); return; }
+    let elapsed = 0;
+    const id = window.setInterval(() => {
+      if (window.TellerConnect) {
+        setScriptReady(true);
+        window.clearInterval(id);
+        return;
+      }
+      elapsed += 250;
+      if (elapsed >= 15000) {
+        window.clearInterval(id);
+        setError("Teller Connect failed to load. Check your network or disable any ad/script blockers, then refresh.");
+      }
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [scriptReady]);
+
   function openTellerConnect() {
     if (!window.TellerConnect) { setError("Teller Connect is still loading — try again in a moment."); return; }
     if (!appId) { setError("Teller App ID not configured."); return; }
