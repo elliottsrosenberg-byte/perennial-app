@@ -79,6 +79,7 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
   async function setDefault(cal: UserCalendar) {
     const prev = defaultId;
     setDefaultId(cal.id);
+    window.dispatchEvent(new CustomEvent("calendar:default-changed", { detail: { id: cal.id } }));
     try {
       const res = await fetch("/api/integrations/calendar/calendars", {
         method:  "PATCH",
@@ -86,9 +87,9 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
         body:    JSON.stringify({ id: cal.id, set_default: true }),
       });
       if (!res.ok) throw new Error("PATCH failed");
-      window.dispatchEvent(new Event("calendar:default-changed"));
     } catch {
       setDefaultId(prev);
+      if (prev) window.dispatchEvent(new CustomEvent("calendar:default-changed", { detail: { id: prev } }));
     }
   }
 
@@ -109,6 +110,10 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
 
   async function setVisible(cal: UserCalendar, nextVisible: boolean) {
     setCalendars((prev) => prev.map((c) => (c.id === cal.id ? { ...c, visible: nextVisible } : c)));
+    // Broadcast the optimistic patch immediately so the main grid's
+    // calendarsById updates in lock-step — waiting for the PATCH round
+    // trip leaves chips with stale colour for a beat.
+    window.dispatchEvent(new CustomEvent("calendar:row-changed", { detail: { id: cal.id, patch: { visible: nextVisible } } }));
     try {
       const res = await fetch("/api/integrations/calendar/calendars", {
         method:  "PATCH",
@@ -119,11 +124,13 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
       window.dispatchEvent(new Event("calendar:refresh-events"));
     } catch {
       setCalendars((prev) => prev.map((c) => (c.id === cal.id ? { ...c, visible: cal.visible } : c)));
+      window.dispatchEvent(new CustomEvent("calendar:row-changed", { detail: { id: cal.id, patch: { visible: cal.visible } } }));
     }
   }
 
   async function setColor(cal: UserCalendar, color: string) {
     setCalendars((prev) => prev.map((c) => (c.id === cal.id ? { ...c, color } : c)));
+    window.dispatchEvent(new CustomEvent("calendar:row-changed", { detail: { id: cal.id, patch: { color } } }));
     try {
       const res = await fetch("/api/integrations/calendar/calendars", {
         method:  "PATCH",
@@ -134,6 +141,7 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
       window.dispatchEvent(new Event("calendar:refresh-events"));
     } catch {
       setCalendars((prev) => prev.map((c) => (c.id === cal.id ? { ...c, color: cal.color } : c)));
+      window.dispatchEvent(new CustomEvent("calendar:row-changed", { detail: { id: cal.id, patch: { color: cal.color } } }));
     }
   }
 
@@ -510,7 +518,7 @@ function RowMenu({
             {COLOR_SWATCHES.map(s => (
               <button
                 key={s.value}
-                onClick={() => onColor(s.value)}
+                onClick={() => { onColor(s.value); onClose(); }}
                 title={s.name}
                 style={{
                   width: 16, height: 16, borderRadius: 9999,
