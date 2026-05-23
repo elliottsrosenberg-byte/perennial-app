@@ -468,13 +468,17 @@ export default function EventCard({
         borderBottom: "0.5px solid var(--color-border)",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-          {isEdit && color && (
-            <span style={{
-              width: 9, height: 9, borderRadius: "50%",
-              background: color, flexShrink: 0,
-              boxShadow: `0 0 0 2px ${color}22`,
-            }} />
-          )}
+          {(() => {
+            const dotColor = isEdit ? color : selectedCal?.color;
+            if (!dotColor) return null;
+            return (
+              <span style={{
+                width: 9, height: 9, borderRadius: "50%",
+                background: dotColor, flexShrink: 0,
+                boxShadow: `0 0 0 2px ${dotColor}22`,
+              }} />
+            );
+          })()}
           <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {isEdit ? providerLabel : "Event"}
           </span>
@@ -784,7 +788,12 @@ export default function EventCard({
               disabled={!title.trim() || !calendarId || submitting || noWritable}
               style={{
                 padding: "6px 14px", fontSize: 12, fontWeight: 500, borderRadius: 7,
-                color: "white", background: "var(--color-sage)",
+                color: "white",
+                // Tint the primary action with the selected calendar's
+                // colour so the user can see exactly what the resulting
+                // chip will look like. Falls back to event accent (edit
+                // mode) and finally sage.
+                background: selectedCal?.color ?? color ?? "var(--color-sage)",
                 opacity: (!title.trim() || !calendarId || submitting || noWritable) ? 0.5 : 1,
                 border: "none", cursor: "pointer", fontFamily: "inherit",
               }}

@@ -368,18 +368,53 @@ function MiniCalendar({ selectedDate, onSelect }: {
 
       <div className="grid grid-cols-7">
         {cells.map((date, i) => {
-          if (!date) return <div key={i} />;
+          if (!date) return <div key={i} className="h-[26px]" />;
           const isT  = isSameDay(date, today);
           const inWk = weekDays.some(wd => isSameDay(wd, date));
+
+          // Continuous strip across the selected week: rounded only on
+          // the leftmost cell in this row that's in-span, and on the
+          // rightmost. If the span wraps across two rows (e.g. Wed–Sat
+          // on row 1, Sun–Tue on row 2), each row's run rounds at its
+          // own edges so it reads as a single highlight that wraps.
+          const prevInWk = i > 0 && cells[i - 1] && i % 7 !== 0
+            ? weekDays.some(wd => isSameDay(wd, cells[i - 1]!))
+            : false;
+          const nextInWk = i < cells.length - 1 && cells[i + 1] && (i + 1) % 7 !== 0
+            ? weekDays.some(wd => isSameDay(wd, cells[i + 1]!))
+            : false;
+          const startCap = inWk && !prevInWk;
+          const endCap   = inWk && !nextInWk;
+          const stripRadius = "10px";
+
           return (
             <button key={i} onClick={() => onSelect(date)}
-              className="w-[26px] h-[26px] mx-auto flex items-center justify-center rounded-full text-[10px] transition-colors"
+              className="relative h-[26px] flex items-center justify-center text-[10px] transition-colors"
               style={{
-                background: isT ? "var(--color-charcoal)" : inWk ? "var(--color-cream)" : "transparent",
-                color: isT ? "var(--color-warm-white)" : inWk ? "var(--color-charcoal)" : "var(--color-grey)",
+                background: inWk && !isT ? "var(--color-cream)" : "transparent",
+                borderTopLeftRadius:     startCap ? stripRadius : 0,
+                borderBottomLeftRadius:  startCap ? stripRadius : 0,
+                borderTopRightRadius:    endCap   ? stripRadius : 0,
+                borderBottomRightRadius: endCap   ? stripRadius : 0,
+                color: isT ? "white" : inWk ? "var(--color-charcoal)" : "var(--color-grey)",
                 fontWeight: isT || inWk ? 600 : 400,
+                border: "none", cursor: "pointer", fontFamily: "inherit",
+                padding: 0,
               }}
-            >{date.getDate()}</button>
+            >
+              {isT && (
+                <span
+                  aria-hidden
+                  style={{
+                    position: "absolute", inset: "1px 2px",
+                    background: "var(--color-sage)",
+                    borderRadius: "7px",
+                    zIndex: 0,
+                  }}
+                />
+              )}
+              <span style={{ position: "relative", zIndex: 1 }}>{date.getDate()}</span>
+            </button>
           );
         })}
       </div>
@@ -935,6 +970,7 @@ export default function CalendarClient({
   // Google colorId. Refreshes on `calendar:refresh-events` so a colour
   // change in the sources panel reflects on the grid immediately.
   const [calendarsById,   setCalendarsById]   = useState<Record<string, UserCalendar>>({});
+  const [defaultCalendarId, setDefaultCalendarId] = useState<string | null>(null);
   /** Open an event's preview panel anchored to the clicked chip's rect.
    *  Falls back to right-edge anchoring when called without a rect (deep
    *  links, month overlay rows). */
@@ -1100,11 +1136,16 @@ export default function CalendarClient({
       if (!drag) return;
       const dy = Math.abs(drag.currentY - drag.startY);
 
-      // Snap both endpoints to 15-min grid. If the drag was effectively
-      // a click (tiny dy), pop a 30-min default at the click point.
+      // Single clicks (no drag) should NOT create an event — only drags.
+      // Clear the in-flight gesture and bail out before any event open.
+      if (dy < DRAG_THRESHOLD_PX) {
+        setDragCreate(null);
+        return;
+      }
+
+      // Snap both endpoints to 15-min grid.
       const startMin = yToMinutes(Math.min(drag.startY, drag.currentY));
       let endMin     = yToMinutes(Math.max(drag.startY, drag.currentY));
-      if (dy < DRAG_THRESHOLD_PX) endMin = startMin + 30;
       if (endMin <= startMin)     endMin = startMin + 15;
 
       const startDate = dayWithMinutes(drag.day, startMin);
@@ -1450,19 +1491,50 @@ export default function CalendarClient({
     function load() {
       fetch("/api/integrations/calendar/calendars")
         .then(r => r.json())
-        .then((d: { calendars?: UserCalendar[] }) => {
+        .then((d: { calendars?: UserCalendar[]; default_calendar_id?: string | null }) => {
           if (cancelled) return;
           const map: Record<string, UserCalendar> = {};
           for (const c of d.calendars ?? []) map[c.id] = c;
           setCalendarsById(map);
+          setDefaultCalendarId(d.default_calendar_id ?? null);
         })
         .catch(() => {});
     }
     load();
+    // Listen for granular calendar-row mutations so colour / visibility
+    // changes apply immediately instead of waiting for the full re-fetch.
+    function onRowChanged(e: Event) {
+      const detail = (e as CustomEvent<{ id: string; patch: Partial<UserCalendar> }>).detail;
+      if (!detail?.id) return;
+      setCalendarsById(prev => {
+        const cur = prev[detail.id];
+        if (!cur) return prev;
+        return { ...prev, [detail.id]: { ...cur, ...detail.patch } };
+      });
+    }
+    function onDefaultChanged(e: Event) {
+      const detail = (e as CustomEvent<{ id: string }>).detail;
+      if (!detail?.id) return;
+      setDefaultCalendarId(detail.id);
+    }
     function onRefresh() { load(); }
     window.addEventListener("calendar:refresh-events", onRefresh);
-    return () => { cancelled = true; window.removeEventListener("calendar:refresh-events", onRefresh); };
+    window.addEventListener("calendar:row-changed",     onRowChanged);
+    window.addEventListener("calendar:default-changed", onDefaultChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("calendar:refresh-events", onRefresh);
+      window.removeEventListener("calendar:row-changed",     onRowChanged);
+      window.removeEventListener("calendar:default-changed", onDefaultChanged);
+    };
   }, []);
+
+  // Color the new-event drag ghost (and the EventCard submit button) with
+  // the user's default-calendar colour so the in-progress creation visibly
+  // matches the chip it'll become once submitted.
+  const defaultCalColor = defaultCalendarId && calendarsById[defaultCalendarId]?.color
+    ? (calendarsById[defaultCalendarId]!.color as string)
+    : "var(--color-sage)";
 
   // Per-event colour: prefer the user_calendars colour the user picked in
   // the left rail; fall back to the per-event Google colorId; final
@@ -2311,12 +2383,10 @@ export default function CalendarClient({
             showWeekends={showWeekends}
             onEventClick={openEventAt}
             onTaskClick={openQuickTask}
-            onEmptyCellClick={(date) => {
-              const start = new Date(date); start.setHours(0, 0, 0, 0);
-              const end   = new Date(start); end.setDate(end.getDate() + 1);
-              setNewEventPrefill({ start, end, allDay: true });
-              setNewEventOpen(true);
-            }}
+            onEmptyCellClick={() => { /* Clicking an empty day no longer
+              creates an event — events are drag-only. The Month-view
+              cell still accepts the click to jump to the date via
+              `onDayNumberClick` if the user hits the day number. */ }}
             onDayNumberClick={(date) => { setViewMode("Week"); setViewDate(date); }}
             onShowMore={(date, x, y) => setMonthDayOverlay({ date, x, y })}
           />
@@ -2391,10 +2461,13 @@ export default function CalendarClient({
                     {DOW_SHORT[day.getDay()]}
                   </span>
                   <span
-                    className="w-8 h-8 flex items-center justify-center rounded-full"
+                    className="flex items-center justify-center"
                     style={{
-                      background: today ? "var(--color-charcoal)" : "transparent",
-                      color: today ? "var(--color-warm-white)" : "var(--color-charcoal)",
+                      minWidth: 32, height: 28,
+                      padding: today ? "0 10px" : 0,
+                      borderRadius: today ? 8 : 9999,
+                      background: today ? "var(--color-sage)" : "transparent",
+                      color: today ? "white" : "var(--color-charcoal)",
                       fontSize: today ? "15px" : "19px",
                       fontWeight: today ? 600 : 300,
                     }}
@@ -2583,19 +2656,11 @@ export default function CalendarClient({
                   return (
                     <div
                       key={i}
-                      onClick={(e) => {
-                        if (e.target !== e.currentTarget) return;
-                        const start = new Date(day); start.setHours(0, 0, 0, 0);
-                        const end   = new Date(start); end.setDate(end.getDate() + 1);
-                        setNewEventPrefill({ start, end, allDay: true });
-                        setNewEventOpen(true);
-                      }}
                       style={{
                         gridColumn: i + 2, gridRow: 1,
                         borderLeft: "0.5px solid var(--color-border)",
                         padding: "3px 3px",
                         display: "flex", flexDirection: "column", gap: 2,
-                        cursor: "pointer",
                         minHeight: 28,
                         background: isWeekend(day) ? WEEKEND_BG : undefined,
                       }}
@@ -2782,13 +2847,13 @@ export default function CalendarClient({
                             left:     "2px",
                             right:    "2px",
                             height:   `${heightPx}px`,
-                            background:   "rgba(155,163,122,0.22)",
-                            border:       "1px solid var(--color-sage)",
+                            background:   `${defaultCalColor}22`,
+                            border:       `1px solid ${defaultCalColor}`,
                             borderRadius: 4,
                             zIndex:       4,
                             pointerEvents: "none",
                             padding:      "2px 6px",
-                            color:        "#4a5630",
+                            color:        defaultCalColor,
                             fontSize:     10,
                             fontWeight:   500,
                             overflow:     "hidden",
