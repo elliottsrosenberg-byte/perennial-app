@@ -100,10 +100,15 @@ async function handle(req: Request, url: URL, origin: string) {
     return NextResponse.redirect(settingsUrl(origin, { provider: "microsoft", error: "storage_failed" }));
   }
 
-  // Seed per-account calendar list. Fire-and-forget so the redirect
-  // doesn't block on a Graph round-trip.
+  // Seed per-account calendar list. AWAITed (capped at 5s) so the
+  // user_calendars rows exist before the user lands back on /calendar
+  // — fire-and-forget here would leave a second/third connected
+  // account invisible in the rail until a manual refresh.
   if (enabledSubScopes.calendar) {
-    void syncUserCalendarList(user.id).catch((err) => {
+    await Promise.race([
+      syncUserCalendarList(user.id),
+      new Promise<{ count: number }>((resolve) => setTimeout(() => resolve({ count: 0 }), 5000)),
+    ]).catch((err) => {
       console.error("[oauth/microsoft/callback] calendar list sync failed:", err);
     });
   }

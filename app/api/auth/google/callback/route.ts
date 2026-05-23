@@ -141,12 +141,19 @@ async function handle(req: Request, url: URL, origin: string) {
     }));
   }
 
-  // Seed the per-account calendar list on first connect. Fire-and-
-  // forget — the user's redirect should NOT block on a Google API
-  // round-trip. If this fails the lazy back-fill in the events
-  // aggregator will pick it up.
+  // Seed the per-account calendar list on connect. We AWAIT the sync
+  // (previously fire-and-forget) so the user_calendars rows exist by
+  // the time the user lands back on /calendar. Without this, connecting
+  // a second account left the rail empty for the new account: the
+  // GET endpoint's lazy back-fill only runs on a fully-empty list and
+  // the fresh sync was still in flight when the page mounted.
+  // Capped at 5s so a slow Google response doesn't hang the redirect;
+  // if it times out, the lazy back-fill on next refresh picks it up.
   if (enabledSubScopes.calendar) {
-    void syncUserCalendarList(user.id).catch((err) => {
+    await Promise.race([
+      syncUserCalendarList(user.id),
+      new Promise<{ count: number }>((resolve) => setTimeout(() => resolve({ count: 0 }), 5000)),
+    ]).catch((err) => {
       console.error("[oauth/google/callback] calendar list sync failed:", err);
     });
   }
