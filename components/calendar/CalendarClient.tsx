@@ -2993,7 +2993,11 @@ export default function CalendarClient({
                     user has dragged across, in the default-calendar
                     colour. Visible whether the drag is active or has
                     just landed (the create card is still open). */}
-                {allDayDrag && (() => {
+                {allDayDrag && (allDayDrag.startIdx !== allDayDrag.currentIdx || !allDayDrag.active === false) && (() => {
+                  // Only show the ghost once the user has actually moved
+                  // to a different day OR the drag has landed (active=false
+                  // = the create card is open). A pure click stays silent.
+                  if (allDayDrag.active && allDayDrag.startIdx === allDayDrag.currentIdx) return null;
                   const lo = Math.min(allDayDrag.startIdx, allDayDrag.currentIdx);
                   const hi = Math.max(allDayDrag.startIdx, allDayDrag.currentIdx);
                   return (
@@ -3113,8 +3117,12 @@ export default function CalendarClient({
                       <div key={`hh${i}`} style={{ position: "absolute", top: `${i * PX_PER_HOUR + PX_PER_HOUR / 2}px`, left: 0, right: 0, height: "0.5px", background: "var(--color-border)", opacity: 0.4 }} />
                     ))}
 
-                    {/* Drag-to-create ghost block */}
-                    {dragHere && (() => {
+                    {/* Drag-to-create ghost block. Gated on the cursor
+                        having moved past the drag threshold OR the drag
+                        having landed (`active === false` = mouseup after
+                        a real drag, ghost stays visible while the card
+                        is open). A pure click never shows the ghost. */}
+                    {dragHere && (!dragHere.active || Math.abs(dragHere.currentY - dragHere.startY) >= DRAG_THRESHOLD_PX) && (() => {
                       const startMin = yToMinutes(Math.min(dragHere.startY, dragHere.currentY));
                       const endMin   = Math.max(
                         startMin + 15,

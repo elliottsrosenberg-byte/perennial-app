@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Invoice, InvoiceLineItem, TimeEntry, Project } from "@/types/database";
 import EmptyState from "@/components/ui/EmptyState";
-import { X, Download, Send } from "lucide-react";
+import { X, Download, Send, FileText } from "lucide-react";
 
 interface Props {
   invoices: Invoice[];
@@ -331,7 +331,7 @@ export default function InvoicesTab({ invoices, timeEntries, projects, onInvoice
           {filteredInvoices.length === 0 && invoices.length === 0 && (
             <div style={{ padding: "12px 0" }}>
               <EmptyState
-                icon="🧾"
+                icon={<FileText size={24} strokeWidth={1.5} color="var(--color-sage)" />}
                 heading="Create your first invoice"
                 body="Perennial invoices are linked to clients and projects. Log time and expenses first, then pull them into an invoice with one click."
                 action={{ label: "New invoice", onClick: onNewInvoice }}

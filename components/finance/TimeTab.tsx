@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useRef } from "react";
 import type { TimeEntry, ActiveTimer, Project } from "@/types/database";
+import { Clock } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
 
 interface Props {
@@ -300,7 +301,7 @@ export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projec
       <div className="rounded-xl overflow-hidden" style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)" }}>
         {grouped.length === 0 && !activeTimer && timeEntries.length === 0 && (
           <EmptyState
-            icon="⏱"
+            icon={<Clock size={24} strokeWidth={1.5} color="var(--color-sage)" />}
             heading="Start tracking your time"
             body="Every hour you log builds a picture of how your practice actually runs — what projects take how long, what's billable, and what you can invoice."
             action={{ label: "Log time", onClick: onLogTime }}
