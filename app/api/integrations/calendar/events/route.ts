@@ -229,20 +229,21 @@ export async function GET(req: Request) {
     return NextResponse.json({ connected: false, events: [], sources: [] });
   }
 
-  // Pull the per-account calendar list with visibility flags. If a user
-  // has any rows here for a given provider we honor `visible`; if they
-  // have none (e.g. they connected before user_calendars shipped) we
-  // fall back to primary-only and trigger a background sync so the
-  // next request has the full list.
+  // Pull the per-account calendar list with visibility + tombstone flags.
+  // - `hasAny` includes tombstoned rows: a removed calendar still counts as
+  //   "the user has rows here", so we don't fall back to primary-only and
+  //   trigger a sync that would re-create the tombstones' siblings.
+  // - `metas` only includes rows that are visible AND not removed. The
+  //   aggregator fans out to exactly these.
   const { data: userCalendars } = await supabase
     .from("user_calendars")
-    .select("id, provider, external_id, visible, writable")
+    .select("id, provider, external_id, visible, writable, removed")
     .eq("user_id", user.id);
   const calendarsByProvider = new Map<string, { metas: CalendarMeta[]; hasAny: boolean }>();
   for (const c of userCalendars ?? []) {
     const entry = calendarsByProvider.get(c.provider) ?? { metas: [], hasAny: false };
     entry.hasAny = true;
-    if (c.visible) entry.metas.push({ externalId: c.external_id, rowId: c.id, writable: !!c.writable });
+    if (c.visible && !c.removed) entry.metas.push({ externalId: c.external_id, rowId: c.id, writable: !!c.writable });
     calendarsByProvider.set(c.provider, entry);
   }
 
@@ -250,15 +251,28 @@ export async function GET(req: Request) {
   const sources: { provider: string; accountName: string | null }[] = [];
   let needsBackfill = false;
 
+  // Resolve `metas` per provider with this priority:
+  //   1) entry exists and has at least one visible-non-removed row → use it
+  //   2) entry exists but every row is hidden or tombstoned → empty metas
+  //      (user intentionally has nothing visible; do not fetch anything)
+  //   3) no entry at all → fall back to primary-only and trigger a sync
+  //      so the next request sees the real list. This is the legacy /
+  //      first-load path.
+  function resolveMetas(provider: string): CalendarMeta[] | null {
+    const entry = calendarsByProvider.get(provider);
+    if (!entry) {
+      needsBackfill = true;
+      return [{ externalId: "primary", rowId: null, writable: false }];
+    }
+    return entry.metas;
+  }
+
   for (const r of rows) {
     if (r.provider === "google_calendar") {
       const legacy = r as unknown as LegacyIntegrationRow;
       sources.push({ provider: "google_calendar", accountName: legacy.account_name ?? null });
-      const entry = calendarsByProvider.get("google_calendar");
-      if (!entry) needsBackfill = true;
-      const metas: CalendarMeta[] = entry?.hasAny && entry.metas.length > 0
-        ? entry.metas
-        : [{ externalId: "primary", rowId: null, writable: false }];
+      const metas = resolveMetas("google_calendar") ?? [];
+      if (metas.length === 0) continue;
       work.push((async () => {
         const token = await refreshLegacyGcalToken(legacy);
         if (!token) return [];
@@ -268,11 +282,8 @@ export async function GET(req: Request) {
       const row = r as unknown as IntegrationRow;
       if (row.status !== "active" || !row.scopes?.calendar) continue;
       sources.push({ provider: "google", accountName: row.account_name ?? null });
-      const entry = calendarsByProvider.get("google");
-      if (!entry) needsBackfill = true;
-      const metas: CalendarMeta[] = entry?.hasAny && entry.metas.length > 0
-        ? entry.metas
-        : [{ externalId: "primary", rowId: null, writable: false }];
+      const metas = resolveMetas("google") ?? [];
+      if (metas.length === 0) continue;
       work.push((async () => {
         try {
           const token = await getValidGoogleAccessToken(row.id);
@@ -285,9 +296,19 @@ export async function GET(req: Request) {
       const row = r as unknown as IntegrationRow;
       if (row.status !== "active" || !row.scopes?.calendar) continue;
       sources.push({ provider: "microsoft", accountName: row.account_name ?? null });
+      // Microsoft has a legacy fallback path (null metas → /me/calendarView
+      // aggregate). Only use that when no entry exists at all; if the user
+      // has tombstoned everything, fetch nothing.
       const entry = calendarsByProvider.get("microsoft");
-      if (!entry) needsBackfill = true;
-      const metas = entry?.hasAny && entry.metas.length > 0 ? entry.metas : null;
+      let metas: CalendarMeta[] | null;
+      if (!entry) {
+        needsBackfill = true;
+        metas = null; // legacy aggregate path
+      } else if (entry.metas.length === 0) {
+        continue;
+      } else {
+        metas = entry.metas;
+      }
       work.push((async () => {
         try {
           const token = await getValidMicrosoftAccessToken(row.id);
