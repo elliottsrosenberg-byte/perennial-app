@@ -18,12 +18,16 @@ export async function GET() {
     .from("user_calendars")
     .select("*")
     .eq("user_id", user.id)
+    .eq("removed", false)
     .order("account_email", { ascending: true })
     .order("is_primary",    { ascending: false })
     .order("name",          { ascending: true });
 
   // First load after a fresh integration may have zero rows — sync once
-  // and re-read so the UI sees something useful immediately.
+  // and re-read so the UI sees something useful immediately. A user
+  // with only tombstoned rows (everything removed) will also fall into
+  // this branch; that's fine because sync preserves the `removed` flag
+  // for existing rows, so the re-read still returns nothing.
   if (!cals || cals.length === 0) {
     const sync = await syncUserCalendarList(user.id);
     if (sync.count > 0) {
@@ -31,6 +35,7 @@ export async function GET() {
         .from("user_calendars")
         .select("*")
         .eq("user_id", user.id)
+        .eq("removed", false)
         .order("account_email", { ascending: true })
         .order("is_primary",    { ascending: false })
         .order("name",          { ascending: true });
@@ -112,13 +117,18 @@ export async function PATCH(req: Request) {
   return NextResponse.json({ calendar: updated, ok: true });
 }
 
-// Remove a single calendar from the user's list. The OAuth credential stays
-// intact (other calendars in the same account may still be in use); the user
-// can disconnect the whole account from Settings → Integrations. A re-sync
-// will repopulate this row if the calendar still exists upstream — we don't
-// keep a "soft-removed" flag, so removing a calendar the user still has in
-// Google/Outlook only sticks until the next sync. If that's a problem, the
-// next iteration is a `tombstoned` boolean.
+// Remove a single calendar from the user's list. The OAuth credential
+// stays intact (other calendars in the same account may still be in
+// use); the user can disconnect the whole account from
+// Settings → Integrations.
+//
+// Implemented as a soft-delete by flipping `removed = true` instead of
+// dropping the row. The natural key (user_id, provider, external_id)
+// stays in place, so the next syncUserCalendarList sees a conflicting
+// row and the upsert (which doesn't touch `removed`) leaves the
+// tombstone intact. A re-sync therefore respects user intent — the
+// calendar stays gone until the user explicitly re-adds it from
+// Settings → Integrations or the manual "Refresh calendars" path.
 export async function DELETE(req: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -130,7 +140,7 @@ export async function DELETE(req: Request) {
 
   const { error } = await supabase
     .from("user_calendars")
-    .delete()
+    .update({ removed: true, visible: false, updated_at: new Date().toISOString() })
     .eq("id", id)
     .eq("user_id", user.id);
 

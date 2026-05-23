@@ -400,6 +400,11 @@ export interface UserCalendar {
   is_primary:    boolean;
   visible:       boolean;
   writable:      boolean;
+  /** Tombstone — true when the user removed this calendar from the left
+   *  rail. The row is kept (not hard-deleted) so syncUserCalendarList
+   *  doesn't re-create it on the next refresh; the events aggregator
+   *  skips rows where removed = true. */
+  removed:       boolean;
   created_at:    string;
   updated_at:    string;
 }
