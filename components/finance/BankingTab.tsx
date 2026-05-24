@@ -141,6 +141,19 @@ const ICON_REGISTRY: Record<string, React.ElementType> = {
   Lightbulb, Music, Plane, Receipt: ReceiptIcon, ShoppingBag, Tag, User: UserIcon, Utensils, Wrench,
 };
 
+// ── ExpenseCategory display ────────────────────────────────────────────────
+// Labels mirror AddExpenseModal so the picker reads the same as the
+// downstream "Log expense" form. Order is the AddExpenseModal order.
+const EXPENSE_CATEGORY_OPTIONS: { value: ExpenseCategory; label: string }[] = [
+  { value: "materials",  label: "Materials"  },
+  { value: "travel",     label: "Travel"     },
+  { value: "production", label: "Production" },
+  { value: "software",   label: "Software"   },
+  { value: "other",      label: "Other"      },
+];
+const EXPENSE_CATEGORY_LABEL: Record<ExpenseCategory, string> =
+  Object.fromEntries(EXPENSE_CATEGORY_OPTIONS.map((o) => [o.value, o.label])) as Record<ExpenseCategory, string>;
+
 // ── Filter / sort types ─────────────────────────────────────────────────────
 
 type StatusFilter = "all" | "needs_review" | "logged" | "matched" | "personal";
@@ -530,6 +543,20 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
     }
   }
 
+  async function setManualCategory(tx: BankTransaction, next: ExpenseCategory | null) {
+    const prev = tx.manual_category;
+    patchLocal(tx.id, { manual_category: next });
+    const res = await fetch(`/api/finance/banking/transactions/${tx.id}/category`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ manual_category: next }),
+    });
+    if (!res.ok) {
+      patchLocal(tx.id, { manual_category: prev });
+      setError("Couldn't update category.");
+    }
+  }
+
   async function attachReceipt(tx: BankTransaction, file: File) {
     try {
       const up = await uploadReceipt(file);
@@ -863,6 +890,7 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
                   onSaveNote={(note) => saveNote(tx, note)}
                   onAttachReceipt={(file) => attachReceipt(tx, file)}
                   onRemoveReceipt={() => removeReceipt(tx)}
+                  onSetManualCategory={(c) => setManualCategory(tx, c)}
                   outstanding={outstanding}
                 />
               ))}
@@ -926,7 +954,9 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
             description: convertTarget.details?.merchant_name ?? convertTarget.description ?? "",
             amount:      Math.abs(Number(convertTarget.amount)),
             date:        convertTarget.date,
-            category:    plaidCategoryToExpenseCategory(convertTarget.details?.personal_finance_category?.primary ?? null),
+            // User's manual override wins over the Plaid-derived guess.
+            category:    convertTarget.manual_category
+              ?? plaidCategoryToExpenseCategory(convertTarget.details?.personal_finance_category?.primary ?? null),
           }}
           onSubmitOverride={(values) => submitConvert(convertTarget, values)}
           onClose={() => setConvertTarget(null)}
@@ -1108,6 +1138,7 @@ interface RowProps {
   onSaveNote:       (note: string | null) => void;
   onAttachReceipt:  (file: File) => void;
   onRemoveReceipt:  () => void;
+  onSetManualCategory: (c: ExpenseCategory | null) => void;
   outstanding:      OutstandingInvoice[];
 }
 
@@ -1115,7 +1146,7 @@ function TransactionRow({
   tx, first, expanded, selected,
   onToggleSelect, onToggleExpand,
   onMarkPersonal, onConvert, onMatch, onUnmatch, onUnmarkPersonal,
-  onSaveNote, onAttachReceipt, onRemoveReceipt,
+  onSaveNote, onAttachReceipt, onRemoveReceipt, onSetManualCategory,
   outstanding,
 }: RowProps) {
   const amt        = Number(tx.amount);
@@ -1123,17 +1154,28 @@ function TransactionRow({
   const merchant   = tx.details?.merchant_name ?? tx.description;
   const pending    = tx.status === "pending";
   const primary    = tx.details?.personal_finance_category?.primary ?? null;
-  const cat        = categoryFor(primary);
-  const Icon       = ICON_REGISTRY[cat.icon] ?? Tag;
+  const plaidCat   = categoryFor(primary);
+  const PlaidIcon  = ICON_REGISTRY[plaidCat.icon] ?? Tag;
   const acct       = tx.bank_account;
   const hasNote    = !!tx.note;
   const hasReceipt = !!tx.receipt_url;
 
-  // State chip overrides the category chip when the row is handled.
+  // Manual category override beats the Plaid label. When set we show a
+  // muted "Manual" pip beside the chip so it's clear the row has been
+  // touched (and to nudge the user that the value is editable).
+  const hasManual = !!tx.manual_category;
+  const displayCat = hasManual
+    ? { label: EXPENSE_CATEGORY_LABEL[tx.manual_category as ExpenseCategory], bg: plaidCat.bg, fg: plaidCat.fg, icon: PlaidIcon }
+    : { label: plaidCat.label, bg: plaidCat.bg, fg: plaidCat.fg, icon: PlaidIcon };
+
+  // Personal is a state-chip but the user can now flip back to a normal
+  // category via the picker, so it lives alongside (not instead of) the
+  // category — but for `is_personal` rows we still want a pill that says
+  // "Personal". Logged / Matched continue to override the chip.
   let stateChip: { label: string; bg: string; fg: string } | null = null;
-  if (tx.is_personal)             stateChip = { label: "Personal",                       bg: "rgba(31,33,26,0.06)",   fg: "var(--color-grey)" };
-  else if (tx.linked_expense_id)  stateChip = { label: "Logged",                          bg: "rgba(155,163,122,0.14)", fg: "var(--color-sage)" };
-  else if (tx.matched_invoice_id) stateChip = { label: "Matched",                         bg: "rgba(155,163,122,0.14)", fg: "var(--color-sage)" };
+  if (tx.is_personal)             stateChip = { label: "Personal",  bg: "rgba(31,33,26,0.06)",    fg: "var(--color-grey)" };
+  else if (tx.linked_expense_id)  stateChip = { label: "Logged",    bg: "rgba(155,163,122,0.14)", fg: "var(--color-sage)" };
+  else if (tx.matched_invoice_id) stateChip = { label: "Matched",   bg: "rgba(155,163,122,0.14)", fg: "var(--color-sage)" };
 
   return (
     <>
@@ -1173,13 +1215,18 @@ function TransactionRow({
           </span>
         </span>
 
-        {/* Category / state chip */}
-        <span>
-          {stateChip ? (
-            <Chip bg={stateChip.bg} fg={stateChip.fg} label={stateChip.label} />
-          ) : (
-            <Chip bg={cat.bg} fg={cat.fg} icon={Icon} label={cat.label} />
-          )}
+        {/* Category / state chip — clicking opens the category picker. The
+            Personal pill still flips the state (sets is_personal=true) and
+            the picker treats "Auto (Plaid)" as clearing the override. */}
+        <span onClick={(e) => e.stopPropagation()}>
+          <CategoryPickerChip
+            tx={tx}
+            stateChip={stateChip}
+            displayCat={displayCat}
+            hasManual={hasManual}
+            onSelect={(c) => onSetManualCategory(c)}
+            onSelectPersonal={onMarkPersonal}
+          />
         </span>
 
         {/* Actions */}
@@ -1243,6 +1290,145 @@ function TransactionRow({
         />
       )}
     </>
+  );
+}
+
+// ── Category picker chip ────────────────────────────────────────────────────
+// Click the chip → vertical options popover anchored under it. Lists the
+// five ExpenseCategory values plus a Personal option below a divider.
+// "Auto (Plaid)" clears the manual override and falls back to the Plaid
+// mapping. Closes on outside click or Escape. Styled with the same
+// CARD_STYLE shadow + a thin sage border so it reads as a controlled
+// surface without needing a new ui primitive.
+
+interface CategoryPickerChipProps {
+  tx:        BankTransaction;
+  stateChip: { label: string; bg: string; fg: string } | null;
+  displayCat: { label: string; bg: string; fg: string; icon: React.ElementType };
+  hasManual: boolean;
+  onSelect:  (c: ExpenseCategory | null) => void;
+  onSelectPersonal: () => void;
+}
+
+function CategoryPickerChip({
+  tx, stateChip, displayCat, hasManual, onSelect, onSelectPersonal,
+}: CategoryPickerChipProps) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 4, maxWidth: "100%" }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        title="Change category"
+        style={{
+          all:        "unset",
+          cursor:     "pointer",
+          maxWidth:   "100%",
+          display:    "inline-flex",
+        }}>
+        {stateChip ? (
+          <Chip bg={stateChip.bg} fg={stateChip.fg} label={stateChip.label} />
+        ) : (
+          <Chip bg={displayCat.bg} fg={displayCat.fg} icon={displayCat.icon} label={displayCat.label} />
+        )}
+      </button>
+      {hasManual && !stateChip && (
+        <span title="Manual category" style={{
+          fontSize: 9, lineHeight: 1, padding: "1px 4px", borderRadius: 3,
+          background: "rgba(31,33,26,0.05)", color: "var(--color-grey)",
+          letterSpacing: "0.04em", textTransform: "uppercase", fontWeight: 600,
+        }}>
+          Manual
+        </span>
+      )}
+
+      {open && (
+        <div
+          role="menu"
+          style={{
+            position:     "absolute",
+            top:          "calc(100% + 6px)",
+            left:         0,
+            zIndex:       30,
+            minWidth:     180,
+            background:   "var(--color-off-white)",
+            border:       "0.5px solid var(--color-sage)",
+            borderRadius: 10,
+            boxShadow:    "0 8px 24px rgba(31,33,26,0.10)",
+            overflow:     "hidden",
+            padding:      "4px 0",
+            fontFamily:   "inherit",
+          }}>
+          {EXPENSE_CATEGORY_OPTIONS.map((opt) => {
+            const active = tx.manual_category === opt.value;
+            return (
+              <button key={opt.value} type="button"
+                onClick={() => { onSelect(opt.value); setOpen(false); }}
+                style={{
+                  all:        "unset",
+                  display:    "block",
+                  width:      "100%",
+                  padding:    "7px 12px",
+                  fontSize:   12,
+                  cursor:     "pointer",
+                  color:      active ? "var(--color-sage)" : "var(--color-charcoal)",
+                  fontWeight: active ? 600 : 400,
+                  background: active ? "rgba(155,163,122,0.10)" : "transparent",
+                  boxSizing:  "border-box",
+                }}
+                onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+                onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}>
+                {opt.label}
+              </button>
+            );
+          })}
+          {tx.manual_category != null && (
+            <button type="button"
+              onClick={() => { onSelect(null); setOpen(false); }}
+              style={{
+                all: "unset", display: "block", width: "100%",
+                padding: "7px 12px", fontSize: 11, cursor: "pointer",
+                color: "var(--color-grey)", boxSizing: "border-box",
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-surface-sunken)"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+              Auto (from Plaid)
+            </button>
+          )}
+          <div style={{ height: "0.5px", background: "var(--color-border)", margin: "4px 0" }} />
+          <button type="button"
+            onClick={() => { onSelectPersonal(); setOpen(false); }}
+            style={{
+              all: "unset", display: "block", width: "100%",
+              padding: "7px 12px", fontSize: 12, cursor: "pointer",
+              color: tx.is_personal ? "var(--color-sage)" : "var(--color-charcoal)",
+              fontWeight: tx.is_personal ? 600 : 400,
+              background: tx.is_personal ? "rgba(155,163,122,0.10)" : "transparent",
+              boxSizing: "border-box",
+            }}
+            onMouseEnter={(e) => { if (!tx.is_personal) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+            onMouseLeave={(e) => { if (!tx.is_personal) e.currentTarget.style.background = "transparent"; }}>
+            Personal
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
