@@ -294,6 +294,51 @@ export interface InvoiceLineItem {
   expense_id: string | null;
 }
 
+// ── Banking ───────────────────────────────────────────────────────────────────
+
+export interface BankAccount {
+  id: string;
+  user_id: string;
+  integration_id: string | null;
+  provider: string;
+  external_id: string;
+  institution: string;
+  name: string;
+  type: string;
+  subtype: string;
+  last_four: string;
+  balance_available: number | null;
+  balance_current: number | null;
+  balance_updated_at: string | null;
+}
+
+export interface BankTransactionDetails {
+  merchant_name?: string | null;
+  personal_finance_category?: {
+    primary:  string;
+    detailed: string;
+  } | null;
+  category?: string[] | null;
+}
+
+export interface BankTransaction {
+  id: string;
+  user_id: string;
+  bank_account_id: string;
+  provider: string;
+  external_id: string;
+  amount: number;          // Signed: positive = money IN (Teller-style)
+  type: "debit" | "credit";
+  description: string;
+  details: BankTransactionDetails | null;
+  date: string;            // YYYY-MM-DD
+  status: "pending" | "posted";
+  is_personal: boolean;
+  linked_expense_id: string | null;
+  matched_invoice_id: string | null;
+  bank_account?: Pick<BankAccount, "name" | "institution" | "last_four" | "type" | "subtype"> | null;
+}
+
 export interface Invoice {
   id: string;
   user_id: string;
