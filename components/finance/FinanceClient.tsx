@@ -316,9 +316,12 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
       {showNewInvoice && (
         <NewInvoiceModal
           projects={projects}
+          timeEntries={timeEntries}
+          expenses={expenses}
+          invoices={invoices}
           nextNumber={nextInvoiceNumber}
           onClose={() => setShowNewInvoice(false)}
-          onCreated={(inv) => setInvoices((prev) => [{ ...inv, line_items: [] }, ...prev])} />
+          onCreated={(inv) => setInvoices((prev) => [inv, ...prev])} />
       )}
 
       <FinanceIntroModal />
