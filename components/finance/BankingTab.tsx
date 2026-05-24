@@ -895,8 +895,12 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
                 />
               ))}
 
-              {/* Pagination footer */}
-              <div className="flex items-center justify-between px-4 py-3 text-[11px]"
+              {/* Pagination footer.
+                  Bottom-left only — the bottom-right corner is reserved
+                  for the floating Ash overlay, and bottom-center looks
+                  lost on wide screens. Caption sits to the right of the
+                  controls so the eye lands on the page indicator first. */}
+              <div className="flex items-center gap-3 px-4 py-3 text-[11px]"
                 style={{ borderTop: "0.5px solid var(--color-border)", color: "var(--color-grey)" }}>
                 <span>
                   {total === 0
@@ -922,6 +926,7 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
                     <ChevronRight size={12} />
                   </button>
                 </div>
+                <div className="flex-1" />
               </div>
             </div>
           </>
