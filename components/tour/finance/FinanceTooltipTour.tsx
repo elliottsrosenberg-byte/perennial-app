@@ -22,7 +22,7 @@ import { createClient } from "@/lib/supabase/client";
 import AshMark from "@/components/ui/AshMark";
 import { type TourVisited } from "@/lib/tour";
 
-type Tab = "overview" | "time" | "expenses" | "invoices" | "banking";
+type Tab = "overview" | "time" | "invoices" | "banking";
 
 interface Step {
   id:        string;
@@ -43,8 +43,8 @@ const STEPS: Step[] = [
     id:      "topbar-tabs",
     anchor:  '[data-tour-target="finance.tabs"]',
     tab:     "overview",
-    title:   "Five tabs, one studio ledger",
-    body:    "Overview is your daily glance. Time, Expenses, and Invoices are where the work goes in. Banking is the connected real-money side. They share data — log time, then pull it into an invoice without retyping.",
+    title:   "Four tabs, one studio ledger",
+    body:    "Overview is your daily glance. Time and Invoices are where the work goes in. Banking is the connected real-money side — it's also where expenses get logged, by expanding any bank row. The tabs share data, so log time once and pull it into an invoice without retyping.",
   },
   {
     id:      "timer",
@@ -52,13 +52,6 @@ const STEPS: Step[] = [
     tab:     "time",
     title:   "Start the timer",
     body:    "Type what you're working on, pick a project, and Start. The timer keeps running across reloads — there's also a quick Start in the app topbar so it's always one click away. Stop the timer and the hours land here as a time entry.",
-  },
-  {
-    id:      "expenses",
-    anchor:  '[data-tour-target="finance.add-expense"]',
-    tab:     "expenses",
-    title:   "Add an expense",
-    body:    "Log studio costs as they happen — categorize, attach to a project, drop a receipt photo. The sidebar rolls everything up by category and project, and the warning bar flags anything sitting unattached.",
   },
   {
     id:      "invoices",

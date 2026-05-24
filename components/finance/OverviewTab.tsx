@@ -4,7 +4,7 @@ import type { TimeEntry, ActiveTimer, Expense, Invoice } from "@/types/database"
 import EmptyState from "@/components/ui/EmptyState";
 import { Landmark } from "lucide-react";
 
-type Tab = "overview" | "time" | "expenses" | "invoices" | "banking";
+type Tab = "overview" | "time" | "invoices" | "banking";
 
 interface Props {
   timeEntries: TimeEntry[];
@@ -292,7 +292,9 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
             <div style={{ height: 3, background: "var(--color-yellow)", opacity: 0.85 }} />
             <div className={cardHead} style={cardHeadStyle}>
               <span className="flex-1" style={cardTitleStyle}>Recent expenses</span>
-              <button onClick={() => onSwitchTab("expenses")} className="text-[11px]" style={{ color: "var(--color-sage)" }}>See all →</button>
+              {/* Expenses no longer has its own tab; Banking is the home for
+                  expense triage. See-all jumps there. */}
+              <button onClick={() => onSwitchTab("banking")} className="text-[11px]" style={{ color: "var(--color-sage)" }}>See all →</button>
             </div>
             {recentExpenses.map((e) => (
               <div key={e.id} className="flex items-center gap-2.5 px-4 py-2.5"
