@@ -15,8 +15,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Script from "next/script";
 import {
-  Ban, ChevronRight, Loader2, MoreHorizontal, Paperclip, Plus, RefreshCw,
-  StickyNote, Trash2, Unplug, X,
+  ChevronRight, Loader2, MoreHorizontal, Paperclip, Plus, RefreshCw,
+  Trash2, Unplug, X,
   // Category-chip icons (lookup by name from plaidCategoryDisplay):
   ArrowDownToLine, ArrowLeftRight, Briefcase, Car, HeartPulse, Landmark,
   Lightbulb, Music, Plane, Receipt as ReceiptIcon, ShoppingBag, Tag,
@@ -843,7 +843,7 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
               {/* Column header */}
               <div className="grid items-center px-4 py-2 text-[10px] font-semibold uppercase tracking-wider"
                 style={{
-                  gridTemplateColumns: "24px 56px 1fr 180px 80px 120px 18px",
+                  gridTemplateColumns: "24px 56px 1fr 180px 120px 18px",
                   gap: 12,
                   borderBottom: "0.5px solid var(--color-border)",
                   color: "var(--color-grey)",
@@ -853,7 +853,6 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
                 <span>Date</span>
                 <span>Name</span>
                 <span>Category</span>
-                <span>Actions</span>
                 <span style={{ textAlign: "right" }}>Amount</span>
                 <span />
               </div>
@@ -1162,8 +1161,6 @@ function TransactionRow({
   const plaidCat   = categoryFor(primary);
   const PlaidIcon  = ICON_REGISTRY[plaidCat.icon] ?? Tag;
   const acct       = tx.bank_account;
-  const hasNote    = !!tx.note;
-  const hasReceipt = !!tx.receipt_url;
 
   // Manual category override beats the Plaid label. When set we show a
   // muted "Manual" pip beside the chip so it's clear the row has been
@@ -1187,7 +1184,7 @@ function TransactionRow({
       <div
         className="grid items-center px-4 py-3 transition-colors"
         style={{
-          gridTemplateColumns: "24px 56px 1fr 180px 80px 120px 18px",
+          gridTemplateColumns: "24px 56px 1fr 180px 120px 18px",
           gap: 12,
           borderTop: first ? "none" : "0.5px solid var(--color-border)",
           background: expanded ? "var(--color-surface-sunken)" : "transparent",
@@ -1232,34 +1229,6 @@ function TransactionRow({
             onSelect={(c) => onSetManualCategory(c)}
             onSelectPersonal={onMarkPersonal}
           />
-        </span>
-
-        {/* Actions */}
-        <span className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          <button onClick={onToggleExpand}
-            title={hasNote ? "Edit note" : "Add note"}
-            className="relative w-7 h-7 flex items-center justify-center rounded-md transition-colors"
-            style={{ color: hasNote ? "var(--color-sage)" : "var(--color-grey)" }}
-            onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
-            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-            <StickyNote size={13} />
-            {hasNote && (
-              <span style={{
-                position: "absolute", top: 5, right: 5,
-                width: 5, height: 5, borderRadius: "50%",
-                background: "var(--color-sage)",
-              }} />
-            )}
-          </button>
-          <button
-            onClick={tx.is_personal ? onUnmarkPersonal : onMarkPersonal}
-            title={tx.is_personal ? "Unmark personal" : "Mark personal"}
-            className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
-            style={{ color: tx.is_personal ? "var(--color-sage)" : "var(--color-grey)" }}
-            onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
-            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-            <Ban size={13} />
-          </button>
         </span>
 
         {/* Amount */}
