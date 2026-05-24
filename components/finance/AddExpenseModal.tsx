@@ -7,6 +7,14 @@ import { X, Paperclip } from "lucide-react";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
 
+interface ExpensePrefill {
+  description?: string;
+  category?:    ExpenseCategory;
+  amount?:      number;
+  date?:        string;
+  vendor?:      string;
+}
+
 interface Props {
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
   onClose: () => void;
@@ -14,6 +22,17 @@ interface Props {
   /** When provided, the modal opens in edit mode and PATCHes the row. */
   expense?: Expense;
   onUpdated?: (expense: Expense) => void;
+  /** Pre-populate fields without flipping into edit mode (e.g. Banking → log expense). */
+  prefill?: ExpensePrefill;
+  /** When set, replaces the default Supabase insert. Useful for the Banking
+   *  "convert to expense" flow which posts to /api/finance/banking instead. */
+  onSubmitOverride?: (values: {
+    project_id: string | null;
+    description: string;
+    category: ExpenseCategory;
+    amount: number;
+    date: string;
+  }) => Promise<{ expense: Expense } | { error: string }>;
 }
 
 const CATEGORIES: { value: ExpenseCategory; label: string }[] = [
@@ -27,13 +46,15 @@ const CATEGORIES: { value: ExpenseCategory; label: string }[] = [
 const inputCls = "w-full px-3 py-2 text-[13px] rounded-lg border transition-colors focus:outline-none";
 const inputStyle = { background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" };
 
-export default function AddExpenseModal({ projects, onClose, onCreated, expense, onUpdated }: Props) {
+export default function AddExpenseModal({ projects, onClose, onCreated, expense, onUpdated, prefill, onSubmitOverride }: Props) {
   const today = new Date().toISOString().split("T")[0];
   const isEdit = !!expense;
-  const [description, setDescription] = useState(expense?.description ?? "");
-  const [category, setCategory]       = useState<ExpenseCategory>(expense?.category ?? "materials");
-  const [amount, setAmount]           = useState(expense ? String(expense.amount) : "");
-  const [date, setDate]               = useState(expense?.date ?? today);
+  const [description, setDescription] = useState(expense?.description ?? prefill?.description ?? "");
+  const [category, setCategory]       = useState<ExpenseCategory>(expense?.category ?? prefill?.category ?? "materials");
+  const [amount, setAmount]           = useState(
+    expense ? String(expense.amount) : (prefill?.amount != null ? String(prefill.amount) : ""),
+  );
+  const [date, setDate]               = useState(expense?.date ?? prefill?.date ?? today);
   const [projectId, setProjectId]     = useState(expense?.project_id ?? "");
   const [receiptUrl, setReceiptUrl]   = useState<string | null>(expense?.receipt_url ?? null);
   const [receiptName, setReceiptName] = useState<string | null>(expense?.receipt_url ? "Existing receipt" : null);
@@ -73,6 +94,20 @@ export default function AddExpenseModal({ projects, onClose, onCreated, expense,
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setError("Not authenticated."); setLoading(false); return; }
+
+    if (onSubmitOverride) {
+      const result = await onSubmitOverride({
+        project_id:  projectId || null,
+        description: description.trim(),
+        category,
+        amount: amt,
+        date,
+      });
+      if ("error" in result) { setError(result.error); setLoading(false); return; }
+      onCreated(result.expense);
+      onClose();
+      return;
+    }
 
     if (isEdit && expense) {
       // Scope by id AND user_id as defence-in-depth alongside RLS.
