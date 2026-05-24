@@ -636,12 +636,10 @@ export default function EventCard({
         </Section>
 
         <Section icon={<MapPin size={13} />} label="Location">
-          <input
+          <LocationInput
             value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            placeholder="Address, room, link…"
+            onChange={setLocation}
             disabled={fieldsDisabled}
-            style={textInputStyle}
           />
         </Section>
 
@@ -985,5 +983,165 @@ function DateChip({ value, onChange, disabled }: { value: string; onChange: (v: 
         }}
       />
     </label>
+  );
+}
+
+// ── LocationInput ────────────────────────────────────────────────────────────
+//
+// Plain text input with an autocomplete popover backed by `/api/geocode/
+// search` (Nominatim under the hood). Suggestions surface after the user
+// types 3+ chars; the input remains freely editable when no suggestions
+// show — autocomplete is additive, not gating.
+//
+// Keyboard model: ↑/↓ moves the active suggestion, Enter selects it,
+// Escape closes the popover without changing the field. Mouse: click a
+// suggestion to write it into the event's location.
+
+interface LocationSuggestion { id: string; label: string; sub: string }
+
+function LocationInput({ value, onChange, disabled }: {
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const [open,        setOpen]        = useState(false);
+  const [focused,     setFocused]     = useState(false);
+  const [suggestions, setSuggestions] = useState<LocationSuggestion[]>([]);
+  const [activeIdx,   setActiveIdx]   = useState(-1);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  // Bumped every keystroke; the in-flight fetch checks against this on
+  // resolve and drops its results if a newer query has already fired.
+  const reqIdRef = useRef(0);
+
+  // Debounced fetch — Nominatim asks callers not to hammer the service,
+  // and we don't want a popover flicker for every keystroke either.
+  useEffect(() => {
+    if (disabled) return;
+    const q = value.trim();
+    if (q.length < 3) { setSuggestions([]); setActiveIdx(-1); return; }
+    const myReq = ++reqIdRef.current;
+    const handle = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(q)}`);
+        if (!res.ok) return;
+        const data = await res.json() as { suggestions?: LocationSuggestion[] };
+        // Drop if a newer keystroke superseded us mid-flight.
+        if (myReq !== reqIdRef.current) return;
+        setSuggestions(data.suggestions ?? []);
+        setActiveIdx(-1);
+      } catch {
+        // Network/offline — silently fall back to plain text input.
+      }
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [value, disabled]);
+
+  // Click-outside closes the popover. We listen on mousedown so that a
+  // click *inside* the suggestion list (which calls select() on
+  // mousedown for snappy feedback) still fires before the close.
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  function select(s: LocationSuggestion) {
+    const full = s.sub ? `${s.label}, ${s.sub}` : s.label;
+    onChange(full);
+    setOpen(false);
+    setSuggestions([]);
+    setActiveIdx(-1);
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!open || suggestions.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIdx((i) => (i + 1) % suggestions.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIdx((i) => (i <= 0 ? suggestions.length - 1 : i - 1));
+    } else if (e.key === "Enter") {
+      if (activeIdx >= 0 && activeIdx < suggestions.length) {
+        e.preventDefault();
+        select(suggestions[activeIdx]);
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setOpen(false);
+    }
+  }
+
+  const showPopover = open && focused && value.trim().length >= 3 && suggestions.length > 0;
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative" }}>
+      <input
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => { setFocused(true); setOpen(true); }}
+        onBlur={() => { setFocused(false); }}
+        onKeyDown={onKeyDown}
+        placeholder="Address, room, link…"
+        disabled={disabled}
+        autoComplete="off"
+        spellCheck={false}
+        style={textInputStyle}
+      />
+      {showPopover && (
+        <div
+          // Keep mousedown inside the popover from blurring the input —
+          // otherwise the click never reaches our onClick.
+          onMouseDown={(e) => e.preventDefault()}
+          style={{
+            position: "absolute",
+            top: "calc(100% + 2px)",
+            left: 0, right: 0,
+            zIndex: 60,
+            background: "var(--color-off-white)",
+            border: "0.5px solid var(--color-border)",
+            borderRadius: 8,
+            boxShadow: "0 2px 8px rgba(31,33,26,0.04), 0 8px 24px rgba(31,33,26,0.10)",
+            maxHeight: 260,
+            overflowY: "auto",
+            padding: 4,
+          }}
+        >
+          {suggestions.map((s, i) => {
+            const active = i === activeIdx;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onMouseEnter={() => setActiveIdx(i)}
+                onClick={() => select(s)}
+                style={{
+                  width: "100%", textAlign: "left",
+                  display: "flex", flexDirection: "column", gap: 1,
+                  padding: "6px 8px",
+                  background: active ? "var(--color-cream)" : "transparent",
+                  border: "none", borderRadius: 6,
+                  cursor: "pointer", fontFamily: "inherit",
+                }}
+              >
+                <span style={{ fontSize: 12, color: "var(--color-text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {s.label}
+                </span>
+                {s.sub && (
+                  <span style={{ fontSize: 10.5, color: "var(--color-text-tertiary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {s.sub}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
