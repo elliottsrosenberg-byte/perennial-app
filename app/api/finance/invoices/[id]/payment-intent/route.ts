@@ -93,7 +93,11 @@ export async function POST(
     }
   }
 
-  const intent = await stripe.paymentIntents.create({
+  // Primary path: let Stripe surface whatever the dashboard has
+  // configured. If the user hasn't enabled anything though, this comes
+  // back with payment_method_types: [] and the PaymentElement renders
+  // empty — see retry below.
+  let intent = await stripe.paymentIntents.create({
     amount:   amountCents,
     currency,
     automatic_payment_methods: { enabled: true },
@@ -102,6 +106,49 @@ export async function POST(
       public_token: token,
     },
   });
+
+  // Defense-in-depth: re-fetch and check whether automatic methods
+  // actually produced anything. Empty payment_method_types is the
+  // signature of "no methods enabled in Stripe Dashboard → Settings →
+  // Payment methods". Retry with an explicit allowlist so at least Card
+  // surfaces. (Won't help if Card is explicitly disabled on the
+  // account, but covers the much-more-common "nothing enabled at all"
+  // case.)
+  try {
+    const verified = await stripe.paymentIntents.retrieve(intent.id, {
+      expand: ["payment_method_options"],
+    });
+    const methods = verified.payment_method_types ?? [];
+    if (methods.length === 0) {
+      console.warn(
+        `[payment-intent] Stripe returned no payment methods for intent ${intent.id}. ` +
+        `Likely cause: no methods enabled in Stripe Dashboard → Settings → Payment Methods.`,
+      );
+      const retried = await stripe.paymentIntents.create({
+        amount:   amountCents,
+        currency,
+        payment_method_types: ["card", "us_bank_account", "link"],
+        metadata: {
+          invoice_id:   inv.id,
+          public_token: token,
+          fallback:     "explicit_method_allowlist",
+        },
+      });
+      // Cancel the empty original so we don't leave an orphaned
+      // unusable intent behind.
+      try {
+        await stripe.paymentIntents.cancel(intent.id);
+      } catch (cancelErr) {
+        console.warn("[payment-intent] failed to cancel empty intent:", cancelErr);
+      }
+      intent = retried;
+    }
+  } catch (verifyErr) {
+    // Verification failure shouldn't block the happy path — if the
+    // retrieve call hiccups we still return the original client_secret
+    // and let the client render what it can.
+    console.warn("[payment-intent] post-create verify failed:", verifyErr);
+  }
 
   await supabase
     .from("invoices")
