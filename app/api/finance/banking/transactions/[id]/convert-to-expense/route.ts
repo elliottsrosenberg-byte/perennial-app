@@ -39,10 +39,11 @@ export async function POST(
     ? body.category
     : "other";
 
-  // Load the transaction (with cheap details for fallback description).
+  // Load the transaction (with cheap details for fallback description +
+  // the receipt fields so the expense inherits any uploaded file).
   const { data: tx, error: txErr } = await supabase
     .from("bank_transactions")
-    .select("id, amount, type, date, description, details, linked_expense_id")
+    .select("id, amount, type, date, description, details, linked_expense_id, receipt_url, receipt_path")
     .eq("id", id)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -65,16 +66,20 @@ export async function POST(
 
   const expenseAmount = Math.abs(Number(tx.amount));
 
+  // Carry the receipt over so the expense already has the file the user
+  // attached on the bank row. Both columns are nullable, so a missing
+  // receipt just stays null.
   const { data: expense, error: insertErr } = await supabase
     .from("expenses")
     .insert({
-      user_id:     user.id,
-      project_id:  body.project_id || null,
+      user_id:      user.id,
+      project_id:   body.project_id || null,
       description,
       category,
-      amount:      expenseAmount,
-      date:        tx.date,
-      receipt_url: null,
+      amount:       expenseAmount,
+      date:         tx.date,
+      receipt_url:  tx.receipt_url  ?? null,
+      receipt_path: tx.receipt_path ?? null,
     })
     .select("*, project:projects(id, title, type, rate)")
     .single();
