@@ -5,7 +5,9 @@ import { createClient } from "@/lib/supabase/client";
 import type { TimeEntry, ActiveTimer, Expense, Invoice, Project } from "@/types/database";
 import OverviewTab from "./OverviewTab";
 import TimeTab from "./TimeTab";
-import ExpensesTab from "./ExpensesTab";
+// ExpensesTab is intentionally not imported here — it's no longer a top-
+// level Finance tab. The file is retained because NewInvoiceModal still
+// pulls expense rows via shared API routes that pre-date this change.
 import InvoicesTab from "./InvoicesTab";
 import BankingTab from "./BankingTab";
 import LogTimeModal from "./LogTimeModal";
@@ -16,7 +18,10 @@ import Button from "@/components/ui/Button";
 import FinanceIntroModal from "@/components/tour/finance/FinanceIntroModal";
 import FinanceTooltipTour from "@/components/tour/finance/FinanceTooltipTour";
 
-type Tab = "overview" | "time" | "expenses" | "invoices" | "banking";
+// Expenses is no longer a top-level tab — Banking is now the primary
+// surface for logging expenses (each row's expanded view IS the log
+// workflow). Legacy `?tab=expenses` URLs / events redirect to banking.
+type Tab = "overview" | "time" | "invoices" | "banking";
 
 interface Props {
   initialTimeEntries: TimeEntry[];
@@ -49,11 +54,14 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
   const now = new Date();
   const periodLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
 
-  // Tour can ask us to switch tabs as it advances across the tab strip
+  // Tour can ask us to switch tabs as it advances across the tab strip.
+  // Legacy `expenses` events from older tour steps / deep links are
+  // remapped to banking so they don't no-op or crash.
   useEffect(() => {
     function onSetTab(e: Event) {
-      const tab = (e as CustomEvent<{ tab: Tab }>).detail?.tab;
-      if (tab) setActiveTab(tab);
+      const tab = (e as CustomEvent<{ tab: Tab | "expenses" }>).detail?.tab;
+      if (!tab) return;
+      setActiveTab(tab === "expenses" ? "banking" : tab);
     }
     window.addEventListener("finance:set-tab", onSetTab);
     return () => window.removeEventListener("finance:set-tab", onSetTab);
@@ -132,11 +140,6 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
     setTimeEntries(prev => prev.filter(e => e.id !== id));
   }
 
-  async function deleteExpense(id: string) {
-    await createClient().from("expenses").delete().eq("id", id);
-    setExpenses(prev => prev.filter(e => e.id !== id));
-  }
-
   function handleInvoiceSent(invoiceId: string) {
     setInvoices(prev => prev.map(inv =>
       inv.id === invoiceId ? { ...inv, status: "sent" as const } : inv
@@ -152,9 +155,6 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
       <Button onClick={() => setShowNewInvoice(true)}><Plus size={12} />New invoice</Button>
     </>,
     time:     <Button onClick={() => setShowLogTime(true)}><Plus size={12} />Log time</Button>,
-    expenses: <span data-tour-target="finance.add-expense">
-      <Button onClick={() => setShowAddExpense(true)}><Plus size={12} />Add expense</Button>
-    </span>,
     invoices: <span data-tour-target="finance.new-invoice">
       <Button onClick={() => setShowNewInvoice(true)}><Plus size={12} />New invoice</Button>
     </span>,
@@ -172,7 +172,7 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
           <span className="text-[11px]" style={{ color: "var(--color-grey)" }}>{periodLabel}</span>
         </div>
         <div className="flex items-stretch" data-tour-target="finance.tabs">
-          {(["overview","time","expenses","invoices","banking"] as Tab[]).map((tab) => (
+          {(["overview","time","invoices","banking"] as Tab[]).map((tab) => (
             <button key={tab} type="button" onClick={() => setActiveTab(tab)}
               className="px-5 text-[12px] capitalize"
               style={{
@@ -264,16 +264,6 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
             onEntryDeleted={deleteTimeEntry}
             onEntryEdit={(entry) => setEditTimeEntry(entry)}
             onLogTime={() => setShowLogTime(true)}
-          />
-        )}
-        {activeTab === "expenses" && (
-          <ExpensesTab
-            expenses={expenses}
-            projects={projects}
-            onExpenseCreated={(e) => setExpenses((prev) => [e, ...prev])}
-            onExpenseDeleted={deleteExpense}
-            onExpenseEdit={(exp) => setEditExpense(exp)}
-            onAddExpense={() => setShowAddExpense(true)}
           />
         )}
         {activeTab === "invoices" && (
