@@ -152,13 +152,19 @@ export default function BankingTab() {
             }),
           });
           if (!res.ok) {
-            const { error: e } = await res.json() as { error: string };
-            setError(e ?? "Connection failed.");
+            // Try JSON first (the server returns { error } on every failure
+            // path) then fall back to plain text so a Next 500 with an HTML
+            // body doesn't read as a network error.
+            let body: string;
+            try { body = (await res.json() as { error?: string }).error ?? `HTTP ${res.status}`; }
+            catch { body = (await res.text()) || `HTTP ${res.status}`; }
+            setError(body);
           } else {
             await fetchData();
           }
-        } catch {
-          setError("Connection failed. Please try again.");
+        } catch (err) {
+          console.error("[BankingTab] enroll failed:", err);
+          setError(err instanceof Error ? `Connection failed: ${err.message}` : "Connection failed. Please try again.");
         } finally {
           setConnecting(false);
         }
