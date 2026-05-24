@@ -27,10 +27,16 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Menu from "@/components/ui/Menu";
 import Select from "@/components/ui/Select";
 import AddExpenseModal from "./AddExpenseModal";
+import CustomizeCategoriesModal from "./CustomizeCategoriesModal";
 import type { BankAccount, BankTransaction, Expense, ExpenseCategory, Project } from "@/types/database";
 import { plaidCategoryToExpenseCategory } from "./plaidCategoryMap";
 import { categoryFor, PLAID_PRIMARY_KEYS } from "./plaidCategoryDisplay";
 import { uploadReceipt, deleteReceipt } from "@/lib/uploads/receipt";
+import { createClient } from "@/lib/supabase/client";
+import {
+  parseCustomCategories, tintForColor, findCustom,
+  type CustomCategory,
+} from "@/lib/finance/customCategories";
 
 const PROVIDER = (process.env.NEXT_PUBLIC_BANK_PROVIDER ?? "plaid") as "plaid" | "teller";
 const API_BASE = `/api/integrations/${PROVIDER}`;
@@ -219,6 +225,40 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [convertTarget, setConvertTarget] = useState<BankTransaction | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // User-defined custom categories (from profiles.custom_categories).
+  // Merged with built-ins in the row picker and used by the chip renderer
+  // when a row's manual_custom_id points at one. Loaded once on mount.
+  const [customs, setCustoms] = useState<CustomCategory[]>([]);
+  const [headerMenuOpen, setHeaderMenuOpen]   = useState(false);
+  const headerMenuRef = useRef<HTMLDivElement>(null);
+  const [customizeOpen, setCustomizeOpen]     = useState(false);
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("custom_categories")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      setCustoms(parseCustomCategories(data?.custom_categories));
+    })();
+  }, []);
+  useEffect(() => {
+    if (!headerMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (headerMenuRef.current && !headerMenuRef.current.contains(e.target as Node)) setHeaderMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setHeaderMenuOpen(false); };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [headerMenuOpen]);
   const [snackbar, setSnackbar] = useState<{ text: string; onUndo?: () => void } | null>(null);
   // Auto-dismiss snackbars after 4s unless they carry an Undo.
   useEffect(() => {
@@ -544,16 +584,21 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
     }
   }
 
-  async function setManualCategory(tx: BankTransaction, next: ExpenseCategory | null) {
-    const prev = tx.manual_category;
-    patchLocal(tx.id, { manual_category: next });
+  async function setManualCategory(
+    tx: BankTransaction,
+    next: ExpenseCategory | null,
+    customId: string | null = null,
+  ) {
+    const prevCat = tx.manual_category;
+    const prevCid = tx.manual_custom_id;
+    patchLocal(tx.id, { manual_category: next, manual_custom_id: customId });
     const res = await fetch(`/api/finance/banking/transactions/${tx.id}/category`, {
       method:  "PATCH",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ manual_category: next }),
+      body:    JSON.stringify({ manual_category: next, manual_custom_id: customId }),
     });
     if (!res.ok) {
-      patchLocal(tx.id, { manual_category: prev });
+      patchLocal(tx.id, { manual_category: prevCat, manual_custom_id: prevCid });
       setError("Couldn't update category.");
     }
   }
@@ -675,6 +720,40 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
                 ? `${accounts.length} account${accounts.length !== 1 ? "s" : ""} · ${envLabel}${syncing ? " · Syncing…" : ""}`
                 : "Connect a bank to start triaging transactions"}
             </p>
+          </div>
+          {/* Top-level ⋯ menu — sits where Sync / Disconnect used to live
+              before they moved into the per-account cards. Currently
+              houses the Customize categories action. */}
+          <div ref={headerMenuRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setHeaderMenuOpen((o) => !o)}
+              aria-label="Banking options"
+              className="flex items-center justify-center rounded transition-colors"
+              style={{
+                width: 28, height: 28,
+                background: headerMenuOpen ? "rgba(31,33,26,0.06)" : "transparent",
+                color: "var(--color-grey)",
+                border: "none", cursor: "pointer",
+              }}
+              onMouseEnter={(e) => { if (!headerMenuOpen) e.currentTarget.style.background = "rgba(31,33,26,0.04)"; }}
+              onMouseLeave={(e) => { if (!headerMenuOpen) e.currentTarget.style.background = "transparent"; }}
+            >
+              <MoreHorizontal size={14} />
+            </button>
+            {headerMenuOpen && (
+              <Menu
+                items={[
+                  {
+                    label:   "Customize categories",
+                    icon:    Tag,
+                    onClick: () => setCustomizeOpen(true),
+                  },
+                ]}
+                onClose={() => setHeaderMenuOpen(false)}
+                style={{ position: "absolute", top: "calc(100% + 4px)", right: 0, minWidth: 200, zIndex: 40 }}
+              />
+            )}
           </div>
         </div>
 
@@ -898,6 +977,7 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
                   first={i === 0}
                   expanded={expandedId === tx.id}
                   selected={selectedIds.has(tx.id)}
+                  customs={customs}
                   onToggleSelect={() => {
                     setSelectedIds((s) => {
                       const n = new Set(s);
@@ -914,7 +994,7 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
                   onSaveNote={(note) => saveNote(tx, note)}
                   onAttachReceipt={(file) => attachReceipt(tx, file)}
                   onRemoveReceipt={() => removeReceipt(tx)}
-                  onSetManualCategory={(c) => setManualCategory(tx, c)}
+                  onSetManualCategory={(c, cid) => setManualCategory(tx, c, cid)}
                   outstanding={outstanding}
                 />
               ))}
@@ -973,6 +1053,15 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
             <X size={11} />
           </button>
         </div>
+      )}
+
+      {/* ── Customize categories modal ──────────────────────────────── */}
+      {customizeOpen && (
+        <CustomizeCategoriesModal
+          initial={customs}
+          onClose={() => setCustomizeOpen(false)}
+          onSaved={setCustoms}
+        />
       )}
 
       {/* ── Convert-to-expense modal ────────────────────────────────── */}
@@ -1200,6 +1289,7 @@ interface RowProps {
   first: boolean;
   expanded: boolean;
   selected: boolean;
+  customs: CustomCategory[];
   onToggleSelect: () => void;
   onToggleExpand: () => void;
   onMarkPersonal: () => void;
@@ -1210,12 +1300,14 @@ interface RowProps {
   onSaveNote:       (note: string | null) => void;
   onAttachReceipt:  (file: File) => void;
   onRemoveReceipt:  () => void;
-  onSetManualCategory: (c: ExpenseCategory | null) => void;
+  /** When `customId` is provided the row chip renders the custom's
+   *  label/colour; `category` is the built-in we route persistence to. */
+  onSetManualCategory: (c: ExpenseCategory | null, customId?: string | null) => void;
   outstanding:      OutstandingInvoice[];
 }
 
 function TransactionRow({
-  tx, first, expanded, selected,
+  tx, first, expanded, selected, customs,
   onToggleSelect, onToggleExpand,
   onMarkPersonal, onConvert, onMatch, onUnmatch, onUnmarkPersonal,
   onSaveNote, onAttachReceipt, onRemoveReceipt, onSetManualCategory,
@@ -1230,11 +1322,15 @@ function TransactionRow({
   const PlaidIcon  = ICON_REGISTRY[plaidCat.icon] ?? Tag;
   const acct       = tx.bank_account;
 
-  // Manual category override beats the Plaid label. When set we show a
-  // muted "Manual" pip beside the chip so it's clear the row has been
-  // touched (and to nudge the user that the value is editable).
-  const hasManual = !!tx.manual_category;
-  const displayCat = hasManual
+  // Manual category override beats the Plaid label. When a custom is
+  // attached (manual_custom_id) we render its label + tinted colour;
+  // otherwise we fall back to the built-in manual category, otherwise the
+  // Plaid mapping. A muted "Manual" pip flags any user override.
+  const customMatch = findCustom(customs, tx.manual_custom_id);
+  const hasManual = !!tx.manual_category || !!customMatch;
+  const displayCat = customMatch
+    ? { label: customMatch.label, bg: tintForColor(customMatch.color), fg: customMatch.color, icon: Tag }
+    : tx.manual_category
     ? { label: EXPENSE_CATEGORY_LABEL[tx.manual_category as ExpenseCategory], bg: plaidCat.bg, fg: plaidCat.fg, icon: PlaidIcon }
     : { label: plaidCat.label, bg: plaidCat.bg, fg: plaidCat.fg, icon: PlaidIcon };
 
@@ -1294,7 +1390,8 @@ function TransactionRow({
             stateChip={stateChip}
             displayCat={displayCat}
             hasManual={hasManual}
-            onSelect={(c) => onSetManualCategory(c)}
+            customs={customs}
+            onSelect={(c, cid) => onSetManualCategory(c, cid)}
             onSelectPersonal={onMarkPersonal}
           />
         </span>
@@ -1336,24 +1433,43 @@ function TransactionRow({
 }
 
 // ── Category picker chip ────────────────────────────────────────────────────
-// Click the chip → vertical options popover anchored under it. Lists the
-// five ExpenseCategory values plus a Personal option below a divider.
-// "Auto (Plaid)" clears the manual override and falls back to the Plaid
-// mapping. Closes on outside click or Escape. Styled with the same
-// CARD_STYLE shadow + a thin sage border so it reads as a controlled
-// surface without needing a new ui primitive.
+// Click the chip → 2-col pill grid anchored under it, listing built-in
+// + user-defined custom categories as colour-coded buttons. Personal sits
+// below a divider as a quieter ghost pill so its destructive-ish
+// "hide this from the books" meaning stays visually distinct. "Auto
+// (Plaid)" clears any override and falls back to the Plaid mapping.
+// Closes on outside click or Escape.
+//
+// Visual contract: each pill matches the row chip's vocabulary (tinted
+// bg + full-colour fg + icon) so the connection between picker and chip
+// is obvious. Built-ins re-use the Plaid display palette so the same
+// label reads the same in either surface; customs use the user's
+// chosen swatch (tintForColor for bg, full hex for fg).
 
 interface CategoryPickerChipProps {
   tx:        BankTransaction;
   stateChip: { label: string; bg: string; fg: string } | null;
   displayCat: { label: string; bg: string; fg: string; icon: React.ElementType };
   hasManual: boolean;
-  onSelect:  (c: ExpenseCategory | null) => void;
+  customs:   CustomCategory[];
+  /** Pass (cat, null) for built-in, (cat, customId) for custom, (null, null) for Auto. */
+  onSelect:  (c: ExpenseCategory | null, customId: string | null) => void;
   onSelectPersonal: () => void;
 }
 
+// Display palette for built-in expense categories in the picker grid.
+// Echoes the Plaid chip palette so a label like "Travel" reads the same
+// in the picker as in a row whose Plaid mapping already gave it sage.
+const BUILTIN_DISPLAY: Record<ExpenseCategory, { fg: string; bg: string; icon: React.ElementType }> = {
+  materials:  { fg: "#a37f12",            bg: "rgba(232,197,71,0.18)", icon: Wrench       },
+  travel:     { fg: "var(--color-sage)",  bg: "rgba(155,163,122,0.18)", icon: Plane        },
+  production: { fg: "#7f6f9c",            bg: "rgba(173,163,192,0.22)", icon: Briefcase    },
+  software:   { fg: "var(--color-charcoal)", bg: "rgba(31,33,26,0.08)", icon: Lightbulb    },
+  other:      { fg: "var(--color-grey)",  bg: "rgba(31,33,26,0.06)",    icon: Tag          },
+};
+
 function CategoryPickerChip({
-  tx, stateChip, displayCat, hasManual, onSelect, onSelectPersonal,
+  tx, stateChip, displayCat, hasManual, customs, onSelect, onSelectPersonal,
 }: CategoryPickerChipProps) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -1408,69 +1524,141 @@ function CategoryPickerChip({
             top:          "calc(100% + 6px)",
             left:         0,
             zIndex:       30,
-            minWidth:     180,
+            width:        268,
             background:   "var(--color-off-white)",
-            border:       "0.5px solid var(--color-sage)",
-            borderRadius: 10,
-            boxShadow:    "0 8px 24px rgba(31,33,26,0.10)",
-            overflow:     "hidden",
-            padding:      "4px 0",
+            border:       "0.5px solid var(--color-border)",
+            borderRadius: 12,
+            boxShadow:    "0 12px 28px rgba(31,33,26,0.14)",
+            padding:      "10px 10px 8px",
             fontFamily:   "inherit",
           }}>
-          {EXPENSE_CATEGORY_OPTIONS.map((opt) => {
-            const active = tx.manual_category === opt.value;
-            return (
-              <button key={opt.value} type="button"
-                onClick={() => { onSelect(opt.value); setOpen(false); }}
-                style={{
-                  all:        "unset",
-                  display:    "block",
-                  width:      "100%",
-                  padding:    "7px 12px",
-                  fontSize:   12,
-                  cursor:     "pointer",
-                  color:      active ? "var(--color-sage)" : "var(--color-charcoal)",
-                  fontWeight: active ? 600 : 400,
-                  background: active ? "rgba(155,163,122,0.10)" : "transparent",
-                  boxSizing:  "border-box",
-                }}
-                onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
-                onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}>
-                {opt.label}
-              </button>
-            );
-          })}
-          {tx.manual_category != null && (
+          {/* Built-in + custom grid */}
+          <div style={{
+            display:             "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap:                 6,
+          }}>
+            {EXPENSE_CATEGORY_OPTIONS.map((opt) => {
+              const active = tx.manual_category === opt.value && !tx.manual_custom_id;
+              const d = BUILTIN_DISPLAY[opt.value];
+              return (
+                <PillButton
+                  key={opt.value}
+                  active={active}
+                  bg={d.bg}
+                  fg={d.fg}
+                  icon={d.icon}
+                  label={opt.label}
+                  onClick={() => { onSelect(opt.value, null); setOpen(false); }}
+                />
+              );
+            })}
+            {customs.map((c) => {
+              const active = tx.manual_custom_id === c.id;
+              return (
+                <PillButton
+                  key={c.id}
+                  active={active}
+                  bg={tintForColor(c.color)}
+                  fg={c.color}
+                  icon={Tag}
+                  label={c.label}
+                  onClick={() => { onSelect(c.routesTo, c.id); setOpen(false); }}
+                />
+              );
+            })}
+          </div>
+
+          {(tx.manual_category != null || tx.manual_custom_id != null) && (
             <button type="button"
-              onClick={() => { onSelect(null); setOpen(false); }}
+              onClick={() => { onSelect(null, null); setOpen(false); }}
               style={{
                 all: "unset", display: "block", width: "100%",
-                padding: "7px 12px", fontSize: 11, cursor: "pointer",
-                color: "var(--color-grey)", boxSizing: "border-box",
+                padding: "6px 8px", marginTop: 8,
+                fontSize: 10.5, cursor: "pointer", textAlign: "center",
+                color: "var(--color-grey)", borderRadius: 6,
               }}
               onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-surface-sunken)"}
               onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-              Auto (from Plaid)
+              Reset to auto (from Plaid)
             </button>
           )}
-          <div style={{ height: "0.5px", background: "var(--color-border)", margin: "4px 0" }} />
+
+          <div style={{ height: "0.5px", background: "var(--color-border)", margin: "8px 0 6px" }} />
+
+          {/* Personal — quieter ghost pill to keep its destructive-ish
+              meaning visually distinct from the categorization grid. */}
           <button type="button"
             onClick={() => { onSelectPersonal(); setOpen(false); }}
             style={{
-              all: "unset", display: "block", width: "100%",
-              padding: "7px 12px", fontSize: 12, cursor: "pointer",
-              color: tx.is_personal ? "var(--color-sage)" : "var(--color-charcoal)",
-              fontWeight: tx.is_personal ? 600 : 400,
+              all: "unset",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+              width: "100%",
+              padding: "7px 10px",
+              borderRadius: 999,
+              fontSize: 11.5,
+              cursor: "pointer",
+              border: "0.5px solid var(--color-border)",
               background: tx.is_personal ? "rgba(155,163,122,0.10)" : "transparent",
+              color: tx.is_personal ? "var(--color-sage)" : "var(--color-grey)",
+              fontWeight: tx.is_personal ? 600 : 500,
               boxSizing: "border-box",
+              transition: "background 0.1s ease",
             }}
             onMouseEnter={(e) => { if (!tx.is_personal) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
             onMouseLeave={(e) => { if (!tx.is_personal) e.currentTarget.style.background = "transparent"; }}>
-            Personal
+            <UserIcon size={11} strokeWidth={1.75} />
+            Mark as personal
           </button>
         </div>
       )}
     </div>
+  );
+}
+
+// ── PillButton (picker grid) ───────────────────────────────────────────────
+
+function PillButton({
+  active, bg, fg, icon: Icon, label, onClick,
+}: {
+  active: boolean;
+  bg:     string;
+  fg:     string;
+  icon:   React.ElementType;
+  label:  string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      style={{
+        all:        "unset",
+        display:    "inline-flex",
+        alignItems: "center",
+        gap:        6,
+        padding:    "7px 10px",
+        borderRadius: 999,
+        background: bg,
+        color:      fg,
+        fontSize:   11.5,
+        fontWeight: active ? 600 : 500,
+        boxSizing:  "border-box",
+        cursor:     "pointer",
+        outline:    active ? `1.5px solid ${fg}` : "1px solid transparent",
+        outlineOffset: active ? -1 : 0,
+        minWidth:   0,
+        transition: "filter 0.1s ease",
+      }}
+      onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(0.96)"}
+      onMouseLeave={(e) => e.currentTarget.style.filter = "none"}
+    >
+      <Icon size={11} strokeWidth={1.75} style={{ flexShrink: 0 }} />
+      <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {label}
+      </span>
+    </button>
   );
 }
 
