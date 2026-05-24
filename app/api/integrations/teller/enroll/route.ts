@@ -30,22 +30,30 @@ export async function POST(req: Request) {
   // certificate the TLS handshake fails before the request lands. Routes
   // surface a clean 503 when the cert isn't installed so the UI can
   // explain it instead of silently 502'ing.
+  console.log("[teller/enroll] starting", { env, hasCert: !!process.env.TELLER_CERT_PEM, hasKey: !!process.env.TELLER_KEY_PEM, enrollmentId, institutionName });
   let accountsRes: Response;
   try {
     accountsRes = await tellerFetch("/accounts", accessToken);
   } catch (e) {
     if (e instanceof TellerNotConfiguredError) {
+      console.error("[teller/enroll] not configured:", e.message);
       return NextResponse.json({ error: e.message }, { status: 503 });
     }
-    throw e;
+    // mTLS handshake failures, DNS, etc. land here. Surface the underlying
+    // message so the UI can show something more useful than a generic
+    // "Connection failed" — and so the dev-server log shows the cause.
+    const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+    console.error("[teller/enroll] network/TLS error:", msg, e);
+    return NextResponse.json({ error: `Teller request failed: ${msg}` }, { status: 502 });
   }
 
   if (!accountsRes.ok) {
     const err = await accountsRes.text();
-    console.error("Teller accounts fetch failed:", err);
-    return NextResponse.json({ error: "Failed to fetch accounts from Teller" }, { status: 502 });
+    console.error("[teller/enroll] accounts fetch failed", accountsRes.status, err);
+    return NextResponse.json({ error: `Teller responded ${accountsRes.status}: ${err.slice(0, 200)}` }, { status: 502 });
   }
 
+  console.log("[teller/enroll] accounts fetch OK");
   const tellerAccounts = await accountsRes.json() as TellerAccount[];
 
   // Store or update the integration
