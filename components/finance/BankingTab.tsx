@@ -1,29 +1,38 @@
 "use client";
 
-// Banking — review queue.
+// Banking — unified transaction table.
 //
-// The historical "transaction feed" UI is gone. Connected accounts are
-// assumed business, and every unhandled transaction is one of:
-//   (a) a business debit to log as an expense,
-//   (b) a credit that's an invoice payment,
-//   (c) personal (hide).
+// One filterable, sortable, paginated list of every bank_transactions row
+// the user has, modeled after Rocket Money. Filters live above the table;
+// each row expands inline for the per-tx actions (log expense, mark
+// personal, match invoice, attach receipt, note). The underlying review
+// semantics (`needs_review` = not personal AND no linked expense AND no
+// matched invoice) are unchanged — just collapsed into one surface.
 //
-// The user moves rows out of the active view by acting on them. The
-// API layer (POST /api/finance/banking/transactions/:id/*) handles all
-// of the writes; this file is just an orchestrator over /queue.
+// The Plaid + Teller connect flows are carried over verbatim from the
+// segmented version; only the data layer and presentation are new.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Script from "next/script";
+import {
+  Ban, ChevronRight, Loader2, Paperclip, StickyNote, Trash2, X,
+  // Category-chip icons (lookup by name from plaidCategoryDisplay):
+  ArrowDownToLine, ArrowLeftRight, Briefcase, Car, HeartPulse, Landmark,
+  Lightbulb, Music, Plane, Receipt as ReceiptIcon, ShoppingBag, Tag,
+  User as UserIcon, Utensils, Wrench,
+} from "lucide-react";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Select from "@/components/ui/Select";
 import AddExpenseModal from "./AddExpenseModal";
 import type { BankAccount, BankTransaction, Expense, ExpenseCategory, Project } from "@/types/database";
-import { plaidCategoryToExpenseCategory, prettyPlaidPrimary } from "./plaidCategoryMap";
+import { plaidCategoryToExpenseCategory } from "./plaidCategoryMap";
+import { categoryFor, PLAID_PRIMARY_KEYS } from "./plaidCategoryDisplay";
+import { uploadReceipt, deleteReceipt } from "@/lib/uploads/receipt";
 
 const PROVIDER = (process.env.NEXT_PUBLIC_BANK_PROVIDER ?? "plaid") as "plaid" | "teller";
 const API_BASE = `/api/integrations/${PROVIDER}`;
 
-// ── Provider SDK shims ───────────────────────────────────────────────────────
+// ── Provider SDK shims (verbatim from previous design) ──────────────────────
 
 declare global {
   interface Window {
@@ -55,43 +64,41 @@ interface PlaidLinkMetadata {
 }
 interface PlaidLinkError { error_code: string; error_message: string }
 
-// ── Queue payload types ──────────────────────────────────────────────────────
+// ── Server payload types ────────────────────────────────────────────────────
 
-interface SuggestedInvoice {
-  id:     string;
-  number: number;
-  client: string;
-  total:  number;
+interface KpiPayload {
+  in_this_month:  number;
+  out_this_month: number;
+  net:            number;
 }
-interface QueueTransaction extends BankTransaction {
-  suggested_invoices?: SuggestedInvoice[];
+interface TransactionsResponse {
+  transactions: BankTransaction[];
+  total:        number;
+  page:         number;
+  pageSize:     number;
+  kpis:         KpiPayload;
 }
 interface OutstandingInvoice {
   id:     string;
   number: number;
-  status: string;
   client: string;
   total:  number;
 }
-interface QueueResponse {
-  to_review:            QueueTransaction[];
-  invoice_activity:     QueueTransaction[];
-  hidden_count:         number;
-  outstanding_invoices: OutstandingInvoice[];
-}
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
-function fmtCurrency(n: number, opts: { dp?: number } = {}) {
+function fmtCurrency(n: number, opts: { dp?: number; sign?: boolean } = {}) {
   const dp = opts.dp ?? 2;
   return "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
 }
-function fmtDate(ds: string) {
-  return new Date(ds + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+function fmtShortDate(ds: string): string {
+  // M/D — matches the Rocket Money reference.
+  const d = new Date(ds + "T12:00:00");
+  return `${d.getMonth() + 1}/${d.getDate()}`;
 }
-
-// Plaid loves verbose account names. "American Express - Plaid Gold
-// Standard 0% Interest Checking" turns into something legible.
+function fmtLongDate(ds: string): string {
+  return new Date(ds + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
 function trimAccountName(name: string): string {
   if (!name) return "Account";
   let n = name.replace(/^[A-Z][a-z]+\s+(Express|Bank|Card|Credit|Savings)\s*-\s*/, "");
@@ -100,6 +107,14 @@ function trimAccountName(name: string): string {
   n = n.replace(/\s{2,}/g, " ").trim();
   if (n.length > 28) n = n.slice(0, 26).trimEnd() + "…";
   return n || name;
+}
+function useDebounced<T>(value: T, ms: number): T {
+  const [out, setOut] = useState(value);
+  useEffect(() => {
+    const id = window.setTimeout(() => setOut(value), ms);
+    return () => window.clearTimeout(id);
+  }, [value, ms]);
+  return out;
 }
 
 const CARD_STYLE: React.CSSProperties = {
@@ -116,7 +131,40 @@ const SECTION_HEADER_STYLE: React.CSSProperties = {
   letterSpacing: "-0.01em",
 };
 
-// ── Props ────────────────────────────────────────────────────────────────────
+// ── Category icon registry ──────────────────────────────────────────────────
+// plaidCategoryDisplay returns icon NAMES (so it can stay framework-free);
+// resolve them here.
+const ICON_REGISTRY: Record<string, React.ElementType> = {
+  ArrowDownToLine, ArrowLeftRight, Briefcase, Car, HeartPulse, Landmark,
+  Lightbulb, Music, Plane, Receipt: ReceiptIcon, ShoppingBag, Tag, User: UserIcon, Utensils, Wrench,
+};
+
+// ── Filter / sort types ─────────────────────────────────────────────────────
+
+type StatusFilter = "all" | "needs_review" | "logged" | "matched" | "personal";
+type TypeFilter   = "all" | "debit" | "credit";
+type SortKey      = "date_desc" | "date_asc" | "amount_desc" | "amount_asc";
+
+const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
+  { value: "needs_review", label: "Needs review" },
+  { value: "all",          label: "All"          },
+  { value: "logged",       label: "Logged"       },
+  { value: "matched",      label: "Matched"      },
+  { value: "personal",     label: "Personal"     },
+];
+const TYPE_OPTIONS: { value: TypeFilter; label: string }[] = [
+  { value: "all",    label: "All types" },
+  { value: "debit",  label: "Debits"    },
+  { value: "credit", label: "Credits"   },
+];
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "date_desc",   label: "Date · newest" },
+  { value: "date_asc",    label: "Date · oldest" },
+  { value: "amount_desc", label: "Amount · high" },
+  { value: "amount_asc",  label: "Amount · low"  },
+];
+
+// ── Props ───────────────────────────────────────────────────────────────────
 
 interface Props {
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
@@ -124,40 +172,79 @@ interface Props {
   onInvoiceMarkedPaid: (invoiceId: string, paidAt: string) => void;
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
+// ── Component ───────────────────────────────────────────────────────────────
 
 export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarkedPaid }: Props) {
   const [accounts, setAccounts]                   = useState<BankAccount[]>([]);
-  const [queue,    setQueue]                      = useState<QueueResponse>({ to_review: [], invoice_activity: [], hidden_count: 0, outstanding_invoices: [] });
-  const [hidden,   setHidden]                     = useState<QueueTransaction[]>([]);
-  const [showHidden, setShowHidden]               = useState(false);
-  const [loading,  setLoading]                    = useState(true);
-  const [syncing,  setSyncing]                    = useState(false);
+  const [transactions, setTransactions]           = useState<BankTransaction[]>([]);
+  const [total, setTotal]                         = useState(0);
+  const [kpis, setKpis]                           = useState<KpiPayload>({ in_this_month: 0, out_this_month: 0, net: 0 });
+  const [outstanding, setOutstanding]             = useState<OutstandingInvoice[]>([]);
+
+  const [loading, setLoading]                     = useState(true);
+  const [syncing, setSyncing]                     = useState(false);
+  const [tableLoading, setTableLoading]           = useState(false);
   const [connecting, setConnecting]               = useState(false);
   const [scriptReady, setScriptReady]             = useState(false);
   const [error, setError]                         = useState<string | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
-  // The "Log expense" modal hangs off the transaction it was opened from.
-  const [convertTarget, setConvertTarget] = useState<QueueTransaction | null>(null);
-  // For credits with multiple suggested matches: chosen invoice id per tx.
-  const [chosenInvoice, setChosenInvoice] = useState<Record<string, string>>({});
+  // Filter / sort / page state
+  const [status, setStatus]     = useState<StatusFilter>("needs_review");
+  const [account, setAccount]   = useState<string>("all");
+  const [category, setCategory] = useState<string>("all");
+  const [txType, setTxType]     = useState<TypeFilter>("all");
+  const [searchRaw, setSearchRaw] = useState<string>("");
+  const search = useDebounced(searchRaw, 300);
+  const [sort, setSort]         = useState<SortKey>("date_desc");
+  const [page, setPage]         = useState(1);
+  const pageSize = 20;
+
+  // Per-row UI state
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [convertTarget, setConvertTarget] = useState<BankTransaction | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [snackbar, setSnackbar] = useState<{ text: string; onUndo?: () => void } | null>(null);
 
   const tellerAppId = process.env.NEXT_PUBLIC_TELLER_APPLICATION_ID ?? "";
   const tellerEnv   = process.env.NEXT_PUBLIC_TELLER_ENVIRONMENT ?? "sandbox";
   const plaidEnv    = process.env.NEXT_PUBLIC_PLAID_ENV ?? "sandbox";
 
-  // Pulls accounts, runs the Plaid sync (route does that on every GET
-  // to /transactions), then reads the freshly-computed queue.
-  const fetchData = useCallback(async () => {
+  // ── Data fetchers ─────────────────────────────────────────────────────────
+
+  const reqIdRef = useRef(0);
+  const fetchTransactions = useCallback(async () => {
+    const myReqId = ++reqIdRef.current;
+    setTableLoading(true);
+    try {
+      const params = new URLSearchParams({
+        status, account, category, type: txType, sort,
+        page:     String(page),
+        pageSize: String(pageSize),
+      });
+      if (search) params.set("search", search);
+      const res = await fetch(`/api/finance/banking/transactions?${params.toString()}`);
+      if (myReqId !== reqIdRef.current) return; // a newer request superseded us
+      if (!res.ok) { setError("Couldn't load transactions."); return; }
+      const data: TransactionsResponse = await res.json();
+      setTransactions(data.transactions);
+      setTotal(data.total);
+      setKpis(data.kpis);
+    } finally {
+      if (myReqId === reqIdRef.current) setTableLoading(false);
+    }
+  }, [status, account, category, txType, search, sort, page]);
+
+  // Pulls accounts + runs the Plaid sync (the GET /transactions on the
+  // provider route does that on every read), then loads the new table data.
+  const initialLoad = useCallback(async () => {
     setSyncing(true);
     setError(null);
     try {
-      // Force the sync to run before reading the queue. We don't use the
-      // returned list — /queue gives us the actually-needed projection.
-      const [acctRes, syncRes] = await Promise.all([
+      const [acctRes, syncRes, invRes] = await Promise.all([
         fetch(`${API_BASE}/accounts`),
         fetch(`${API_BASE}/transactions`),
+        fetch(`/api/finance/banking/queue`), // still the simplest way to get outstanding invoices
       ]);
       if (acctRes.status === 503 || syncRes.status === 503) {
         const res = acctRes.status === 503 ? acctRes : syncRes;
@@ -165,11 +252,9 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
         setError(body?.error ?? `${PROVIDER} isn't fully configured yet.`);
       }
       if (acctRes.ok) { const { accounts: a } = await acctRes.json(); setAccounts(a ?? []); }
-
-      const qRes = await fetch(`/api/finance/banking/queue`);
-      if (qRes.ok) {
-        const data: QueueResponse = await qRes.json();
-        setQueue(data);
+      if (invRes.ok) {
+        const data = await invRes.json() as { outstanding_invoices?: OutstandingInvoice[] };
+        setOutstanding(data.outstanding_invoices ?? []);
       }
     } finally {
       setSyncing(false);
@@ -177,24 +262,14 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
     }
   }, []);
 
-  // Hidden list is only loaded on demand.
-  const fetchHidden = useCallback(async () => {
-    // Re-use the raw transactions endpoint; it returns up to 100 rows
-    // with the joined account. Personal + already-handled rows are
-    // exactly what's NOT in to_review or invoice_activity.
-    const res = await fetch(`${API_BASE}/transactions`);
-    if (!res.ok) return;
-    const { transactions } = await res.json() as { transactions: QueueTransaction[] };
-    const hiddenRows = (transactions ?? []).filter(t =>
-      t.is_personal || t.linked_expense_id || t.matched_invoice_id,
-    );
-    setHidden(hiddenRows);
-  }, []);
+  useEffect(() => { initialLoad(); }, [initialLoad]);
+  // After the initial load resolves accounts, fetch the table.
+  useEffect(() => { if (!loading) fetchTransactions(); }, [loading, fetchTransactions]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
-  useEffect(() => { if (showHidden) fetchHidden(); }, [showHidden, fetchHidden]);
+  // Reset to page 1 whenever a filter changes.
+  useEffect(() => { setPage(1); }, [status, account, category, txType, search, sort]);
 
-  // Probe the provider SDK global as a backup for Next/Script onLoad.
+  // Provider SDK probe (verbatim).
   useEffect(() => {
     if (scriptReady) return;
     if (typeof window === "undefined") return;
@@ -212,7 +287,7 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
     return () => window.clearInterval(id);
   }, [scriptReady]);
 
-  // ── Provider connect flows (carried over verbatim) ─────────────────────────
+  // ── Provider connect flows (verbatim) ─────────────────────────────────────
 
   async function openConnect() {
     setError(null);
@@ -257,7 +332,8 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
             catch { body = (await res.text()) || `HTTP ${res.status}`; }
             setError(body);
           } else {
-            await fetchData();
+            await initialLoad();
+            await fetchTransactions();
           }
         } catch (err) {
           console.error("[BankingTab/plaid] enroll failed:", err);
@@ -297,7 +373,8 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
             catch { body = (await res.text()) || `HTTP ${res.status}`; }
             setError(body);
           } else {
-            await fetchData();
+            await initialLoad();
+            await fetchTransactions();
           }
         } catch (err) {
           console.error("[BankingTab/teller] enroll failed:", err);
@@ -314,75 +391,89 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
   async function disconnect() {
     await fetch(`${API_BASE}/accounts`, { method: "DELETE" });
     setAccounts([]);
-    setQueue({ to_review: [], invoice_activity: [], hidden_count: 0, outstanding_invoices: [] });
-    setHidden([]);
+    setTransactions([]);
+    setTotal(0);
+    setKpis({ in_this_month: 0, out_this_month: 0, net: 0 });
+    setOutstanding([]);
   }
 
-  // ── Action handlers ────────────────────────────────────────────────────────
+  async function manualSync() {
+    setSyncing(true);
+    try {
+      await fetch(`${API_BASE}/transactions`); // triggers the sync server-side
+      await fetchTransactions();
+    } finally {
+      setSyncing(false);
+    }
+  }
 
-  async function markPersonal(tx: QueueTransaction, isPersonal: boolean) {
-    // Optimistic — pull out of whichever list it's in.
-    setQueue((q) => ({
-      ...q,
-      to_review:        q.to_review.filter((t) => t.id !== tx.id),
-      invoice_activity: q.invoice_activity.filter((t) => t.id !== tx.id),
-      hidden_count:     isPersonal ? q.hidden_count + 1 : Math.max(0, q.hidden_count - 1),
-    }));
-    if (showHidden) setHidden((rows) => isPersonal ? [{ ...tx, is_personal: true }, ...rows] : rows.filter((r) => r.id !== tx.id));
+  // ── Optimistic mutators ───────────────────────────────────────────────────
 
+  function patchLocal(id: string, patch: Partial<BankTransaction>) {
+    setTransactions((rows) => rows.map((r) => r.id === id ? { ...r, ...patch } : r));
+  }
+
+  async function markPersonal(tx: BankTransaction, isPersonal: boolean) {
+    const prev = { is_personal: tx.is_personal };
+    patchLocal(tx.id, { is_personal: isPersonal });
     const res = await fetch(`/api/finance/banking/transactions/${tx.id}/personal`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ is_personal: isPersonal }),
     });
     if (!res.ok) {
+      patchLocal(tx.id, prev);
       setError("Couldn't update transaction — refreshing.");
-      await fetchData();
-      if (showHidden) await fetchHidden();
+      await fetchTransactions();
+      return;
+    }
+    if (isPersonal) {
+      setSnackbar({
+        text: "Marked personal",
+        onUndo: async () => {
+          setSnackbar(null);
+          await markPersonal({ ...tx, is_personal: true }, false);
+          await fetchTransactions();
+        },
+      });
     }
   }
 
-  async function matchInvoice(tx: QueueTransaction, invoiceId: string) {
-    // Optimistic
-    setQueue((q) => ({
-      ...q,
-      invoice_activity: q.invoice_activity.filter((t) => t.id !== tx.id),
-      hidden_count:     q.hidden_count + 1,
-      outstanding_invoices: q.outstanding_invoices.filter((i) => i.id !== invoiceId),
-    }));
+  async function matchInvoice(tx: BankTransaction, invoiceId: string) {
+    patchLocal(tx.id, { matched_invoice_id: invoiceId });
+    setOutstanding((rows) => rows.filter((i) => i.id !== invoiceId));
     const res = await fetch(`/api/finance/banking/transactions/${tx.id}/match-invoice`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ invoice_id: invoiceId }),
     });
     if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      setError(j?.error ?? "Couldn't match invoice — refreshing.");
-      await fetchData();
+      patchLocal(tx.id, { matched_invoice_id: null });
+      setError("Couldn't match invoice — refreshing.");
+      await fetchTransactions();
       return;
     }
     onInvoiceMarkedPaid(invoiceId, tx.date);
+    setSnackbar({ text: `Matched to #${outstanding.find(i => i.id === invoiceId)?.number ?? ""}` });
   }
 
-  async function unmatch(tx: QueueTransaction) {
-    setHidden((rows) => rows.filter((r) => r.id !== tx.id));
-    setQueue((q) => ({ ...q, hidden_count: Math.max(0, q.hidden_count - 1) }));
+  async function unmatch(tx: BankTransaction) {
+    const prevId = tx.matched_invoice_id;
+    patchLocal(tx.id, { matched_invoice_id: null });
     const res = await fetch(`/api/finance/banking/transactions/${tx.id}/unmatch`, { method: "POST" });
-    if (!res.ok) { setError("Couldn't unmatch — refreshing."); await fetchData(); await fetchHidden(); return; }
-    await fetchData();
+    if (!res.ok) {
+      patchLocal(tx.id, { matched_invoice_id: prevId });
+      setError("Couldn't unmatch — refreshing.");
+      await fetchTransactions();
+    }
   }
 
-  async function unmarkPersonal(tx: QueueTransaction) {
-    await markPersonal(tx, false);
-    await fetchData();
-  }
-
-  async function submitConvert(tx: QueueTransaction, values: {
-    project_id: string | null;
+  async function submitConvert(tx: BankTransaction, values: {
+    project_id:  string | null;
     description: string;
-    category: ExpenseCategory;
-    amount: number;
-    date: string;
+    category:    ExpenseCategory;
+    amount:      number;
+    date:        string;
   }) {
     const res = await fetch(`/api/finance/banking/transactions/${tx.id}/convert-to-expense`, {
       method:  "POST",
@@ -398,42 +489,99 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
       return { error: j?.error ?? `Failed (HTTP ${res.status})` };
     }
     const { expense } = await res.json() as { expense: Expense };
-    // Optimistic: drop the row from to_review and bump hidden_count.
-    setQueue((q) => ({
-      ...q,
-      to_review:    q.to_review.filter((t) => t.id !== tx.id),
-      hidden_count: q.hidden_count + 1,
-    }));
+    patchLocal(tx.id, { linked_expense_id: expense.id });
     onExpenseCreated(expense);
+    setSnackbar({ text: "Logged as expense" });
     return { expense };
   }
 
-  // ── Derived ────────────────────────────────────────────────────────────────
-
-  // Monthly rollup — based on the rows we can see in /queue, plus the
-  // current month's hidden (reviewed) rows. We use to_review + hidden
-  // when expanded, else fall back to to_review + invoice_activity.
-  const monthRollup = useMemo(() => {
-    const now = new Date();
-    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    const rows = [...queue.to_review, ...queue.invoice_activity, ...hidden];
-    let inSum = 0, outSum = 0;
-    const seen = new Set<string>();
-    for (const r of rows) {
-      if (seen.has(r.id)) continue;
-      seen.add(r.id);
-      if (!r.date?.startsWith(month)) continue;
-      if (r.is_personal) continue;
-      const amt = Number(r.amount);
-      if (amt > 0) inSum  += amt;
-      else         outSum += Math.abs(amt);
+  async function saveNote(tx: BankTransaction, note: string | null) {
+    const prev = tx.note;
+    patchLocal(tx.id, { note });
+    const res = await fetch(`/api/finance/banking/transactions/${tx.id}/note`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ note }),
+    });
+    if (!res.ok) {
+      patchLocal(tx.id, { note: prev });
+      setError("Couldn't save note.");
     }
-    return { in: inSum, out: outSum, net: inSum - outSum };
-  }, [queue.to_review, queue.invoice_activity, hidden]);
+  }
+
+  async function attachReceipt(tx: BankTransaction, file: File) {
+    try {
+      const up = await uploadReceipt(file);
+      const res = await fetch(`/api/finance/banking/transactions/${tx.id}/receipt`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ receipt_url: up.url, receipt_path: up.path }),
+      });
+      if (!res.ok) throw new Error("save failed");
+      patchLocal(tx.id, { receipt_url: up.url, receipt_path: up.path });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Receipt upload failed.");
+    }
+  }
+
+  async function removeReceipt(tx: BankTransaction) {
+    const prevUrl  = tx.receipt_url;
+    const prevPath = tx.receipt_path;
+    patchLocal(tx.id, { receipt_url: null, receipt_path: null });
+    try {
+      if (prevPath) await deleteReceipt(prevPath);
+      const res = await fetch(`/api/finance/banking/transactions/${tx.id}/receipt`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ receipt_url: null, receipt_path: null }),
+      });
+      if (!res.ok) throw new Error("save failed");
+    } catch (e) {
+      patchLocal(tx.id, { receipt_url: prevUrl, receipt_path: prevPath });
+      setError(e instanceof Error ? e.message : "Couldn't remove receipt.");
+    }
+  }
+
+  async function bulkMarkPersonal() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    // Optimistic
+    setTransactions((rows) => rows.map((r) => ids.includes(r.id) ? { ...r, is_personal: true } : r));
+    setSelectedIds(new Set());
+    await Promise.all(ids.map((id) =>
+      fetch(`/api/finance/banking/transactions/${id}/personal`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ is_personal: true }),
+      }),
+    ));
+    await fetchTransactions();
+  }
+
+  // ── Derived ───────────────────────────────────────────────────────────────
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const pageStart  = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const pageEnd    = Math.min(page * pageSize, total);
+
+  const accountOptions = useMemo(() => ([
+    { value: "all", label: "All accounts" },
+    ...accounts.map((a) => ({
+      value: a.id,
+      label: `${trimAccountName(a.name)}${a.last_four ? ` ••${a.last_four}` : ""}`,
+    })),
+  ]), [accounts]);
+
+  const categoryOptions = useMemo(() => ([
+    { value: "all", label: "All categories" },
+    ...PLAID_PRIMARY_KEYS.map((k) => ({ value: k, label: categoryFor(k).label })),
+  ]), []);
 
   const envLabel = PROVIDER === "plaid"
     ? (plaidEnv === "production" ? "Live" : plaidEnv === "development" ? "Live (Dev)" : "Sandbox mode")
     : (tellerEnv === "sandbox" ? "Sandbox mode" : "Live");
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -447,8 +595,8 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
 
       <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
 
-        {/* ── Header ─────────────────────────────────────────────────────── */}
-        <div className="flex items-center gap-3">
+        {/* ── Header ───────────────────────────────────────────────────── */}
+        <div className="flex items-center gap-3 shrink-0">
           <div className="flex-1">
             <h2 style={SECTION_HEADER_STYLE}>Banking</h2>
             <p className="text-[11px] mt-0.5" style={{ color: "var(--color-grey)" }}>
@@ -459,7 +607,7 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
           </div>
           {accounts.length > 0 && (
             <>
-              <button onClick={fetchData} disabled={syncing}
+              <button onClick={manualSync} disabled={syncing}
                 className="px-3 py-1.5 text-[11px] rounded-lg transition-colors"
                 style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", background: "transparent" }}
                 onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
@@ -484,9 +632,12 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
         </div>
 
         {error && (
-          <div className="px-4 py-3 rounded-lg text-[12px]"
+          <div className="px-4 py-3 rounded-lg text-[12px] shrink-0 flex items-start gap-3"
             style={{ background: "rgba(220,62,13,0.07)", color: "var(--color-red-orange)", border: "0.5px solid rgba(220,62,13,0.2)" }}>
-            {error}
+            <span className="flex-1">{error}</span>
+            <button onClick={() => setError(null)} style={{ color: "var(--color-red-orange)" }}>
+              <X size={12} />
+            </button>
           </div>
         )}
 
@@ -496,7 +647,7 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
           </div>
         )}
 
-        {/* ── Empty (no accounts) ───────────────────────────────────────── */}
+        {/* ── Empty (no accounts) ─────────────────────────────────────── */}
         {!loading && accounts.length === 0 && (
           <div className="flex flex-col items-center justify-center h-64 gap-4 rounded-xl"
             style={{ border: "0.5px dashed var(--color-border)" }}>
@@ -517,15 +668,19 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
 
         {!loading && accounts.length > 0 && (
           <>
-            {/* ── Accounts strip ────────────────────────────────────────── */}
-            <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "thin" }}>
+            {/* ── Accounts strip ─────────────────────────────────────── */}
+            {/* shrink-0 + explicit minHeight protects against parent
+                flex-col collapsing the row when the table grows tall. */}
+            <div className="flex gap-2 overflow-x-auto pb-1 shrink-0"
+                 style={{ scrollbarWidth: "thin", minHeight: 76 }}>
               {accounts.map((acct) => (
                 <div key={acct.id}
-                  className="shrink-0 px-3 py-2.5 flex flex-col gap-0.5"
+                  className="shrink-0 px-3 py-2.5 flex flex-col justify-between"
                   style={{
                     ...CARD_STYLE,
-                    minWidth: 160,
-                    maxWidth: 200,
+                    minWidth:  168,
+                    maxWidth:  208,
+                    minHeight: 68,
                   }}>
                   <p className="text-[10px] uppercase tracking-wider truncate" style={{ color: "var(--color-grey)" }}>
                     {acct.institution}
@@ -546,15 +701,15 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
               ))}
             </div>
 
-            {/* ── Month rollup ─────────────────────────────────────────── */}
-            <div className="grid grid-cols-3 gap-3">
+            {/* ── KPI cards ─────────────────────────────────────────── */}
+            <div className="grid grid-cols-3 gap-3 shrink-0">
               {[
-                { label: "In this month",  value: "+" + fmtCurrency(monthRollup.in,  { dp: 0 }), color: "var(--color-sage)" },
-                { label: "Out this month", value: "−" + fmtCurrency(monthRollup.out, { dp: 0 }), color: "var(--color-charcoal)" },
+                { label: "In this month",  value: "+" + fmtCurrency(kpis.in_this_month,  { dp: 0 }), color: "var(--color-sage)" },
+                { label: "Out this month", value: "−" + fmtCurrency(kpis.out_this_month, { dp: 0 }), color: "var(--color-charcoal)" },
                 {
                   label: "Net",
-                  value: (monthRollup.net >= 0 ? "+" : "−") + fmtCurrency(monthRollup.net, { dp: 0 }),
-                  color: monthRollup.net >= 0 ? "var(--color-sage)" : "var(--color-red-orange)",
+                  value: (kpis.net >= 0 ? "+" : "−") + fmtCurrency(kpis.net, { dp: 0 }),
+                  color: kpis.net >= 0 ? "var(--color-sage)" : "var(--color-red-orange)",
                 },
               ].map((s) => (
                 <div key={s.label} className="px-4 py-3" style={CARD_STYLE}>
@@ -564,196 +719,170 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
               ))}
             </div>
 
-            {/* ── To categorize ────────────────────────────────────────── */}
-            <Section title="To categorize" count={queue.to_review.length}>
-              {queue.to_review.length === 0 ? (
-                <p className="px-4 py-6 text-center text-[12px]" style={{ color: "var(--color-grey)" }}>
-                  All caught up. New debits will show up here as they post.
-                </p>
-              ) : (
-                queue.to_review.map((tx, i) => {
-                  const merchant = tx.details?.merchant_name ?? tx.description;
-                  const acct     = tx.bank_account;
-                  const primary  = tx.details?.personal_finance_category?.primary ?? null;
-                  return (
-                    <div key={tx.id} className="flex items-center gap-4 px-4 py-3"
-                      style={{ borderTop: i > 0 ? "0.5px solid var(--color-border)" : "none" }}>
-                      <div style={{ minWidth: 96 }}>
-                        <p className="text-[17px] font-semibold tabular-nums" style={{
-                          color: "var(--color-red-orange)",
-                          fontFamily: "var(--font-display)",
-                        }}>
-                          −{fmtCurrency(Math.abs(Number(tx.amount)))}
-                        </p>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-medium truncate" style={{ color: "var(--color-charcoal)" }}>{merchant}</p>
-                        <p className="text-[11px] truncate" style={{ color: "var(--color-grey)" }}>
-                          {acct ? `${trimAccountName(acct.name)} ••${acct.last_four ?? ""}` : "Account"} · {fmtDate(tx.date)}
-                          {tx.status === "pending" && <span style={{ color: "#b8860b" }}> · Pending</span>}
-                          {primary && (
-                            <span className="ml-2 px-1.5 py-0.5 rounded text-[10px]"
-                              style={{ background: "var(--color-cream)", color: "var(--color-grey)" }}>
-                              {prettyPlaidPrimary(primary)}
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                      <button onClick={() => setConvertTarget(tx)}
-                        className="px-3 py-1.5 text-[11px] font-medium rounded-lg text-white"
-                        style={{ background: "var(--color-sage)" }}>
-                        → Log expense
-                      </button>
-                      <button onClick={() => markPersonal(tx, true)}
-                        className="px-3 py-1.5 text-[11px] rounded-lg transition-colors"
-                        style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", background: "transparent" }}
-                        onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
-                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                        Personal
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-            </Section>
+            {/* ── Filter / sort bar ─────────────────────────────────── */}
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
+              <FilterPills
+                value={status}
+                options={STATUS_OPTIONS}
+                onChange={(v) => setStatus(v)}
+              />
+              <div style={{ width: 168 }}>
+                <Select value={account}  onChange={setAccount}  options={accountOptions}  />
+              </div>
+              <div style={{ width: 184 }}>
+                <Select value={category} onChange={setCategory} options={categoryOptions} />
+              </div>
+              <div style={{ width: 132 }}>
+                <Select value={txType}   onChange={(v) => setTxType(v as TypeFilter)} options={TYPE_OPTIONS} />
+              </div>
+              <div className="flex-1" />
+              <input
+                type="text"
+                value={searchRaw}
+                onChange={(e) => setSearchRaw(e.target.value)}
+                placeholder="Search transactions…"
+                className="px-3 py-2 text-[12px] rounded-lg"
+                style={{
+                  width: 200,
+                  background: "var(--color-surface-sunken)",
+                  border:     "0.5px solid var(--color-border)",
+                  color:      "var(--color-charcoal)",
+                  outline:    "none",
+                  fontFamily: "inherit",
+                }}
+              />
+              <div style={{ width: 156 }}>
+                <Select value={sort} onChange={(v) => setSort(v as SortKey)} options={SORT_OPTIONS} />
+              </div>
+            </div>
 
-            {/* ── Invoice activity ─────────────────────────────────────── */}
-            <Section title="Invoice activity" count={queue.invoice_activity.length}>
-              {queue.invoice_activity.length === 0 ? (
-                <p className="px-4 py-6 text-center text-[12px]" style={{ color: "var(--color-grey)" }}>
-                  No recent deposits. Payments from the last 60 days will land here.
-                </p>
-              ) : (
-                queue.invoice_activity.map((tx, i) => {
-                  const suggestions = tx.suggested_invoices ?? [];
-                  const single      = suggestions.length === 1;
-                  const multi       = suggestions.length > 1;
-                  const chosenId    = chosenInvoice[tx.id]
-                    ?? (single ? suggestions[0].id : "");
-                  const chosen      = suggestions.find((s) => s.id === chosenId)
-                    ?? queue.outstanding_invoices.find((i2) => i2.id === chosenId);
-                  return (
-                    <div key={tx.id} className="flex items-center gap-4 px-4 py-3"
-                      style={{ borderTop: i > 0 ? "0.5px solid var(--color-border)" : "none" }}>
-                      <div style={{ minWidth: 96 }}>
-                        <p className="text-[17px] font-semibold tabular-nums" style={{
-                          color: "var(--color-sage)",
-                          fontFamily: "var(--font-display)",
-                        }}>
-                          +{fmtCurrency(Math.abs(Number(tx.amount)))}
-                        </p>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-medium truncate" style={{ color: "var(--color-charcoal)" }}>
-                          {fmtDate(tx.date)} — {tx.details?.merchant_name ?? tx.description}
-                        </p>
-                        <p className="text-[11px] truncate" style={{ color: "var(--color-grey)" }}>
-                          {single && (
-                            <>Looks like #{suggestions[0].number} ({suggestions[0].client})</>
-                          )}
-                          {multi && (
-                            <>{suggestions.length} possible invoice matches</>
-                          )}
-                          {!single && !multi && (
-                            <>No suggested match — pick one to mark paid</>
-                          )}
-                        </p>
-                      </div>
-                      {(multi || (!single && !multi)) && (
-                        <div style={{ width: 200 }}>
-                          <Select
-                            value={chosenId}
-                            onChange={(v) => setChosenInvoice((m) => ({ ...m, [tx.id]: v }))}
-                            placeholder="Match to invoice…"
-                            options={(multi ? suggestions : queue.outstanding_invoices).map((s) => ({
-                              value: s.id,
-                              label: `#${s.number} · ${s.client} · ${fmtCurrency(s.total, { dp: 0 })}`,
-                            }))}
-                          />
-                        </div>
-                      )}
-                      <button onClick={() => chosen && matchInvoice(tx, chosen.id)}
-                        disabled={!chosen}
-                        className="px-3 py-1.5 text-[11px] font-medium rounded-lg text-white disabled:opacity-40"
-                        style={{ background: "var(--color-sage)" }}>
-                        Mark paid
-                      </button>
-                      <button onClick={() => markPersonal(tx, true)}
-                        className="px-3 py-1.5 text-[11px] rounded-lg transition-colors"
-                        style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", background: "transparent" }}
-                        onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
-                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                        Not this one
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-            </Section>
+            {/* ── Bulk action bar ───────────────────────────────────── */}
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-3 px-4 py-2 rounded-lg shrink-0"
+                style={{ background: "var(--color-charcoal)", color: "white" }}>
+                <span className="text-[12px]">{selectedIds.size} selected</span>
+                <div className="flex-1" />
+                <button onClick={bulkMarkPersonal}
+                  className="px-3 py-1 text-[11px] rounded-md"
+                  style={{ background: "rgba(255,255,255,0.12)", color: "white" }}>
+                  Mark all personal
+                </button>
+                <button onClick={() => setSelectedIds(new Set())}
+                  className="px-3 py-1 text-[11px] rounded-md"
+                  style={{ background: "transparent", color: "rgba(255,255,255,0.7)" }}>
+                  Cancel
+                </button>
+              </div>
+            )}
 
-            {/* ── Hidden (collapsible) ─────────────────────────────────── */}
+            {/* ── Transactions table ────────────────────────────────── */}
             <div style={CARD_STYLE}>
-              <button
-                onClick={() => setShowHidden((s) => !s)}
-                className="w-full flex items-center justify-between px-4 py-3 text-left"
-                style={{ background: "transparent", border: "none", cursor: "pointer" }}>
-                <span style={SECTION_HEADER_STYLE}>
-                  Hidden <span style={{ color: "var(--color-grey)", fontWeight: 400, marginLeft: 6 }}>{queue.hidden_count}</span>
-                </span>
-                <span className="text-[11px]" style={{ color: "var(--color-grey)" }}>
-                  {showHidden ? "Hide" : "Show"}
-                </span>
-              </button>
-              {showHidden && (
-                <div style={{ borderTop: "0.5px solid var(--color-border)" }}>
-                  {hidden.length === 0 ? (
-                    <p className="px-4 py-6 text-center text-[12px]" style={{ color: "var(--color-grey)" }}>Nothing hidden yet.</p>
-                  ) : hidden.map((tx, i) => {
-                    const acct = tx.bank_account;
-                    let label = "Personal";
-                    if (tx.linked_expense_id)       label = "Logged as expense";
-                    else if (tx.matched_invoice_id) label = "Matched to invoice";
-                    return (
-                      <div key={tx.id} className="flex items-center gap-3 px-4 py-2.5"
-                        style={{ borderTop: i > 0 ? "0.5px solid var(--color-border)" : "none" }}>
-                        <div style={{ minWidth: 80 }}>
-                          <p className="text-[12px] tabular-nums" style={{ color: "var(--color-grey)" }}>
-                            {Number(tx.amount) > 0 ? "+" : "−"}{fmtCurrency(Math.abs(Number(tx.amount)))}
-                          </p>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[12px] truncate" style={{ color: "var(--color-charcoal)" }}>
-                            {tx.details?.merchant_name ?? tx.description}
-                          </p>
-                          <p className="text-[10px] truncate" style={{ color: "var(--color-grey)" }}>
-                            {acct ? `${trimAccountName(acct.name)} ••${acct.last_four ?? ""}` : ""} · {fmtDate(tx.date)} · {label}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => {
-                            if (tx.matched_invoice_id) return unmatch(tx);
-                            if (tx.is_personal)        return unmarkPersonal(tx);
-                            // linked_expense_id case: we don't auto-delete
-                            // the expense; user can do that in Expenses tab.
-                            setError("Edit or delete the expense from the Expenses tab to undo.");
-                          }}
-                          className="px-2.5 py-1 text-[11px] rounded transition-colors"
-                          style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", background: "transparent" }}
-                          onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
-                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                          Undo
-                        </button>
-                      </div>
-                    );
-                  })}
+              {/* Column header */}
+              <div className="grid items-center px-4 py-2 text-[10px] font-semibold uppercase tracking-wider"
+                style={{
+                  gridTemplateColumns: "24px 56px 1fr 180px 80px 120px 18px",
+                  gap: 12,
+                  borderBottom: "0.5px solid var(--color-border)",
+                  color: "var(--color-grey)",
+                  background: "var(--color-warm-white)",
+                }}>
+                <span />
+                <span>Date</span>
+                <span>Name</span>
+                <span>Category</span>
+                <span>Actions</span>
+                <span style={{ textAlign: "right" }}>Amount</span>
+                <span />
+              </div>
+
+              {/* Body */}
+              {tableLoading && transactions.length === 0 && (
+                <div className="flex items-center justify-center gap-2 py-12 text-[12px]" style={{ color: "var(--color-grey)" }}>
+                  <Loader2 size={12} className="animate-spin" /> Loading…
                 </div>
               )}
+              {!tableLoading && transactions.length === 0 && (
+                <EmptyForFilter status={status} />
+              )}
+              {transactions.map((tx, i) => (
+                <TransactionRow
+                  key={tx.id}
+                  tx={tx}
+                  first={i === 0}
+                  expanded={expandedId === tx.id}
+                  selected={selectedIds.has(tx.id)}
+                  onToggleSelect={() => {
+                    setSelectedIds((s) => {
+                      const n = new Set(s);
+                      if (n.has(tx.id)) n.delete(tx.id); else n.add(tx.id);
+                      return n;
+                    });
+                  }}
+                  onToggleExpand={() => setExpandedId((id) => id === tx.id ? null : tx.id)}
+                  onMarkPersonal={() => markPersonal(tx, true)}
+                  onConvert={() => setConvertTarget(tx)}
+                  onMatch={(invoiceId) => matchInvoice(tx, invoiceId)}
+                  onUnmatch={() => unmatch(tx)}
+                  onUnmarkPersonal={() => markPersonal(tx, false)}
+                  onSaveNote={(note) => saveNote(tx, note)}
+                  onAttachReceipt={(file) => attachReceipt(tx, file)}
+                  onRemoveReceipt={() => removeReceipt(tx)}
+                  outstanding={outstanding}
+                />
+              ))}
+
+              {/* Pagination footer */}
+              <div className="flex items-center justify-between px-4 py-3 text-[11px]"
+                style={{ borderTop: "0.5px solid var(--color-border)", color: "var(--color-grey)" }}>
+                <span>
+                  {total === 0
+                    ? "No transactions"
+                    : `Showing ${pageStart}–${pageEnd} of ${total}`}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1 || tableLoading}
+                    className="w-7 h-7 flex items-center justify-center rounded-md transition-colors disabled:opacity-30"
+                    style={{ border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" }}>
+                    <ChevronRight size={12} style={{ transform: "rotate(180deg)" }} />
+                  </button>
+                  <span style={{ color: "var(--color-charcoal)" }}>
+                    Page {page} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages || tableLoading}
+                    className="w-7 h-7 flex items-center justify-center rounded-md transition-colors disabled:opacity-30"
+                    style={{ border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" }}>
+                    <ChevronRight size={12} />
+                  </button>
+                </div>
+              </div>
             </div>
           </>
         )}
       </div>
 
-      {/* ── Convert-to-expense modal ──────────────────────────────────── */}
+      {/* ── Snackbar ───────────────────────────────────────────────── */}
+      {snackbar && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2.5 rounded-lg text-[12px]"
+          style={{ background: "var(--color-charcoal)", color: "white", boxShadow: "0 8px 24px rgba(0,0,0,0.18)" }}>
+          <span>{snackbar.text}</span>
+          {snackbar.onUndo && (
+            <button onClick={snackbar.onUndo}
+              className="text-[11px] font-semibold uppercase tracking-wider"
+              style={{ color: "var(--color-sage)" }}>
+              Undo
+            </button>
+          )}
+          <button onClick={() => setSnackbar(null)} style={{ color: "rgba(255,255,255,0.6)" }}>
+            <X size={11} />
+          </button>
+        </div>
+      )}
+
+      {/* ── Convert-to-expense modal ────────────────────────────────── */}
       {convertTarget && (
         <AddExpenseModal
           projects={projects}
@@ -765,7 +894,7 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
           }}
           onSubmitOverride={(values) => submitConvert(convertTarget, values)}
           onClose={() => setConvertTarget(null)}
-          onCreated={() => { /* submitConvert already updated parent + queue */ }}
+          onCreated={() => { /* submitConvert already updated parent + table */ }}
         />
       )}
 
@@ -782,21 +911,456 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
   );
 }
 
-// ── Section card ─────────────────────────────────────────────────────────────
+// ── Filter pills ────────────────────────────────────────────────────────────
+// Matches the InvoicesTab list-pane pattern: filled charcoal when active,
+// quiet ghost otherwise. Kept inline (no new ui primitive).
 
-function Section({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
+function FilterPills<T extends string>({ value, options, onChange }: {
+  value:   T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+}) {
   return (
-    <div style={CARD_STYLE}>
-      <div className="px-4 py-3 flex items-center justify-between"
-        style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-        <span style={SECTION_HEADER_STYLE}>
-          {title}
-          {typeof count === "number" && count > 0 && (
-            <span style={{ color: "var(--color-grey)", fontWeight: 400, marginLeft: 6 }}>· {count}</span>
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((o) => {
+        const active = value === o.value;
+        return (
+          <button key={o.value} type="button" onClick={() => onChange(o.value)}
+            className="px-2.5 py-1 rounded-full text-[11px] transition-colors"
+            style={{
+              background: active ? "var(--color-charcoal)" : "rgba(31,33,26,0.06)",
+              color:      active ? "white" : "var(--color-grey)",
+              border:     "none",
+              fontWeight: active ? 600 : 400,
+            }}>
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Empty state per filter ──────────────────────────────────────────────────
+
+function EmptyForFilter({ status }: { status: StatusFilter }) {
+  const copy: Record<StatusFilter, string> = {
+    needs_review: "No transactions need review — you're caught up.",
+    all:          "No transactions yet. They'll show up here as your bank syncs.",
+    logged:       "No transactions have been logged as expenses yet.",
+    matched:      "No transactions matched to invoices yet.",
+    personal:     "No personal transactions hidden.",
+  };
+  return (
+    <p className="px-4 py-10 text-center text-[12px]" style={{ color: "var(--color-grey)" }}>
+      {copy[status]}
+    </p>
+  );
+}
+
+// ── Transaction row ─────────────────────────────────────────────────────────
+
+interface RowProps {
+  tx: BankTransaction;
+  first: boolean;
+  expanded: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
+  onToggleExpand: () => void;
+  onMarkPersonal: () => void;
+  onConvert:      () => void;
+  onMatch:        (invoiceId: string) => void;
+  onUnmatch:      () => void;
+  onUnmarkPersonal: () => void;
+  onSaveNote:       (note: string | null) => void;
+  onAttachReceipt:  (file: File) => void;
+  onRemoveReceipt:  () => void;
+  outstanding:      OutstandingInvoice[];
+}
+
+function TransactionRow({
+  tx, first, expanded, selected,
+  onToggleSelect, onToggleExpand,
+  onMarkPersonal, onConvert, onMatch, onUnmatch, onUnmarkPersonal,
+  onSaveNote, onAttachReceipt, onRemoveReceipt,
+  outstanding,
+}: RowProps) {
+  const amt        = Number(tx.amount);
+  const isCredit   = amt > 0;
+  const merchant   = tx.details?.merchant_name ?? tx.description;
+  const pending    = tx.status === "pending";
+  const primary    = tx.details?.personal_finance_category?.primary ?? null;
+  const cat        = categoryFor(primary);
+  const Icon       = ICON_REGISTRY[cat.icon] ?? Tag;
+  const acct       = tx.bank_account;
+  const hasNote    = !!tx.note;
+  const hasReceipt = !!tx.receipt_url;
+
+  // State chip overrides the category chip when the row is handled.
+  let stateChip: { label: string; bg: string; fg: string } | null = null;
+  if (tx.is_personal)             stateChip = { label: "Personal",                       bg: "rgba(31,33,26,0.06)",   fg: "var(--color-grey)" };
+  else if (tx.linked_expense_id)  stateChip = { label: "Logged",                          bg: "rgba(155,163,122,0.14)", fg: "var(--color-sage)" };
+  else if (tx.matched_invoice_id) stateChip = { label: "Matched",                         bg: "rgba(155,163,122,0.14)", fg: "var(--color-sage)" };
+
+  return (
+    <>
+      <div
+        className="grid items-center px-4 py-3 transition-colors"
+        style={{
+          gridTemplateColumns: "24px 56px 1fr 180px 80px 120px 18px",
+          gap: 12,
+          borderTop: first ? "none" : "0.5px solid var(--color-border)",
+          background: expanded ? "var(--color-surface-sunken)" : "transparent",
+          cursor: "pointer",
+        }}
+        onClick={onToggleExpand}
+        onMouseEnter={(e) => { if (!expanded) e.currentTarget.style.background = "rgba(31,33,26,0.025)"; }}
+        onMouseLeave={(e) => { if (!expanded) e.currentTarget.style.background = "transparent"; }}
+      >
+        {/* Checkbox */}
+        <span onClick={(e) => { e.stopPropagation(); onToggleSelect(); }}>
+          <input type="checkbox" checked={selected} readOnly
+            style={{ cursor: "pointer", accentColor: "var(--color-sage)" }} />
+        </span>
+
+        {/* Date */}
+        <span className="text-[12px] tabular-nums" style={{ color: "var(--color-grey)" }}>
+          {fmtShortDate(tx.date)}
+        </span>
+
+        {/* Name + pending */}
+        <span className="min-w-0">
+          <span className="text-[13px] font-medium truncate block" style={{ color: "var(--color-charcoal)" }}>
+            {merchant}
+            {pending && (
+              <span className="ml-2 text-[10px] font-normal" style={{ color: "#b8860b" }}>
+                • Pending
+              </span>
+            )}
+          </span>
+        </span>
+
+        {/* Category / state chip */}
+        <span>
+          {stateChip ? (
+            <Chip bg={stateChip.bg} fg={stateChip.fg} label={stateChip.label} />
+          ) : (
+            <Chip bg={cat.bg} fg={cat.fg} icon={Icon} label={cat.label} />
           )}
         </span>
+
+        {/* Actions */}
+        <span className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <button onClick={onToggleExpand}
+            title={hasNote ? "Edit note" : "Add note"}
+            className="relative w-7 h-7 flex items-center justify-center rounded-md transition-colors"
+            style={{ color: hasNote ? "var(--color-sage)" : "var(--color-grey)" }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+            <StickyNote size={13} />
+            {hasNote && (
+              <span style={{
+                position: "absolute", top: 5, right: 5,
+                width: 5, height: 5, borderRadius: "50%",
+                background: "var(--color-sage)",
+              }} />
+            )}
+          </button>
+          <button
+            onClick={tx.is_personal ? onUnmarkPersonal : onMarkPersonal}
+            title={tx.is_personal ? "Unmark personal" : "Mark personal"}
+            className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
+            style={{ color: tx.is_personal ? "var(--color-sage)" : "var(--color-grey)" }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+            <Ban size={13} />
+          </button>
+        </span>
+
+        {/* Amount */}
+        <span className="text-[13px] font-medium tabular-nums" style={{
+          textAlign: "right",
+          color: isCredit ? "var(--color-sage)" : "var(--color-charcoal)",
+        }}>
+          {isCredit ? "+" : "−"}{fmtCurrency(amt)}
+        </span>
+
+        {/* Chevron */}
+        <span style={{ color: "var(--color-grey)" }}>
+          <ChevronRight size={12} style={{
+            transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+            transition: "transform 0.12s ease",
+          }} />
+        </span>
       </div>
-      <div>{children}</div>
+
+      {expanded && (
+        <ExpandedRow
+          tx={tx}
+          acctLabel={acct ? `${acct.institution} ${acct.last_four ? `••${acct.last_four}` : ""}` : "Account"}
+          onConvert={onConvert}
+          onMarkPersonal={onMarkPersonal}
+          onUnmarkPersonal={onUnmarkPersonal}
+          onMatch={onMatch}
+          onUnmatch={onUnmatch}
+          onSaveNote={onSaveNote}
+          onAttachReceipt={onAttachReceipt}
+          onRemoveReceipt={onRemoveReceipt}
+          outstanding={outstanding}
+        />
+      )}
+    </>
+  );
+}
+
+function Chip({ bg, fg, icon: Icon, label }: {
+  bg: string; fg: string; icon?: React.ElementType; label: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] max-w-full"
+      style={{ background: bg, color: fg }}>
+      {Icon && <Icon size={11} strokeWidth={1.75} style={{ flexShrink: 0 }} />}
+      <span className="truncate">{label}</span>
+    </span>
+  );
+}
+
+// ── Expanded row ────────────────────────────────────────────────────────────
+
+interface ExpandedProps {
+  tx: BankTransaction;
+  acctLabel: string;
+  onConvert:        () => void;
+  onMarkPersonal:   () => void;
+  onUnmarkPersonal: () => void;
+  onMatch:          (invoiceId: string) => void;
+  onUnmatch:        () => void;
+  onSaveNote:       (note: string | null) => void;
+  onAttachReceipt:  (file: File) => void;
+  onRemoveReceipt:  () => void;
+  outstanding:      OutstandingInvoice[];
+}
+
+function ExpandedRow({
+  tx, acctLabel,
+  onConvert, onMarkPersonal, onUnmarkPersonal, onMatch, onUnmatch,
+  onSaveNote, onAttachReceipt, onRemoveReceipt,
+  outstanding,
+}: ExpandedProps) {
+  const [noteDraft, setNoteDraft] = useState<string>(tx.note ?? "");
+  const [chosenInvoice, setChosenInvoice] = useState<string>("");
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Keep the draft in sync when the row mutates from elsewhere.
+  useEffect(() => { setNoteDraft(tx.note ?? ""); }, [tx.note]);
+
+  const isHandled = tx.is_personal || !!tx.linked_expense_id || !!tx.matched_invoice_id;
+  const isCredit  = Number(tx.amount) > 0;
+
+  const isImageReceipt = tx.receipt_url
+    ? /\.(jpe?g|png|gif|webp)(\?|$)/i.test(tx.receipt_url)
+    : false;
+
+  async function pickFile(file: File) {
+    setUploadingReceipt(true);
+    try {
+      await onAttachReceipt(file);
+    } finally {
+      setUploadingReceipt(false);
+    }
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) void pickFile(file);
+  }
+
+  const invoiceOptions = [
+    { value: "", label: "Pick an outstanding invoice…" },
+    ...outstanding.map((i) => ({
+      value: i.id,
+      label: `#${i.number} · ${i.client} · ${fmtCurrency(i.total, { dp: 0 })}`,
+    })),
+  ];
+
+  return (
+    <div className="px-6 py-4"
+      style={{
+        borderTop: "0.5px solid var(--color-border)",
+        background: "var(--color-surface-sunken)",
+      }}>
+      <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        {/* Left column: metadata + note */}
+        <div className="flex flex-col gap-3 min-w-0">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--color-grey)" }}>
+              Details
+            </p>
+            <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>
+              {acctLabel} · {fmtLongDate(tx.date)} · {tx.status === "pending" ? "Pending" : "Posted"}
+            </p>
+            <p className="text-[12px] mt-1 break-words" style={{ color: "var(--color-charcoal)" }}>
+              {tx.description}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--color-grey)" }}>
+              Note
+            </p>
+            <textarea
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              onBlur={() => {
+                const next = noteDraft.trim() === "" ? null : noteDraft;
+                if (next !== (tx.note ?? null)) onSaveNote(next);
+              }}
+              placeholder="Add a note…"
+              rows={2}
+              className="w-full px-3 py-2 text-[12px] rounded-lg resize-none"
+              style={{
+                background: "var(--color-warm-white)",
+                border:     "0.5px solid var(--color-border)",
+                color:      "var(--color-charcoal)",
+                outline:    "none",
+                fontFamily: "inherit",
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Right column: receipt */}
+        <div className="flex flex-col gap-3 min-w-0">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--color-grey)" }}>
+              Receipt
+            </p>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp,application/pdf"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void pickFile(f);
+                if (fileRef.current) fileRef.current.value = "";
+              }}
+            />
+            {tx.receipt_url ? (
+              <div className="flex items-center gap-3 px-3 py-2 rounded-lg"
+                style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)" }}>
+                {isImageReceipt ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={tx.receipt_url} alt="Receipt"
+                    style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />
+                ) : (
+                  <span className="w-11 h-11 flex items-center justify-center rounded-md"
+                    style={{ background: "var(--color-cream)", color: "var(--color-grey)", flexShrink: 0 }}>
+                    <Paperclip size={16} />
+                  </span>
+                )}
+                <a href={tx.receipt_url} target="_blank" rel="noreferrer"
+                  className="flex-1 text-[12px] truncate"
+                  style={{ color: "var(--color-sage)", textDecoration: "none" }}>
+                  View receipt
+                </a>
+                <button onClick={onRemoveReceipt}
+                  className="w-7 h-7 flex items-center justify-center rounded-md"
+                  style={{ color: "var(--color-grey)" }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
+                  onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={onDrop}
+                disabled={uploadingReceipt}
+                className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-lg text-[12px] transition-colors"
+                style={{
+                  border:     `0.5px dashed ${dragOver ? "var(--color-sage)" : "var(--color-border)"}`,
+                  background: dragOver ? "rgba(155,163,122,0.08)" : "transparent",
+                  color:      "var(--color-grey)",
+                  cursor:     "pointer",
+                  fontFamily: "inherit",
+                }}>
+                <Paperclip size={12} />
+                {uploadingReceipt ? "Uploading…" : "Drop or click to upload receipt"}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Action row */}
+      <div className="flex items-center gap-2 mt-4 pt-3 flex-wrap"
+        style={{ borderTop: "0.5px solid var(--color-border)" }}>
+        {isHandled ? (
+          <>
+            {tx.is_personal && (
+              <button onClick={onUnmarkPersonal}
+                className="px-3 py-1.5 text-[11px] rounded-lg transition-colors"
+                style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
+                onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
+                onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+                Unmark personal
+              </button>
+            )}
+            {tx.matched_invoice_id && (
+              <button onClick={onUnmatch}
+                className="px-3 py-1.5 text-[11px] rounded-lg transition-colors"
+                style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
+                onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
+                onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+                Unmatch invoice
+              </button>
+            )}
+            {tx.linked_expense_id && (
+              <span className="text-[11px]" style={{ color: "var(--color-grey)" }}>
+                Edit or delete the expense from the Expenses tab to undo.
+              </span>
+            )}
+          </>
+        ) : (
+          <>
+            {!isCredit && (
+              <button onClick={onConvert}
+                className="px-3 py-1.5 text-[11px] font-medium rounded-lg text-white"
+                style={{ background: "var(--color-sage)" }}>
+                → Log expense
+              </button>
+            )}
+            <button onClick={onMarkPersonal}
+              className="px-3 py-1.5 text-[11px] rounded-lg transition-colors"
+              style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+              Mark personal
+            </button>
+            {isCredit && (
+              <div className="flex items-center gap-2 flex-1 min-w-[280px] max-w-[480px]">
+                <div className="flex-1">
+                  <Select value={chosenInvoice} onChange={setChosenInvoice} options={invoiceOptions} />
+                </div>
+                <button onClick={() => chosenInvoice && onMatch(chosenInvoice)}
+                  disabled={!chosenInvoice}
+                  className="px-3 py-1.5 text-[11px] font-medium rounded-lg text-white disabled:opacity-40"
+                  style={{ background: "var(--color-sage)" }}>
+                  Match
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
