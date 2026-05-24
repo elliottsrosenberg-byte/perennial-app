@@ -280,8 +280,10 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
           <InvoicesTab
             invoices={invoices}
             timeEntries={timeEntries}
+            expenses={expenses}
             projects={projects}
             onInvoiceUpdated={(inv) => setInvoices((prev) => prev.map((i) => i.id === inv.id ? inv : i))}
+            onInvoiceDeleted={(id) => setInvoices((prev) => prev.filter((i) => i.id !== id))}
             onInvoiceSent={handleInvoiceSent}
             onNewInvoice={() => setShowNewInvoice(true)}
           />
