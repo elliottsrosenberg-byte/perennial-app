@@ -31,7 +31,11 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
   const body = (await req.json().catch(() => null)) as {
-    manual_category?: ExpenseCategory | null;
+    manual_category?:   ExpenseCategory | null;
+    /** Optional UUID of a custom category from profiles.custom_categories.
+     *  When provided, the row's chip renders the custom label/colour.
+     *  Pass null to clear. */
+    manual_custom_id?:  string | null;
   } | null;
   if (!body || !("manual_category" in body)) {
     return NextResponse.json({ error: "manual_category is required" }, { status: 400 });
@@ -42,12 +46,25 @@ export async function PATCH(
     return NextResponse.json({ error: "invalid manual_category" }, { status: 400 });
   }
 
+  // Build the update payload. We only touch manual_custom_id when the
+  // client explicitly sends it — keeps the existing chip picker (which
+  // doesn't know about customs) from accidentally clearing the custom id
+  // when toggling between built-ins.
+  const patch: Record<string, unknown> = { manual_category: next };
+  if ("manual_custom_id" in body) {
+    const cid = body.manual_custom_id;
+    if (cid !== null && (typeof cid !== "string" || cid.length > 128)) {
+      return NextResponse.json({ error: "invalid manual_custom_id" }, { status: 400 });
+    }
+    patch.manual_custom_id = cid;
+  }
+
   const { data, error } = await supabase
     .from("bank_transactions")
-    .update({ manual_category: next })
+    .update(patch)
     .eq("id", id)
     .eq("user_id", user.id)
-    .select("id, manual_category")
+    .select("id, manual_category, manual_custom_id")
     .maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: "not_found" }, { status: 404 });
