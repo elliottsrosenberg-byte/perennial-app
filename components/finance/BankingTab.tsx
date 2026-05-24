@@ -1401,10 +1401,17 @@ function TransactionRow({
   // Plaid mapping. A muted "Manual" pip flags any user override.
   const customMatch = findCustom(customs, tx.manual_custom_id);
   const hasManual = !!tx.manual_category || !!customMatch;
+  // Built-in manual categories should render in their OWN palette
+  // (Travel = sage, Materials = warm-yellow, etc.) — not the Plaid
+  // category's palette, which was nearly always grey/neutral and
+  // washed every overridden chip out. BUILTIN_DISPLAY is the same
+  // palette the picker pills use, so the row chip and the picker
+  // selection now read the same color.
+  const builtin = tx.manual_category ? BUILTIN_DISPLAY[tx.manual_category as ExpenseCategory] : null;
   const displayCat = customMatch
     ? { label: customMatch.label, bg: tintForColor(customMatch.color), fg: customMatch.color, icon: Tag }
-    : tx.manual_category
-    ? { label: EXPENSE_CATEGORY_LABEL[tx.manual_category as ExpenseCategory], bg: plaidCat.bg, fg: plaidCat.fg, icon: PlaidIcon }
+    : builtin
+    ? { label: EXPENSE_CATEGORY_LABEL[tx.manual_category as ExpenseCategory], bg: builtin.bg, fg: builtin.fg, icon: builtin.icon }
     : { label: plaidCat.label, bg: plaidCat.bg, fg: plaidCat.fg, icon: PlaidIcon };
 
   // Personal is a state-chip but the user can now flip back to a normal
