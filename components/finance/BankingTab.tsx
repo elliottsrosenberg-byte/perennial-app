@@ -24,7 +24,10 @@ interface Transaction {
   description: string;
   date: string;
   status: string;
-  bank_account: { name: string; institution: string; last_four: string } | null;
+  // type/subtype come from the joined bank_accounts row so we can flip
+  // the displayed sign for credit-card accounts (where a positive Teller
+  // amount is a charge — money OUT — not income).
+  bank_account: { name: string; institution: string; last_four: string; type?: string; subtype?: string } | null;
 }
 
 function fmtCurrency(n: number) {
@@ -78,6 +81,11 @@ export default function BankingTab() {
   const [connecting,   setConnecting]   = useState(false);
   const [scriptReady,  setScriptReady]  = useState(false);
   const [error,        setError]        = useState<string | null>(null);
+  // After a fresh enrollment we open a small picker listing the just-
+  // linked accounts so the user can untick any they didn't want (Teller's
+  // own UI doesn't surface an account selector for every institution —
+  // Amex / Ally both auto-import all accounts on the enrollment).
+  const [justAddedIds, setJustAddedIds] = useState<string[] | null>(null);
 
   const appId = process.env.NEXT_PUBLIC_TELLER_APPLICATION_ID ?? "";
   const env   = process.env.NEXT_PUBLIC_TELLER_ENVIRONMENT ?? "sandbox";
@@ -152,14 +160,17 @@ export default function BankingTab() {
             }),
           });
           if (!res.ok) {
-            // Try JSON first (the server returns { error } on every failure
-            // path) then fall back to plain text so a Next 500 with an HTML
-            // body doesn't read as a network error.
             let body: string;
             try { body = (await res.json() as { error?: string }).error ?? `HTTP ${res.status}`; }
             catch { body = (await res.text()) || `HTTP ${res.status}`; }
             setError(body);
           } else {
+            // Pull the freshly-created accounts back so we can hand them
+            // to the picker. enroll returns { accounts: [...rows] } where
+            // each row has the new id from bank_accounts.
+            const json = (await res.json()) as { accounts?: { id: string }[] };
+            const newIds = (json.accounts ?? []).map(a => a.id);
+            if (newIds.length > 0) setJustAddedIds(newIds);
             await fetchData();
           }
         } catch (err) {
@@ -179,6 +190,27 @@ export default function BankingTab() {
     await fetch("/api/integrations/teller/accounts", { method: "DELETE" });
     setAccounts([]);
     setTransactions([]);
+  }
+
+  // Remove a single account (and its cached transactions). Optimistically
+  // drops the row from local state; on failure restores.
+  async function removeAccount(id: string) {
+    const prev = accounts;
+    const prevTx = transactions;
+    setAccounts((cs) => cs.filter(c => c.id !== id));
+    setTransactions((ts) => ts.filter(t => t.bank_account
+      ? // bank_account is a join, no id — filter by matching account
+        prev.some(a => a.id === id && a.name === t.bank_account?.name && a.last_four === t.bank_account?.last_four) ? false : true
+      : true,
+    ));
+    try {
+      const res = await fetch(`/api/integrations/teller/accounts?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("DELETE failed");
+      await fetchData();
+    } catch {
+      setAccounts(prev);
+      setTransactions(prevTx);
+    }
   }
 
   // Compute totals
@@ -296,7 +328,7 @@ export default function BankingTab() {
                 Accounts
               </div>
               {accounts.map((acct, i) => (
-                <div key={acct.id} className="flex items-center gap-3 px-4 py-3"
+                <div key={acct.id} className="group flex items-center gap-3 px-4 py-3"
                   style={{ borderBottom: i < accounts.length - 1 ? "0.5px solid var(--color-border)" : "none", background: "var(--color-off-white)" }}>
                   <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
                     style={{ background: "var(--color-cream)", color: "var(--color-grey)" }}>
@@ -321,6 +353,17 @@ export default function BankingTab() {
                       {acct.balance_updated_at ? `Updated ${fmtDate(acct.balance_updated_at.split("T")[0])}` : "available"}
                     </p>
                   </div>
+                  <button
+                    onClick={() => removeAccount(acct.id)}
+                    title="Remove this account"
+                    aria-label="Remove account"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity rounded p-1.5"
+                    style={{ color: "var(--color-grey)", background: "transparent", border: "none", cursor: "pointer" }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(220,62,13,0.08)"; e.currentTarget.style.color = "var(--color-red-orange)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-grey)"; }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                  </button>
                 </div>
               ))}
             </div>
@@ -333,29 +376,175 @@ export default function BankingTab() {
                   Recent transactions
                   <span className="text-[10px] font-normal" style={{ color: "var(--color-grey)" }}>{transactions.length} loaded</span>
                 </div>
-                {transactions.slice(0, 20).map((tx, i) => (
-                  <div key={tx.id} className="flex items-center gap-3 px-4 py-2.5"
-                    style={{ borderBottom: i < Math.min(19, transactions.length - 1) ? "0.5px solid var(--color-border)" : "none", background: "var(--color-off-white)" }}>
-                    <div className="w-2 h-2 rounded-full shrink-0"
-                      style={{ background: tx.type === "credit" ? "var(--color-sage)" : "rgba(31,33,26,0.2)" }} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[12px] font-medium truncate" style={{ color: "var(--color-charcoal)" }}>{tx.description}</p>
-                      <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>
-                        {tx.bank_account?.institution ?? ""} · {fmtDate(tx.date)}
-                        {tx.status === "pending" && <span style={{ color: "#b8860b" }}> · Pending</span>}
-                      </p>
+                {transactions.map((tx, i) => {
+                  // Teller's amount sign convention varies by account
+                  // type:
+                  //   - depository (checking/savings): + = deposit (money
+                  //     in), − = withdrawal
+                  //   - credit (cards): + = charge (money OUT, raises
+                  //     what you owe), − = payment to the card
+                  // Flip the displayed sign for credit accounts so the
+                  // user reads the entry the way they'd think about it:
+                  // a $25 Uber charge is −$25, a $500 payment to the
+                  // card is +$500.
+                  const isCredit  = tx.bank_account?.type === "credit";
+                  const moneyIn   = isCredit ? tx.amount < 0 : tx.amount > 0;
+                  const display   = (moneyIn ? "+" : "−") + fmtCurrency(Math.abs(tx.amount));
+                  const tone      = moneyIn ? "var(--color-sage)" : "var(--color-charcoal)";
+                  return (
+                    <div key={tx.id} className="flex items-center gap-3 px-4 py-2.5"
+                      style={{ borderBottom: i < transactions.length - 1 ? "0.5px solid var(--color-border)" : "none", background: "var(--color-off-white)" }}>
+                      <div className="w-2 h-2 rounded-full shrink-0"
+                        style={{ background: moneyIn ? "var(--color-sage)" : "rgba(31,33,26,0.2)" }} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-medium truncate" style={{ color: "var(--color-charcoal)" }}>{tx.description}</p>
+                        <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>
+                          {tx.bank_account?.institution ?? ""} · {fmtDate(tx.date)}
+                          {tx.status === "pending" && <span style={{ color: "#b8860b" }}> · Pending</span>}
+                        </p>
+                      </div>
+                      <span className="text-[13px] font-semibold shrink-0" style={{ color: tone }}>
+                        {display}
+                      </span>
                     </div>
-                    <span className="text-[13px] font-semibold shrink-0"
-                      style={{ color: tx.type === "credit" ? "var(--color-sage)" : "var(--color-charcoal)" }}>
-                      {tx.type === "credit" ? "+" : "−"}{fmtCurrency(Math.abs(tx.amount))}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>
         )}
       </div>
+
+      {/* Post-enrollment account picker — Teller's Connect UI doesn't
+          offer an account selector for many institutions (Amex / Ally
+          auto-import everything). This modal opens immediately after a
+          successful enroll, lists the just-linked accounts, and lets
+          the user untick any they don't want. Confirming deletes the
+          unticked ones via the per-account DELETE endpoint. */}
+      {justAddedIds && justAddedIds.length > 0 && (
+        <PostEnrollPicker
+          accounts={accounts.filter(a => justAddedIds.includes(a.id))}
+          onConfirm={async (keepIds) => {
+            const toRemove = justAddedIds.filter(id => !keepIds.includes(id));
+            for (const id of toRemove) {
+              await fetch(`/api/integrations/teller/accounts?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+            }
+            setJustAddedIds(null);
+            await fetchData();
+          }}
+          onCancel={() => setJustAddedIds(null)}
+        />
+      )}
     </>
+  );
+}
+
+// ── Post-enrollment account picker ───────────────────────────────────────────
+// Shown right after a successful Teller Connect flow. The user ticks the
+// accounts they want to keep; unticked ones get removed via the per-
+// account DELETE endpoint when they hit Done.
+
+function PostEnrollPicker({ accounts, onConfirm, onCancel }: {
+  accounts: BankAccount[];
+  onConfirm: (keepIds: string[]) => Promise<void> | void;
+  onCancel: () => void;
+}) {
+  const [keep,   setKeep]   = useState<Set<string>>(() => new Set(accounts.map(a => a.id)));
+  const [busy,   setBusy]   = useState(false);
+
+  function toggle(id: string) {
+    setKeep(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function confirm() {
+    if (busy) return;
+    setBusy(true);
+    try { await onConfirm(Array.from(keep)); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(31,33,26,0.45)", backdropFilter: "blur(4px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}
+    >
+      <div
+        className="rounded-2xl w-full max-w-md overflow-hidden"
+        style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 12px 40px rgba(0,0,0,0.2)" }}
+      >
+        <div className="px-5 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
+          <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--color-sage)" }}>
+            New connection
+          </p>
+          <h3 className="text-[15px] font-semibold mb-1" style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>
+            Which accounts to keep?
+          </h3>
+          <p className="text-[12px]" style={{ color: "var(--color-grey)" }}>
+            Untick anything you don't want in Perennial. You can always add them back later.
+          </p>
+        </div>
+
+        <div className="px-3 py-2 max-h-[50vh] overflow-y-auto">
+          {accounts.map((a) => {
+            const checked = keep.has(a.id);
+            return (
+              <label
+                key={a.id}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer"
+                style={{ background: checked ? "var(--color-cream)" : "transparent" }}
+                onMouseEnter={e => { if (!checked) e.currentTarget.style.background = "var(--color-warm-white)"; }}
+                onMouseLeave={e => { if (!checked) e.currentTarget.style.background = "transparent"; }}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggle(a.id)}
+                  style={{ accentColor: "var(--color-sage)" }}
+                />
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                  style={{ background: "var(--color-warm-white)", color: "var(--color-grey)" }}>
+                  {accountIcon(a.type, a.subtype)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium truncate" style={{ color: "var(--color-charcoal)" }}>
+                    {a.institution} {a.name}
+                  </p>
+                  <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>
+                    {a.subtype ? `${a.subtype.charAt(0).toUpperCase() + a.subtype.slice(1)} · ` : ""}
+                    ••••{a.last_four}
+                  </p>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+
+        <div className="flex justify-end gap-2 px-5 py-4" style={{ borderTop: "0.5px solid var(--color-border)" }}>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="px-4 py-2 text-[12px] rounded-lg"
+            style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}
+          >
+            Keep all
+          </button>
+          <button
+            type="button"
+            onClick={confirm}
+            disabled={busy}
+            className="px-4 py-2 text-[12px] font-medium rounded-lg text-white"
+            style={{ background: "var(--color-sage)", border: "none", cursor: "pointer", fontFamily: "inherit", opacity: busy ? 0.5 : 1 }}
+          >
+            {busy ? "Saving…" : `Keep ${keep.size} account${keep.size === 1 ? "" : "s"}`}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

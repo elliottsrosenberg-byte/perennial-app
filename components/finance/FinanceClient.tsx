@@ -228,8 +228,12 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
         </div>
       </header>
 
-      {/* Tab content */}
-      <div className="flex-1 overflow-hidden">
+      {/* Tab content — flex column so each tab's flex-1 child can
+          actually constrain its own height for scrolling. Without the
+          flex direction the child's flex-1 was no-op'd and tall content
+          (Banking transactions list) was being clipped by the parent's
+          overflow-hidden with no scrollbar. */}
+      <div className="flex-1 overflow-hidden flex flex-col">
         {activeTab === "overview" && (
           <OverviewTab
             timeEntries={timeEntries}
