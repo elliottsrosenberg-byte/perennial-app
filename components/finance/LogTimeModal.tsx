@@ -4,6 +4,8 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { TimeEntry, Project } from "@/types/database";
 import { X } from "lucide-react";
+import Select from "@/components/ui/Select";
+import DatePicker from "@/components/ui/DatePicker";
 
 interface Props {
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
@@ -74,10 +76,12 @@ export default function LogTimeModal({ projects, onClose, onCreated }: Props) {
           </div>
           <div>
             <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Project</label>
-            <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={inputCls} style={inputStyle}>
-              <option value="">No project</option>
-              {projects.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
-            </select>
+            <Select
+              value={projectId}
+              onChange={setProjectId}
+              options={[{ value: "", label: "No project" }, ...projects.map((p) => ({ value: p.id, label: p.title }))]}
+              placeholder="No project"
+            />
           </div>
           <div>
             <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Duration</label>
@@ -96,7 +100,13 @@ export default function LogTimeModal({ projects, onClose, onCreated }: Props) {
           </div>
           <div>
             <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Date</label>
-            <input type="date" value={loggedAt} onChange={(e) => setLoggedAt(e.target.value)} className={inputCls} style={inputStyle} />
+            <DatePicker
+              value={loggedAt ? new Date(loggedAt + "T12:00:00") : null}
+              onChange={(d) => {
+                const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const day = String(d.getDate()).padStart(2, "0");
+                setLoggedAt(`${y}-${m}-${day}`);
+              }}
+            />
           </div>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setBillable((v) => !v)}

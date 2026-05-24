@@ -4,6 +4,8 @@ import { useState, useMemo, useRef } from "react";
 import type { TimeEntry, ActiveTimer, Project } from "@/types/database";
 import { Clock } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
+import Select from "@/components/ui/Select";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 interface Props {
   timeEntries: TimeEntry[];
@@ -117,12 +119,14 @@ function StartTimerBar({ activeTimer, timerSeconds, projects, onStartTimer, onSt
         className="flex-1 text-[13px] bg-transparent border-none outline-none"
         style={{ color: "var(--color-charcoal)", fontFamily: "inherit" }}
       />
-      <select value={projectId} onChange={e => setProjectId(e.target.value)}
-        className="text-[11px] px-2.5 py-1.5 rounded-lg focus:outline-none shrink-0"
-        style={{ background: "var(--color-cream)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit", maxWidth: 140 }}>
-        <option value="">No project</option>
-        {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-      </select>
+      <div style={{ width: 140, flexShrink: 0 }}>
+        <Select
+          value={projectId}
+          onChange={setProjectId}
+          options={[{ value: "", label: "No project" }, ...projects.map(p => ({ value: p.id, label: p.title }))]}
+          placeholder="No project"
+        />
+      </div>
       <button type="button" onClick={() => setBillable(v => !v)}
         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] shrink-0 transition-colors"
         style={{ background: billableOn ? "rgba(61,107,79,0.08)" : "transparent", color: billableOn ? "var(--color-sage)" : "var(--color-grey)", border: `0.5px solid ${billableOn ? "rgba(61,107,79,0.2)" : "var(--color-border)"}` }}>
@@ -140,10 +144,12 @@ function StartTimerBar({ activeTimer, timerSeconds, projects, onStartTimer, onSt
   );
 }
 
-export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projects, onStopTimer, onStartTimer, onEntryCreated, onEntryDeleted, onLogTime }: Props) {
+export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projects, onStopTimer, onStartTimer, onEntryCreated: _onEntryCreated, onEntryDeleted, onLogTime }: Props) {
+  void _onEntryCreated;
   const [filterProject, setFilterProject] = useState("all");
   const [billableOnly, setBillableOnly]   = useState(false);
   const [weekOffset, setWeekOffset]       = useState(0);
+  const [pendingDelete, setPendingDelete] = useState<TimeEntry | null>(null);
 
   const weekAnchor = useMemo(() => {
     const d = new Date();
@@ -220,12 +226,13 @@ export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projec
 
       {/* Filter bar */}
       <div className="flex items-center gap-2">
-        <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)}
-          className="px-3 py-1.5 text-[11px] rounded-lg focus:outline-none"
-          style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" }}>
-          <option value="all">All projects</option>
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
-        </select>
+        <div style={{ width: 160 }}>
+          <Select
+            value={filterProject}
+            onChange={setFilterProject}
+            options={[{ value: "all", label: "All projects" }, ...projects.map((p) => ({ value: p.id, label: p.title }))]}
+          />
+        </div>
         <div className="flex items-center gap-1 rounded-lg overflow-hidden" style={{ border: "0.5px solid var(--color-border)" }}>
           <button onClick={() => setWeekOffset((v) => v - 1)}
             className="px-2.5 py-1.5 text-[11px] transition-colors"
@@ -338,7 +345,7 @@ export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projec
                   {fmtDuration(e.duration_minutes)}
                 </span>
                 <button
-                  onClick={() => { if (confirm("Delete this time entry?")) onEntryDeleted(e.id); }}
+                  onClick={() => setPendingDelete(e)}
                   className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded transition-opacity"
                   style={{ color: "var(--color-grey)", flexShrink: 0 }}
                   onMouseEnter={ev => ev.currentTarget.style.color = "var(--color-red-orange)"}
@@ -351,6 +358,16 @@ export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projec
           </div>
         ))}
       </div>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete time entry?"
+        body={pendingDelete ? `${fmtDuration(pendingDelete.duration_minutes)} on ${new Date(pendingDelete.logged_at + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })} will be permanently removed.` : ""}
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={() => { if (pendingDelete) { onEntryDeleted(pendingDelete.id); setPendingDelete(null); } }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }
