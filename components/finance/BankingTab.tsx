@@ -27,6 +27,7 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Menu from "@/components/ui/Menu";
 import Select from "@/components/ui/Select";
 import AddExpenseModal from "./AddExpenseModal";
+import BankingReports from "./BankingReports";
 import CustomizeCategoriesModal from "./CustomizeCategoriesModal";
 import type { BankAccount, BankTransaction, Expense, ExpenseCategory, Project } from "@/types/database";
 import { plaidCategoryToExpenseCategory } from "./plaidCategoryMap";
@@ -220,6 +221,12 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
   const [sort, setSort]         = useState<SortKey>("date_desc");
   const [page, setPage]         = useState(1);
   const pageSize = 20;
+
+  // In-tab subview toggle: Transactions (the unified table) vs Reports
+  // (the placeholder analytics shell). Kept local — there's no URL
+  // contract for these yet; if/when we want to deep-link into Reports,
+  // promote this to a search-param.
+  const [subTab, setSubTab] = useState<"transactions" | "reports">("transactions");
 
   // Per-row UI state
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -721,6 +728,11 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
                 : "Connect a bank to start triaging transactions"}
             </p>
           </div>
+          {/* Subtab toggle — only meaningful once accounts exist, so
+              suppress it until the empty state is dismissed. */}
+          {!loading && accounts.length > 0 && (
+            <SubTabToggle value={subTab} onChange={setSubTab} />
+          )}
           {/* Top-level ⋯ menu — sits where Sync / Disconnect used to live
               before they moved into the per-account cards. Currently
               houses the Customize categories action. */}
@@ -792,7 +804,11 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
           </div>
         )}
 
-        {!loading && accounts.length > 0 && (
+        {!loading && accounts.length > 0 && subTab === "reports" && (
+          <BankingReports />
+        )}
+
+        {!loading && accounts.length > 0 && subTab === "transactions" && (
           <>
             {/* ── Accounts strip ─────────────────────────────────────── */}
             {/* Each card carries its own ⋯ menu with Sync + Disconnect for
@@ -1231,6 +1247,55 @@ function AccountCard({ acct, syncing, onSync, onDisconnect }: AccountCardProps) 
         onConfirm={() => { setConfirmOpen(false); void onDisconnect(); }}
         onCancel={() => setConfirmOpen(false)}
       />
+    </div>
+  );
+}
+
+// ── Sub-tab toggle ──────────────────────────────────────────────────────────
+// Sits in the Banking header row to flip between the transactions table
+// and the Reports placeholder. Two segments, charcoal active fill — same
+// visual vocabulary as FilterPills below but pinned (not multi-select).
+
+function SubTabToggle({
+  value, onChange,
+}: {
+  value: "transactions" | "reports";
+  onChange: (v: "transactions" | "reports") => void;
+}) {
+  const options: { value: "transactions" | "reports"; label: string }[] = [
+    { value: "transactions", label: "Transactions" },
+    { value: "reports",      label: "Reports"      },
+  ];
+  return (
+    <div style={{
+      display: "inline-flex",
+      padding: 3,
+      borderRadius: 999,
+      background: "rgba(31,33,26,0.05)",
+      gap: 2,
+    }}>
+      {options.map((o) => {
+        const active = value === o.value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            style={{
+              all:        "unset",
+              padding:    "5px 12px",
+              borderRadius: 999,
+              fontSize:   11.5,
+              fontWeight: active ? 600 : 500,
+              color:      active ? "white" : "var(--color-grey)",
+              background: active ? "var(--color-charcoal)" : "transparent",
+              cursor:     "pointer",
+              transition: "background 0.1s ease, color 0.1s ease",
+            }}>
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
