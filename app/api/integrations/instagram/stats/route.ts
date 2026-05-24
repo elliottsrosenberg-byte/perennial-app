@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { readIntegrationSecret } from "@/lib/integrations/vault";
 
 // Fetches latest Instagram stats and updates the integration metadata
 export async function GET() {
@@ -14,7 +15,17 @@ export async function GET() {
     .eq("provider", "instagram")
     .maybeSingle();
 
-  if (!integration?.access_token) {
+  if (!integration) {
+    return NextResponse.json({ connected: false });
+  }
+
+  // Token lives in the vault (RPC integration_read_secret), not on the
+  // integrations row — the column was deprecated during the migration to
+  // SECURITY DEFINER token storage. Legacy reads of integration.access_token
+  // returned null for any new connection, which is why the stats fetch
+  // silently no-op'd and the dashboard rendered blank.
+  const token = await readIntegrationSecret(integration.id, "access_token");
+  if (!token) {
     return NextResponse.json({ connected: false });
   }
 
@@ -22,7 +33,6 @@ export async function GET() {
   // user_id; the rename happened during the IG Business Login migration).
   // Fall back to the old key so legacy rows still work without a backfill.
   const igId = integration.metadata?.ig_user_id ?? integration.metadata?.user_id;
-  const token = integration.access_token;
 
   if (!igId) {
     return NextResponse.json({ connected: true, error: "Missing Instagram user id on integration", metadata: integration.metadata }, { status: 422 });
