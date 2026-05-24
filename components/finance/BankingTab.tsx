@@ -12,7 +12,8 @@
 // The Plaid + Teller connect flows are carried over verbatim from the
 // segmented version; only the data layer and presentation are new.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Script from "next/script";
 import {
   ChevronRight, Loader2, MoreHorizontal, Paperclip, Plus, RefreshCw,
@@ -989,11 +990,43 @@ function AccountCard({ acct, syncing, onSync, onDisconnect }: AccountCardProps) 
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // Coordinates for the portal-mounted menu. Anchored to the trigger's
+  // bottom-right so the menu floats above the accounts strip's
+  // overflow-x-auto clip and never forces the strip to scroll.
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+
+  const reposition = useCallback(() => {
+    const t = triggerRef.current;
+    if (!t) return;
+    const rect = t.getBoundingClientRect();
+    setMenuPos({
+      top:   rect.bottom + 4,
+      right: window.innerWidth - rect.right,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!menuOpen) return;
+    reposition();
+    const onScroll = () => reposition();
+    const onResize = () => reposition();
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [menuOpen, reposition]);
 
   useEffect(() => {
     if (!menuOpen) return;
     const onDown = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setMenuOpen(false);
+      const target = e.target as Node;
+      const insideTrigger = triggerRef.current?.contains(target);
+      const insideMenu    = menuRef.current?.contains(target);
+      if (!insideTrigger && !insideMenu) setMenuOpen(false);
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
     window.addEventListener("mousedown", onDown);
@@ -1019,6 +1052,7 @@ function AccountCard({ acct, syncing, onSync, onDisconnect }: AccountCardProps) 
           for horizontal space, and quiet enough on idle that it doesn't
           read as a chip. Visible bg only when menu is open or hovered. */}
       <button
+        ref={triggerRef}
         type="button"
         onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); }}
         aria-label={`Options for ${acctLabel}`}
@@ -1050,26 +1084,29 @@ function AccountCard({ acct, syncing, onSync, onDisconnect }: AccountCardProps) 
           : acct.balance_current !== null ? fmtCurrency(acct.balance_current, { dp: 0 }) : "—"}
       </p>
 
-      {menuOpen && (
-        <Menu
-          items={[
-            {
-              label:    syncing ? "Syncing…" : "Sync this account",
-              icon:     RefreshCw,
-              disabled: syncing,
-              onClick:  () => { void onSync(); },
-            },
-            "divider",
-            {
-              label:   "Disconnect this account",
-              icon:    Unplug,
-              danger:  true,
-              onClick: () => setConfirmOpen(true),
-            },
-          ]}
-          onClose={() => setMenuOpen(false)}
-          style={{ position: "absolute", top: "calc(100% + 4px)", right: 6, minWidth: 180, zIndex: 20 }}
-        />
+      {menuOpen && menuPos && typeof document !== "undefined" && createPortal(
+        <div ref={menuRef}>
+          <Menu
+            items={[
+              {
+                label:    syncing ? "Syncing…" : "Sync this account",
+                icon:     RefreshCw,
+                disabled: syncing,
+                onClick:  () => { void onSync(); },
+              },
+              "divider",
+              {
+                label:   "Disconnect this account",
+                icon:    Unplug,
+                danger:  true,
+                onClick: () => setConfirmOpen(true),
+              },
+            ]}
+            onClose={() => setMenuOpen(false)}
+            style={{ position: "fixed", top: menuPos.top, right: menuPos.right, minWidth: 200, zIndex: 1000 }}
+          />
+        </div>,
+        document.body,
       )}
 
       <ConfirmDialog
