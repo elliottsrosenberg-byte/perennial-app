@@ -318,7 +318,7 @@ export default async function PublicInvoicePage({
               </div>
               <div className="pi-pay-amt">Amount due</div>
               <div className="pi-pay-amount">{fmtCurrency(total)}</div>
-              <PaymentSectionMount invoiceId={inv.id} token={token} amount={total} status={inv.status} />
+              <PaymentSectionMount invoiceId={inv.id} token={token} amount={total} status={inv.status} clientEmail={clientEmail} />
             </div>
           </aside>
         </div>
