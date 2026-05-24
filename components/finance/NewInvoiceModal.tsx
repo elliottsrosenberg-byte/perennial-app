@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Invoice, Project, Contact, TimeEntry, Expense } from "@/types/database";
-import { X, AlertTriangle, Clock, Receipt, Plus } from "lucide-react";
+import { X, AlertTriangle, Clock, Receipt, Plus, Check } from "lucide-react";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
 
@@ -60,6 +60,13 @@ export default function NewInvoiceModal({
   const [addEmail, setAddEmail]               = useState("");
   const [addBusy, setAddBusy]                 = useState(false);
   const [addError, setAddError]               = useState<string | null>(null);
+
+  // Inline rate setter — surfaces when the picked project has no rate set
+  // and there's billable time waiting on it.
+  const [projectRateOverrides, setProjectRateOverrides] = useState<Record<string, number>>({});
+  const [rateEditing, setRateEditing]         = useState(false);
+  const [rateDraft, setRateDraft]             = useState("");
+  const [rateSaving, setRateSaving]           = useState(false);
   const [issuedAt, setIssuedAt]               = useState(today);
   const [dueAt, setDueAt]                     = useState(addDays(today, 14));
   const [paymentTerms, setPaymentTerms]       = useState("Net 14");
@@ -74,7 +81,24 @@ export default function NewInvoiceModal({
   useEffect(() => {
     setExcludedTimeIds(new Set());
     setExcludedExpenseIds(new Set());
+    setRateEditing(false);
+    setRateDraft("");
   }, [projectId]);
+
+  async function saveProjectRate() {
+    if (!projectId) return;
+    const n = Number(rateDraft);
+    if (!Number.isFinite(n) || n < 0) return;
+    setRateSaving(true);
+    const { error: upErr } = await createClient()
+      .from("projects")
+      .update({ rate: n })
+      .eq("id", projectId);
+    setRateSaving(false);
+    if (upErr) return;
+    setProjectRateOverrides((prev) => ({ ...prev, [projectId]: n }));
+    setRateEditing(false);
+  }
 
   // Load every active contact once. Small payload (no joins) and lets the
   // picker render the grouping client-side with zero latency.
@@ -183,7 +207,12 @@ export default function NewInvoiceModal({
   }, [invoices]);
 
   const selectedProject = projects.find((p) => p.id === projectId);
-  const projectRate = Number(selectedProject?.rate ?? 0);
+  // Session-local overrides for project.rate edits made inline below. The
+  // override wins so the Ready-to-bill panel re-costs time as soon as the
+  // user hits Save — no need to re-fetch the project from upstream.
+  const projectRate = projectId && projectRateOverrides[projectId] !== undefined
+    ? projectRateOverrides[projectId]
+    : Number(selectedProject?.rate ?? 0);
   const rateMissing = !!projectId && projectRate === 0;
 
   // Uninvoiced billable time for the selected project.
@@ -336,11 +365,46 @@ export default function NewInvoiceModal({
             )}
           </div>
 
+          {/* Inline rate setter — only when the picked project has no rate
+              and there's billable time waiting on it. Saves projects.rate
+              and re-costs the preview without leaving the modal. */}
+          {projectId && rateMissing && uninvoicedTime.length > 0 && (
+            <RateInlinePanel
+              editing={rateEditing}
+              onEdit={() => { setRateDraft(""); setRateEditing(true); }}
+              rateDraft={rateDraft}
+              setRateDraft={setRateDraft}
+              onSave={saveProjectRate}
+              saving={rateSaving}
+            />
+          )}
+          {projectId && !rateMissing && projectRateOverrides[projectId] !== undefined && (
+            rateEditing ? (
+              <RateInlinePanel
+                editing
+                onEdit={() => { /* already editing */ }}
+                rateDraft={rateDraft}
+                setRateDraft={setRateDraft}
+                onSave={saveProjectRate}
+                saving={rateSaving}
+              />
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-[12px]"
+                style={{ background: "rgba(61,107,79,0.08)", border: "0.5px solid rgba(61,107,79,0.25)", color: "var(--color-sage-hover)" }}>
+                <Check size={12} />
+                <span>Rate set: <strong>{fmtMoney(projectRate)}/hr</strong></span>
+                <button type="button"
+                  onClick={() => { setRateDraft(String(projectRate)); setRateEditing(true); }}
+                  className="ml-auto text-[11px] underline"
+                  style={{ color: "var(--color-sage-hover)" }}>Change</button>
+              </div>
+            )
+          )}
+
           {/* Ready to bill — appears once a project is selected */}
           {projectId && (
             hasReady ? (
               <ReadyToBillPanel
-                rateMissing={rateMissing}
                 projectRate={projectRate}
                 uninvoicedTime={uninvoicedTime}
                 uninvoicedExpenses={uninvoicedExpenses}
@@ -444,14 +508,13 @@ export default function NewInvoiceModal({
 // ─── Ready-to-bill panel ─────────────────────────────────────────────────────
 
 function ReadyToBillPanel({
-  rateMissing, projectRate,
+  projectRate,
   uninvoicedTime, uninvoicedExpenses,
   excludedTimeIds, excludedExpenseIds,
   toggleTime, toggleExpense,
   timeTotalMinutes, timeTotalDollars, expenseTotal, grandTotal,
   includedTimeCount, includedExpenseCount,
 }: {
-  rateMissing: boolean;
   projectRate: number;
   uninvoicedTime: TimeEntry[];
   uninvoicedExpenses: Expense[];
@@ -476,17 +539,6 @@ function ReadyToBillPanel({
           {(grandTotal).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}
         </span>
       </div>
-
-      {/* Rate warning */}
-      {rateMissing && uninvoicedTime.length > 0 && (
-        <div className="flex items-start gap-2 px-4 py-2"
-          style={{ background: "rgba(220,153,13,0.08)", borderBottom: "0.5px solid var(--color-border)" }}>
-          <AlertTriangle size={11} style={{ color: "var(--color-dark-orange)", marginTop: 2, flexShrink: 0 }} />
-          <p className="text-[11px]" style={{ color: "var(--color-dark-orange)" }}>
-            Set a rate on this project to bill time. Time lines will use $0 for now.
-          </p>
-        </div>
-      )}
 
       {/* Time section */}
       {uninvoicedTime.length > 0 && (
@@ -580,6 +632,82 @@ function ReadyToBillPanel({
         <span className="text-[14px] font-semibold tabular-nums" style={{ color: "var(--color-charcoal)" }}>
           {fmtMoney(grandTotal)}
         </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Inline rate setter ─────────────────────────────────────────────────────
+// Surfaces inside the modal when the picked project has no hourly rate.
+// Saves projects.rate directly so the change persists, and the parent
+// re-costs the Ready-to-bill panel from the override on the same render.
+
+function RateInlinePanel({
+  editing, onEdit, rateDraft, setRateDraft, onSave, saving,
+}: {
+  editing: boolean;
+  onEdit: () => void;
+  rateDraft: string;
+  setRateDraft: (s: string) => void;
+  onSave: () => void;
+  saving: boolean;
+}) {
+  return (
+    <div className="rounded-xl p-3"
+      style={{ background: "rgba(220,153,13,0.08)", border: "0.5px solid rgba(220,153,13,0.35)" }}>
+      <div className="flex items-start gap-2">
+        <AlertTriangle size={12} style={{ color: "var(--color-dark-orange)", marginTop: 2, flexShrink: 0 }} />
+        <div className="flex-1">
+          <p className="text-[11px] mb-2" style={{ color: "var(--color-dark-orange)" }}>
+            This project has no hourly rate. Set one to bill time on this invoice.
+          </p>
+          {!editing ? (
+            <button type="button" onClick={onEdit}
+              className="px-3 py-1 text-[11px] font-medium rounded-md text-white"
+              style={{ background: "var(--color-sage)" }}>
+              Set rate
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 max-w-[160px]">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[12px]"
+                  style={{ color: "var(--color-grey)" }}>$</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  min={0}
+                  value={rateDraft}
+                  onChange={(e) => setRateDraft(e.target.value)}
+                  placeholder="0"
+                  autoFocus
+                  className="w-full pl-6 pr-12 py-1.5 text-[12px] rounded-md focus:outline-none rate-input"
+                  style={{
+                    background: "var(--color-warm-white)",
+                    border: "0.5px solid var(--color-border)",
+                    color: "var(--color-charcoal)",
+                  }}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onSave(); } }}
+                />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px]"
+                  style={{ color: "var(--color-grey)" }}>/hr</span>
+              </div>
+              <button type="button" onClick={onSave} disabled={saving || !rateDraft}
+                className="px-3 py-1 text-[11px] font-medium rounded-md text-white disabled:opacity-50"
+                style={{ background: "var(--color-sage)" }}>
+                {saving ? "Saving…" : "Save rate"}
+              </button>
+              {/* Strip native number spinners for a quieter look. */}
+              <style>{`
+                .rate-input::-webkit-outer-spin-button,
+                .rate-input::-webkit-inner-spin-button {
+                  -webkit-appearance: none; margin: 0;
+                }
+                .rate-input { -moz-appearance: textfield; }
+              `}</style>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
