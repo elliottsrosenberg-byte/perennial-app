@@ -782,59 +782,117 @@ function WebsiteTab({ integration, onConnect, onDisconnect }: {
       </div>
       <div style={{ padding:"22px 24px", display:"flex", flexDirection:"column", gap:18, flex:1 }}>
         {noData ? (
-          <div className={card()} style={{ ...cardStyle, padding:"32px 28px", display:"flex", flexDirection:"column", alignItems:"flex-start", gap:14, maxWidth:560 }}>
-            <div style={{ width:40, height:40, borderRadius:10, background:"rgba(155,163,122,0.14)", display:"flex", alignItems:"center", justifyContent:"center", color:"var(--color-sage)" }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
+          // Centered empty state, mirroring the brand EmptyState
+          // vocabulary used in other modules (icon → heading → body →
+          // primary + secondary actions → tips panel → tertiary text).
+          <div style={{
+            display:        "flex",
+            flexDirection:  "column",
+            alignItems:     "center",
+            justifyContent: "center",
+            textAlign:      "center",
+            margin:         "32px auto 0",
+            maxWidth:       480,
+            padding:        "40px 24px",
+          }}>
+            <div style={{
+              width:        56, height: 56, borderRadius: 16, marginBottom: 18,
+              background:   "var(--color-cream)",
+              border:       "0.5px solid var(--color-border)",
+              display:      "flex", alignItems: "center", justifyContent: "center",
+              color:        "var(--color-sage)",
+            }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
             </div>
-            <div>
-              <p style={{ fontSize:15, fontWeight:700, color:"var(--color-charcoal)", marginBottom:6 }}>Your GA4 property is connected, but hasn&apos;t received any traffic yet</p>
-              <p style={{ fontSize:12, color:"var(--color-grey)", lineHeight:1.6 }}>Add the GA4 measurement snippet to your website to start tracking sessions, top pages, and traffic channels.</p>
-            </div>
-            <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
+            <h3 style={{
+              fontSize: 15, fontWeight: 600, marginBottom: 8,
+              color:   "var(--color-charcoal)", fontFamily: "var(--font-display)",
+              lineHeight: 1.3,
+            }}>
+              No traffic yet
+            </h3>
+            <p style={{ fontSize: 12, lineHeight: 1.7, color: "var(--color-grey)", marginBottom: 20 }}>
+              Your GA4 property is connected, but hasn&apos;t received any traffic yet. Add the GA4 snippet to your site to start tracking sessions, top pages, and traffic channels.
+            </p>
+
+            {/* Primary + secondary CTAs */}
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", marginBottom: 14 }}>
               <a
                 href={guide.guideUrl}
                 target="_blank"
                 rel="noreferrer"
-                style={{ padding:"9px 18px", fontSize:13, fontWeight:500, borderRadius:8, border:"none", background:"var(--color-sage)", color:"white", textDecoration:"none", fontFamily:"inherit" }}
+                style={{
+                  padding:    "10px 20px", fontSize: 13, fontWeight: 500,
+                  borderRadius: 8, border: "none",
+                  background: "var(--color-sage)", color: "white",
+                  textDecoration: "none", fontFamily: "inherit",
+                }}
               >
                 {platform === "unknown"
                   ? "How to install GA4 →"
                   : `Install GA4 on ${guide.label} →`}
               </a>
+              <button
+                onClick={recheckStats}
+                disabled={loadingStats}
+                style={{
+                  padding:    "10px 20px", fontSize: 13, fontWeight: 500,
+                  borderRadius: 8, border: "0.5px solid var(--color-border)",
+                  background: "transparent", color: "var(--color-charcoal)",
+                  cursor: loadingStats ? "default" : "pointer", fontFamily: "inherit",
+                  opacity: loadingStats ? 0.6 : 1,
+                }}
+              >
+                {loadingStats ? "Checking…" : "Check now"}
+              </button>
               {guide.deepLinkUrl && guide.deepLinkLabel && (
                 <a
                   href={guide.deepLinkUrl}
                   target="_blank"
                   rel="noreferrer"
-                  style={{ padding:"9px 18px", fontSize:13, fontWeight:500, borderRadius:8, border:"0.5px solid var(--color-border)", background:"transparent", color:"var(--color-charcoal)", textDecoration:"none", fontFamily:"inherit" }}
+                  style={{
+                    padding:    "10px 20px", fontSize: 13, fontWeight: 500,
+                    borderRadius: 8, border: "0.5px solid var(--color-border)",
+                    background: "transparent", color: "var(--color-charcoal)",
+                    textDecoration: "none", fontFamily: "inherit",
+                  }}
                 >
                   {guide.deepLinkLabel}
                 </a>
               )}
-              <button
-                onClick={() => setStep("select_property")}
-                style={{ fontSize:12, color:"var(--color-grey)", background:"none", border:"none", cursor:"pointer", padding:"6px 4px", fontFamily:"inherit" }}
-              >
-                Wrong property?
-              </button>
             </div>
+
+            {/* Install steps — mirrors EmptyState's tips panel */}
             {guide.installSteps.length > 0 && (
-              <ol style={{ margin:0, paddingLeft:18, fontSize:11, color:"var(--color-charcoal)", lineHeight:1.7, background:"var(--color-cream)", borderRadius:6, padding:"10px 14px 10px 28px", listStylePosition:"outside" }}>
-                {guide.installSteps.map((s, i) => (
-                  <li key={i} style={{ marginBottom: i === guide.installSteps.length - 1 ? 0 : 2 }}>{s}</li>
-                ))}
-              </ol>
+              <div style={{
+                alignSelf: "stretch", marginBottom: 16,
+                background: "var(--color-off-white)",
+                border: "0.5px solid var(--color-border)",
+                borderRadius: 12, padding: "14px 16px 14px 32px",
+                textAlign: "left",
+              }}>
+                <ol style={{ margin: 0, paddingLeft: 0, fontSize: 12, color: "var(--color-charcoal)", lineHeight: 1.75 }}>
+                  {guide.installSteps.map((s, i) => (
+                    <li key={i} style={{ marginBottom: i === guide.installSteps.length - 1 ? 0 : 4 }}>{s}</li>
+                  ))}
+                </ol>
+              </div>
             )}
-            <div style={{ fontSize:11, color:"var(--color-grey)", lineHeight:1.6, marginTop:2 }}>
-              Already installed? It can take up to 24h for data to appear.{" "}
-              <button
-                onClick={recheckStats}
-                disabled={loadingStats}
-                style={{ color:"var(--color-sage)", background:"none", border:"none", cursor: loadingStats ? "default" : "pointer", padding:0, fontFamily:"inherit", fontSize:11, opacity: loadingStats ? 0.6 : 1 }}
-              >
-                {loadingStats ? "Re-checking…" : "Re-check now"}
-              </button>
-            </div>
+
+            {/* Tertiary footer text */}
+            <p style={{ fontSize: 11, color: "var(--color-grey)", lineHeight: 1.6, marginBottom: 6 }}>
+              It can take up to 24h for data to appear after install.
+            </p>
+            <button
+              onClick={() => setStep("select_property")}
+              style={{
+                fontSize: 11, color: "var(--color-sage)",
+                background: "none", border: "none", cursor: "pointer",
+                padding: 0, fontFamily: "inherit", textDecoration: "underline",
+              }}
+            >
+              Wrong property?
+            </button>
           </div>
         ) : (
         <>
@@ -1811,7 +1869,18 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 export default function PresenceClient({ initialOpportunities }: { initialOpportunities: Opportunity[] }) {
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTabState] = useState<Tab>("overview");
+
+  // Persist tab in the URL so reload + back/forward land on the same
+  // subtab the user was viewing. Without this, every reload hit the
+  // default "overview" because the URL was never updated on tab clicks.
+  const setTab = (next: Tab) => {
+    setTabState(next);
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    sp.set("tab", next);
+    window.history.replaceState({}, "", `${window.location.pathname}?${sp.toString()}`);
+  };
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [connectModal, setConnectModal] = useState<ConnectProvider | null>(null);
   const [deepLinkOppId, setDeepLinkOppId] = useState<string | null>(null);
