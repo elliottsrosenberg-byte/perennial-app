@@ -613,6 +613,23 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
   const pageStart  = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const pageEnd    = Math.min(page * pageSize, total);
 
+  // Balance rollups for the KPI strip. Cash uses available with a current
+  // fallback (Plaid's available reflects holds; not every account exposes
+  // it). Credit is rendered as money owed (positive) — the wire value is
+  // typically negative for cards, so absolute it.
+  const totalCash = useMemo(
+    () => accounts
+      .filter((a) => a.type === "depository")
+      .reduce((sum, a) => sum + (a.balance_available ?? a.balance_current ?? 0), 0),
+    [accounts],
+  );
+  const totalCredit = useMemo(
+    () => accounts
+      .filter((a) => a.type === "credit")
+      .reduce((sum, a) => sum + Math.abs(a.balance_current ?? 0), 0),
+    [accounts],
+  );
+
   const accountOptions = useMemo(() => ([
     { value: "all", label: "All accounts" },
     ...accounts.map((a) => ({
@@ -753,8 +770,15 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
             </div>
 
             {/* ── KPI cards ─────────────────────────────────────────── */}
-            <div className="grid grid-cols-3 gap-3 shrink-0">
+            {/* Five-up at typical widths so the eye reads
+                balances (cash / credit) → flow (in / out / net) left
+                to right. Cash sums depository.balance_available with
+                a current-balance fallback; credit sums |credit.current|
+                since the wire-level sign is negative (debt). */}
+            <div className="grid grid-cols-5 gap-3 shrink-0">
               {[
+                { label: "Total cash",     value: fmtCurrency(totalCash,     { dp: 0 }), color: "var(--color-sage)"     },
+                { label: "Total credit",   value: fmtCurrency(totalCredit,   { dp: 0 }), color: "#b8860b" },
                 { label: "In this month",  value: "+" + fmtCurrency(kpis.in_this_month,  { dp: 0 }), color: "var(--color-sage)" },
                 { label: "Out this month", value: "−" + fmtCurrency(kpis.out_this_month, { dp: 0 }), color: "var(--color-charcoal)" },
                 {
