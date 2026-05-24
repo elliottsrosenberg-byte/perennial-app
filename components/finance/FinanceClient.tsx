@@ -286,7 +286,17 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
             onNewInvoice={() => setShowNewInvoice(true)}
           />
         )}
-        {activeTab === "banking" && <BankingTab />}
+        {activeTab === "banking" && (
+          <BankingTab
+            projects={projects}
+            onExpenseCreated={(e) => setExpenses((prev) => [e, ...prev])}
+            onInvoiceMarkedPaid={(invoiceId, paidAt) =>
+              setInvoices((prev) => prev.map((inv) =>
+                inv.id === invoiceId ? { ...inv, status: "paid" as const, paid_at: paidAt } : inv,
+              ))
+            }
+          />
+        )}
       </div>
 
       {showLogTime && (
