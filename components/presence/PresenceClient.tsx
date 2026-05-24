@@ -6,6 +6,7 @@ import type { Opportunity } from "@/types/database";
 import PresenceIntroModal from "@/components/tour/presence/PresenceIntroModal";
 import PresenceTooltipTour from "@/components/tour/presence/PresenceTooltipTour";
 import { MoreHorizontal, Plus } from "lucide-react";
+import { detectHostingPlatform, guideFor } from "@/lib/presence/detectHostingPlatform";
 
 function openAsh(message: string) {
   window.dispatchEvent(new CustomEvent("open-ash", { detail: { message } }));
@@ -564,6 +565,28 @@ function WebsiteTab({ integration, onConnect, onDisconnect }: {
   const [stats, setStats]                   = useState<GA4Stats | null>(null);
   const [loadingStats, setLoadingStats]     = useState(false);
   const [propError, setPropError]           = useState<string | null>(null);
+  const [profileWebsite, setProfileWebsite] = useState<string | null>(null);
+
+  // Load profile.website once so the empty state can tailor install
+  // instructions to the user's hosting platform. Best-effort: if this
+  // fails or returns null we fall back to the generic Google guide.
+  useEffect(() => {
+    const supabase = createClient();
+    let cancelled = false;
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user || cancelled) return;
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("website")
+        .eq("user_id", data.user.id)
+        .maybeSingle();
+      if (!cancelled) setProfileWebsite((prof?.website as string | null) ?? null);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const platform = detectHostingPlatform(profileWebsite);
+  const guide    = guideFor(platform);
 
   // Detect OAuth callback redirect
   useEffect(() => {
@@ -769,13 +792,25 @@ function WebsiteTab({ integration, onConnect, onDisconnect }: {
             </div>
             <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
               <a
-                href="https://support.google.com/analytics/answer/9304153"
+                href={guide.guideUrl}
                 target="_blank"
                 rel="noreferrer"
                 style={{ padding:"9px 18px", fontSize:13, fontWeight:500, borderRadius:8, border:"none", background:"var(--color-sage)", color:"white", textDecoration:"none", fontFamily:"inherit" }}
               >
-                How to install GA4 →
+                {platform === "unknown"
+                  ? "How to install GA4 →"
+                  : `Install GA4 on ${guide.label} →`}
               </a>
+              {guide.deepLinkUrl && guide.deepLinkLabel && (
+                <a
+                  href={guide.deepLinkUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ padding:"9px 18px", fontSize:13, fontWeight:500, borderRadius:8, border:"0.5px solid var(--color-border)", background:"transparent", color:"var(--color-charcoal)", textDecoration:"none", fontFamily:"inherit" }}
+                >
+                  {guide.deepLinkLabel}
+                </a>
+              )}
               <button
                 onClick={() => setStep("select_property")}
                 style={{ fontSize:12, color:"var(--color-grey)", background:"none", border:"none", cursor:"pointer", padding:"6px 4px", fontFamily:"inherit" }}
@@ -783,6 +818,13 @@ function WebsiteTab({ integration, onConnect, onDisconnect }: {
                 Wrong property?
               </button>
             </div>
+            {guide.installSteps.length > 0 && (
+              <ol style={{ margin:0, paddingLeft:18, fontSize:11, color:"var(--color-charcoal)", lineHeight:1.7, background:"var(--color-cream)", borderRadius:6, padding:"10px 14px 10px 28px", listStylePosition:"outside" }}>
+                {guide.installSteps.map((s, i) => (
+                  <li key={i} style={{ marginBottom: i === guide.installSteps.length - 1 ? 0 : 2 }}>{s}</li>
+                ))}
+              </ol>
+            )}
             <div style={{ fontSize:11, color:"var(--color-grey)", lineHeight:1.6, marginTop:2 }}>
               Already installed? It can take up to 24h for data to appear.{" "}
               <button
