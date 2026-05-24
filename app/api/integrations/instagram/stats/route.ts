@@ -18,14 +18,23 @@ export async function GET() {
     return NextResponse.json({ connected: false });
   }
 
-  const igId = integration.metadata?.user_id;
+  // The OAuth callback writes metadata.ig_user_id (it used to write
+  // user_id; the rename happened during the IG Business Login migration).
+  // Fall back to the old key so legacy rows still work without a backfill.
+  const igId = integration.metadata?.ig_user_id ?? integration.metadata?.user_id;
   const token = integration.access_token;
+
+  if (!igId) {
+    return NextResponse.json({ connected: true, error: "Missing Instagram user id on integration", metadata: integration.metadata }, { status: 422 });
+  }
 
   // Fetch profile + follower count
   const profileRes = await fetch(
     `https://graph.instagram.com/${igId}?fields=id,username,followers_count,media_count&access_token=${token}`
   );
   if (!profileRes.ok) {
+    const body = await profileRes.text().catch(() => "");
+    console.error("[instagram/stats] profile fetch failed", profileRes.status, body);
     return NextResponse.json({ connected: true, error: "Failed to fetch stats", metadata: integration.metadata });
   }
 
