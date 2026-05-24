@@ -6,7 +6,7 @@ import type { Invoice, InvoiceLineItem, TimeEntry, Expense, Project } from "@/ty
 import EmptyState from "@/components/ui/EmptyState";
 import Menu from "@/components/ui/Menu";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import { X, Download, Send, FileText, MoreHorizontal, Plus, Clock, Receipt, CheckCircle2, Sparkles, ChevronDown } from "lucide-react";
+import { X, Download, Send, FileText, MoreHorizontal, Plus, Clock, Receipt, CheckCircle2, Sparkles, ChevronDown, Link2 } from "lucide-react";
 
 interface Props {
   invoices: Invoice[];
@@ -586,6 +586,12 @@ export default function InvoicesTab({
               </span>
             )}
 
+            {/* Public link affordance — only meaningful once the invoice
+                has been shared with the client (sent / overdue / paid). */}
+            {selectedInvoice.status !== "draft" && (
+              <CopyPublicLinkButton invoiceId={selectedInvoice.id} />
+            )}
+
             {/* Overflow menu */}
             <div ref={menuRef} style={{ position: "relative" }}>
               <button onClick={() => setMenuOpen((v) => !v)}
@@ -956,6 +962,85 @@ function PullMorePicker({
           Add
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Copy public link ─────────────────────────────────────────────────────────
+//
+// Hits the public-link endpoint to ensure the invoice has a token (minting
+// one if not), then copies the resulting /i/<token> URL to the clipboard.
+// Shows a short-lived "Copied!" pill so the user sees the action landed.
+
+function CopyPublicLinkButton({ invoiceId }: { invoiceId: string }) {
+  const [busy,    setBusy]    = useState(false);
+  const [toast,   setToast]   = useState<string | null>(null);
+
+  async function handleClick() {
+    if (busy) return;
+    setBusy(true);
+    setToast(null);
+    try {
+      const res = await fetch(`/api/finance/invoices/${invoiceId}/public-link`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const json = await res.json() as { url?: string; error?: string };
+      if (!res.ok || !json.url) {
+        setToast(json.error ?? "Could not generate link.");
+      } else {
+        try {
+          await navigator.clipboard.writeText(json.url);
+          setToast("Copied!");
+        } catch {
+          // Some browsers reject clipboard writes without a user gesture
+          // — the click counts but iframed previews can still fail.
+          setToast(json.url);
+        }
+      }
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Failed.");
+    } finally {
+      setBusy(false);
+      window.setTimeout(() => setToast(null), 2000);
+    }
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={busy}
+        title="Copy a public link the client can use to pay"
+        className="flex items-center gap-1.5 px-2.5 py-2 text-[11.5px] font-medium rounded-lg transition-colors"
+        style={{
+          color:      "var(--color-charcoal)",
+          background: "transparent",
+          border:     "0.5px solid var(--color-border)",
+          opacity:    busy ? 0.6 : 1,
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-warm-white)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+      >
+        <Link2 size={11} />
+        Copy public link
+      </button>
+      {toast && (
+        <span
+          className="absolute right-0 text-[10.5px] font-medium px-2 py-1 rounded-md"
+          style={{
+            top: "calc(100% + 6px)",
+            background: "var(--color-charcoal)",
+            color: "var(--color-warm-white)",
+            whiteSpace: "nowrap",
+            zIndex: 40,
+            boxShadow: "0 4px 12px rgba(31,33,26,0.18)",
+          }}
+        >
+          {toast}
+        </span>
+      )}
     </div>
   );
 }
