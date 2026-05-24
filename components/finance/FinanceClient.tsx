@@ -282,6 +282,8 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
           <BankingTab
             projects={projects}
             onExpenseCreated={(e) => setExpenses((prev) => [e, ...prev])}
+            onExpenseUpdated={(e) => setExpenses((prev) => prev.map((x) => x.id === e.id ? e : x))}
+            onExpenseDeleted={(id) => setExpenses((prev) => prev.filter((x) => x.id !== id))}
             onInvoiceMarkedPaid={(invoiceId, paidAt) =>
               setInvoices((prev) => prev.map((inv) =>
                 inv.id === invoiceId ? { ...inv, status: "paid" as const, paid_at: paidAt } : inv,
