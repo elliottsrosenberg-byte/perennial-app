@@ -607,6 +607,14 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
     if (!res.ok) {
       patchLocal(tx.id, { manual_category: prevCat, manual_custom_id: prevCid });
       setError("Couldn't update category.");
+      return;
+    }
+    // If the user is assigning a real category to a row that was marked
+    // personal, also un-mark personal. Otherwise the row stays hidden
+    // from rollups even though the user just picked a normal category —
+    // there was no path out of "personal" via the picker before.
+    if (tx.is_personal && next !== null) {
+      await markPersonal(tx, false);
     }
   }
 
@@ -1458,6 +1466,7 @@ function TransactionRow({
             customs={customs}
             onSelect={(c, cid) => onSetManualCategory(c, cid)}
             onSelectPersonal={onMarkPersonal}
+            onUnmarkPersonal={onUnmarkPersonal}
           />
         </span>
 
@@ -1519,7 +1528,8 @@ interface CategoryPickerChipProps {
   customs:   CustomCategory[];
   /** Pass (cat, null) for built-in, (cat, customId) for custom, (null, null) for Auto. */
   onSelect:  (c: ExpenseCategory | null, customId: string | null) => void;
-  onSelectPersonal: () => void;
+  onSelectPersonal:   () => void;
+  onUnmarkPersonal:   () => void;
 }
 
 // Display palette for built-in expense categories in the picker grid.
@@ -1534,7 +1544,7 @@ const BUILTIN_DISPLAY: Record<ExpenseCategory, { fg: string; bg: string; icon: R
 };
 
 function CategoryPickerChip({
-  tx, stateChip, displayCat, hasManual, customs, onSelect, onSelectPersonal,
+  tx, stateChip, displayCat, hasManual, customs, onSelect, onSelectPersonal, onUnmarkPersonal,
 }: CategoryPickerChipProps) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -1597,11 +1607,13 @@ function CategoryPickerChip({
             padding:      "10px 10px 8px",
             fontFamily:   "inherit",
           }}>
-          {/* Built-in + custom grid */}
+          {/* Built-in + custom list. Single column reads faster than the
+              prior 2-col grid for short option lists, and lets long
+              custom-category labels render without truncation. */}
           <div style={{
             display:             "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap:                 6,
+            gridTemplateColumns: "1fr",
+            gap:                 4,
           }}>
             {EXPENSE_CATEGORY_OPTIONS.map((opt) => {
               const active = tx.manual_category === opt.value && !tx.manual_custom_id;
@@ -1651,10 +1663,15 @@ function CategoryPickerChip({
 
           <div style={{ height: "0.5px", background: "var(--color-border)", margin: "8px 0 6px" }} />
 
-          {/* Personal — quieter ghost pill to keep its destructive-ish
-              meaning visually distinct from the categorization grid. */}
+          {/* Personal — quieter ghost pill kept visually distinct from the
+              category grid. When already personal, the button flips to
+              "Unmark personal" so the user has a path back out — the
+              previous "Mark as personal" copy was a dead end. */}
           <button type="button"
-            onClick={() => { onSelectPersonal(); setOpen(false); }}
+            onClick={() => {
+              if (tx.is_personal) onUnmarkPersonal(); else onSelectPersonal();
+              setOpen(false);
+            }}
             style={{
               all: "unset",
               display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
@@ -1673,7 +1690,7 @@ function CategoryPickerChip({
             onMouseEnter={(e) => { if (!tx.is_personal) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
             onMouseLeave={(e) => { if (!tx.is_personal) e.currentTarget.style.background = "transparent"; }}>
             <UserIcon size={11} strokeWidth={1.75} />
-            Mark as personal
+            {tx.is_personal ? "Unmark personal" : "Mark as personal"}
           </button>
         </div>
       )}
@@ -1921,8 +1938,8 @@ function ExpandedRow({
           <>
             {tx.is_personal && (
               <button onClick={onUnmarkPersonal}
-                className="px-3 py-1.5 text-[11px] rounded-lg transition-colors"
-                style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
+                className="px-3 py-1.5 text-[11px] transition-colors"
+                style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", borderRadius: 999 }}
                 onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
                 onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
                 Unmark personal
@@ -1930,8 +1947,8 @@ function ExpandedRow({
             )}
             {tx.matched_invoice_id && (
               <button onClick={onUnmatch}
-                className="px-3 py-1.5 text-[11px] rounded-lg transition-colors"
-                style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
+                className="px-3 py-1.5 text-[11px] transition-colors"
+                style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", borderRadius: 999 }}
                 onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
                 onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
                 Unmatch invoice
@@ -1947,14 +1964,14 @@ function ExpandedRow({
           <>
             {!isCredit && (
               <button onClick={onConvert}
-                className="px-3 py-1.5 text-[11px] font-medium rounded-lg text-white"
-                style={{ background: "var(--color-sage)" }}>
+                className="px-3 py-1.5 text-[11px] font-medium text-white"
+                style={{ background: "var(--color-sage)", borderRadius: 999 }}>
                 → Log expense
               </button>
             )}
             <button onClick={onMarkPersonal}
-              className="px-3 py-1.5 text-[11px] rounded-lg transition-colors"
-              style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
+              className="px-3 py-1.5 text-[11px] transition-colors"
+              style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", borderRadius: 999 }}
               onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
               onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
               Mark personal
@@ -1966,8 +1983,8 @@ function ExpandedRow({
                 </div>
                 <button onClick={() => chosenInvoice && onMatch(chosenInvoice)}
                   disabled={!chosenInvoice}
-                  className="px-3 py-1.5 text-[11px] font-medium rounded-lg text-white disabled:opacity-40"
-                  style={{ background: "var(--color-sage)" }}>
+                  className="px-3 py-1.5 text-[11px] font-medium text-white disabled:opacity-40"
+                  style={{ background: "var(--color-sage)", borderRadius: 999 }}>
                   Match
                 </button>
               </div>
