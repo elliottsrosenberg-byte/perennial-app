@@ -1008,27 +1008,34 @@ function AccountCard({ acct, syncing, onSync, onDisconnect }: AccountCardProps) 
 
   return (
     <div ref={wrapRef}
-      className="shrink-0 px-3 py-2.5 flex flex-col justify-between relative"
+      className="shrink-0 px-3 py-2.5 flex flex-col justify-between relative group"
       style={{
         ...CARD_STYLE,
         minWidth:  168,
         maxWidth:  208,
         minHeight: 68,
       }}>
-      <div className="flex items-start gap-2">
-        <p className="flex-1 text-[10px] uppercase tracking-wider truncate" style={{ color: "var(--color-grey)" }}>
+      {/* Absolute top-right so it doesn't fight the institution label
+          for horizontal space, and quiet enough on idle that it doesn't
+          read as a chip. Visible bg only when menu is open or hovered. */}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); }}
+        aria-label={`Options for ${acctLabel}`}
+        className="absolute flex items-center justify-center rounded transition-opacity opacity-0 group-hover:opacity-100"
+        style={{
+          top: 6, right: 6,
+          width: 18, height: 18,
+          color: "var(--color-grey)",
+          background: menuOpen ? "rgba(31,33,26,0.06)" : "transparent",
+          opacity: menuOpen ? 1 : undefined,
+        }}>
+        <MoreHorizontal size={11} />
+      </button>
+      <div className="flex items-start">
+        <p className="flex-1 text-[10px] uppercase tracking-wider truncate pr-5" style={{ color: "var(--color-grey)" }}>
           {acct.institution}
         </p>
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); }}
-          aria-label={`Options for ${acctLabel}`}
-          className="w-5 h-5 -mt-0.5 -mr-1 flex items-center justify-center rounded-md transition-colors"
-          style={{ color: "var(--color-grey)", background: menuOpen ? "var(--color-cream)" : "transparent" }}
-          onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
-          onMouseLeave={(e) => { if (!menuOpen) e.currentTarget.style.background = "transparent"; }}>
-          <MoreHorizontal size={12} />
-        </button>
       </div>
       <p className="text-[12px] font-medium truncate" style={{ color: "var(--color-charcoal)" }}>
         {trimAccountName(acct.name)}
