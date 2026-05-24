@@ -67,7 +67,7 @@ export async function GET() {
 
   const { data: transactions } = await supabase
     .from("bank_transactions")
-    .select("*, bank_account:bank_accounts(name, institution, last_four)")
+    .select("*, bank_account:bank_accounts(name, institution, last_four, type, subtype)")
     .eq("user_id", user.id)
     .order("date", { ascending: false })
     .limit(100);
