@@ -175,7 +175,17 @@ export default function InvoicesTab({
   const [menuOpen, setMenuOpen]               = useState(false);
   const [pullerOpen, setPullerOpen]           = useState(false);
   const [confirmDelete, setConfirmDelete]     = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
+  // Persist banner dismissal for the session so it doesn't re-appear every
+  // tab switch. sessionStorage is intentional — the next browser tab can
+  // remind them again.
+  const [bannerDismissed, setBannerDismissed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.sessionStorage.getItem("perennial:invoices:bannerDismissed") === "1";
+  });
+  function dismissBanner() {
+    setBannerDismissed(true);
+    try { window.sessionStorage.setItem("perennial:invoices:bannerDismissed", "1"); } catch {}
+  }
   const menuRef = useRef<HTMLDivElement>(null);
   const pullerRef = useRef<HTMLDivElement>(null);
 
@@ -428,7 +438,7 @@ export default function InvoicesTab({
                 style={{ color: "var(--color-sage)" }}>
                 Create
               </button>
-              <button onClick={() => setBannerDismissed(true)}
+              <button onClick={dismissBanner}
                 className="w-4 h-4 flex items-center justify-center" style={{ color: "var(--color-grey)" }}>
                 <X size={10} />
               </button>
@@ -441,13 +451,21 @@ export default function InvoicesTab({
             const st = STATUS_STYLE[statusKey];
             const total = invoiceTotal(inv);
             const isSelected = inv.id === selectedId;
+            // Left stripe carries status color so it's legible even when the
+            // row isn't selected. Selection widens the stripe (3px → reads as
+            // active without changing the row's chrome).
+            const stripeColor = overdue
+              ? "var(--color-red-orange)"
+              : inv.status === "paid" ? "var(--color-sage)"
+              : inv.status === "sent" ? "#2563ab"
+              : "var(--color-border)";
             return (
               <div key={inv.id}
                 className="px-4 py-3 cursor-pointer"
                 style={{
                   borderBottom: "0.5px solid var(--color-border)",
-                  background: isSelected ? "rgba(37,99,171,0.07)" : "transparent",
-                  borderLeft: isSelected ? "2px solid #2563ab" : "2px solid transparent",
+                  background: isSelected ? "rgba(31,33,26,0.04)" : "transparent",
+                  borderLeft: `${isSelected ? 3 : 2}px solid ${stripeColor}`,
                 }}
                 onClick={() => setSelectedId(inv.id)}>
                 <div className="flex items-center gap-1.5 mb-1">
