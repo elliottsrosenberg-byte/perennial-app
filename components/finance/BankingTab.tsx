@@ -192,12 +192,18 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 interface Props {
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
   onExpenseCreated:    (e: Expense) => void;
+  /** For the manual-expense + edit-linked-expense flows that mutate
+   *  the parent's expense cache. Both are no-ops for the create flow
+   *  driven by the inline "Save as expense" form (that one goes
+   *  through onExpenseCreated). */
+  onExpenseUpdated?:   (e: Expense) => void;
+  onExpenseDeleted?:   (id: string) => void;
   onInvoiceMarkedPaid: (invoiceId: string, paidAt: string) => void;
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
 
-export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarkedPaid }: Props) {
+export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdated, onExpenseDeleted, onInvoiceMarkedPaid }: Props) {
   const [accounts, setAccounts]                   = useState<BankAccount[]>([]);
   const [transactions, setTransactions]           = useState<BankTransaction[]>([]);
   const [total, setTotal]                         = useState(0);
@@ -230,8 +236,28 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
 
   // Per-row UI state
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // `convertTarget` is still here for parity (the AddExpenseModal-based
+  // log flow), but the new path is the inline form inside ExpandedRow.
+  // We keep the modal pathway dormant for now — useful as a fallback
+  // if the inline form ever proves too cramped on small viewports.
   const [convertTarget, setConvertTarget] = useState<BankTransaction | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // "+ Add manual expense" button in the header opens AddExpenseModal
+  // with no prefill. The created row goes through onExpenseCreated;
+  // it isn't linked to any bank_transaction so it never appears in the
+  // Banking table — it lives in the expenses cache and can still be
+  // pulled into an invoice via NewInvoiceModal.
+  const [manualExpenseOpen, setManualExpenseOpen] = useState(false);
+
+  // For editing the expense already linked to a bank row. We fetch the
+  // expense row on demand (rather than holding the full expenses array
+  // as a prop) so the BankingTab surface stays self-contained.
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [confirmDeleteExpense, setConfirmDeleteExpense] = useState<{
+    tx: BankTransaction;
+    expenseId: string;
+  } | null>(null);
 
   // User-defined custom categories (from profiles.custom_categories).
   // Merged with built-ins in the row picker and used by the chip renderer
@@ -577,6 +603,46 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
     return { expense };
   }
 
+  // Open AddExpenseModal in edit mode against the expense linked to
+  // this bank row. We do a tiny on-demand fetch instead of threading
+  // the parent's expenses array down — the modal owns the form state,
+  // so all we need is the row to seed it.
+  async function openEditLinkedExpense(tx: BankTransaction) {
+    if (!tx.linked_expense_id) return;
+    const supabase = createClient();
+    const { data, error: err } = await supabase
+      .from("expenses")
+      .select("*, project:projects(id, title, type, rate)")
+      .eq("id", tx.linked_expense_id)
+      .maybeSingle();
+    if (err || !data) {
+      setError("Couldn't load the linked expense.");
+      return;
+    }
+    setEditingExpense(data as Expense);
+  }
+
+  // Delete the expense + unlink the bank row in two steps. We don't
+  // wrap in a transaction (Supabase JS can't), so on the rare error
+  // between steps the user just sees the bank row still pointing at a
+  // (now-missing) expense — they can re-trigger the delete.
+  async function deleteLinkedExpense(tx: BankTransaction, expenseId: string) {
+    const supabase = createClient();
+    const { error: delErr } = await supabase
+      .from("expenses")
+      .delete()
+      .eq("id", expenseId);
+    if (delErr) { setError("Couldn't delete the expense."); return; }
+    const { error: linkErr } = await supabase
+      .from("bank_transactions")
+      .update({ linked_expense_id: null })
+      .eq("id", tx.id);
+    if (linkErr) { setError("Deleted the expense, but couldn't unlink the bank row — refreshing."); }
+    patchLocal(tx.id, { linked_expense_id: null });
+    onExpenseDeleted?.(expenseId);
+    setSnackbar({ text: "Expense deleted, bank row unlinked" });
+  }
+
   async function saveNote(tx: BankTransaction, note: string | null) {
     const prev = tx.note;
     patchLocal(tx.id, { note });
@@ -740,6 +806,34 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
               suppress it until the empty state is dismissed. */}
           {!loading && accounts.length > 0 && (
             <SubTabToggle value={subTab} onChange={setSubTab} />
+          )}
+          {/* "+ Add manual expense" — discreet ghost button sitting
+              between the subtab toggle and the ⋯ menu. For cash, mileage,
+              or anything that didn't hit a bank account. Opens
+              AddExpenseModal with no prefill; the resulting expense
+              isn't surfaced in the Banking table (no tx to attach to)
+              but is pullable into invoices via NewInvoiceModal. */}
+          {!loading && accounts.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setManualExpenseOpen(true)}
+              className="flex items-center gap-1.5 px-3 transition-colors"
+              style={{
+                height:        28,
+                borderRadius:  999,
+                fontSize:      11.5,
+                color:         "var(--color-grey)",
+                background:    "transparent",
+                border:        "0.5px solid var(--color-border)",
+                cursor:        "pointer",
+                fontFamily:    "inherit",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(31,33,26,0.04)"; e.currentTarget.style.color = "var(--color-charcoal)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-grey)"; }}
+            >
+              <Plus size={12} strokeWidth={1.75} />
+              Add manual expense
+            </button>
           )}
           {/* Top-level ⋯ menu — sits where Sync / Disconnect used to live
               before they moved into the per-account cards. Currently
@@ -1002,6 +1096,7 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
                   expanded={expandedId === tx.id}
                   selected={selectedIds.has(tx.id)}
                   customs={customs}
+                  projects={projects}
                   onToggleSelect={() => {
                     setSelectedIds((s) => {
                       const n = new Set(s);
@@ -1012,6 +1107,9 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
                   onToggleExpand={() => setExpandedId((id) => id === tx.id ? null : tx.id)}
                   onMarkPersonal={() => markPersonal(tx, true)}
                   onConvert={() => setConvertTarget(tx)}
+                  onSubmitInlineLog={(values) => submitConvert(tx, values)}
+                  onEditLinkedExpense={() => openEditLinkedExpense(tx)}
+                  onDeleteLinkedExpense={(expenseId) => setConfirmDeleteExpense({ tx, expenseId })}
                   onMatch={(invoiceId) => matchInvoice(tx, invoiceId)}
                   onUnmatch={() => unmatch(tx)}
                   onUnmarkPersonal={() => markPersonal(tx, false)}
@@ -1019,6 +1117,7 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
                   onAttachReceipt={(file) => attachReceipt(tx, file)}
                   onRemoveReceipt={() => removeReceipt(tx)}
                   onSetManualCategory={(c, cid) => setManualCategory(tx, c, cid)}
+                  onCollapse={() => setExpandedId(null)}
                   outstanding={outstanding}
                 />
               ))}
@@ -1088,7 +1187,47 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
         />
       )}
 
-      {/* ── Convert-to-expense modal ────────────────────────────────── */}
+      {/* ── Manual expense modal (header "+ Add manual expense") ──── */}
+      {manualExpenseOpen && (
+        <AddExpenseModal
+          projects={projects}
+          onClose={() => setManualExpenseOpen(false)}
+          onCreated={(e) => { onExpenseCreated(e); setSnackbar({ text: "Manual expense added" }); }}
+        />
+      )}
+
+      {/* ── Edit linked expense (from a "Logged as expense" row) ──── */}
+      {editingExpense && (
+        <AddExpenseModal
+          projects={projects}
+          expense={editingExpense}
+          onClose={() => setEditingExpense(null)}
+          onCreated={() => { /* unused in edit mode */ }}
+          onUpdated={(e) => { onExpenseUpdated?.(e); setSnackbar({ text: "Expense updated" }); }}
+        />
+      )}
+
+      {/* ── Confirm delete linked expense ──────────────────────────── */}
+      <ConfirmDialog
+        open={!!confirmDeleteExpense}
+        title="Delete this expense?"
+        body="The expense will be removed and this bank transaction will be un-logged so you can re-categorize it. Receipts uploaded to the expense will be detached."
+        confirmLabel="Delete expense"
+        tone="danger"
+        onConfirm={() => {
+          if (confirmDeleteExpense) {
+            void deleteLinkedExpense(confirmDeleteExpense.tx, confirmDeleteExpense.expenseId);
+          }
+          setConfirmDeleteExpense(null);
+        }}
+        onCancel={() => setConfirmDeleteExpense(null)}
+      />
+
+      {/* ── Convert-to-expense modal (legacy AddExpenseModal flow) ── */}
+      {/* Kept dormant — the new ExpandedRow uses an inline form instead.
+          This branch never fires from the current UI but stays mounted
+          for the rare future case where we want to pop a fuller modal
+          (e.g. attaching a receipt before saving). */}
       {convertTarget && (
         <AddExpenseModal
           projects={projects}
@@ -1363,10 +1502,24 @@ interface RowProps {
   expanded: boolean;
   selected: boolean;
   customs: CustomCategory[];
+  projects: Pick<Project, "id" | "title" | "type" | "rate">[];
   onToggleSelect: () => void;
   onToggleExpand: () => void;
   onMarkPersonal: () => void;
+  /** Legacy modal-based convert flow (currently dormant). */
   onConvert:      () => void;
+  /** New inline log workflow — drives the "Save as expense" button
+   *  inside ExpandedRow. Returns the convert-to-expense response so
+   *  the form can surface errors and reset its busy state. */
+  onSubmitInlineLog: (values: {
+    project_id:  string | null;
+    description: string;
+    category:    ExpenseCategory;
+    amount:      number;
+    date:        string;
+  }) => Promise<{ expense: Expense } | { error: string }>;
+  onEditLinkedExpense:   () => void;
+  onDeleteLinkedExpense: (expenseId: string) => void;
   onMatch:        (invoiceId: string) => void;
   onUnmatch:      () => void;
   onUnmarkPersonal: () => void;
@@ -1376,15 +1529,18 @@ interface RowProps {
   /** When `customId` is provided the row chip renders the custom's
    *  label/colour; `category` is the built-in we route persistence to. */
   onSetManualCategory: (c: ExpenseCategory | null, customId?: string | null) => void;
+  onCollapse:       () => void;
   outstanding:      OutstandingInvoice[];
 }
 
 function TransactionRow({
-  tx, first, expanded, selected, customs,
+  tx, first, expanded, selected, customs, projects,
   onToggleSelect, onToggleExpand,
-  onMarkPersonal, onConvert, onMatch, onUnmatch, onUnmarkPersonal,
+  onMarkPersonal, onConvert, onSubmitInlineLog,
+  onEditLinkedExpense, onDeleteLinkedExpense,
+  onMatch, onUnmatch, onUnmarkPersonal,
   onSaveNote, onAttachReceipt, onRemoveReceipt, onSetManualCategory,
-  outstanding,
+  onCollapse, outstanding,
 }: RowProps) {
   const amt        = Number(tx.amount);
   const isCredit   = amt > 0;
@@ -1497,8 +1653,13 @@ function TransactionRow({
       {expanded && (
         <ExpandedRow
           tx={tx}
+          projects={projects}
+          displayCat={displayCat}
           acctLabel={acct ? `${acct.institution} ${acct.last_four ? `••${acct.last_four}` : ""}` : "Account"}
           onConvert={onConvert}
+          onSubmitInlineLog={onSubmitInlineLog}
+          onEditLinkedExpense={onEditLinkedExpense}
+          onDeleteLinkedExpense={onDeleteLinkedExpense}
           onMarkPersonal={onMarkPersonal}
           onUnmarkPersonal={onUnmarkPersonal}
           onMatch={onMatch}
@@ -1506,6 +1667,7 @@ function TransactionRow({
           onSaveNote={onSaveNote}
           onAttachReceipt={onAttachReceipt}
           onRemoveReceipt={onRemoveReceipt}
+          onCollapse={onCollapse}
           outstanding={outstanding}
         />
       )}
@@ -1767,8 +1929,23 @@ function Chip({ bg, fg, icon: Icon, label }: {
 
 interface ExpandedProps {
   tx: BankTransaction;
+  projects: Pick<Project, "id" | "title" | "type" | "rate">[];
+  /** Pre-resolved category chip (built-in/custom/Plaid fallback) used
+   *  to render the "Category" confirm chip inside the inline log form,
+   *  so the user sees the same chip they'd click on the row. */
+  displayCat: { label: string; bg: string; fg: string; icon: React.ElementType };
   acctLabel: string;
+  /** Legacy modal-based log flow (dormant; see Props.onConvert). */
   onConvert:        () => void;
+  onSubmitInlineLog: (values: {
+    project_id:  string | null;
+    description: string;
+    category:    ExpenseCategory;
+    amount:      number;
+    date:        string;
+  }) => Promise<{ expense: Expense } | { error: string }>;
+  onEditLinkedExpense:   () => void;
+  onDeleteLinkedExpense: (expenseId: string) => void;
   onMarkPersonal:   () => void;
   onUnmarkPersonal: () => void;
   onMatch:          (invoiceId: string) => void;
@@ -1776,14 +1953,17 @@ interface ExpandedProps {
   onSaveNote:       (note: string | null) => void;
   onAttachReceipt:  (file: File) => void;
   onRemoveReceipt:  () => void;
+  onCollapse:       () => void;
   outstanding:      OutstandingInvoice[];
 }
 
 function ExpandedRow({
-  tx, acctLabel,
-  onConvert, onMarkPersonal, onUnmarkPersonal, onMatch, onUnmatch,
+  tx, projects, displayCat, acctLabel,
+  onConvert: _onConvert,
+  onSubmitInlineLog, onEditLinkedExpense, onDeleteLinkedExpense,
+  onMarkPersonal, onUnmarkPersonal, onMatch, onUnmatch,
   onSaveNote, onAttachReceipt, onRemoveReceipt,
-  outstanding,
+  onCollapse, outstanding,
 }: ExpandedProps) {
   const [noteDraft, setNoteDraft] = useState<string>(tx.note ?? "");
   const [chosenInvoice, setChosenInvoice] = useState<string>("");
@@ -1794,8 +1974,30 @@ function ExpandedRow({
   // Keep the draft in sync when the row mutates from elsewhere.
   useEffect(() => { setNoteDraft(tx.note ?? ""); }, [tx.note]);
 
-  const isHandled = tx.is_personal || !!tx.linked_expense_id || !!tx.matched_invoice_id;
   const isCredit  = Number(tx.amount) > 0;
+  const isLogged  = !!tx.linked_expense_id;
+  // "Show the inline log workflow" — applies to debits that haven't
+  // been logged yet and aren't marked personal. Credits keep their
+  // existing invoice-match flow; personal rows keep theirs too.
+  const showInlineLog = !isCredit && !isLogged && !tx.is_personal;
+
+  // ── Inline log form state ──
+  // Defaults: description = merchant_name || description || a
+  // human-readable fallback so the field is never empty (the bank may
+  // ship a bare amount-only row with no description on rare merchants).
+  const initialDescription =
+    (tx.details?.merchant_name ?? tx.description ?? "").trim()
+    || `Bank transaction · ${tx.date}`;
+  const [logDescription, setLogDescription] = useState(initialDescription);
+  const [logBillable,    setLogBillable]    = useState(false);
+  const [logProjectId,   setLogProjectId]   = useState<string>("");
+  const [logSaving,      setLogSaving]      = useState(false);
+  const [logError,       setLogError]       = useState<string | null>(null);
+
+  // Re-seed when the underlying row mutates (e.g. user picked a new
+  // category from the chip → category prop changes → form should
+  // reflect that on re-mount of the expanded view).
+  useEffect(() => { setLogDescription(initialDescription); }, [initialDescription]);
 
   const isImageReceipt = tx.receipt_url
     ? /\.(jpe?g|png|gif|webp)(\?|$)/i.test(tx.receipt_url)
@@ -1938,67 +2140,203 @@ function ExpandedRow({
         </div>
       </div>
 
-      {/* Action row */}
-      <div className="flex items-center gap-2 mt-4 pt-3 flex-wrap"
-        style={{ borderTop: "0.5px solid var(--color-border)" }}>
-        {isHandled ? (
-          <>
-            {tx.is_personal && (
-              <button onClick={onUnmarkPersonal}
-                className="px-3 py-1.5 text-[11px] transition-colors"
-                style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", borderRadius: 999 }}
-                onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
-                onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-                Unmark personal
-              </button>
-            )}
-            {tx.matched_invoice_id && (
-              <button onClick={onUnmatch}
-                className="px-3 py-1.5 text-[11px] transition-colors"
-                style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", borderRadius: 999 }}
-                onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
-                onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-                Unmatch invoice
-              </button>
-            )}
-            {tx.linked_expense_id && (
-              <span className="text-[11px]" style={{ color: "var(--color-grey)" }}>
-                Edit or delete the expense from the Expenses tab to undo.
-              </span>
-            )}
-          </>
-        ) : (
-          <>
-            {!isCredit && (
-              <button onClick={onConvert}
-                className="px-3 py-1.5 text-[11px] font-medium text-white"
-                style={{ background: "var(--color-sage)", borderRadius: 999 }}>
-                → Log expense
-              </button>
-            )}
+      {/* Inline log form — the heart of the new Banking-as-expense-surface
+          design. Renders for unlogged, non-personal debits. Category is
+          implicit (already pickable via the row chip above) — we surface
+          it here as a read-only confirmation chip with a hint to use the
+          chip to change it, so the user doesn't have two pickers fighting
+          for the same field. Project becomes required when Billable is
+          checked. */}
+      {showInlineLog && (
+        <div className="mt-4 pt-4 flex flex-col gap-3"
+          style={{ borderTop: "0.5px solid var(--color-border)" }}>
+          <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider mb-1.5" style={{ color: "var(--color-grey)" }}>
+                Category
+              </label>
+              <div className="flex items-center gap-2">
+                <Chip bg={displayCat.bg} fg={displayCat.fg} icon={displayCat.icon} label={displayCat.label} />
+                <span className="text-[10.5px]" style={{ color: "var(--color-grey)" }}>
+                  Use the chip above to change.
+                </span>
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider mb-1.5" style={{ color: "var(--color-grey)" }}>
+                Description
+              </label>
+              <input
+                type="text"
+                value={logDescription}
+                onChange={(e) => setLogDescription(e.target.value)}
+                placeholder="What this was for"
+                className="w-full px-3 py-1.5 text-[12px] rounded-lg"
+                style={{
+                  background: "var(--color-warm-white)",
+                  border:     "0.5px solid var(--color-border)",
+                  color:      "var(--color-charcoal)",
+                  outline:    "none",
+                  fontFamily: "inherit",
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-3 items-end" style={{ gridTemplateColumns: "auto 1fr" }}>
+            <label className="flex items-center gap-2 text-[11.5px] select-none"
+              style={{ color: "var(--color-charcoal)", cursor: "pointer", paddingBottom: 6 }}>
+              <input
+                type="checkbox"
+                checked={logBillable}
+                onChange={(e) => setLogBillable(e.target.checked)}
+                style={{ accentColor: "var(--color-sage)", cursor: "pointer" }}
+              />
+              This is a billable client expense
+            </label>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider mb-1.5" style={{ color: "var(--color-grey)" }}>
+                Project {logBillable && <span style={{ color: "var(--color-red-orange)" }}>*</span>}
+              </label>
+              <Select
+                value={logProjectId}
+                onChange={setLogProjectId}
+                options={[
+                  { value: "", label: logBillable ? "Pick a project…" : "None (unattached)" },
+                  ...projects.map((p) => ({ value: p.id, label: p.title })),
+                ]}
+              />
+            </div>
+          </div>
+
+          {logError && (
+            <p className="text-[11px]" style={{ color: "var(--color-red-orange)" }}>{logError}</p>
+          )}
+
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              disabled={logSaving || !logDescription.trim() || (logBillable && !logProjectId)}
+              onClick={async () => {
+                setLogError(null);
+                setLogSaving(true);
+                // Resolve the category exactly the way the chip resolves
+                // it: explicit manual_category wins, otherwise we fall
+                // back to the Plaid map (which itself defaults to "other"
+                // when unmapped). Custom categories route through their
+                // built-in target (kept on tx.manual_category), so this
+                // covers both branches.
+                const resolvedCategory: ExpenseCategory = tx.manual_category
+                  ?? plaidCategoryToExpenseCategory(tx.details?.personal_finance_category?.primary ?? null);
+                const result = await onSubmitInlineLog({
+                  project_id:  logProjectId || null,
+                  description: logDescription.trim(),
+                  category:    resolvedCategory,
+                  amount:      Math.abs(Number(tx.amount)),
+                  date:        tx.date,
+                });
+                setLogSaving(false);
+                if ("error" in result) { setLogError(result.error); return; }
+                // On success the parent flips tx.linked_expense_id, which
+                // re-renders this expanded view into the "Logged" branch.
+              }}
+              className="px-4 py-1.5 text-[11.5px] font-medium text-white disabled:opacity-40"
+              style={{ background: "var(--color-sage)", borderRadius: 999, cursor: logSaving ? "wait" : "pointer", border: "none" }}>
+              {logSaving ? "Saving…" : "Save as expense"}
+            </button>
+            <button
+              type="button"
+              onClick={onCollapse}
+              className="px-3 py-1.5 text-[11.5px] transition-colors"
+              style={{ color: "var(--color-grey)", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+              onMouseEnter={(e) => e.currentTarget.style.color = "var(--color-charcoal)"}
+              onMouseLeave={(e) => e.currentTarget.style.color = "var(--color-grey)"}>
+              Cancel
+            </button>
+            <div className="flex-1" />
             <button onClick={onMarkPersonal}
               className="px-3 py-1.5 text-[11px] transition-colors"
-              style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", borderRadius: 999 }}
+              style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", borderRadius: 999, background: "transparent", cursor: "pointer" }}
               onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
               onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-              Mark personal
+              Mark personal instead
             </button>
-            {isCredit && (
-              <div className="flex items-center gap-2 flex-1 min-w-[280px] max-w-[480px]">
-                <div className="flex-1">
-                  <Select value={chosenInvoice} onChange={setChosenInvoice} options={invoiceOptions} />
-                </div>
-                <button onClick={() => chosenInvoice && onMatch(chosenInvoice)}
-                  disabled={!chosenInvoice}
-                  className="px-3 py-1.5 text-[11px] font-medium text-white disabled:opacity-40"
-                  style={{ background: "var(--color-sage)", borderRadius: 999 }}>
-                  Match
-                </button>
+          </div>
+        </div>
+      )}
+
+      {/* Logged-as-expense panel — quieter header + Edit / Delete
+          affordances for the linked expense. The old copy "Edit or
+          delete from the Expenses tab" is gone with the tab. */}
+      {isLogged && (
+        <div className="mt-4 pt-3 flex items-center gap-2 flex-wrap"
+          style={{ borderTop: "0.5px solid var(--color-border)" }}>
+          <span className="inline-flex items-center gap-1.5 text-[11.5px]" style={{ color: "var(--color-sage)" }}>
+            <span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--color-sage)" }} />
+            Logged as expense
+          </span>
+          <div className="flex-1" />
+          <button
+            type="button"
+            onClick={onEditLinkedExpense}
+            className="px-3 py-1.5 text-[11px] transition-colors"
+            style={{ color: "var(--color-charcoal)", border: "0.5px solid var(--color-border)", borderRadius: 999, background: "transparent", cursor: "pointer" }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+            Edit expense
+          </button>
+          <button
+            type="button"
+            onClick={() => tx.linked_expense_id && onDeleteLinkedExpense(tx.linked_expense_id)}
+            className="px-3 py-1.5 text-[11px] transition-colors"
+            style={{ color: "var(--color-red-orange)", border: "0.5px solid rgba(220,62,13,0.25)", borderRadius: 999, background: "transparent", cursor: "pointer" }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "rgba(220,62,13,0.06)"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+            Delete expense + unlink
+          </button>
+        </div>
+      )}
+
+      {/* Personal / matched-credit / unmatched-credit action rows —
+          unchanged from before, just rehomed below the inline-log branch.
+          (Credits never enter the log workflow; personal rows have their
+          own flow; matched rows just show the un-match affordance.) */}
+      {(tx.is_personal || tx.matched_invoice_id || (isCredit && !tx.matched_invoice_id)) && (
+        <div className="flex items-center gap-2 mt-4 pt-3 flex-wrap"
+          style={{ borderTop: "0.5px solid var(--color-border)" }}>
+          {tx.is_personal && (
+            <button onClick={onUnmarkPersonal}
+              className="px-3 py-1.5 text-[11px] transition-colors"
+              style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", borderRadius: 999, background: "transparent", cursor: "pointer" }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+              Unmark personal
+            </button>
+          )}
+          {tx.matched_invoice_id && (
+            <button onClick={onUnmatch}
+              className="px-3 py-1.5 text-[11px] transition-colors"
+              style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", borderRadius: 999, background: "transparent", cursor: "pointer" }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+              Unmatch invoice
+            </button>
+          )}
+          {isCredit && !tx.matched_invoice_id && !tx.is_personal && (
+            <div className="flex items-center gap-2 flex-1 min-w-[280px] max-w-[480px]">
+              <div className="flex-1">
+                <Select value={chosenInvoice} onChange={setChosenInvoice} options={invoiceOptions} />
               </div>
-            )}
-          </>
-        )}
-      </div>
+              <button onClick={() => chosenInvoice && onMatch(chosenInvoice)}
+                disabled={!chosenInvoice}
+                className="px-3 py-1.5 text-[11px] font-medium text-white disabled:opacity-40"
+                style={{ background: "var(--color-sage)", borderRadius: 999, border: "none", cursor: "pointer" }}>
+                Match
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
