@@ -9,21 +9,26 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-const url        = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!url) {
-  throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL — required for the service-role client.");
-}
-if (!serviceKey) {
-  throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY — required for the public invoice view and Stripe webhook. Add it to .env.local (and to your Vercel env).");
-}
+// Lazy initialization. The env-var check fires the FIRST time the
+// client is needed, not at module load — module-load throws blow up
+// `next build`'s page-data collection step even when the route is
+// never going to be hit. Request-time throws still produce a clear
+// 500 the moment someone exercises the public invoice view or Stripe
+// webhook without the key set.
 
 let cached: SupabaseClient | null = null;
 
 export function createServiceClient(): SupabaseClient {
   if (cached) return cached;
-  cached = createClient(url!, serviceKey!, {
+  const url        = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL — required for the service-role client.");
+  }
+  if (!serviceKey) {
+    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY — required for the public invoice view and Stripe webhook. Add it to .env.local (and to your Vercel env).");
+  }
+  cached = createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   return cached;
