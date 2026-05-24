@@ -67,7 +67,8 @@ export async function GET() {
               balance_updated_at: now,
             })
             .eq("user_id", user.id)
-            .eq("teller_id", acct.id);
+            .eq("provider", "teller")
+            .eq("external_id", acct.id);
         }
       }
     }
@@ -155,7 +156,8 @@ interface TellerBalance {
 
 interface BankAccountRow {
   id: string;
-  teller_id: string;
+  external_id: string;
+  provider:    string;
   institution: string;
   name: string;
   type: string;

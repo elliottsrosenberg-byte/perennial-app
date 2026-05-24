@@ -3,9 +3,17 @@
 import { useState, useEffect, useCallback } from "react";
 import Script from "next/script";
 
+// Provider switch — Plaid by default; flip NEXT_PUBLIC_BANK_PROVIDER to
+// "teller" in the env to fall back to the older Teller integration. The
+// API routes are mirrored per-provider; everything below this constant
+// is provider-agnostic.
+const PROVIDER = (process.env.NEXT_PUBLIC_BANK_PROVIDER ?? "plaid") as "plaid" | "teller";
+const API_BASE = `/api/integrations/${PROVIDER}`;
+
 interface BankAccount {
   id: string;
-  teller_id: string;
+  external_id: string;
+  provider:    string;
   institution: string;
   name: string;
   type: string;
@@ -18,15 +26,13 @@ interface BankAccount {
 
 interface Transaction {
   id: string;
-  teller_id: string;
+  external_id: string;
+  provider:    string;
   amount: number;
   type: string;
   description: string;
   date: string;
   status: string;
-  // type/subtype come from the joined bank_accounts row so we can flip
-  // the displayed sign for credit-card accounts (where a positive Teller
-  // amount is a charge — money OUT — not income).
   bank_account: { name: string; institution: string; last_four: string; type?: string; subtype?: string } | null;
 }
 
@@ -53,14 +59,19 @@ function accountIcon(type: string, subtype: string) {
   );
 }
 
-// Teller Connect types
+// ── Provider-specific SDK types ──────────────────────────────────────────────
+
 declare global {
   interface Window {
     TellerConnect?: {
       setup: (config: TellerConnectConfig) => { open: () => void };
     };
+    Plaid?: {
+      create: (config: PlaidLinkConfig) => { open: () => void };
+    };
   }
 }
+
 interface TellerConnectConfig {
   applicationId: string;
   environment: string;
@@ -73,6 +84,21 @@ interface TellerEnrollment {
   enrollment: { id: string; institution: { name: string } };
 }
 
+interface PlaidLinkConfig {
+  token:      string;
+  onSuccess:  (publicToken: string, metadata: PlaidLinkMetadata) => void;
+  onExit?:    (err: PlaidLinkError | null, metadata: PlaidLinkMetadata | null) => void;
+  onLoad?:    () => void;
+}
+interface PlaidLinkMetadata {
+  institution: { name: string; institution_id: string } | null;
+  accounts:    { id: string; name: string; mask: string | null; type: string; subtype: string | null }[];
+  link_session_id: string;
+}
+interface PlaidLinkError { error_code: string; error_message: string }
+
+// ── Component ────────────────────────────────────────────────────────────────
+
 export default function BankingTab() {
   const [accounts,     setAccounts]     = useState<BankAccount[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -82,27 +108,27 @@ export default function BankingTab() {
   const [scriptReady,  setScriptReady]  = useState(false);
   const [error,        setError]        = useState<string | null>(null);
   // After a fresh enrollment we open a small picker listing the just-
-  // linked accounts so the user can untick any they didn't want (Teller's
-  // own UI doesn't surface an account selector for every institution —
-  // Amex / Ally both auto-import all accounts on the enrollment).
+  // linked accounts so the user can untick any they didn't want. Plaid
+  // Link has an account-selector built in (so this picker only adds
+  // value on Teller, or as a "did I pick the right ones?" safety net),
+  // but the modal works for both.
   const [justAddedIds, setJustAddedIds] = useState<string[] | null>(null);
 
-  const appId = process.env.NEXT_PUBLIC_TELLER_APPLICATION_ID ?? "";
-  const env   = process.env.NEXT_PUBLIC_TELLER_ENVIRONMENT ?? "sandbox";
+  // Provider-specific env. The Teller bits are gated to the Teller branch.
+  const tellerAppId = process.env.NEXT_PUBLIC_TELLER_APPLICATION_ID ?? "";
+  const tellerEnv   = process.env.NEXT_PUBLIC_TELLER_ENVIRONMENT ?? "sandbox";
+  const plaidEnv    = process.env.NEXT_PUBLIC_PLAID_ENV ?? "sandbox";
 
   const fetchData = useCallback(async () => {
     setSyncing(true);
     const [acctRes, txRes] = await Promise.all([
-      fetch("/api/integrations/teller/accounts"),
-      fetch("/api/integrations/teller/transactions"),
+      fetch(`${API_BASE}/accounts`),
+      fetch(`${API_BASE}/transactions`),
     ]);
-    // 503 from either route means the server is missing the Teller
-    // mTLS cert — surface the dev-facing message rather than failing
-    // silently (no accounts) which masks the real cause.
     if (acctRes.status === 503 || txRes.status === 503) {
       const res = acctRes.status === 503 ? acctRes : txRes;
       const body = await res.json().catch(() => ({}));
-      setError(body?.error ?? "Teller isn't fully configured yet.");
+      setError(body?.error ?? `${PROVIDER} isn't fully configured yet.`);
     }
     if (acctRes.ok) { const { accounts: a } = await acctRes.json(); setAccounts(a ?? []); }
     if (txRes.ok)   { const { transactions: t } = await txRes.json(); setTransactions(t ?? []); }
@@ -112,45 +138,102 @@ export default function BankingTab() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Poll for window.TellerConnect as a fallback for the Next/Script
-  // onLoad callback. In practice <Script strategy="afterInteractive">'s
-  // onLoad can miss for cached responses, adblockers that delay the
-  // script, or strict-CSP environments — leaving the Connect bank
-  // button permanently disabled. The poll guarantees the button flips
-  // to enabled the moment the global appears (or surfaces an error if
-  // 15s pass without it).
+  // Poll for the provider's SDK global so the Connect button enables as
+  // soon as the script lands, even if Next/Script's onLoad misses.
   useEffect(() => {
     if (scriptReady) return;
     if (typeof window === "undefined") return;
-    if (window.TellerConnect) { setScriptReady(true); return; }
+    const probe = () => PROVIDER === "plaid" ? !!window.Plaid : !!window.TellerConnect;
+    if (probe()) { setScriptReady(true); return; }
     let elapsed = 0;
     const id = window.setInterval(() => {
-      if (window.TellerConnect) {
-        setScriptReady(true);
-        window.clearInterval(id);
-        return;
-      }
+      if (probe()) { setScriptReady(true); window.clearInterval(id); return; }
       elapsed += 250;
       if (elapsed >= 15000) {
         window.clearInterval(id);
-        setError("Teller Connect failed to load. Check your network or disable any ad/script blockers, then refresh.");
+        setError(`${PROVIDER === "plaid" ? "Plaid Link" : "Teller Connect"} failed to load. Check your network or disable any ad/script blockers, then refresh.`);
       }
     }, 250);
     return () => window.clearInterval(id);
   }, [scriptReady]);
 
+  async function openConnect() {
+    setError(null);
+    if (PROVIDER === "plaid") return openPlaidLink();
+    return openTellerConnect();
+  }
+
+  // ── Plaid ──────────────────────────────────────────────────────────────────
+  async function openPlaidLink() {
+    if (!window.Plaid) { setError("Plaid Link is still loading — try again in a moment."); return; }
+    setConnecting(true);
+    let linkToken: string;
+    try {
+      const tokRes = await fetch(`${API_BASE}/link-token`, { method: "POST" });
+      if (!tokRes.ok) {
+        const j = await tokRes.json().catch(() => ({}));
+        setError(j?.error ?? `Failed to create link token (${tokRes.status})`);
+        setConnecting(false);
+        return;
+      }
+      linkToken = (await tokRes.json()).link_token as string;
+    } catch (e) {
+      setError(e instanceof Error ? `Failed to start Plaid Link: ${e.message}` : "Failed to start Plaid Link");
+      setConnecting(false);
+      return;
+    }
+    const handler = window.Plaid.create({
+      token: linkToken,
+      onSuccess: async (publicToken, metadata) => {
+        try {
+          const res = await fetch(`${API_BASE}/enroll`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              public_token:     publicToken,
+              institution_name: metadata.institution?.name ?? "Bank",
+              institution_id:   metadata.institution?.institution_id ?? null,
+              accounts:         metadata.accounts.map(a => ({ id: a.id, name: a.name, mask: a.mask ?? "" })),
+            }),
+          });
+          if (!res.ok) {
+            let body: string;
+            try { body = (await res.json() as { error?: string }).error ?? `HTTP ${res.status}`; }
+            catch { body = (await res.text()) || `HTTP ${res.status}`; }
+            setError(body);
+          } else {
+            const json = (await res.json()) as { accounts?: { id: string }[] };
+            const newIds = (json.accounts ?? []).map(a => a.id);
+            if (newIds.length > 0) setJustAddedIds(newIds);
+            await fetchData();
+          }
+        } catch (err) {
+          console.error("[BankingTab/plaid] enroll failed:", err);
+          setError(err instanceof Error ? `Connection failed: ${err.message}` : "Connection failed");
+        } finally {
+          setConnecting(false);
+        }
+      },
+      onExit: (err) => {
+        setConnecting(false);
+        if (err) setError(err.error_message || "Connection cancelled");
+      },
+    });
+    handler.open();
+  }
+
+  // ── Teller (fallback when NEXT_PUBLIC_BANK_PROVIDER=teller) ────────────────
   function openTellerConnect() {
     if (!window.TellerConnect) { setError("Teller Connect is still loading — try again in a moment."); return; }
-    if (!appId) { setError("Teller App ID not configured."); return; }
+    if (!tellerAppId) { setError("Teller App ID not configured."); return; }
 
     const teller = window.TellerConnect.setup({
-      applicationId: appId,
-      environment:   env,
+      applicationId: tellerAppId,
+      environment:   tellerEnv,
       onSuccess: async (enrollment) => {
         setConnecting(true);
-        setError(null);
         try {
-          const res = await fetch("/api/integrations/teller/enroll", {
+          const res = await fetch(`${API_BASE}/enroll`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -165,17 +248,14 @@ export default function BankingTab() {
             catch { body = (await res.text()) || `HTTP ${res.status}`; }
             setError(body);
           } else {
-            // Pull the freshly-created accounts back so we can hand them
-            // to the picker. enroll returns { accounts: [...rows] } where
-            // each row has the new id from bank_accounts.
             const json = (await res.json()) as { accounts?: { id: string }[] };
             const newIds = (json.accounts ?? []).map(a => a.id);
             if (newIds.length > 0) setJustAddedIds(newIds);
             await fetchData();
           }
         } catch (err) {
-          console.error("[BankingTab] enroll failed:", err);
-          setError(err instanceof Error ? `Connection failed: ${err.message}` : "Connection failed. Please try again.");
+          console.error("[BankingTab/teller] enroll failed:", err);
+          setError(err instanceof Error ? `Connection failed: ${err.message}` : "Connection failed");
         } finally {
           setConnecting(false);
         }
@@ -187,24 +267,21 @@ export default function BankingTab() {
 
   async function disconnect() {
     if (!confirm("Disconnect all bank accounts? Your transaction history will be removed.")) return;
-    await fetch("/api/integrations/teller/accounts", { method: "DELETE" });
+    await fetch(`${API_BASE}/accounts`, { method: "DELETE" });
     setAccounts([]);
     setTransactions([]);
   }
 
-  // Remove a single account (and its cached transactions). Optimistically
-  // drops the row from local state; on failure restores.
   async function removeAccount(id: string) {
     const prev = accounts;
     const prevTx = transactions;
     setAccounts((cs) => cs.filter(c => c.id !== id));
     setTransactions((ts) => ts.filter(t => t.bank_account
-      ? // bank_account is a join, no id — filter by matching account
-        prev.some(a => a.id === id && a.name === t.bank_account?.name && a.last_four === t.bank_account?.last_four) ? false : true
+      ? prev.some(a => a.id === id && a.name === t.bank_account?.name && a.last_four === t.bank_account?.last_four) ? false : true
       : true,
     ));
     try {
-      const res = await fetch(`/api/integrations/teller/accounts?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE}/accounts?id=${encodeURIComponent(id)}`, { method: "DELETE" });
       if (!res.ok) throw new Error("DELETE failed");
       await fetchData();
     } catch {
@@ -213,7 +290,6 @@ export default function BankingTab() {
     }
   }
 
-  // Compute totals
   const totalCash = accounts
     .filter(a => a.type === "depository")
     .reduce((s, a) => s + (a.balance_available ?? a.balance_current ?? 0), 0);
@@ -221,23 +297,33 @@ export default function BankingTab() {
     .filter(a => a.type === "credit")
     .reduce((s, a) => s + Math.abs(a.balance_current ?? 0), 0);
 
+  const envLabel = PROVIDER === "plaid"
+    ? (plaidEnv === "production" ? "Live" : plaidEnv === "development" ? "Live (Dev)" : "Sandbox mode")
+    : (tellerEnv === "sandbox" ? "Sandbox mode" : "Live");
 
   return (
     <>
-      <Script
-        src="https://cdn.teller.io/connect/connect.js"
-        onLoad={() => setScriptReady(true)}
-        strategy="afterInteractive"
-      />
+      {PROVIDER === "plaid" ? (
+        <Script
+          src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"
+          onLoad={() => setScriptReady(true)}
+          strategy="afterInteractive"
+        />
+      ) : (
+        <Script
+          src="https://cdn.teller.io/connect/connect.js"
+          onLoad={() => setScriptReady(true)}
+          strategy="afterInteractive"
+        />
+      )}
 
       <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
-        {/* Header row */}
         <div className="flex items-center gap-3">
           <div className="flex-1">
             <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>Banking</h2>
             <p className="text-[11px] mt-0.5" style={{ color: "var(--color-grey)" }}>
               {accounts.length > 0
-                ? `${accounts.length} account${accounts.length !== 1 ? "s" : ""} connected · ${env === "sandbox" ? "Sandbox mode" : "Live"}`
+                ? `${accounts.length} account${accounts.length !== 1 ? "s" : ""} connected · ${envLabel}`
                 : "Connect your bank accounts to see real balances and transactions"}
             </p>
           </div>
@@ -260,7 +346,7 @@ export default function BankingTab() {
             </>
           )}
           <button
-            onClick={openTellerConnect}
+            onClick={openConnect}
             disabled={connecting || !scriptReady}
             data-tour-target="finance.connect-bank"
             className="px-3 py-1.5 text-[11px] font-medium rounded-lg text-white disabled:opacity-50"
@@ -292,14 +378,19 @@ export default function BankingTab() {
               <p className="text-[13px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>No bank accounts connected</p>
               <p className="text-[12px]" style={{ color: "var(--color-grey)" }}>Connect your checking, savings, or credit accounts to track real cash flow</p>
             </div>
-            <button onClick={openTellerConnect} disabled={connecting || !scriptReady}
+            <button onClick={openConnect} disabled={connecting || !scriptReady}
               className="px-5 py-2 text-[12px] font-medium rounded-lg text-white disabled:opacity-50"
               style={{ background: "var(--color-sage)" }}>
               {connecting ? "Connecting…" : "Connect your bank"}
             </button>
-            {env === "sandbox" && (
+            {PROVIDER === "plaid" && plaidEnv === "sandbox" && (
               <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>
-                Sandbox mode — use test credentials (any username starting with "test_")
+                Sandbox mode — use test credentials: username <code>user_good</code>, password <code>pass_good</code>
+              </p>
+            )}
+            {PROVIDER === "teller" && tellerEnv === "sandbox" && (
+              <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>
+                Sandbox mode — use test credentials (any username starting with &quot;test_&quot;)
               </p>
             )}
           </div>
@@ -307,7 +398,6 @@ export default function BankingTab() {
 
         {!loading && accounts.length > 0 && (
           <>
-            {/* Summary bar */}
             <div className="grid grid-cols-3 gap-3">
               {[
                 { label: "Cash available", value: fmtCurrency(totalCash),   color: "var(--color-charcoal)" },
@@ -322,7 +412,6 @@ export default function BankingTab() {
               ))}
             </div>
 
-            {/* Accounts list */}
             <div className="rounded-xl overflow-hidden" style={{ border: "0.5px solid var(--color-border)" }}>
               <div className="px-4 py-3 text-[12px] font-semibold" style={{ background: "var(--color-cream)", borderBottom: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" }}>
                 Accounts
@@ -340,7 +429,7 @@ export default function BankingTab() {
                     </p>
                     <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>
                       {acct.subtype ? `${acct.subtype.charAt(0).toUpperCase() + acct.subtype.slice(1)} · ` : ""}
-                      ••••{acct.last_four}
+                      {acct.last_four ? `••••${acct.last_four}` : ""}
                     </p>
                   </div>
                   <div className="text-right">
@@ -368,7 +457,6 @@ export default function BankingTab() {
               ))}
             </div>
 
-            {/* Transactions */}
             {transactions.length > 0 && (
               <div className="rounded-xl overflow-hidden" style={{ border: "0.5px solid var(--color-border)" }}>
                 <div className="px-4 py-3 text-[12px] font-semibold flex items-center justify-between"
@@ -377,16 +465,6 @@ export default function BankingTab() {
                   <span className="text-[10px] font-normal" style={{ color: "var(--color-grey)" }}>{transactions.length} loaded</span>
                 </div>
                 {transactions.map((tx, i) => {
-                  // Teller's amount sign convention varies by account
-                  // type:
-                  //   - depository (checking/savings): + = deposit (money
-                  //     in), − = withdrawal
-                  //   - credit (cards): + = charge (money OUT, raises
-                  //     what you owe), − = payment to the card
-                  // Flip the displayed sign for credit accounts so the
-                  // user reads the entry the way they'd think about it:
-                  // a $25 Uber charge is −$25, a $500 payment to the
-                  // card is +$500.
                   const isCredit  = tx.bank_account?.type === "credit";
                   const moneyIn   = isCredit ? tx.amount < 0 : tx.amount > 0;
                   const display   = (moneyIn ? "+" : "−") + fmtCurrency(Math.abs(tx.amount));
@@ -415,19 +493,13 @@ export default function BankingTab() {
         )}
       </div>
 
-      {/* Post-enrollment account picker — Teller's Connect UI doesn't
-          offer an account selector for many institutions (Amex / Ally
-          auto-import everything). This modal opens immediately after a
-          successful enroll, lists the just-linked accounts, and lets
-          the user untick any they don't want. Confirming deletes the
-          unticked ones via the per-account DELETE endpoint. */}
       {justAddedIds && justAddedIds.length > 0 && (
         <PostEnrollPicker
           accounts={accounts.filter(a => justAddedIds.includes(a.id))}
           onConfirm={async (keepIds) => {
             const toRemove = justAddedIds.filter(id => !keepIds.includes(id));
             for (const id of toRemove) {
-              await fetch(`/api/integrations/teller/accounts?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+              await fetch(`${API_BASE}/accounts?id=${encodeURIComponent(id)}`, { method: "DELETE" });
             }
             setJustAddedIds(null);
             await fetchData();
@@ -438,11 +510,6 @@ export default function BankingTab() {
     </>
   );
 }
-
-// ── Post-enrollment account picker ───────────────────────────────────────────
-// Shown right after a successful Teller Connect flow. The user ticks the
-// accounts they want to keep; unticked ones get removed via the per-
-// account DELETE endpoint when they hit Done.
 
 function PostEnrollPicker({ accounts, onConfirm, onCancel }: {
   accounts: BankAccount[];
@@ -485,7 +552,7 @@ function PostEnrollPicker({ accounts, onConfirm, onCancel }: {
             Which accounts to keep?
           </h3>
           <p className="text-[12px]" style={{ color: "var(--color-grey)" }}>
-            Untick anything you don't want in Perennial. You can always add them back later.
+            Untick anything you don&apos;t want in Perennial. You can always add them back later.
           </p>
         </div>
 
@@ -516,7 +583,7 @@ function PostEnrollPicker({ accounts, onConfirm, onCancel }: {
                   </p>
                   <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>
                     {a.subtype ? `${a.subtype.charAt(0).toUpperCase() + a.subtype.slice(1)} · ` : ""}
-                    ••••{a.last_four}
+                    {a.last_four ? `••••${a.last_four}` : ""}
                   </p>
                 </div>
               </label>
