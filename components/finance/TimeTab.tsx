@@ -16,6 +16,7 @@ interface Props {
   onStartTimer: (projectId: string | null, description: string) => void;
   onEntryCreated: (entry: TimeEntry) => void;
   onEntryDeleted: (id: string) => void;
+  onEntryEdit?: (entry: TimeEntry) => void;
   onLogTime: () => void;
 }
 
@@ -144,7 +145,7 @@ function StartTimerBar({ activeTimer, timerSeconds, projects, onStartTimer, onSt
   );
 }
 
-export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projects, onStopTimer, onStartTimer, onEntryCreated: _onEntryCreated, onEntryDeleted, onLogTime }: Props) {
+export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projects, onStopTimer, onStartTimer, onEntryCreated: _onEntryCreated, onEntryDeleted, onEntryEdit, onLogTime }: Props) {
   void _onEntryCreated;
   const [filterProject, setFilterProject] = useState("all");
   const [billableOnly, setBillableOnly]   = useState(false);
@@ -331,7 +332,14 @@ export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projec
               </span>
             </div>
             {entries.map((e) => (
-              <div key={e.id} className="group flex items-center gap-2.5 px-4 py-2.5" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
+              <div key={e.id} className="group flex items-center gap-2.5 px-4 py-2.5"
+                onClick={() => onEntryEdit?.(e)}
+                role={onEntryEdit ? "button" : undefined}
+                tabIndex={onEntryEdit ? 0 : undefined}
+                onKeyDown={onEntryEdit ? (ev) => { if (ev.key === "Enter") onEntryEdit(e); } : undefined}
+                onMouseEnter={onEntryEdit ? ev => ev.currentTarget.style.background = "rgba(31,33,26,0.025)" : undefined}
+                onMouseLeave={onEntryEdit ? ev => ev.currentTarget.style.background = "transparent" : undefined}
+                style={{ borderBottom: "0.5px solid var(--color-border)", cursor: onEntryEdit ? "pointer" : "default" }}>
                 <div className="w-2 h-2 rounded-full shrink-0" style={{ background: projectColor(e.project_id) }} />
                 <div className="flex-1 min-w-0">
                   <p className="text-[12px] font-medium truncate" style={{ color: "var(--color-charcoal)" }}>{e.description || "—"}</p>
@@ -345,9 +353,11 @@ export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projec
                   {fmtDuration(e.duration_minutes)}
                 </span>
                 <button
-                  onClick={() => setPendingDelete(e)}
+                  onClick={(ev) => { ev.stopPropagation(); setPendingDelete(e); }}
+                  title="Delete time entry"
+                  aria-label="Delete time entry"
                   className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded transition-opacity"
-                  style={{ color: "var(--color-grey)", flexShrink: 0 }}
+                  style={{ color: "var(--color-grey)", flexShrink: 0, background: "transparent", border: "none", cursor: "pointer" }}
                   onMouseEnter={ev => ev.currentTarget.style.color = "var(--color-red-orange)"}
                   onMouseLeave={ev => ev.currentTarget.style.color = "var(--color-grey)"}
                 >
