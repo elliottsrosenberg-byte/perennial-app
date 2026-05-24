@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { mintPublicInvoiceToken } from "@/lib/invoices/token";
 import type { Invoice } from "@/types/database";
 
 function fmtCurrency(n: number) {
@@ -21,10 +22,11 @@ function clientName(inv: Invoice) {
   return "Client";
 }
 
-function buildEmail(inv: Invoice, to: string, message: string, appUrl: string) {
+function buildEmail(inv: Invoice, to: string, message: string, appUrl: string, publicToken: string) {
   const total = invoiceTotal(inv);
   const invNum = String(inv.number).padStart(3, "0");
-  const printUrl = `${appUrl}/finance/invoice/${inv.id}/print`;
+  const printUrl  = `${appUrl}/finance/invoice/${inv.id}/print`;
+  const publicUrl = `${appUrl}/i/${publicToken}`;
   const lineItemRows = (inv.line_items ?? []).map(li => `
     <tr>
       <td style="padding:10px 0;border-bottom:1px solid #f0ede8;font-size:13px;color:#1f211a;">${li.description}</td>
@@ -90,16 +92,20 @@ function buildEmail(inv: Invoice, to: string, message: string, appUrl: string) {
         </div>
       </div>
 
-      <!-- CTA -->
+      <!-- Primary CTA: hosted public view with embedded Stripe payment -->
+      <div style="text-align:center;margin-bottom:12px;">
+        <a href="${publicUrl}" style="background:#3d6b4f;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-size:13px;font-weight:600;">View &amp; pay invoice →</a>
+      </div>
+      <!-- Secondary: plain PDF -->
       <div style="text-align:center;margin-bottom:8px;">
-        <a href="${printUrl}" style="display:inline-block;background:#9BA37A;color:white;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:13px;font-weight:600;">View & Download Invoice</a>
+        <a href="${printUrl}" style="font-size:12px;color:#6b6860;text-decoration:underline;">Or download a PDF</a>
       </div>
       ${inv.payment_method ? `<p style="text-align:center;font-size:12px;color:#9a9690;margin-top:12px;">Payment via ${inv.payment_method}</p>` : ""}
     </div>
 
     <!-- Footer -->
     <div style="background:#f9faf4;padding:16px 36px;border-top:1px solid #eff0e7;">
-      <p style="font-size:11px;color:#9a9690;margin:0;">Sent via Perennial · <a href="${printUrl}" style="color:#9BA37A;text-decoration:none;">View invoice</a></p>
+      <p style="font-size:11px;color:#9a9690;margin:0;">Sent via Perennial · <a href="${publicUrl}" style="color:#3d6b4f;text-decoration:none;">Open the secure invoice page</a></p>
     </div>
   </div>
 </body>
@@ -128,8 +134,24 @@ export async function POST(req: Request) {
 
   if (!inv) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
 
+  // Mint + persist a public token the first time we send this invoice so
+  // the email CTA can deep-link the recipient to /i/[token]. Reuses the
+  // existing token on subsequent sends (clients sometimes get re-sent).
+  let publicToken: string = (inv as Invoice).public_token ?? "";
+  if (!publicToken) {
+    publicToken = mintPublicInvoiceToken();
+    const { error: tokErr } = await supabase
+      .from("invoices")
+      .update({ public_token: publicToken })
+      .eq("id", invoiceId);
+    if (tokErr) {
+      console.error("Failed to persist public_token:", tokErr);
+      return NextResponse.json({ error: "Failed to prepare public link." }, { status: 500 });
+    }
+  }
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? `${new URL(req.url).origin}`;
-  const { html, subject } = buildEmail(inv as Invoice, to, message, appUrl);
+  const { html, subject } = buildEmail(inv as Invoice, to, message, appUrl, publicToken);
 
   const { Resend } = await import("resend");
   const resend = new Resend(apiKey);
