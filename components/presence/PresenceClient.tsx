@@ -859,6 +859,13 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
   onRefreshed: (next: Integration) => void;
 }) {
   const [refreshing, setRefreshing] = useState(false);
+  // Surface a quiet error chip when the Graph fetch fails (the upstream
+  // route now 502s with the raw Meta error body — see SHA a66dd3d).
+  // Without this, a broken token or revoked permission produced silent
+  // blank stats. Truncate the body to 200 chars after the colon so a
+  // verbose Graph error doesn't blow the layout.
+  const [igError, setIgError] = useState<string | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
 
   // Pull fresh stats + recent media from the Graph API on tab mount.
   // The /api/integrations/instagram/stats endpoint already persists
@@ -868,11 +875,42 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
     let cancelled = false;
     const lastFetched = instagram.metadata.last_fetched as string | undefined;
     const stale = !lastFetched || (Date.now() - new Date(lastFetched).getTime()) > 30 * 60 * 1000;
-    if (!stale) return;
+    // Retry always re-runs the fetch even if we have fresh data, so the
+    // user can re-test after fixing perms upstream.
+    if (!stale && retryNonce === 0) return;
     setRefreshing(true);
-    fetch("/api/integrations/instagram/stats")
-      .then(r => r.json())
-      .then((d: { connected?: boolean; followers?: number; engagement_rate?: number | null; recent_posts?: IGRecentPost[]; username?: string }) => {
+    setIgError(null);
+    const igId = (instagram.metadata.ig_user_id as string | undefined)
+      ?? (instagram.metadata.ig_id as string | undefined)
+      ?? null;
+    console.log("[SocialsTab/instagram] fetching stats", { igId, retry: retryNonce });
+    (async () => {
+      try {
+        const res = await fetch("/api/integrations/instagram/stats");
+        const text = await res.text();
+        if (!res.ok) {
+          // The route returns { error: "Instagram API ..." }; fall back to
+          // the raw body when JSON parsing fails (proxy 502s etc.).
+          let msg: string;
+          try {
+            const j = JSON.parse(text) as { error?: string };
+            msg = j?.error ?? text;
+          } catch {
+            msg = text;
+          }
+          // Cap after the first colon to keep the chip a reasonable size.
+          const colon = msg.indexOf(":");
+          if (colon > -1 && msg.length - colon > 200) {
+            msg = msg.slice(0, colon + 1) + " " + msg.slice(colon + 1, colon + 201).trim() + "…";
+          }
+          console.warn("[SocialsTab/instagram] stats fetch failed", { status: res.status, body: text });
+          if (!cancelled) setIgError(msg || `Instagram stats fetch failed (HTTP ${res.status})`);
+          return;
+        }
+        const d = JSON.parse(text) as {
+          connected?: boolean; followers?: number; engagement_rate?: number | null;
+          recent_posts?: IGRecentPost[]; username?: string;
+        };
         if (cancelled || !d.connected) return;
         onRefreshed({
           ...instagram,
@@ -886,11 +924,16 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
             last_fetched:    new Date().toISOString(),
           },
         });
-      })
-      .finally(() => { if (!cancelled) setRefreshing(false); });
+      } catch (err) {
+        console.error("[SocialsTab/instagram] fetch threw", err);
+        if (!cancelled) setIgError(err instanceof Error ? err.message : "Instagram stats fetch failed.");
+      } finally {
+        if (!cancelled) setRefreshing(false);
+      }
+    })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [instagram?.id]);
+  }, [instagram?.id, retryNonce]);
 
   const recentPosts = (instagram?.metadata?.recent_posts as IGRecentPost[] | undefined) ?? [];
 
@@ -950,6 +993,59 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
       </div>
         <div style={{ display:"flex", gap:16, flex:1, minHeight:0, padding:"0 24px 24px" }}>
           <div style={{ flex:1, display:"flex", flexDirection:"column", gap:12, minWidth:0 }}>
+            {igError && (
+              <div
+                role="alert"
+                style={{
+                  display: "flex", alignItems: "flex-start", gap: 10,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  background: "rgba(220,62,13,0.07)",
+                  color: "var(--color-red-orange)",
+                  border: "0.5px solid rgba(220,62,13,0.2)",
+                  fontSize: 11.5,
+                  lineHeight: 1.45,
+                }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                    Couldn&apos;t refresh Instagram stats
+                  </div>
+                  <code
+                    style={{
+                      display: "block",
+                      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                      fontSize: 10.5,
+                      background: "rgba(220,62,13,0.06)",
+                      padding: "5px 7px",
+                      borderRadius: 5,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                      color: "var(--color-red-orange)",
+                    }}>
+                    {igError}
+                  </code>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRetryNonce((n) => n + 1)}
+                  disabled={refreshing}
+                  style={{
+                    flexShrink: 0,
+                    padding: "5px 10px",
+                    borderRadius: 6,
+                    border: "0.5px solid rgba(220,62,13,0.35)",
+                    background: "transparent",
+                    color: "var(--color-red-orange)",
+                    fontSize: 11,
+                    fontWeight: 500,
+                    cursor: refreshing ? "wait" : "pointer",
+                    opacity: refreshing ? 0.6 : 1,
+                    fontFamily: "inherit",
+                  }}>
+                  {refreshing ? "Retrying…" : "Retry"}
+                </button>
+              </div>
+            )}
             {/* Recent posts — live from Instagram Graph API (via /api/integrations/instagram/stats). */}
             <div className={card()} style={cardStyle}>
               <div style={cardHeadStyle}>
