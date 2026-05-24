@@ -8,12 +8,21 @@ import type { InvoiceStatus } from "@/types/database";
  *  separate from PaymentSection so any future client-only setup (Stripe
  *  appearance config, locale, etc.) lives here. */
 export default function PaymentSectionMount({
-  invoiceId, token, amount, status,
+  invoiceId, token, amount, status, clientEmail,
 }: {
-  invoiceId: string;
-  token:     string;
-  amount:    number;
-  status:    InvoiceStatus;
+  invoiceId:   string;
+  token:       string;
+  amount:      number;
+  status:      InvoiceStatus;
+  clientEmail: string | null;
 }) {
-  return <PaymentSection invoiceId={invoiceId} token={token} amount={amount} status={status} />;
+  return (
+    <PaymentSection
+      invoiceId={invoiceId}
+      token={token}
+      amount={amount}
+      status={status}
+      clientEmail={clientEmail}
+    />
+  );
 }

@@ -8,6 +8,7 @@ import {
   useElements,
   useStripe,
 } from "@stripe/react-stripe-js";
+import type { StripeElementsOptions } from "@stripe/stripe-js";
 import type { InvoiceStatus } from "@/types/database";
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
@@ -24,12 +25,13 @@ function fmtCurrency(n: number) {
 }
 
 export default function PaymentSection({
-  invoiceId, token, amount, status,
+  invoiceId, token, amount, status, clientEmail,
 }: {
-  invoiceId: string;
-  token:     string;
-  amount:    number;
-  status:    InvoiceStatus;
+  invoiceId:   string;
+  token:       string;
+  amount:      number;
+  status:      InvoiceStatus;
+  clientEmail: string | null;
 }) {
   // The page already 404s on draft, but defend in depth.
   if (status === "paid") return <PaidChip />;
@@ -65,7 +67,7 @@ export default function PaymentSection({
   }
 
   return (
-    <PaymentFlow invoiceId={invoiceId} token={token} amount={amount} />
+    <PaymentFlow invoiceId={invoiceId} token={token} amount={amount} clientEmail={clientEmail} />
   );
 }
 
@@ -85,7 +87,14 @@ function PaidChip() {
 /** Wraps Elements once we have a client_secret. We can't render <Elements>
  *  with an empty options.clientSecret, so we fetch first and only mount
  *  once the response lands. */
-function PaymentFlow({ invoiceId, token, amount }: { invoiceId: string; token: string; amount: number }) {
+function PaymentFlow({
+  invoiceId, token, amount, clientEmail,
+}: {
+  invoiceId:   string;
+  token:       string;
+  amount:      number;
+  clientEmail: string | null;
+}) {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError]               = useState<string | null>(null);
   const fetchedRef = useRef(false);
@@ -129,30 +138,38 @@ function PaymentFlow({ invoiceId, token, amount }: { invoiceId: string; token: s
     );
   }
 
+  const elementsOptions: StripeElementsOptions = {
+    clientSecret,
+    appearance: {
+      theme: "stripe",
+      variables: {
+        colorPrimary:     "#3d6b4f",
+        colorBackground:  "#ffffff",
+        colorText:        "#1f211a",
+        colorDanger:      "#dc3e0d",
+        fontFamily:       "Albert Sans, -apple-system, BlinkMacSystemFont, sans-serif",
+        borderRadius:     "8px",
+      },
+    },
+  };
+
   return (
     <Elements
       stripe={stripeJs}
-      options={{
-        clientSecret,
-        appearance: {
-          theme: "stripe",
-          variables: {
-            colorPrimary:     "#3d6b4f",
-            colorBackground:  "#ffffff",
-            colorText:        "#1f211a",
-            colorDanger:      "#dc3e0d",
-            fontFamily:       "Albert Sans, -apple-system, BlinkMacSystemFont, sans-serif",
-            borderRadius:     "8px",
-          },
-        },
-      }}
+      options={elementsOptions}
     >
-      <PayForm amount={amount} token={token} />
+      <PayForm amount={amount} token={token} clientEmail={clientEmail} />
     </Elements>
   );
 }
 
-function PayForm({ amount, token }: { amount: number; token: string }) {
+function PayForm({
+  amount, token, clientEmail,
+}: {
+  amount:      number;
+  token:       string;
+  clientEmail: string | null;
+}) {
   const stripe   = useStripe();
   const elements = useElements();
   const [busy, setBusy]     = useState(false);
@@ -184,7 +201,16 @@ function PayForm({ amount, token }: { amount: number; token: string }) {
   return (
     <form onSubmit={handleSubmit}>
       <div style={{ background: "white", padding: "14px 14px", borderRadius: 8, marginBottom: 12 }}>
-        <PaymentElement />
+        {/* Prefill the payer's email from the invoice contact so they
+            don't have to retype something we already know. They can
+            still edit it. */}
+        <PaymentElement
+          options={{
+            defaultValues: {
+              billingDetails: { email: clientEmail ?? undefined },
+            },
+          }}
+        />
       </div>
       {err && (
         <p style={{ fontSize: 11.5, color: "#dc3e0d", marginBottom: 10, lineHeight: 1.5 }}>{err}</p>
