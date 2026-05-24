@@ -1080,35 +1080,68 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
 
   const recentPosts = (instagram?.metadata?.recent_posts as IGRecentPost[] | undefined) ?? [];
 
+  // Subtab state — Instagram is the only live network today; the rest are
+  // present as disabled subtabs so the slot they'll occupy is visible. When
+  // TikTok / Pinterest / LinkedIn ship, they become selectable here.
+  type SocialSubtab = "instagram" | "tiktok" | "pinterest" | "linkedin";
+  const SUBTABS: { key: SocialSubtab; label: string; soon: boolean }[] = [
+    { key:"instagram", label:"Instagram", soon:false },
+    { key:"tiktok",    label:"TikTok",    soon:true  },
+    { key:"pinterest", label:"Pinterest", soon:true  },
+    { key:"linkedin",  label:"LinkedIn",  soon:true  },
+  ];
+  const [subtab, setSubtab] = useState<SocialSubtab>("instagram");
+
   return (
     <div className="flex-1 overflow-y-auto" style={{ display:"flex", flexDirection:"column" }}>
-      <div style={{ display:"flex", gap:8, padding:"12px 24px", borderBottom:"0.5px solid var(--color-border)", flexWrap:"wrap", alignItems:"center", background:"var(--color-off-white)" }}>
-        {instagram ? (
-          <div className="flex items-center gap-2 rounded-full" style={{ padding:"7px 12px", border:"0.5px solid rgba(155,163,122,0.4)", background:"rgba(155,163,122,0.08)", cursor:"pointer" }}>
-            <div className="flex items-center justify-center rounded-md" style={{ width:18, height:18, background:C.purpleL }}><span style={{ color:C.purple }}><IcIG /></span></div>
-            <div>
-              <div style={{ fontSize:11, fontWeight:600 }}>{instagram.account_name ?? "@instagram"}</div>
-              <div style={{ fontSize:10, color:"var(--color-grey)" }}>{instagram.metadata.followers_count ? `${(instagram.metadata.followers_count as number).toLocaleString()} followers` : "Instagram"}</div>
-            </div>
-            <div style={{ width:6, height:6, borderRadius:"50%", background:"var(--color-sage)" }} />
-          </div>
-        ) : null}
-        {["TikTok","Pinterest","LinkedIn"].map(p => (
-          <div key={p} className="flex items-center gap-2 rounded-full" style={{ padding:"7px 12px", border:"0.5px solid rgba(31,33,26,0.13)", background:"var(--color-cream)", cursor:"default", opacity:0.65 }}>
-            <span style={{ fontSize:11, fontWeight:600, color:"var(--color-grey)" }}>{p}</span>
-            <span style={{ fontSize:10, color:"var(--color-grey)" }}>Coming soon</span>
-          </div>
-        ))}
-        {!instagram ? (
-          <button onClick={onConnect} className="flex items-center gap-1 rounded-full" style={{ padding:"7px 14px", border:"0.5px dashed var(--color-sage)", color:"var(--color-sage)", cursor:"pointer", fontSize:11, background:"none", fontFamily:"inherit" }}>
-            <IcPlus /> Connect Instagram
-          </button>
-        ) : (
-          <button onClick={onDisconnect} className="ml-auto rounded-full" style={{ padding:"5px 10px", border:"0.5px solid var(--color-border)", color:"var(--color-grey)", cursor:"pointer", fontSize:10, background:"none", fontFamily:"inherit" }}>Disconnect</button>
-        )}
+      {/* Connection status row — only when Instagram is connected. The
+          not-connected case is handled inside the Instagram subtab body
+          (which already has a richer connect CTA). */}
+      {instagram && (
+        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 24px", borderBottom:"0.5px solid var(--color-border)", background:"var(--color-off-white)" }}>
+          <div style={{ width:6, height:6, borderRadius:"50%", background:"var(--color-sage)", flexShrink:0 }} />
+          <span style={{ fontSize:12, fontWeight:600, color:"var(--color-charcoal)" }}>{instagram.account_name ?? "@instagram"}</span>
+          {instagram.metadata.followers_count ? (
+            <span style={{ fontSize:11, color:"var(--color-grey)" }}>· {(instagram.metadata.followers_count as number).toLocaleString()} followers</span>
+          ) : null}
+          <button onClick={onDisconnect} className="ml-auto" style={{ padding:"4px 10px", border:"0.5px solid var(--color-border)", borderRadius:6, color:"var(--color-grey)", cursor:"pointer", fontSize:10, background:"transparent", fontFamily:"inherit" }}>Disconnect</button>
+        </div>
+      )}
+
+      {/* Subtabs — mirrors the parent module's tab vocabulary
+          (underline, 12px font, charcoal/grey, sage underline on active). */}
+      <div className="flex items-stretch" style={{ borderBottom:"0.5px solid var(--color-border)", background:"var(--color-off-white)" }}>
+        {SUBTABS.map(s => {
+          const active = subtab === s.key;
+          const disabled = s.soon;
+          return (
+            <button
+              key={s.key}
+              onClick={() => { if (!disabled) setSubtab(s.key); }}
+              disabled={disabled}
+              style={{
+                padding:"9px 18px",
+                fontSize:12,
+                color: active ? "var(--color-charcoal)" : "var(--color-grey)",
+                cursor: disabled ? "not-allowed" : "pointer",
+                opacity: disabled ? 0.45 : 1,
+                borderBottom: active ? "2px solid var(--color-sage)" : "2px solid transparent",
+                borderRight:"0.5px solid rgba(31,33,26,0.07)",
+                borderTop:"none",
+                borderLeft:"none",
+                background:"transparent",
+                fontWeight: active ? 600 : 400,
+                whiteSpace:"nowrap",
+                fontFamily:"inherit",
+              }}
+            >
+              {s.label}{s.soon ? <span style={{ marginLeft:6, fontSize:10, color:"var(--color-grey)", fontWeight:400 }}>·soon</span> : null}
+            </button>
+          );
+        })}
       </div>
 
-      {!instagram ? (
+      {subtab === "instagram" && !instagram ? (
         <div style={{ padding:"60px 24px", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16 }}>
           <div className="flex items-center justify-center rounded-xl" style={{ width:48, height:48, background:C.purpleL }}><span style={{ color:C.purple }}><IcIG /></span></div>
           <div style={{ textAlign:"center" }}>
@@ -1120,13 +1153,9 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
           </button>
           <p style={{ fontSize:11, color:"var(--color-grey)" }}>Requires a business or creator account</p>
         </div>
-      ) : (
+      ) : null}
 
-      <div style={{ display:"flex", gap:4, padding:"10px 24px", borderBottom:"0.5px solid var(--color-border)", background:"var(--color-off-white)" }}>
-        <div style={{ padding:"5px 12px", borderRadius:"10px 10px 0 0", border:"0.5px solid rgba(155,163,122,0.4)", borderBottom:"2px solid var(--color-sage)", fontSize:11, color:"var(--color-sage)", fontWeight:500, cursor:"pointer" }}>Instagram</div>
-      </div>
-      )}
-      {instagram && (
+      {subtab === "instagram" && instagram && (
       <>
       <div style={{ padding:"14px 24px", display:"flex", gap:12 }}>
         <StatCard label="Followers"  value={instagram.metadata.followers_count ? (instagram.metadata.followers_count as number).toLocaleString() : "—"} sub={instagram.account_name ?? "Instagram"} detail="Total followers" helpText="Total people following you." askAsh ashMessage="How can I grow my Instagram following as a designer?" />
