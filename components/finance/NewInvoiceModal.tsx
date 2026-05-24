@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Invoice, Project, Contact, Organization, TimeEntry, Expense } from "@/types/database";
-import { X, AlertTriangle, Clock, Receipt } from "lucide-react";
+import type { Invoice, Project, Contact, TimeEntry, Expense } from "@/types/database";
+import { X, AlertTriangle, Clock, Receipt, Plus } from "lucide-react";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
 
@@ -19,8 +19,6 @@ interface Props {
 
 const inputCls = "w-full px-3 py-2 text-[13px] rounded-lg border transition-colors focus:outline-none";
 const inputStyle = { background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" };
-
-type SearchResult = (Contact & { _type: "contact" }) | (Organization & { _type: "organization" });
 
 function fmtMoney(n: number) {
   return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -41,13 +39,27 @@ export default function NewInvoiceModal({
   projects, timeEntries, expenses, invoices, nextNumber, onClose, onCreated,
 }: Props) {
   const today = new Date().toISOString().split("T")[0];
-  const [search, setSearch]                   = useState("");
-  const [searchResults, setSearchResults]     = useState<SearchResult[]>([]);
-  const [searching, setSearching]             = useState(false);
-  const [showSearch, setShowSearch]           = useState(false);
-  const [clientContact, setClientContact]           = useState<Contact | null>(null);
-  const [clientOrganization, setClientOrganization] = useState<Organization | null>(null);
+  const [clientContact, setClientContact]     = useState<Contact | null>(null);
   const [projectId, setProjectId]             = useState("");
+
+  // Contact picker: load every (non-archived) contact once, then group by
+  // whether they're attached to the selected project via project_contacts.
+  const [allContacts, setAllContacts]         = useState<Contact[]>([]);
+  const [projectContactIds, setProjectContactIds] = useState<Set<string>>(new Set());
+  const [contactsLoaded, setContactsLoaded]   = useState(false);
+  const [pickerOpen, setPickerOpen]           = useState(false);
+  const [pickerQuery, setPickerQuery]         = useState("");
+  // Track which project we've already auto-selected for, so changing
+  // project never silently clobbers a deliberate pick the user made.
+  const [autoSelectedFor, setAutoSelectedFor] = useState<string | null>(null);
+
+  // Inline "+ Add new contact" mini-form.
+  const [addOpen, setAddOpen]                 = useState(false);
+  const [addFirst, setAddFirst]               = useState("");
+  const [addLast, setAddLast]                 = useState("");
+  const [addEmail, setAddEmail]               = useState("");
+  const [addBusy, setAddBusy]                 = useState(false);
+  const [addError, setAddError]               = useState<string | null>(null);
   const [issuedAt, setIssuedAt]               = useState(today);
   const [dueAt, setDueAt]                     = useState(addDays(today, 14));
   const [paymentTerms, setPaymentTerms]       = useState("Net 14");
@@ -64,42 +76,97 @@ export default function NewInvoiceModal({
     setExcludedExpenseIds(new Set());
   }, [projectId]);
 
+  // Load every active contact once. Small payload (no joins) and lets the
+  // picker render the grouping client-side with zero latency.
   useEffect(() => {
-    if (!search.trim()) { setSearchResults([]); return; }
-    const timer = setTimeout(() => runSearch(search.trim()), 250);
-    return () => clearTimeout(timer);
-  }, [search]);
+    if (contactsLoaded) return;
+    (async () => {
+      const supabase = createClient();
+      const { data } = await supabase.from("contacts")
+        .select("*")
+        .eq("archived", false)
+        .order("first_name");
+      setAllContacts((data as Contact[]) ?? []);
+      setContactsLoaded(true);
+    })();
+  }, [contactsLoaded]);
 
-  async function runSearch(q: string) {
-    setSearching(true);
-    const supabase = createClient();
-    const [{ data: contacts }, { data: organizations }] = await Promise.all([
-      supabase.from("contacts").select("*").eq("archived", false).or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`).limit(5),
-      supabase.from("organizations").select("*").ilike("name", `%${q}%`).limit(4),
-    ]);
-    setSearchResults([
-      ...(contacts ?? []).map((c: Contact) => ({ ...c, _type: "contact" as const })),
-      ...(organizations ?? []).map((c: Organization) => ({ ...c, _type: "organization" as const })),
-    ]);
-    setSearching(false);
-  }
-
-  function selectClient(item: SearchResult) {
-    if (item._type === "contact") {
-      setClientContact(item);
-      setClientOrganization(null);
-    } else {
-      setClientOrganization(item);
-      setClientContact(null);
+  // Refresh project_contacts membership whenever the selected project
+  // changes. On the first switch to a given project we also auto-select
+  // the first attached contact (but only if the user hasn't explicitly
+  // picked one — switching projects later won't clobber the choice).
+  useEffect(() => {
+    if (!projectId) {
+      setProjectContactIds(new Set());
+      return;
     }
-    setSearch(""); setSearchResults([]); setShowSearch(false);
-  }
+    (async () => {
+      const supabase = createClient();
+      const { data } = await supabase.from("project_contacts")
+        .select("contact_id")
+        .eq("project_id", projectId);
+      const ids = new Set<string>((data ?? []).map((r: { contact_id: string }) => r.contact_id));
+      setProjectContactIds(ids);
 
-  function clearClient() { setClientContact(null); setClientOrganization(null); }
+      if (autoSelectedFor !== projectId && !clientContact && ids.size > 0) {
+        const first = allContacts.find((c) => ids.has(c.id));
+        if (first) setClientContact(first);
+        setAutoSelectedFor(projectId);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, allContacts]);
+
+  function clearClient() { setClientContact(null); }
+
+  async function createInlineContact() {
+    const first = addFirst.trim();
+    const last  = addLast.trim();
+    const email = addEmail.trim();
+    if (!first && !last) { setAddError("Add a first or last name."); return; }
+    setAddBusy(true); setAddError(null);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setAddError("Not signed in."); setAddBusy(false); return; }
+    const { data: created, error: insErr } = await supabase
+      .from("contacts")
+      .insert({
+        user_id:    user.id,
+        first_name: first,
+        last_name:  last,
+        email:      email || null,
+        status:     "active",
+      })
+      .select("*")
+      .single();
+    if (insErr || !created) {
+      setAddError(insErr?.message ?? "Could not create contact.");
+      setAddBusy(false);
+      return;
+    }
+    const c = created as Contact;
+    setAllContacts((prev) => [c, ...prev]);
+
+    // When a project is selected, attach the new contact to it so future
+    // invoices on the same project surface them too.
+    if (projectId) {
+      await supabase.from("project_contacts").upsert(
+        { project_id: projectId, contact_id: c.id, user_id: user.id },
+        { onConflict: "project_id,contact_id" },
+      );
+      setProjectContactIds((prev) => {
+        const next = new Set(prev); next.add(c.id); return next;
+      });
+    }
+    setClientContact(c);
+    setAddFirst(""); setAddLast(""); setAddEmail("");
+    setAddOpen(false); setAddBusy(false);
+    setPickerOpen(false); setPickerQuery("");
+  }
 
   const clientLabel = clientContact
     ? `${clientContact.first_name} ${clientContact.last_name}`
-    : clientOrganization?.name ?? null;
+    : null;
 
   // Build the "already invoiced" set from every existing invoice's line items
   // (any status). Once a time entry or expense has been attached to a line,
@@ -162,7 +229,7 @@ export default function NewInvoiceModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!clientLabel) { setError("Select a client."); return; }
+    if (!clientContact) { setError("Select a client."); return; }
     setLoading(true); setError(null);
 
     const res = await fetch("/api/finance/invoices", {
@@ -170,8 +237,8 @@ export default function NewInvoiceModal({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         number: nextNumber,
-        client_contact_id:      clientContact?.id ?? null,
-        client_organization_id: clientOrganization?.id ?? null,
+        client_contact_id:      clientContact.id,
+        client_organization_id: null,
         project_id:             projectId || null,
         issued_at:              issuedAt,
         due_at:                 dueAt || null,
@@ -214,56 +281,8 @@ export default function NewInvoiceModal({
         </div>
 
         <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4 max-h-[72vh] overflow-y-auto">
-          {/* Client */}
-          <div>
-            <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Client *</label>
-            {clientLabel ? (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
-                style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)" }}>
-                <span className="flex-1 text-[13px]" style={{ color: "var(--color-charcoal)" }}>{clientLabel}</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded"
-                  style={{ background: "rgba(31,33,26,0.07)", color: "var(--color-grey)" }}>
-                  {clientContact ? "Contact" : "Organization"}
-                </span>
-                <button type="button" onClick={clearClient} style={{ color: "var(--color-grey)" }}><X size={12} /></button>
-              </div>
-            ) : (
-              <div className="relative">
-                <input type="text" value={search}
-                  onChange={(e) => { setSearch(e.target.value); setShowSearch(true); }}
-                  onFocus={() => setShowSearch(true)}
-                  placeholder="Search contacts and organizations…"
-                  className={inputCls} style={inputStyle} />
-                {showSearch && search.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-1 rounded-xl z-20 overflow-hidden"
-                    style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 4px 20px rgba(0,0,0,0.12)" }}>
-                    {searching ? (
-                      <p className="text-[12px] text-center py-3" style={{ color: "var(--color-grey)" }}>Searching…</p>
-                    ) : searchResults.length === 0 ? (
-                      <p className="text-[12px] text-center py-3" style={{ color: "var(--color-grey)" }}>No results</p>
-                    ) : searchResults.map((item, i) => {
-                      const label = item._type === "contact" ? `${item.first_name} ${item.last_name}` : item.name;
-                      return (
-                        <button key={i} type="button" onClick={() => selectClient(item)}
-                          className="w-full text-left px-4 py-2.5 flex items-center gap-2.5"
-                          style={{ borderBottom: i < searchResults.length - 1 ? "0.5px solid var(--color-border)" : "none" }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded"
-                            style={{ background: item._type === "contact" ? "var(--color-cream)" : "rgba(37,99,171,0.1)", color: item._type === "contact" ? "#6b6860" : "#2563ab" }}>
-                            {item._type === "contact" ? "Contact" : "Organization"}
-                          </span>
-                          <span className="text-[12px] font-medium" style={{ color: "var(--color-charcoal)" }}>{label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Project */}
+          {/* Project — first, so the client picker below can suggest the
+              contacts attached to it. */}
           <div>
             <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Project</label>
             <Select
@@ -272,6 +291,49 @@ export default function NewInvoiceModal({
               options={[{ value: "", label: "None" }, ...projects.map((p) => ({ value: p.id, label: p.title }))]}
               placeholder="None"
             />
+          </div>
+
+          {/* Client — when a project is picked, contacts attached to that
+              project surface in a "From this project" group on top. */}
+          <div>
+            <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Client *</label>
+            {projectId && projectContactIds.size === 0 && !clientLabel && (
+              <p className="text-[11px] mb-1.5" style={{ color: "var(--color-grey)" }}>
+                No contacts linked to this project yet — pick from the full list or add a new one.
+              </p>
+            )}
+            {clientLabel ? (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)" }}>
+                <span className="flex-1 text-[13px]" style={{ color: "var(--color-charcoal)" }}>{clientLabel}</span>
+                {projectId && clientContact && projectContactIds.has(clientContact.id) && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded"
+                    style={{ background: "rgba(61,107,79,0.12)", color: "var(--color-sage-hover)" }}>From project</span>
+                )}
+                <span className="text-[10px] px-1.5 py-0.5 rounded"
+                  style={{ background: "rgba(31,33,26,0.07)", color: "var(--color-grey)" }}>Contact</span>
+                <button type="button" onClick={clearClient} style={{ color: "var(--color-grey)" }}><X size={12} /></button>
+              </div>
+            ) : (
+              <ContactPicker
+                allContacts={allContacts}
+                projectContactIds={projectContactIds}
+                hasProject={!!projectId}
+                open={pickerOpen}
+                setOpen={setPickerOpen}
+                query={pickerQuery}
+                setQuery={setPickerQuery}
+                onPick={(c) => { setClientContact(c); setPickerOpen(false); setPickerQuery(""); }}
+                addOpen={addOpen}
+                setAddOpen={setAddOpen}
+                addFirst={addFirst} setAddFirst={setAddFirst}
+                addLast={addLast}   setAddLast={setAddLast}
+                addEmail={addEmail} setAddEmail={setAddEmail}
+                addBusy={addBusy}
+                addError={addError}
+                onCreate={createInlineContact}
+              />
+            )}
           </div>
 
           {/* Ready to bill — appears once a project is selected */}
@@ -523,3 +585,147 @@ function ReadyToBillPanel({
   );
 }
 
+// ─── Contact picker ─────────────────────────────────────────────────────────
+// Custom inline picker (instead of plain <Select>) so we can group contacts
+// linked to the selected project at the top, then a divider, then everyone
+// else — and tuck a quiet "+ Add new contact" affordance at the bottom.
+
+function ContactPicker({
+  allContacts, projectContactIds, hasProject,
+  open, setOpen, query, setQuery, onPick,
+  addOpen, setAddOpen,
+  addFirst, setAddFirst, addLast, setAddLast, addEmail, setAddEmail,
+  addBusy, addError, onCreate,
+}: {
+  allContacts: Contact[];
+  projectContactIds: Set<string>;
+  hasProject: boolean;
+  open: boolean;
+  setOpen: (b: boolean) => void;
+  query: string;
+  setQuery: (s: string) => void;
+  onPick: (c: Contact) => void;
+  addOpen: boolean;
+  setAddOpen: (b: boolean) => void;
+  addFirst: string; setAddFirst: (s: string) => void;
+  addLast: string;  setAddLast: (s: string) => void;
+  addEmail: string; setAddEmail: (s: string) => void;
+  addBusy: boolean;
+  addError: string | null;
+  onCreate: () => void;
+}) {
+  const q = query.trim().toLowerCase();
+  const matches = (c: Contact) => {
+    if (!q) return true;
+    return (
+      c.first_name.toLowerCase().includes(q) ||
+      c.last_name.toLowerCase().includes(q) ||
+      (c.email ?? "").toLowerCase().includes(q)
+    );
+  };
+  const projectGroup = hasProject
+    ? allContacts.filter((c) => projectContactIds.has(c.id) && matches(c))
+    : [];
+  const otherGroup = allContacts.filter(
+    (c) => (!hasProject || !projectContactIds.has(c.id)) && matches(c),
+  );
+
+  return (
+    <div className="relative">
+      <input type="text" value={query}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        placeholder="Search contacts…"
+        className={inputCls} style={inputStyle} />
+      {open && (
+        <>
+          {/* Outside-click catcher — sits below the panel in stacking order. */}
+          <div className="fixed inset-0 z-10" onClick={() => { setOpen(false); setAddOpen(false); }} />
+          <div className="absolute top-full left-0 right-0 mt-1 rounded-xl z-20 overflow-hidden"
+            style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 4px 20px rgba(0,0,0,0.12)" }}>
+            <div style={{ maxHeight: 260, overflowY: "auto" }}>
+              {projectGroup.length > 0 && (
+                <>
+                  <div className="px-4 py-1.5 text-[9.5px] font-bold uppercase tracking-wider"
+                    style={{ color: "var(--color-grey)", background: "rgba(61,107,79,0.06)", borderBottom: "0.5px solid var(--color-border)" }}>
+                    From this project
+                  </div>
+                  {projectGroup.map((c) => (
+                    <ContactRow key={c.id} contact={c} onPick={() => onPick(c)} />
+                  ))}
+                  {otherGroup.length > 0 && (
+                    <div className="px-4 py-1.5 text-[9.5px] font-bold uppercase tracking-wider"
+                      style={{ color: "var(--color-grey)", background: "rgba(31,33,26,0.03)", borderTop: "0.5px solid var(--color-border)", borderBottom: "0.5px solid var(--color-border)" }}>
+                      Other contacts
+                    </div>
+                  )}
+                </>
+              )}
+              {otherGroup.length > 0 && otherGroup.map((c) => (
+                <ContactRow key={c.id} contact={c} onPick={() => onPick(c)} />
+              ))}
+              {projectGroup.length === 0 && otherGroup.length === 0 && (
+                <p className="text-[12px] text-center py-3" style={{ color: "var(--color-grey)" }}>No contacts match.</p>
+              )}
+            </div>
+
+            {/* Add-new affordance + inline form */}
+            <div style={{ borderTop: "0.5px solid var(--color-border)", background: "var(--color-warm-white)" }}>
+              {!addOpen ? (
+                <button type="button" onClick={() => setAddOpen(true)}
+                  className="w-full text-left px-4 py-2.5 flex items-center gap-2 text-[12px]"
+                  style={{ color: "var(--color-sage-hover)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-warm-white)")}>
+                  <Plus size={12} />
+                  <span>Add new contact</span>
+                </button>
+              ) : (
+                <div className="px-3 py-2.5 space-y-2">
+                  <div className="flex gap-2">
+                    <input value={addFirst} onChange={(e) => setAddFirst(e.target.value)}
+                      placeholder="First name" className={inputCls} style={inputStyle} autoFocus />
+                    <input value={addLast} onChange={(e) => setAddLast(e.target.value)}
+                      placeholder="Last name" className={inputCls} style={inputStyle} />
+                  </div>
+                  <input value={addEmail} onChange={(e) => setAddEmail(e.target.value)}
+                    placeholder="Email (optional)" type="email" className={inputCls} style={inputStyle} />
+                  {addError && <p className="text-[11px]" style={{ color: "var(--color-red-orange)" }}>{addError}</p>}
+                  <div className="flex items-center justify-end gap-2">
+                    <button type="button" onClick={() => setAddOpen(false)}
+                      className="px-3 py-1.5 text-[12px] rounded-lg"
+                      style={{ color: "var(--color-grey)" }}>Cancel</button>
+                    <button type="button" onClick={onCreate} disabled={addBusy}
+                      className="px-3 py-1.5 text-[12px] font-medium rounded-lg text-white disabled:opacity-50"
+                      style={{ background: "var(--color-sage)" }}>
+                      {addBusy ? "Adding…" : "Add & select"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ContactRow({ contact, onPick }: { contact: Contact; onPick: () => void }) {
+  return (
+    <button type="button" onClick={onPick}
+      className="w-full text-left px-4 py-2 flex items-center gap-2.5"
+      style={{ borderBottom: "0.5px solid var(--color-border)" }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+      <span className="text-[12px] font-medium" style={{ color: "var(--color-charcoal)" }}>
+        {contact.first_name} {contact.last_name}
+      </span>
+      {contact.email && (
+        <span className="text-[11px] ml-auto truncate" style={{ color: "var(--color-grey)", maxWidth: 220 }}>
+          {contact.email}
+        </span>
+      )}
+    </button>
+  );
+}
