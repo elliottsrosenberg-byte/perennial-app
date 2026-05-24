@@ -336,6 +336,9 @@ export interface BankTransaction {
   is_personal: boolean;
   linked_expense_id: string | null;
   matched_invoice_id: string | null;
+  note: string | null;
+  receipt_url: string | null;
+  receipt_path: string | null;
   bank_account?: Pick<BankAccount, "name" | "institution" | "last_four" | "type" | "subtype"> | null;
 }
 
