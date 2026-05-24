@@ -172,12 +172,22 @@ function PayForm({
 }) {
   const stripe   = useStripe();
   const elements = useElements();
-  const [busy, setBusy]     = useState(false);
-  const [err,  setErr]      = useState<string | null>(null);
+  const [busy, setBusy]                       = useState(false);
+  const [err,  setErr]                        = useState<string | null>(null);
+  // Track the PaymentElement lifecycle so we can gate the Pay button on
+  // it actually rendering, and surface load failures inline instead of
+  // leaving the user staring at an empty white box.
+  const [elementReady, setElementReady]       = useState(false);
+  const [elementError, setElementError]       = useState<string | null>(null);
+  const [elementComplete, setElementComplete] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!stripe || !elements) return;
+    // Belt-and-suspenders: don't let an empty/incomplete form race into
+    // confirmPayment, which historically left the button stuck at
+    // "Processing…" indefinitely.
+    if (!elementReady || !elementComplete) return;
     setBusy(true);
     setErr(null);
 
@@ -185,18 +195,46 @@ function PayForm({
       ? `${window.location.origin}/i/${token}?paid=1`
       : `/i/${token}?paid=1`;
 
-    const { error } = await stripe.confirmPayment({
-      elements,
-      confirmParams: { return_url: returnUrl },
-    });
+    // Wrap confirmPayment in a 90s timeout. Stripe's promise can stall
+    // silently when a 3DS popup is blocked or a postMessage gets lost —
+    // we'd rather give the user an actionable error than leave them
+    // staring at "Processing…" forever.
+    type ConfirmResult = Awaited<ReturnType<typeof stripe.confirmPayment>>;
+    const result = (await Promise.race([
+      stripe.confirmPayment({
+        elements,
+        confirmParams: { return_url: returnUrl },
+      }),
+      new Promise<{ error: { message: string } }>((resolve) =>
+        setTimeout(
+          () =>
+            resolve({
+              error: {
+                message:
+                  "Payment is taking longer than expected — please try again or refresh.",
+              },
+            }),
+          90_000,
+        ),
+      ),
+    ])) as ConfirmResult | { error: { message: string } };
 
     // If we get here, confirmPayment didn't redirect (typically because
-    // there was an immediate validation error). Surface it inline.
-    if (error) {
-      setErr(error.message ?? "Payment failed. Please try again.");
+    // there was an immediate validation error, or our timeout fired).
+    // Surface it inline and unstick the button.
+    if ("error" in result && result.error) {
+      setErr(result.error.message ?? "Payment failed. Please try again.");
       setBusy(false);
     }
   }
+
+  // Button label tracks the three meaningful states: still loading the
+  // PaymentElement, ready to take a payment, or actively submitting.
+  const buttonLabel = busy
+    ? "Processing…"
+    : !elementReady
+      ? "Loading…"
+      : `Pay ${fmtCurrency(amount)}`;
 
   return (
     <form onSubmit={handleSubmit}>
@@ -210,22 +248,45 @@ function PayForm({
               billingDetails: { email: clientEmail ?? undefined },
             },
           }}
+          onReady={() => setElementReady(true)}
+          onLoadError={(event) => {
+            // event.elementType is "payment"; event.error has { type, message, code? }
+            const msg =
+              event?.error?.message ??
+              "Payment form couldn't load. Please refresh and try again.";
+            console.error("[hosted-invoice] PaymentElement loaderror:", event?.error);
+            setElementError(msg);
+          }}
+          onChange={(event) => {
+            setElementComplete(Boolean(event.complete));
+          }}
         />
       </div>
+      {elementError && (
+        <p style={{ fontSize: 11.5, color: "#dc3e0d", marginBottom: 10, lineHeight: 1.5 }}>
+          Payment form couldn&apos;t load: {elementError}
+        </p>
+      )}
+      {!elementError && elementReady && !elementComplete && (
+        <p style={{ fontSize: 11.5, color: "#9a9690", marginBottom: 10, lineHeight: 1.5 }}>
+          Enter your payment details to continue.
+        </p>
+      )}
       {err && (
         <p style={{ fontSize: 11.5, color: "#dc3e0d", marginBottom: 10, lineHeight: 1.5 }}>{err}</p>
       )}
       <button
         type="submit"
-        disabled={!stripe || busy}
+        disabled={!stripe || busy || !elementReady || !elementComplete}
         style={{
           width: "100%", padding: "12px 16px", borderRadius: 8,
           background: "#1f211a", color: "white", border: "none",
           fontFamily: "inherit", fontSize: 13, fontWeight: 600,
-          cursor: busy ? "default" : "pointer", opacity: busy ? 0.7 : 1,
+          cursor: (busy || !elementReady || !elementComplete) ? "default" : "pointer",
+          opacity: (busy || !elementReady || !elementComplete) ? 0.7 : 1,
         }}
       >
-        {busy ? "Processing…" : `Pay ${fmtCurrency(amount)}`}
+        {buttonLabel}
       </button>
     </form>
   );
