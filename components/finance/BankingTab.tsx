@@ -95,6 +95,20 @@ interface OutstandingInvoice {
   total:  number;
 }
 
+/** Item from /api/finance/banking/queue#invoice_activity — a credit
+ *  bank row with zero-or-more suggested outstanding invoice matches
+ *  (the queue route uses a $1 tolerance). We surface the first
+ *  suggestion as an inline auto-match banner above the table; the
+ *  user dismisses per-credit for the session. */
+interface InvoiceActivityRow extends BankTransaction {
+  suggested_invoices: {
+    id:     string;
+    number: number;
+    client: string;
+    total:  number;
+  }[];
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function fmtCurrency(n: number, opts: { dp?: number; sign?: boolean } = {}) {
@@ -209,6 +223,13 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
   const [total, setTotal]                         = useState(0);
   const [kpis, setKpis]                           = useState<KpiPayload>({ in_this_month: 0, out_this_month: 0, net: 0 });
   const [outstanding, setOutstanding]             = useState<OutstandingInvoice[]>([]);
+  // Auto-match suggestions from the queue route. Only credits whose
+  // amount matches an outstanding invoice within tolerance land here;
+  // we render up to 3 inline banners above the filter bar. Dismissals
+  // are session-local (cleared on reload by design — a fresh page
+  // load should re-surface anything the user didn't act on).
+  const [invoiceActivity, setInvoiceActivity]     = useState<InvoiceActivityRow[]>([]);
+  const [dismissedMatches, setDismissedMatches]   = useState<Set<string>>(new Set());
 
   const [loading, setLoading]                     = useState(true);
   const [syncing, setSyncing]                     = useState(false);
@@ -347,8 +368,12 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
       }
       if (acctRes.ok) { const { accounts: a } = await acctRes.json(); setAccounts(a ?? []); }
       if (invRes.ok) {
-        const data = await invRes.json() as { outstanding_invoices?: OutstandingInvoice[] };
+        const data = await invRes.json() as {
+          outstanding_invoices?: OutstandingInvoice[];
+          invoice_activity?:     InvoiceActivityRow[];
+        };
         setOutstanding(data.outstanding_invoices ?? []);
+        setInvoiceActivity(data.invoice_activity ?? []);
       }
     } finally {
       setSyncing(false);
@@ -735,6 +760,33 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
+  // Auto-match banners. Source of truth: queue.invoice_activity rows
+  // that (a) have at least one suggested invoice, (b) aren't already
+  // matched, and (c) haven't been dismissed in this session. Capped
+  // at 3 to avoid swallowing the table; "+N more" affordance is
+  // deferred per spec.
+  const visibleMatchBanners = useMemo(() => {
+    return invoiceActivity
+      .filter((r) => r.suggested_invoices.length > 0)
+      .filter((r) => !r.matched_invoice_id)
+      .filter((r) => !dismissedMatches.has(r.id))
+      .slice(0, 3);
+  }, [invoiceActivity, dismissedMatches]);
+
+  // When the user marks a credit paid via the banner, we go through the
+  // existing matchInvoice mutator (which already updates the table row,
+  // the outstanding list, and the parent invoices). We also drop the
+  // row from invoiceActivity so the banner disappears immediately.
+  async function acceptMatchBanner(row: InvoiceActivityRow, invoiceId: string) {
+    setInvoiceActivity((rows) => rows.filter((r) => r.id !== row.id));
+    await matchInvoice(row, invoiceId);
+  }
+  function dismissMatchBanner(rowId: string) {
+    setDismissedMatches((s) => {
+      const n = new Set(s); n.add(rowId); return n;
+    });
+  }
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const pageStart  = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const pageEnd    = Math.min(page * pageSize, total);
@@ -990,6 +1042,70 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                 </div>
               ))}
             </div>
+
+            {/* ── Auto-match banners ─────────────────────────────────── */}
+            {/* Inline, sage-tinted nudge when a credit looks like an
+                outstanding invoice payment. "Mark paid" runs the same
+                match-invoice mutator the row's expanded view uses;
+                "Not this one" dismisses for the session. Stacked up
+                to 3; deferred: +N affordance for the longer tail. */}
+            {visibleMatchBanners.length > 0 && (
+              <div className="flex flex-col gap-2 shrink-0">
+                {visibleMatchBanners.map((row) => {
+                  const suggestion = row.suggested_invoices[0];
+                  return (
+                    <div key={row.id}
+                      className="flex items-center gap-3 px-4 py-2.5 rounded-lg"
+                      style={{
+                        background: "rgba(155,163,122,0.10)",
+                        border:     "0.5px solid rgba(155,163,122,0.35)",
+                      }}>
+                      <span className="inline-flex items-center justify-center shrink-0"
+                        style={{
+                          width: 22, height: 22, borderRadius: 999,
+                          background: "var(--color-sage)", color: "white",
+                          fontSize: 12, fontWeight: 600,
+                        }}>
+                        ✓
+                      </span>
+                      <p className="flex-1 text-[12px]" style={{ color: "var(--color-charcoal)" }}>
+                        Got <span style={{ fontWeight: 600 }}>+{fmtCurrency(Number(row.amount), { dp: 0 })}</span>
+                        {" on "}
+                        {new Date(row.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        {" — looks like "}
+                        <span style={{ fontWeight: 600 }}>Invoice #{suggestion.number}</span>
+                        {" from "}
+                        <span style={{ fontWeight: 600 }}>{suggestion.client}</span>
+                        .
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void acceptMatchBanner(row, suggestion.id)}
+                        className="px-3 py-1.5 text-[11.5px] font-medium text-white"
+                        style={{ background: "var(--color-sage)", borderRadius: 999, border: "none", cursor: "pointer" }}>
+                        Mark paid
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => dismissMatchBanner(row.id)}
+                        className="px-3 py-1.5 text-[11.5px] transition-colors"
+                        style={{
+                          color: "var(--color-grey)",
+                          background: "transparent",
+                          border: "0.5px solid var(--color-border)",
+                          borderRadius: 999,
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
+                        onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+                        Not this one
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* ── Filter / sort bar ─────────────────────────────────── */}
             {/* Sticky so the table can scroll under it. Negative top
