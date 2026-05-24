@@ -190,7 +190,6 @@ const catColor = (cat: string) => ({
 }[cat] ?? { dark: C.blue, light: C.blueL });
 
 type Tab = "overview" | "website" | "socials" | "newsletter" | "opportunities";
-type OppFilter = "all" | "fair" | "openCall" | "grant" | "award" | "residency";
 type OppView = "list" | "calendar";
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -1574,51 +1573,6 @@ function MonthCalendar({ opps }: { opps: Opportunity[] }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // OPPORTUNITIES TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function OppRow({ opp, onClick, selected }: { opp: Opportunity; onClick: () => void; selected?: boolean }) {
-  const start = parseDate(opp.start_date);
-  const end   = parseDate(opp.end_date);
-  const isNow = start && end && start <= today() && end >= today();
-  const section = oppSection(opp);
-  const deadlineLabel = isNow ? "Happening now"
-    : section === "actSoon" && end ? `Deadline ${end.toLocaleDateString("en-US",{month:"short",day:"numeric"})}`
-    : null;
-
-  return (
-    <div
-      onClick={onClick}
-      style={{ cursor:"pointer", background:selected?"var(--color-cream)":undefined, borderRadius:selected?8:undefined, margin:selected?"0 -8px":undefined, padding:selected?"0 8px":undefined, transition:"background 0.1s" }}
-    >
-      <div className="flex items-start gap-4" style={{ padding:"14px 0", borderBottom: selected ? "none" : "0.5px solid var(--color-border)" }}>
-        <DateBlock month={start ? start.toLocaleString("en-US",{month:"short"}) : "—"} day={start ? String(start.getDate()) : "—"} />
-        <div style={{ flex:1, display:"flex", flexDirection:"column", gap:5 }}>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span style={{ fontSize:13, fontWeight:600 }}>{opp.title}</span>
-            <TypeBadge type={opp.event_type} category={opp.category} />
-          </div>
-          <div style={{ fontSize:11, color:"var(--color-grey)" }}>
-            {opp.end_date && opp.start_date !== opp.end_date
-              ? `${start?.toLocaleDateString("en-US",{month:"short",day:"numeric"})} – ${end?.toLocaleDateString("en-US",{month:"short",day:"numeric"})} · `
-              : ""}
-            {opp.location}
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {deadlineLabel && <span className="rounded-full" style={{ fontSize:10, fontWeight:600, padding:"2px 8px", background:isNow?C.accentL:C.redL, color:isNow?C.accent:C.red }}>{deadlineLabel}</span>}
-            {opp.user_status && <StatusBadge status={opp.user_status} />}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span style={{ fontSize:11, color:"var(--color-grey)" }}>View →</span>
-        </div>
-      </div>
-      {opp.ash_note && !selected && (
-        <div style={{ background:C.amberL, borderLeft:`3px solid ${C.amber}`, padding:"9px 12px", margin:"0 0 4px 58px", borderRadius:4, fontSize:11, color:C.amber }}>
-          <strong>Ash:</strong> {opp.ash_note}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Opportunity detail panel ─────────────────────────────────────────────────
 function OppDetail({ opp, onClose, onDismiss, onStatusChange }: {
   opp: Opportunity; onClose: () => void;
@@ -1746,26 +1700,172 @@ function OppDetail({ opp, onClose, onDismiss, onStatusChange }: {
   );
 }
 
+// ─── Opportunity card (grid item) ─────────────────────────────────────────────
+// Compact card surface for the Opportunities grid. Mirrors the Finance
+// `cardShadow` + off-white paper used elsewhere in the file. The full
+// detail panel still opens on click so the existing Work-on-this / Status
+// affordances aren't lost.
+function OppCard({
+  opp, onOpen, highlighted, refCallback, onStatusChange, onDismiss,
+}: {
+  opp: Opportunity;
+  onOpen: () => void;
+  highlighted: boolean;
+  refCallback: (el: HTMLDivElement | null) => void;
+  onStatusChange: (id: string, status: string | null) => void;
+  onDismiss: (id: string) => void;
+}) {
+  const start = parseDate(opp.start_date);
+  const end   = parseDate(opp.end_date);
+  const isNow = start && end && start <= today() && end >= today();
+  const section = oppSection(opp);
+
+  // Deadline coloring — red-orange within 7 days, sage for just-opened
+  // long-running programs, grey otherwise.
+  let deadlineLabel: string | null = null;
+  let deadlineColor = "var(--color-grey)";
+  if (isNow) {
+    deadlineLabel = "Happening now";
+    deadlineColor = C.accent;
+  } else if (end) {
+    const d = daysUntil(end);
+    if (d >= 0) {
+      deadlineLabel = `Deadline ${end.toLocaleDateString("en-US",{month:"short",day:"numeric"})}`;
+      if (d <= 7) deadlineColor = "var(--color-red-orange)";
+      else if (section === "ongoing") deadlineColor = "var(--color-sage)";
+    }
+  } else if (start) {
+    deadlineLabel = `${start.toLocaleDateString("en-US",{month:"short",day:"numeric"})}`;
+  }
+
+  // Action-row buttons map to the existing user_status enum
+  // (saved | attending | exhibiting | applied | hidden). We keep the
+  // schema vocabulary instead of inventing new strings.
+  const status = opp.user_status;
+  const visitUrl = opp.registration_url ?? opp.website_url ?? null;
+
+  async function setStatus(s: string) {
+    const next = status === s ? null : s;
+    onStatusChange(opp.id, next);
+    await createClient().from("opportunities").update({ user_status: next }).eq("id", opp.id);
+  }
+  async function hide() {
+    await createClient().from("opportunities").update({ user_status: "hidden" }).eq("id", opp.id);
+    onDismiss(opp.id);
+  }
+
+  const ghostBtn: React.CSSProperties = {
+    padding:"5px 11px", borderRadius:6, fontSize:11, fontFamily:"inherit",
+    border:"0.5px solid rgba(31,33,26,0.13)", background:"transparent",
+    color:"var(--color-grey)", cursor:"pointer",
+  };
+  const sageOutlineBtn: React.CSSProperties = {
+    padding:"5px 11px", borderRadius:6, fontSize:11, fontFamily:"inherit", fontWeight:500,
+    border:"0.5px solid rgba(155,163,122,0.5)", background:"rgba(155,163,122,0.08)",
+    color:"#5a7040", cursor:"pointer",
+  };
+  const sageFilledBtn: React.CSSProperties = {
+    padding:"5px 11px", borderRadius:6, fontSize:11, fontFamily:"inherit", fontWeight:500,
+    border:"none", background:"var(--color-sage)", color:"white", cursor:"pointer",
+  };
+
+  return (
+    <div
+      ref={refCallback}
+      style={{
+        background:"var(--color-off-white)",
+        borderRadius:12,
+        boxShadow:"0 2px 8px rgba(31,33,26,0.04)",
+        outline: highlighted ? "1.5px solid var(--color-sage)" : "0.5px solid rgba(31,33,26,0.08)",
+        outlineOffset: highlighted ? 0 : undefined,
+        padding:"14px 16px",
+        display:"flex", flexDirection:"column", gap:10,
+        transition:"outline 0.2s",
+      }}>
+      <div onClick={onOpen} style={{ cursor:"pointer", display:"flex", flexDirection:"column", gap:8, minWidth:0 }}>
+        <div className="flex items-start gap-2">
+          <h3 style={{ flex:1, fontSize:14, fontWeight:650, lineHeight:1.3, fontFamily:"var(--font-display)", color:"var(--color-charcoal)", margin:0 }}>{opp.title}</h3>
+          {status && <StatusBadge status={status} />}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap" style={{ fontSize:11, color:"var(--color-grey)" }}>
+          <TypeBadge type={opp.event_type} category={opp.category} />
+          {opp.location && <span>· {opp.location}</span>}
+        </div>
+        {deadlineLabel && (
+          <div style={{ fontSize:11, fontWeight:500, color:deadlineColor }}>{deadlineLabel}</div>
+        )}
+        {opp.about && (
+          <p style={{ fontSize:12, color:"var(--color-grey)", lineHeight:1.5, margin:0, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" as const, overflow:"hidden" }}>{opp.about}</p>
+        )}
+      </div>
+      <div className="flex items-center gap-1.5 flex-wrap" style={{ marginTop:2 }}>
+        {status === null && (
+          <>
+            <button onClick={() => setStatus("saved")} style={sageOutlineBtn}>Save</button>
+            <button onClick={hide} style={ghostBtn}>Hide</button>
+          </>
+        )}
+        {status === "saved" && (
+          <>
+            {visitUrl && (
+              <a href={visitUrl} target="_blank" rel="noopener noreferrer" style={{ ...sageOutlineBtn, textDecoration:"none", display:"inline-flex", alignItems:"center", gap:4 }}>Visit ↗</a>
+            )}
+            <button onClick={() => setStatus("applied")} style={sageFilledBtn}>Mark applied</button>
+            <button onClick={hide} style={ghostBtn}>Hide</button>
+          </>
+        )}
+        {status === "applied" && (
+          <>
+            {visitUrl && (
+              <a href={visitUrl} target="_blank" rel="noopener noreferrer" style={{ ...sageFilledBtn, textDecoration:"none", display:"inline-flex", alignItems:"center", gap:4 }}>Visit ↗</a>
+            )}
+            <button onClick={hide} style={ghostBtn}>Hide</button>
+          </>
+        )}
+        {(status === "attending" || status === "exhibiting") && (
+          <>
+            {visitUrl && (
+              <a href={visitUrl} target="_blank" rel="noopener noreferrer" style={{ ...sageOutlineBtn, textDecoration:"none", display:"inline-flex", alignItems:"center", gap:4 }}>Visit ↗</a>
+            )}
+            <button onClick={hide} style={ghostBtn}>Hide</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportunity[]; deepLinkOppId?: string | null }) {
-  const [filter, setFilter]       = useState<OppFilter>("all");
+  const [filter, setFilter]       = useState<string>("all");
   const [view, setView]           = useState<OppView>("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [localOpps, setLocalOpps] = useState<Opportunity[]>(initialOpps);
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Honor `?opportunityId=` deep-link on mount (Calendar bars link this way).
-  // Open the matching opp's detail panel and scroll it into view.
+  // Scroll the matching card into view + highlight it for ~2.5s. The detail
+  // panel still opens so the user lands on the same surface as before.
   useEffect(() => {
     if (!deepLinkOppId) return;
     const match = initialOpps.find(o => o.id === deepLinkOppId);
     if (!match) return;
     setSelectedId(deepLinkOppId);
+    setHighlightId(deepLinkOppId);
+    // Wait a tick so the card has rendered before scrolling.
+    requestAnimationFrame(() => {
+      const el = cardRefs.current.get(deepLinkOppId);
+      if (el) el.scrollIntoView({ behavior:"smooth", block:"center" });
+    });
+    const t = setTimeout(() => setHighlightId(null), 2500);
     // Clear the query so a refresh or back-nav doesn't re-trigger.
     try {
       const url = new URL(window.location.href);
       url.searchParams.delete("opportunityId");
       window.history.replaceState({}, "", url.toString());
     } catch { /* noop */ }
+    return () => clearTimeout(t);
   }, [deepLinkOppId, initialOpps]);
 
   const opps = localOpps;
@@ -1774,81 +1874,121 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportun
     setLocalOpps(prev => prev.map(o => o.id === id ? { ...o, user_status: status } : o));
   }
 
-  const FILTERS: { key: OppFilter; label: string }[] = [
-    { key:"all",       label:"All" },
-    { key:"fair",      label:"Fairs & Shows" },
-    { key:"openCall",  label:"Open Calls" },
-    { key:"award",     label:"Awards" },
-    { key:"grant",     label:"Grants" },
-    { key:"residency", label:"Residencies" },
-  ];
-
   const visible  = useMemo(() => opps.filter(o => !dismissed.has(o.id)), [opps, dismissed]);
-  const filtered = visible.filter(o => filter === "all" || o.category === filter);
-  const actSoon  = filtered.filter(o => oppSection(o) === "actSoon");
-  const upcoming = filtered.filter(o => oppSection(o) === "upcoming");
-  const later    = filtered.filter(o => oppSection(o) === "later");
-  const ongoing  = filtered.filter(o => oppSection(o) === "ongoing");
 
+  // Filter pills derived from the categories actually present in the data.
+  // Labels for the known categories use the brand vocabulary; anything new
+  // falls back to its raw key so we never silently drop a category.
+  const CATEGORY_LABELS: Record<string, string> = {
+    fair:      "Fairs & Shows",
+    openCall:  "Open Calls",
+    award:     "Awards",
+    grant:     "Grants",
+    residency: "Residencies",
+  };
+  const presentCategories = useMemo(() => {
+    const seen = new Set<string>();
+    for (const o of visible) if (o.category) seen.add(o.category);
+    // Preserve a stable order: known categories first (in canonical
+    // order), then anything novel alphabetically.
+    const known = ["fair","openCall","award","grant","residency"].filter(k => seen.has(k));
+    const extra = [...seen].filter(k => !known.includes(k)).sort();
+    return [...known, ...extra];
+  }, [visible]);
+
+  const filtered = visible.filter(o => filter === "all" || o.category === filter);
   const selectedOpp = selectedId ? visible.find(o => o.id === selectedId) ?? null : null;
 
-  const SectionHead = ({ label, count, color }: { label: string; count: number; color: string }) => (
-    <div style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 0 8px 12px", borderLeft:`4px solid ${color}`, marginBottom:4 }}>
-      <span style={{ fontSize:12, fontWeight:700, color }}>{label}</span>
-      <span className="rounded-full" style={{ fontSize:10, fontWeight:600, padding:"2px 8px", background:color+"18", color }}>{count}</span>
-    </div>
+  // Header counts — "{N} upcoming · {M} with deadlines this week".
+  const upcomingCount = visible.length;
+  const deadlineSoonCount = useMemo(() =>
+    visible.filter(o => {
+      const e = parseDate(o.end_date);
+      if (!e) return false;
+      const d = daysUntil(e);
+      return d >= 0 && d <= 7;
+    }).length,
+    [visible]
   );
+
+  function registerCard(id: string) {
+    return (el: HTMLDivElement | null) => {
+      if (el) cardRefs.current.set(id, el);
+      else cardRefs.current.delete(id);
+    };
+  }
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      {/* Filter bar */}
-      <div style={{ display:"flex", alignItems:"center", gap:16, padding:"10px 24px", background:"var(--color-off-white)", borderBottom:"0.5px solid var(--color-border)", flexShrink:0 }}>
-        <div className="flex items-center gap-2 shrink-0">
-          <span style={{ fontSize:11, color:"var(--color-grey)", textTransform:"uppercase", letterSpacing:"0.05em", fontWeight:600 }}>Perennial Feed</span>
-          <div title="Curated opportunities for designers" style={{ width:14, height:14, borderRadius:"50%", border:"0.5px solid rgba(31,33,26,0.13)", fontSize:9, color:"var(--color-grey)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"help" }}>i</div>
+      {/* Header — display-font title + count subtitle + curated-feed pill */}
+      <div style={{ padding:"18px 24px 14px", background:"var(--color-off-white)", borderBottom:"0.5px solid var(--color-border)", flexShrink:0, display:"flex", alignItems:"flex-start", gap:14, flexWrap:"wrap" }}>
+        <div style={{ flex:1, minWidth:240 }}>
+          <div className="flex items-center gap-2 flex-wrap" style={{ marginBottom:4 }}>
+            <h2 style={{ fontSize:20, fontWeight:650, fontFamily:"var(--font-display)", color:"var(--color-charcoal)", margin:0 }}>Opportunities</h2>
+            <span
+              title="Perennial curates this feed — designers don't add to it directly."
+              style={{ fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em", padding:"3px 8px", borderRadius:20, background:"rgba(31,33,26,0.06)", color:"var(--color-grey)", cursor:"help" }}>
+              Curated by Perennial
+            </span>
+          </div>
+          <p style={{ fontSize:12, color:"var(--color-grey)", margin:0 }}>
+            {upcomingCount} upcoming
+            {deadlineSoonCount > 0 ? ` · ${deadlineSoonCount} with deadline${deadlineSoonCount === 1 ? "" : "s"} this week` : ""}
+          </p>
         </div>
-        <div className="flex items-center gap-2 flex-1 flex-wrap">
-          {FILTERS.map(f => (
-            <button key={f.key} onClick={() => setFilter(f.key)} style={{ padding:"4px 11px", borderRadius:20, fontSize:11, cursor:"pointer", border:`0.5px solid ${filter===f.key?"var(--color-charcoal)":"rgba(31,33,26,0.13)"}`, background:filter===f.key?"var(--color-charcoal)":"transparent", color:filter===f.key?"var(--color-off-white)":"var(--color-grey)", fontFamily:"inherit", whiteSpace:"nowrap" }}>{f.label}</button>
-          ))}
-        </div>
-        {/* View toggle */}
+        {/* View toggle preserved — calendar view is still a useful secondary view */}
         <div className="flex shrink-0" style={{ background:"var(--color-cream)", border:"0.5px solid var(--color-border)", borderRadius:6 }}>
           {(["list","calendar"] as OppView[]).map((v,i) => (
-            <button key={v} onClick={() => setView(v)} title={v === "list" ? "List view" : "Calendar view"} style={{ padding:"4px 10px", background:view===v?"var(--color-off-white)":"transparent", border:view===v?"0.5px solid rgba(31,33,26,0.13)":"none", borderRadius:5, color:view===v?"var(--color-charcoal)":"var(--color-grey)", cursor:"pointer", display:"flex", alignItems:"center", boxShadow:view===v?"0 1px 3px rgba(0,0,0,0.06)":"none", borderRight:i===0?"0.5px solid var(--color-border)":undefined }}>
+            <button key={v} onClick={() => setView(v)} title={v === "list" ? "Card view" : "Calendar view"} style={{ padding:"4px 10px", background:view===v?"var(--color-off-white)":"transparent", border:view===v?"0.5px solid rgba(31,33,26,0.13)":"none", borderRadius:5, color:view===v?"var(--color-charcoal)":"var(--color-grey)", cursor:"pointer", display:"flex", alignItems:"center", boxShadow:view===v?"0 1px 3px rgba(0,0,0,0.06)":"none", borderRight:i===0?"0.5px solid var(--color-border)":undefined }}>
               {v === "list" ? <IcList /> : <IcCalSm />}
             </button>
           ))}
         </div>
       </div>
 
-      {/* List view */}
+      {/* Filter pills — mirrors the InvoicesTab pattern: filled charcoal
+          when active, soft ghost when inactive. Derived from categories
+          actually present in the loaded data so we never show an empty
+          bucket. */}
+      {view === "list" && presentCategories.length > 0 && (
+        <div style={{ display:"flex", alignItems:"center", gap:6, padding:"10px 24px", background:"var(--color-off-white)", borderBottom:"0.5px solid var(--color-border)", flexShrink:0, flexWrap:"wrap" }}>
+          {(["all", ...presentCategories]).map(key => {
+            const active = filter === key;
+            const label = key === "all" ? "All" : (CATEGORY_LABELS[key] ?? key);
+            const count = key === "all" ? visible.length : visible.filter(o => o.category === key).length;
+            return (
+              <button key={key} type="button" onClick={() => setFilter(key)}
+                style={{
+                  padding:"4px 11px", borderRadius:20, fontSize:11, cursor:"pointer",
+                  background: active ? "var(--color-charcoal)" : "rgba(31,33,26,0.06)",
+                  color: active ? "var(--color-off-white)" : "var(--color-grey)",
+                  border:"none", fontWeight: active ? 600 : 400,
+                  fontFamily:"inherit", whiteSpace:"nowrap",
+                }}>
+                {label}{count > 0 ? ` ${count}` : ""}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* List view — card grid */}
       {view === "list" && (
         <div className="flex flex-1 overflow-hidden">
-          <div className="flex-1 overflow-y-auto" style={{ padding:"22px 24px", display:"flex", flexDirection:"column", gap:20 }}>
-            {actSoon.length > 0 && (
-              <div>
-                <SectionHead label="Act soon" count={actSoon.length} color={C.red} />
-                {actSoon.map(o => <OppRow key={o.id} opp={o} onClick={() => setSelectedId(o.id === selectedId ? null : o.id)} selected={o.id === selectedId} />)}
-              </div>
-            )}
-            {upcoming.length > 0 && (
-              <div>
-                <SectionHead label="Upcoming" count={upcoming.length} color={C.accent} />
-                {upcoming.map(o => <OppRow key={o.id} opp={o} onClick={() => setSelectedId(o.id === selectedId ? null : o.id)} selected={o.id === selectedId} />)}
-              </div>
-            )}
-            {later.length > 0 && (
-              <div>
-                <SectionHead label="Later this year" count={later.length} color="var(--color-grey)" />
-                {later.map(o => <OppRow key={o.id} opp={o} onClick={() => setSelectedId(o.id === selectedId ? null : o.id)} selected={o.id === selectedId} />)}
-              </div>
-            )}
-            {ongoing.length > 0 && (
-              <div>
-                <SectionHead label="Ongoing" count={ongoing.length} color={C.blue} />
-                <p style={{ fontSize:11, color:"var(--color-grey)", margin:"0 0 8px 16px" }}>Year-round programs — apply anytime</p>
-                {ongoing.map(o => <OppRow key={o.id} opp={o} onClick={() => setSelectedId(o.id === selectedId ? null : o.id)} selected={o.id === selectedId} />)}
+          <div className="flex-1 overflow-y-auto" style={{ padding:"20px 24px" }}>
+            {filtered.length > 0 && (
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(320px, 1fr))", gap:14 }}>
+                {filtered.map(o => (
+                  <OppCard
+                    key={o.id}
+                    opp={o}
+                    onOpen={() => setSelectedId(o.id === selectedId ? null : o.id)}
+                    highlighted={highlightId === o.id}
+                    refCallback={registerCard(o.id)}
+                    onStatusChange={handleStatusChange}
+                    onDismiss={dismiss}
+                  />
+                ))}
               </div>
             )}
             {filtered.length === 0 && localOpps.length === 0 && (
@@ -1871,7 +2011,15 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportun
               </div>
             )}
             {filtered.length === 0 && localOpps.length > 0 && (
-              <div className="flex-1 flex items-center justify-center" style={{ color:"var(--color-grey)", fontSize:13 }}>No opportunities match this filter.</div>
+              <div style={{ padding:"40px 24px", textAlign:"center", maxWidth:420, margin:"0 auto" }}>
+                <p style={{ fontSize:13, color:"var(--color-grey)", marginBottom:14 }}>No opportunities match this filter.</p>
+                <button
+                  onClick={() => openAsh("What opportunities — art fairs, open calls, grants, residencies — should I be aware of as an independent designer right now?")}
+                  style={{ background:"transparent", border:"none", color:"var(--color-sage)", fontSize:12, fontWeight:500, cursor:"pointer", fontFamily:"inherit", textDecoration:"underline", textUnderlineOffset:3 }}
+                >
+                  Ask Ash about opportunities →
+                </button>
+              </div>
             )}
           </div>
           {selectedOpp && (
