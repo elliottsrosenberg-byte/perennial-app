@@ -592,8 +592,16 @@ function WebsiteTab({ integration, onConnect, onDisconnect }: {
   // Load stats when fully connected
   useEffect(() => {
     const meta = integration?.metadata as Record<string, unknown> | undefined;
-    if (!integration || meta?.step === "select_property") {
-      if (meta?.step === "select_property") setStep("select_property");
+    if (!integration) {
+      // Reset to the empty/connect prompt when integration goes away
+      // (disconnect, provider rename, etc.) so the dashboard doesn't
+      // linger alongside the connect CTA.
+      setStep("idle");
+      setStats(null);
+      return;
+    }
+    if (meta?.step === "select_property") {
+      setStep("select_property");
       return;
     }
     setStep("connected");
@@ -647,21 +655,35 @@ function WebsiteTab({ integration, onConnect, onDisconnect }: {
           </div>
           <div style={{ textAlign:"center" }}>
             <p style={{ fontSize:15, fontWeight:700, color:"var(--color-charcoal)", marginBottom:8 }}>Connect Google Analytics</p>
-            <p style={{ fontSize:12, color:"var(--color-grey)", lineHeight:1.7, maxWidth:380 }}>
-              See real visitor data from your site — sessions, active users, top pages, and where your traffic comes from. Google Analytics is free, and you almost certainly already have it installed.
+            <p style={{ fontSize:12, color:"var(--color-grey)", lineHeight:1.7, maxWidth:420 }}>
+              See real visitor data from your site — sessions, active users, top pages, and where your traffic comes from. Google Analytics 4 is free.
             </p>
           </div>
-          <button onClick={onConnect}
-            style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 22px", fontSize:13, fontWeight:500, borderRadius:8, border:"0.5px solid rgba(0,0,0,0.18)", background:"white", color:"#3c4043", cursor:"pointer", fontFamily:"inherit", boxShadow:"0 1px 3px rgba(0,0,0,0.08)" }}
-            onMouseEnter={e => e.currentTarget.style.background = "#f8f9fa"}
-            onMouseLeave={e => e.currentTarget.style.background = "white"}>
-            <svg width="18" height="18" viewBox="0 0 48 48" fill="none"><path d="M43.6 20H24v8.4h11.2C33.6 33.4 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l6-6C34.5 6.3 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c10 0 19-7.2 19-20 0-1.3-.1-2.7-.4-4z" fill="#4285F4"/></svg>
-            Sign in with Google
-          </button>
-          <p style={{ fontSize:11, color:"var(--color-grey)" }}>
-            Don&apos;t have Analytics yet?{" "}
-            <a href="https://analytics.google.com" target="_blank" rel="noreferrer" style={{ color:"var(--color-sage)" }}>Set it up free →</a>
-          </p>
+
+          {/* Two co-equal paths: connect existing GA, or set one up. */}
+          <div style={{ display:"flex", gap:10, flexWrap:"wrap", justifyContent:"center" }}>
+            <button onClick={onConnect}
+              style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 22px", fontSize:13, fontWeight:500, borderRadius:8, border:"0.5px solid rgba(0,0,0,0.18)", background:"white", color:"#3c4043", cursor:"pointer", fontFamily:"inherit", boxShadow:"0 1px 3px rgba(0,0,0,0.08)" }}
+              onMouseEnter={e => e.currentTarget.style.background = "#f8f9fa"}
+              onMouseLeave={e => e.currentTarget.style.background = "white"}>
+              <svg width="18" height="18" viewBox="0 0 48 48" fill="none"><path d="M43.6 20H24v8.4h11.2C33.6 33.4 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l6-6C34.5 6.3 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c10 0 19-7.2 19-20 0-1.3-.1-2.7-.4-4z" fill="#4285F4"/></svg>
+              Connect existing
+            </button>
+            <a href="https://analytics.google.com/analytics/web/?authuser=0#/p0/admin/account/create" target="_blank" rel="noreferrer"
+              style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 22px", fontSize:13, fontWeight:500, borderRadius:8, border:"none", background:"var(--color-sage)", color:"white", textDecoration:"none", fontFamily:"inherit" }}>
+              Set up GA4 free →
+            </a>
+          </div>
+
+          {/* Inline 3-step guide so the "set up" path doesn't feel like a dead end. */}
+          <details style={{ fontSize:11, color:"var(--color-grey)", maxWidth:480, marginTop:4 }}>
+            <summary style={{ cursor:"pointer", color:"var(--color-sage)" }}>How GA4 setup works (60 seconds)</summary>
+            <ol style={{ marginTop:10, paddingLeft:20, lineHeight:1.8 }}>
+              <li>Click <b>Set up GA4 free</b> above → Google walks you through creating an account + property for your site.</li>
+              <li>Google gives you a one-line snippet (a <code>&lt;script&gt;</code> tag). Paste it into your site&apos;s <code>&lt;head&gt;</code> — Squarespace, Webflow, Framer, Wix all have a one-click field for it.</li>
+              <li>Come back here, click <b>Connect existing</b>, pick the property you just made. Data starts flowing within the hour.</li>
+            </ol>
+          </details>
         </div>
       )}
 
@@ -1674,7 +1696,10 @@ export default function PresenceClient({ initialOpportunities }: { initialOpport
   }
 
   const instagram  = getInt("instagram");
-  const plausible  = getInt("ga4");
+  // Variable name kept for historical reasons (this used to be a
+  // Plausible integration); the actual provider value written by the
+  // OAuth callback is "google_analytics".
+  const plausible  = getInt("google_analytics");
   const newsletter = (["beehiiv","kit","mailchimp","substack"] as const)
     .map(p => getInt(p)).find(Boolean) ?? null;
 
@@ -1805,7 +1830,7 @@ export default function PresenceClient({ initialOpportunities }: { initialOpport
         <WebsiteTab
           integration={plausible}
           onConnect={() => window.location.href = "/api/auth/google-analytics"}
-          onDisconnect={() => disconnectIntegration("ga4")}
+          onDisconnect={() => disconnectIntegration("google_analytics")}
         />
       )}
       {tab === "socials"       && (

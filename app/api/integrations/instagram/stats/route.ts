@@ -29,13 +29,20 @@ export async function GET() {
   }
 
   // Fetch profile + follower count
+  console.log("[instagram/stats] fetching profile", { igId });
   const profileRes = await fetch(
     `https://graph.instagram.com/${igId}?fields=id,username,followers_count,media_count&access_token=${token}`
   );
   if (!profileRes.ok) {
     const body = await profileRes.text().catch(() => "");
     console.error("[instagram/stats] profile fetch failed", profileRes.status, body);
-    return NextResponse.json({ connected: true, error: "Failed to fetch stats", metadata: integration.metadata });
+    // Return 502 so the UI can show the error instead of silently
+    // rendering blanks. Include the upstream body so we can diagnose
+    // permission/scope issues from the client side too.
+    return NextResponse.json(
+      { connected: true, error: `Instagram API ${profileRes.status}: ${body.slice(0, 240)}`, metadata: integration.metadata },
+      { status: 502 },
+    );
   }
 
   const profile = await profileRes.json() as {
