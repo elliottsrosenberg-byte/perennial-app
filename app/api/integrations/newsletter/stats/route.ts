@@ -25,20 +25,48 @@ export async function GET() {
 
     if (int.provider === "beehiiv" && token) {
       const pubId = meta.publication_id as string;
-      const pubRes = await fetch(`https://api.beehiiv.com/v2/publications/${pubId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // expand[]=stats is REQUIRED — Beehiiv omits the stats block from
+      // the publication endpoint by default. Without it the response is
+      // { data: { id, name, ... } } with no subscription counts, and
+      // subscribers stays null in metadata after every sync.
+      const pubRes = await fetch(
+        `https://api.beehiiv.com/v2/publications/${pubId}?expand%5B%5D=stats`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
       if (pubRes.ok) {
-        const { data: pub } = await pubRes.json() as { data: { name: string; stats: { total_active_subscriptions: number } } };
+        const { data: pub } = await pubRes.json() as {
+          data: {
+            name?: string;
+            stats?: {
+              total_subscriptions?: number;
+              active_subscriptions?: number;
+              total_active_subscriptions?: number;
+              total_sent?: number;
+              average_open_rate?: number;
+              average_click_through_rate?: number;
+            };
+          };
+        };
+        const subs =
+          pub.stats?.active_subscriptions
+          ?? pub.stats?.total_active_subscriptions
+          ?? pub.stats?.total_subscriptions
+          ?? meta.subscribers;
         const updatedMeta = {
           ...meta,
-          subscribers:  pub.stats?.total_active_subscriptions ?? meta.subscribers,
-          last_fetched: new Date().toISOString(),
+          subscribers:        subs,
+          total_sent:         pub.stats?.total_sent           ?? meta.total_sent,
+          average_open_rate:  pub.stats?.average_open_rate    ?? meta.average_open_rate,
+          average_ctr:        pub.stats?.average_click_through_rate ?? meta.average_ctr,
+          last_fetched:       new Date().toISOString(),
         };
         await supabase.from("integrations")
           .update({ metadata: updatedMeta, last_synced_at: new Date().toISOString() })
           .eq("id", int.id);
         results.push({ provider: "beehiiv", ...updatedMeta });
+      } else {
+        const body = await pubRes.text().catch(() => "");
+        console.error("[newsletter/beehiiv] publication fetch failed", pubRes.status, body);
       }
     }
 
