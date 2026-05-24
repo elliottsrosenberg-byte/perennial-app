@@ -180,6 +180,17 @@ function PayForm({
   const [elementReady, setElementReady]       = useState(false);
   const [elementError, setElementError]       = useState<string | null>(null);
   const [elementComplete, setElementComplete] = useState(false);
+  // If the iframe never reports ready within 5s, it likely loaded but
+  // rendered no payment methods (silent-empty case — Stripe doesn't
+  // always fire loaderror for this). We surface the same diagnostic as
+  // an explicit loaderror would trigger.
+  const [stalled, setStalled] = useState(false);
+  useEffect(() => {
+    if (elementReady) return;
+    const t = setTimeout(() => setStalled(true), 5_000);
+    return () => clearTimeout(t);
+  }, [elementReady]);
+  const showDiagnostic = Boolean(elementError) || (stalled && !elementReady);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -271,6 +282,36 @@ function PayForm({
         <p style={{ fontSize: 11.5, color: "#9a9690", marginBottom: 10, lineHeight: 1.5 }}>
           Enter your payment details to continue.
         </p>
+      )}
+      {showDiagnostic && (
+        <div
+          style={{
+            background: "white", border: "0.5px solid #e6e4dd", borderRadius: 8,
+            padding: "12px 14px", marginBottom: 12, fontSize: 11.5,
+            color: "#1f211a", lineHeight: 1.55,
+          }}
+        >
+          <p style={{ fontWeight: 600, marginBottom: 6 }}>
+            Payment form didn&apos;t load.
+          </p>
+          <p style={{ color: "#6b6860", marginBottom: 10 }}>
+            This usually means no payment methods are enabled in your Stripe account.
+            Open Stripe Dashboard → Settings → Payment methods, enable Card, then refresh.
+          </p>
+          <a
+            href="https://dashboard.stripe.com/settings/payment_methods"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "8px 12px", borderRadius: 6,
+              background: "#1f211a", color: "white", textDecoration: "none",
+              fontSize: 11.5, fontWeight: 600,
+            }}
+          >
+            Open Stripe settings ↗
+          </a>
+        </div>
       )}
       {err && (
         <p style={{ fontSize: 11.5, color: "#dc3e0d", marginBottom: 10, lineHeight: 1.5 }}>{err}</p>
