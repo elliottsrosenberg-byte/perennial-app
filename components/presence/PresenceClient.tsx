@@ -622,6 +622,25 @@ function WebsiteTab({ integration, onConnect, onDisconnect }: {
       .catch(() => setLoadingStats(false));
   }, [integration]);
 
+  function recheckStats() {
+    if (loadingStats) return;
+    setLoadingStats(true);
+    fetch("/api/integrations/ga4/stats")
+      .then(r => r.json())
+      .then((d: GA4Stats & { step?: string }) => {
+        if (d.step === "select_property") { setStep("select_property"); return; }
+        if (d.connected) setStats(d);
+        setLoadingStats(false);
+      })
+      .catch(() => setLoadingStats(false));
+  }
+
+  const noData = stats !== null
+    && (stats.sessions ?? 0) === 0
+    && (stats.active_users ?? 0) === 0
+    && (stats.top_pages ?? []).length === 0
+    && (stats.channels ?? []).length === 0;
+
   async function saveProperty() {
     if (!selectedPropId) return;
     setSavingProp(true);
@@ -739,22 +758,44 @@ function WebsiteTab({ integration, onConnect, onDisconnect }: {
         <button onClick={onDisconnect} style={{ fontSize:11, color:"var(--color-grey)", background:"none", border:"none", cursor:"pointer" }}>Disconnect</button>
       </div>
       <div style={{ padding:"22px 24px", display:"flex", flexDirection:"column", gap:18, flex:1 }}>
-        <button
-          onClick={() => openAsh("Look at my Google Analytics traffic data and tell me what stands out — top pages, traffic sources, spikes worth investigating, and one or two things I should do this week to grow my audience.")}
-          className="rounded-xl"
-          style={{ border:"0.5px solid var(--color-border)", padding:"12px 16px", display:"flex", gap:12, ...cardStyle, cursor:"pointer", textAlign:"left", fontFamily:"inherit", width:"100%" }}
-        >
-          <div style={{ display:"flex", alignItems:"flex-start", gap:8, flex:1 }}>
-            <div style={{ color:C.accent, flexShrink:0, marginTop:2 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 22c0 0-6-4-6-10a6 6 0 0 1 12 0c0 6-6 10-6 10z"/><path d="M12 12c-2-1.5-3-3-2-5"/><path d="M12 12c2-1.5 3-3 2-5"/></svg>
+        {noData ? (
+          <div className={card()} style={{ ...cardStyle, padding:"32px 28px", display:"flex", flexDirection:"column", alignItems:"flex-start", gap:14, maxWidth:560 }}>
+            <div style={{ width:40, height:40, borderRadius:10, background:"rgba(155,163,122,0.14)", display:"flex", alignItems:"center", justifyContent:"center", color:"var(--color-sage)" }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
             </div>
             <div>
-              <div style={{ fontSize:10, textTransform:"uppercase", color:"var(--color-grey)", fontWeight:600, letterSpacing:"0.04em" }}>Ash</div>
-              <div style={{ fontSize:13, color:"var(--color-charcoal)", lineHeight:1.5, marginTop:2 }}>Want a read on this month&apos;s traffic? I&apos;ll look at your top pages, sources, and what to focus on next.</div>
+              <p style={{ fontSize:15, fontWeight:700, color:"var(--color-charcoal)", marginBottom:6 }}>Your GA4 property is connected, but hasn&apos;t received any traffic yet</p>
+              <p style={{ fontSize:12, color:"var(--color-grey)", lineHeight:1.6 }}>Add the GA4 measurement snippet to your website to start tracking sessions, top pages, and traffic channels.</p>
+            </div>
+            <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
+              <a
+                href="https://support.google.com/analytics/answer/9304153"
+                target="_blank"
+                rel="noreferrer"
+                style={{ padding:"9px 18px", fontSize:13, fontWeight:500, borderRadius:8, border:"none", background:"var(--color-sage)", color:"white", textDecoration:"none", fontFamily:"inherit" }}
+              >
+                How to install GA4 →
+              </a>
+              <button
+                onClick={() => setStep("select_property")}
+                style={{ fontSize:12, color:"var(--color-grey)", background:"none", border:"none", cursor:"pointer", padding:"6px 4px", fontFamily:"inherit" }}
+              >
+                Wrong property?
+              </button>
+            </div>
+            <div style={{ fontSize:11, color:"var(--color-grey)", lineHeight:1.6, marginTop:2 }}>
+              Already installed? It can take up to 24h for data to appear.{" "}
+              <button
+                onClick={recheckStats}
+                disabled={loadingStats}
+                style={{ color:"var(--color-sage)", background:"none", border:"none", cursor: loadingStats ? "default" : "pointer", padding:0, fontFamily:"inherit", fontSize:11, opacity: loadingStats ? 0.6 : 1 }}
+              >
+                {loadingStats ? "Re-checking…" : "Re-check now"}
+              </button>
             </div>
           </div>
-          <span style={{ ...blueLink, whiteSpace:"nowrap", flexShrink:0, alignSelf:"flex-start" }}>Ask Ash →</span>
-        </button>
+        ) : (
+        <>
         <div style={{ display:"flex", gap:12 }}>
           {loadingStats ? (
             [1,2,3,4].map(i => (
@@ -832,6 +873,8 @@ function WebsiteTab({ integration, onConnect, onDisconnect }: {
             )}
           </div>
         </div>
+        </>
+        )}
       </div>
       </>)}
     </div>
