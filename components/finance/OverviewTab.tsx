@@ -105,10 +105,28 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
     .slice(0, 4);
   const recentExpenses = expenses.slice(0, 3);
 
-  const card = "rounded-xl overflow-hidden";
-  const cardStyle = { background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)" };
+  // Module cards share a single elevated paper treatment with a colored
+  // accent stripe — same vocabulary as the KPI row above, so the page
+  // reads as one composition instead of a flat grid.
+  const card = "rounded-xl overflow-hidden flex flex-col";
+  const cardStyle = {
+    background: "var(--color-off-white)",
+    border: "0.5px solid var(--color-border)",
+    boxShadow: "0 2px 8px rgba(31,33,26,0.04)",
+  } as const;
   const cardHead = "flex items-center gap-2 px-4 py-3";
-  const cardHeadStyle = { borderBottom: "0.5px solid var(--color-border)" };
+  const cardHeadStyle = {
+    borderBottom: "0.5px solid var(--color-border)",
+    background: "var(--color-warm-white)",
+  } as const;
+  // Display-font card title for readability.
+  const cardTitleStyle: React.CSSProperties = {
+    fontFamily: "var(--font-display)",
+    fontSize: 13,
+    fontWeight: 600,
+    color: "var(--color-charcoal)",
+    letterSpacing: "-0.005em",
+  };
 
   // "First open" detection — no time entries, no expenses, no invoices.
   // Shows a welcome hero above the stat cards prompting the user to take
@@ -118,41 +136,64 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
 
   return (
     <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
-      {/* Stat cards */}
+      {/* Stat cards — module-keyed accent stripe + elevated paper */}
       <div className="grid grid-cols-4 gap-3">
         {[
           {
             label: "Billable hrs · " + now.toLocaleString("en-US", { month: "short" }),
             value: fmtHrs(billableMinThisMonth),
+            // Sage when there's billable hours this month; otherwise neutral charcoal.
+            valueColor: billableMinThisMonth > 0 ? "var(--color-sage)" : "var(--color-charcoal)",
             sub: billableEarningsThisMonth > 0
               ? `${fmtCurrency(billableEarningsThisMonth)} at project rates`
               : billableMinThisMonth > 0 ? "Rate not set on projects" : "No billable time this month",
-            subColor: billableEarningsThisMonth > 0 ? "var(--color-grey)" : "var(--color-grey)",
+            subColor: "var(--color-grey)",
+            accent: "var(--color-sage)",
           },
           {
             label: "Outstanding",
             value: fmtCurrency(outstanding),
+            // Red-orange when anything is overdue; charcoal otherwise.
+            valueColor: overdueCount > 0 ? "var(--color-red-orange)" : "var(--color-charcoal)",
             sub: overdueCount > 0 ? `${overdueCount} overdue · ${fmtCurrency(overdueAmt)}` : sentCount > 0 ? `${sentCount} sent, awaiting payment` : "No open invoices",
             subColor: overdueCount > 0 ? "var(--color-red-orange)" : "var(--color-grey)",
+            accent: overdueCount > 0 ? "var(--color-red-orange)" : "#2563ab",
           },
           {
             label: "Expenses · YTD",
             value: fmtCurrency(expensesYtd),
+            // Yellow when there are unattached expenses (something to triage).
+            valueColor: unattached > 0 ? "var(--color-yellow)" : "var(--color-charcoal)",
             sub: unattached > 0 ? `${fmtCurrency(unattached)} unattached` : "All attached to projects",
-            subColor: unattached > 0 ? "#b8860b" : "var(--color-grey)",
+            subColor: unattached > 0 ? "var(--color-yellow)" : "var(--color-grey)",
+            accent: "var(--color-yellow)",
           },
           {
             label: "Collected · " + now.getFullYear(),
             value: fmtCurrency(collectedYtd),
+            // Sage when money has actually come in.
+            valueColor: collectedYtd > 0 ? "var(--color-sage)" : "var(--color-charcoal)",
             sub: paidCount > 0 ? `${paidCount} invoice${paidCount > 1 ? "s" : ""} paid` + (lastPaid?.paid_at ? ` · Last: ${new Date(lastPaid.paid_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "") : "Nothing collected yet",
             subColor: "var(--color-grey)",
+            accent: "var(--color-sage)",
           },
         ].map((s) => (
-          <div key={s.label} className="rounded-xl p-4 flex flex-col gap-1.5"
-            style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)" }}>
-            <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>{s.label}</p>
-            <p className="text-[26px] font-semibold leading-none tracking-tight" style={{ color: "var(--color-charcoal)" }}>{s.value}</p>
-            <p className="text-[11px]" style={{ color: s.subColor }}>{s.sub}</p>
+          <div key={s.label} className="rounded-xl flex flex-col overflow-hidden"
+            style={{
+              background: "var(--color-off-white)",
+              border: "0.5px solid var(--color-border)",
+              boxShadow: "0 2px 8px rgba(31,33,26,0.04)",
+            }}>
+            {/* Module-keyed accent stripe along the top edge */}
+            <div style={{ height: 3, background: s.accent, opacity: 0.85 }} />
+            <div className="p-4 flex flex-col gap-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>{s.label}</p>
+              <p className="text-[28px] font-bold leading-none tracking-tight tabular-nums"
+                style={{ color: s.valueColor, fontFamily: "var(--font-display)", fontVariantNumeric: "tabular-nums" }}>
+                {s.value}
+              </p>
+              <p className="text-[11px]" style={{ color: s.subColor }}>{s.sub}</p>
+            </div>
           </div>
         ))}
       </div>
@@ -160,9 +201,10 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
       {/* Main + side columns */}
       <div className="flex gap-4 flex-1">
         {/* Time card */}
-        <div className={`${card} flex-1 flex flex-col`} style={cardStyle}>
+        <div className={`${card} flex-1`} style={cardStyle}>
+          <div style={{ height: 3, background: "var(--color-sage)", opacity: 0.85 }} />
           <div className={cardHead} style={cardHeadStyle}>
-            <span className="text-[12px] font-semibold flex-1" style={{ color: "var(--color-charcoal)" }}>
+            <span className="flex-1" style={cardTitleStyle}>
               Time · {now.toLocaleString("en-US", { month: "long" })}
             </span>
             <button onClick={() => onSwitchTab("time")}
@@ -210,8 +252,9 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
         <div className="flex flex-col gap-4" style={{ width: 272 }}>
           {/* Invoices card */}
           <div className={card} style={cardStyle}>
+            <div style={{ height: 3, background: overdueCount > 0 ? "var(--color-red-orange)" : "#2563ab", opacity: 0.85 }} />
             <div className={cardHead} style={cardHeadStyle}>
-              <span className="text-[12px] font-semibold flex-1" style={{ color: "var(--color-charcoal)" }}>Invoices</span>
+              <span className="flex-1" style={cardTitleStyle}>Invoices</span>
               <button onClick={() => onSwitchTab("invoices")} className="text-[11px]" style={{ color: "var(--color-sage)" }}>See all →</button>
             </div>
             {recentInvoices.map((inv) => {
@@ -246,8 +289,9 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
 
           {/* Expenses card */}
           <div className={card} style={cardStyle}>
+            <div style={{ height: 3, background: "var(--color-yellow)", opacity: 0.85 }} />
             <div className={cardHead} style={cardHeadStyle}>
-              <span className="text-[12px] font-semibold flex-1" style={{ color: "var(--color-charcoal)" }}>Recent expenses</span>
+              <span className="flex-1" style={cardTitleStyle}>Recent expenses</span>
               <button onClick={() => onSwitchTab("expenses")} className="text-[11px]" style={{ color: "var(--color-sage)" }}>See all →</button>
             </div>
             {recentExpenses.map((e) => (
