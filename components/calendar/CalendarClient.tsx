@@ -602,6 +602,7 @@ interface MonthGridProps {
   showWeekends:    boolean;
   rowHeightPx:     number;
   scrollRef:       React.RefObject<HTMLDivElement | null>;
+  selectedEventId: string | null;
   onEventClick:    (e: CalEvent, rect: DOMRect | null) => void;
   onTaskClick:     (e: React.MouseEvent, t: Task) => void;
   onEmptyCellClick:(date: Date) => void;
@@ -611,7 +612,7 @@ interface MonthGridProps {
 
 function MonthGrid({
   panWeeks, monthLabel, events, tasks, projects, showWeekends,
-  rowHeightPx, scrollRef,
+  rowHeightPx, scrollRef, selectedEventId,
   onEventClick, onTaskClick, onEmptyCellClick, onDayNumberClick, onShowMore,
 }: MonthGridProps) {
   // Flatten panWeeks → days. Each row is 7 days starting at the week's
@@ -758,6 +759,8 @@ function MonthGrid({
                   const color = e.colorId
                     ? GCAL_COLORS[e.colorId]
                     : (e.source === "microsoft" ? "#0078d4" : "#039BE5");
+                  const isSelected = selectedEventId === e.id;
+                  const fgSelected = fgOnSaturated(color);
                   return (
                     <button
                       key={`e-${e.id}-${i}`}
@@ -768,14 +771,17 @@ function MonthGrid({
                       }}
                       style={{
                         textAlign: "left",
-                        background: `${color}18`, color,
-                        border: `0.5px solid ${color}44`,
+                        background: isSelected ? withAlpha(color, 0.62) : `${color}18`,
+                        color: isSelected ? fgSelected : color,
+                        border: isSelected ? `1.5px solid ${color}` : `0.5px solid ${color}44`,
+                        boxShadow: isSelected ? "0 1px 4px rgba(0,0,0,0.12)" : "none",
                         borderRadius: 4,
                         padding: "1px 6px",
-                        fontSize: 10, fontWeight: 500,
+                        fontSize: 10, fontWeight: isSelected ? 600 : 500,
                         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                         fontFamily: "inherit",
                         cursor: "pointer",
+                        transition: "background 0.12s ease, box-shadow 0.12s ease",
                       }}
                       title={e.title}
                     >
@@ -879,6 +885,61 @@ const GCAL_COLORS: Record<string, string> = {
   "5": "#F6BF26", "6": "#F4511E", "7": "#039BE5", "8": "#616161",
   "9": "#3F51B5", "10": "#0B8043", "11": "#D50000",
 };
+
+/** Parse `#rgb`, `#rrggbb`, or `rgb()`-ish color strings into 0-255 channels.
+ *  Returns null for unrecognized inputs (e.g. `var(--…)`) so callers can
+ *  fall back to the raw color string for the unselected state. */
+function parseColorChannels(input: string): { r: number; g: number; b: number } | null {
+  if (!input) return null;
+  const s = input.trim();
+  if (s.startsWith("#")) {
+    const hex = s.slice(1);
+    if (hex.length === 3) {
+      const r = parseInt(hex[0] + hex[0], 16);
+      const g = parseInt(hex[1] + hex[1], 16);
+      const b = parseInt(hex[2] + hex[2], 16);
+      if ([r, g, b].some(Number.isNaN)) return null;
+      return { r, g, b };
+    }
+    if (hex.length === 6) {
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
+      if ([r, g, b].some(Number.isNaN)) return null;
+      return { r, g, b };
+    }
+    return null;
+  }
+  const m = s.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (m) return { r: +m[1], g: +m[2], b: +m[3] };
+  return null;
+}
+
+/** color → rgba string with arbitrary alpha. Falls back to the raw color
+ *  if we can't parse channels (e.g. a CSS variable). */
+function withAlpha(color: string, alpha: number): string {
+  const c = parseColorChannels(color);
+  if (!c) return color;
+  return `rgba(${c.r},${c.g},${c.b},${alpha})`;
+}
+
+/** Relative luminance per WCAG. Returns 0..1; >0.55 reads as a "light"
+ *  fill, so charcoal text on top reads better than white. */
+function colorLuminance(color: string): number {
+  const c = parseColorChannels(color);
+  if (!c) return 0.5;
+  const toLin = (v: number) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * toLin(c.r) + 0.7152 * toLin(c.g) + 0.0722 * toLin(c.b);
+}
+
+/** Pick a foreground color that contrasts a saturated fill — charcoal for
+ *  pale fills (amber, sage tints), white for deep ones (cobalt, plum). */
+function fgOnSaturated(color: string): string {
+  return colorLuminance(color) > 0.55 ? "var(--color-charcoal)" : "#ffffff";
+}
 
 // Tight projection of Opportunity used by the all-day row. Keeps the prop
 // surface small — the Presence module owns the full record.
@@ -2458,6 +2519,7 @@ export default function CalendarClient({
             tasks={scheduledTasks}
             projects={initialProjects}
             showWeekends={showWeekends}
+            selectedEventId={openEvent?.id ?? null}
             onEventClick={openEventAt}
             onTaskClick={openQuickTask}
             onEmptyCellClick={() => { /* Clicking an empty day no longer
@@ -2875,6 +2937,8 @@ export default function CalendarClient({
                     cover, not just the start day. */}
                 {allDaySpans.map((span) => {
                   const color = eventColor(span.event);
+                  const isSelected = openEvent?.id === span.event.id;
+                  const fgSelected = fgOnSaturated(color);
                   return (
                     <button
                       key={span.event.id}
@@ -2887,17 +2951,20 @@ export default function CalendarClient({
                         gridColumn: `${span.startIdx + 2} / ${span.endIdx + 3}`,
                         gridRow: span.rowIdx + 2,
                         marginLeft: 2, marginRight: 2,
-                        background: `${color}18`, color,
-                        border: `0.5px solid ${color}44`,
+                        background: isSelected ? withAlpha(color, 0.62) : `${color}18`,
+                        color: isSelected ? fgSelected : color,
+                        border: isSelected ? `1.5px solid ${color}` : `0.5px solid ${color}44`,
+                        boxShadow: isSelected ? "0 1px 4px rgba(0,0,0,0.12)" : "none",
                         borderTopLeftRadius:    span.startsBefore ? 0 : 4,
                         borderBottomLeftRadius: span.startsBefore ? 0 : 4,
                         borderTopRightRadius:   span.endsAfter    ? 0 : 4,
                         borderBottomRightRadius: span.endsAfter   ? 0 : 4,
                         padding: "1px 6px",
-                        fontSize: 10, fontWeight: 500,
+                        fontSize: 10, fontWeight: isSelected ? 600 : 500,
                         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                         textAlign: "left",
                         cursor: "pointer", fontFamily: "inherit",
+                        transition: "background 0.12s ease, box-shadow 0.12s ease",
                       }}
                     >
                       {span.startsBefore && "← "}{span.event.title}{span.endsAfter && " →"}
@@ -3203,6 +3270,13 @@ export default function CalendarClient({
                         // Short chips (≤30 min) only have room for one line;
                         // longer ones get the two-line clamp.
                         const titleLines = h < 36 ? 1 : 2;
+                        // Selected state — pop the chip with a saturated
+                        // fill, a 1.5px solid border in the full-strength
+                        // color, and a soft shadow. Charcoal-or-white text
+                        // is picked by perceived luminance so amber/yellow
+                        // chips don't lose their title to white-on-pale.
+                        const isSelected = openEvent?.id === e.id;
+                        const fgSelected = fgOnSaturated(color);
                         return (
                           <button
                             key={e.id}
@@ -3217,17 +3291,19 @@ export default function CalendarClient({
                               width:  `calc(${widthPct}% - ${colIdx === 0 || colIdx === groupSize - 1 ? GAP_PX + 4 : GAP_PX}px)`,
                               height: `${h}px`,
                               borderRadius: "4px",
-                              borderLeft:   `2.5px solid ${color}`,
-                              borderTop:    "none",
-                              borderRight:  "none",
-                              borderBottom: "none",
-                              background:   `${color}18`,
+                              borderLeft:   isSelected ? `1.5px solid ${color}` : `2.5px solid ${color}`,
+                              borderTop:    isSelected ? `1.5px solid ${color}` : "none",
+                              borderRight:  isSelected ? `1.5px solid ${color}` : "none",
+                              borderBottom: isSelected ? `1.5px solid ${color}` : "none",
+                              background:   isSelected ? withAlpha(color, 0.62) : `${color}18`,
+                              boxShadow:    isSelected ? "0 1px 4px rgba(0,0,0,0.12)" : "none",
                               padding:      "3px 6px",
                               cursor:       "pointer",
-                              zIndex:       2 + ei,
+                              zIndex:       isSelected ? 50 : 2 + ei,
                               overflow:     "hidden",
                               textAlign:    "left",
                               fontFamily:   "inherit",
+                              transition:   "background 0.12s ease, box-shadow 0.12s ease",
                               // Title + time stack from the top of the chip;
                               // for short chips this keeps the title visible
                               // instead of vertically centering it into the
@@ -3243,7 +3319,8 @@ export default function CalendarClient({
                             <p
                               className="text-[11px] font-medium"
                               style={{
-                                color, lineHeight: "1.25",
+                                color: isSelected ? fgSelected : color,
+                                lineHeight: "1.25",
                                 display: "-webkit-box",
                                 WebkitLineClamp: titleLines,
                                 WebkitBoxOrient: "vertical",
@@ -3256,7 +3333,8 @@ export default function CalendarClient({
                             <p
                               className="text-[9px]"
                               style={{
-                                color, opacity: 0.8,
+                                color: isSelected ? fgSelected : color,
+                                opacity: isSelected ? 0.92 : 0.8,
                                 display: "-webkit-box",
                                 WebkitLineClamp: 1,
                                 WebkitBoxOrient: "vertical",
