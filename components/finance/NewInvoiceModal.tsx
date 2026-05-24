@@ -74,6 +74,12 @@ export default function NewInvoiceModal({
   const [notes, setNotes]                     = useState("");
   const [excludedTimeIds, setExcludedTimeIds]       = useState<Set<string>>(new Set());
   const [excludedExpenseIds, setExcludedExpenseIds] = useState<Set<string>>(new Set());
+  // Manual lines composed inside the modal (separate from time/expense
+  // pulls). Each line is independent and ships in the POST body as
+  // `manual_lines`. Mirrors the post-creation `+ Add line item` flow on
+  // the invoice detail page so users don't have to create the invoice
+  // first to add a custom line.
+  const [manualLines, setManualLines]         = useState<ManualLineDraft[]>([]);
   const [loading, setLoading]                 = useState(false);
   const [error, setError]                     = useState<string | null>(null);
 
@@ -239,7 +245,18 @@ export default function NewInvoiceModal({
   const timeTotalMinutes = includedTime.reduce((s, e) => s + e.duration_minutes, 0);
   const timeTotalDollars = (timeTotalMinutes / 60) * projectRate;
   const expenseTotal = includedExpenses.reduce((s, x) => s + Number(x.amount), 0);
-  const grandTotal = timeTotalDollars + expenseTotal;
+  const manualTotal  = manualLines.reduce((s, m) => s + (Number(m.quantity) || 0) * (Number(m.rate) || 0), 0);
+  const grandTotal = timeTotalDollars + expenseTotal + manualTotal;
+
+  function addManualLine() {
+    setManualLines((prev) => [...prev, { id: crypto.randomUUID(), description: "", quantity: "1", rate: "" }]);
+  }
+  function updateManualLine(id: string, patch: Partial<ManualLineDraft>) {
+    setManualLines((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  }
+  function removeManualLine(id: string) {
+    setManualLines((prev) => prev.filter((m) => m.id !== id));
+  }
 
   function toggleTimeExclusion(id: string) {
     setExcludedTimeIds((prev) => {
@@ -276,6 +293,13 @@ export default function NewInvoiceModal({
         notes:                  notes.trim() || null,
         time_entry_ids:         includedTime.map((e) => e.id),
         expense_ids:            includedExpenses.map((x) => x.id),
+        manual_lines:           manualLines
+          .filter((m) => m.description.trim() && (Number(m.rate) || 0) > 0)
+          .map((m) => ({
+            description: m.description.trim(),
+            quantity:    Number(m.quantity) || 1,
+            rate:        Number(m.rate) || 0,
+          })),
       }),
     });
     const json = await res.json() as { invoice?: Invoice; error?: string };
@@ -290,7 +314,11 @@ export default function NewInvoiceModal({
 
   // ── styled bits ─────────────────────────────────────────────────────────────
 
-  const hasReady = projectId && (uninvoicedTime.length > 0 || uninvoicedExpenses.length > 0);
+  // Show the Ready-to-bill panel any time there's something to summarize:
+  // a project (which always gets the Manual lines affordance) OR any
+  // manual lines already drafted (so the panel renders even without a
+  // project for one-off invoices).
+  const hasReady = !!projectId || manualLines.length > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -401,30 +429,41 @@ export default function NewInvoiceModal({
             )
           )}
 
-          {/* Ready to bill — appears once a project is selected */}
-          {projectId && (
-            hasReady ? (
-              <ReadyToBillPanel
-                projectRate={projectRate}
-                uninvoicedTime={uninvoicedTime}
-                uninvoicedExpenses={uninvoicedExpenses}
-                excludedTimeIds={excludedTimeIds}
-                excludedExpenseIds={excludedExpenseIds}
-                toggleTime={toggleTimeExclusion}
-                toggleExpense={toggleExpenseExclusion}
-                timeTotalMinutes={timeTotalMinutes}
-                timeTotalDollars={timeTotalDollars}
-                expenseTotal={expenseTotal}
-                grandTotal={grandTotal}
-                includedTimeCount={includedTime.length}
-                includedExpenseCount={includedExpenses.length}
-              />
-            ) : (
-              <div className="rounded-xl p-3 text-[11px]"
-                style={{ background: "var(--color-cream)", border: "0.5px solid var(--color-border)", color: "var(--color-grey)" }}>
-                No uninvoiced time or expenses for this project — you can add manual line items after the invoice is created.
-              </div>
-            )
+          {/* Ready to bill — appears once a project is selected, or once
+              the user starts composing a manual line on a project-less
+              invoice. */}
+          {hasReady && (
+            <ReadyToBillPanel
+              projectRate={projectRate}
+              uninvoicedTime={uninvoicedTime}
+              uninvoicedExpenses={uninvoicedExpenses}
+              excludedTimeIds={excludedTimeIds}
+              excludedExpenseIds={excludedExpenseIds}
+              toggleTime={toggleTimeExclusion}
+              toggleExpense={toggleExpenseExclusion}
+              timeTotalMinutes={timeTotalMinutes}
+              timeTotalDollars={timeTotalDollars}
+              expenseTotal={expenseTotal}
+              manualLines={manualLines}
+              manualTotal={manualTotal}
+              addManualLine={addManualLine}
+              updateManualLine={updateManualLine}
+              removeManualLine={removeManualLine}
+              grandTotal={grandTotal}
+              includedTimeCount={includedTime.length}
+              includedExpenseCount={includedExpenses.length}
+            />
+          )}
+          {/* If no project picked AND no manual lines yet, offer a quiet
+              entrypoint so users can still compose a one-off invoice. */}
+          {!projectId && manualLines.length === 0 && (
+            <button type="button" onClick={addManualLine}
+              className="w-full rounded-xl py-2.5 text-[12px] transition-colors"
+              style={{ border: "0.5px dashed var(--color-border)", background: "transparent", color: "var(--color-grey)" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+              + Add a line item
+            </button>
           )}
 
           {/* Dates */}
@@ -507,12 +546,21 @@ export default function NewInvoiceModal({
 
 // ─── Ready-to-bill panel ─────────────────────────────────────────────────────
 
+interface ManualLineDraft {
+  id:          string;
+  description: string;
+  quantity:    string;
+  rate:        string;
+}
+
 function ReadyToBillPanel({
   projectRate,
   uninvoicedTime, uninvoicedExpenses,
   excludedTimeIds, excludedExpenseIds,
   toggleTime, toggleExpense,
-  timeTotalMinutes, timeTotalDollars, expenseTotal, grandTotal,
+  timeTotalMinutes, timeTotalDollars, expenseTotal,
+  manualLines, manualTotal, addManualLine, updateManualLine, removeManualLine,
+  grandTotal,
   includedTimeCount, includedExpenseCount,
 }: {
   projectRate: number;
@@ -525,6 +573,11 @@ function ReadyToBillPanel({
   timeTotalMinutes: number;
   timeTotalDollars: number;
   expenseTotal: number;
+  manualLines: ManualLineDraft[];
+  manualTotal: number;
+  addManualLine: () => void;
+  updateManualLine: (id: string, patch: Partial<ManualLineDraft>) => void;
+  removeManualLine: (id: string) => void;
   grandTotal: number;
   includedTimeCount: number;
   includedExpenseCount: number;
@@ -624,6 +677,86 @@ function ReadyToBillPanel({
           </div>
         </div>
       )}
+
+      {/* Manual lines — always available so the user can compose a
+          custom line (consulting, deposit, materials markup, etc.)
+          right inside the modal instead of waiting until after the
+          invoice is created. */}
+      <div>
+        <div className="flex items-center gap-2 px-4 py-2"
+          style={{
+            borderTop: (uninvoicedTime.length > 0 || uninvoicedExpenses.length > 0) ? "0.5px solid var(--color-border)" : "none",
+            borderBottom: "0.5px solid var(--color-border)",
+            background: "rgba(31,33,26,0.03)",
+          }}>
+          <Plus size={11} style={{ color: "var(--color-charcoal)" }} />
+          <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>Manual</span>
+          <span className="text-[11px] ml-auto tabular-nums" style={{ color: "var(--color-grey)" }}>
+            {manualLines.length} {manualLines.length === 1 ? "line" : "lines"}
+          </span>
+          <span className="text-[11px] font-semibold tabular-nums" style={{ color: "var(--color-charcoal)" }}>
+            {fmtMoney(manualTotal)}
+          </span>
+        </div>
+        {manualLines.map((m) => {
+          const lineTotal = (Number(m.quantity) || 0) * (Number(m.rate) || 0);
+          return (
+            <div key={m.id} className="flex items-center gap-2 px-4 py-1.5"
+              style={{ borderBottom: "0.5px solid var(--color-border)" }}>
+              <input
+                value={m.description}
+                onChange={(e) => updateManualLine(m.id, { description: e.target.value })}
+                placeholder="Description"
+                className="flex-1 text-[12px] px-2 py-1 rounded focus:outline-none"
+                style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" }}
+              />
+              <input
+                value={m.quantity}
+                onChange={(e) => updateManualLine(m.id, { quantity: e.target.value })}
+                placeholder="Qty"
+                type="number" inputMode="decimal" step="any" min={0}
+                className="w-14 text-[12px] px-2 py-1 rounded focus:outline-none tabular-nums text-right manual-num"
+                style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" }}
+              />
+              <div className="relative">
+                <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[11px]" style={{ color: "var(--color-grey)" }}>$</span>
+                <input
+                  value={m.rate}
+                  onChange={(e) => updateManualLine(m.id, { rate: e.target.value })}
+                  placeholder="0"
+                  type="number" inputMode="decimal" step="any" min={0}
+                  className="w-20 text-[12px] pl-5 pr-2 py-1 rounded focus:outline-none tabular-nums text-right manual-num"
+                  style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" }}
+                />
+              </div>
+              <span className="text-[11px] font-medium tabular-nums w-14 text-right" style={{ color: "var(--color-charcoal)" }}>
+                {fmtMoney(lineTotal)}
+              </span>
+              <button type="button" onClick={() => removeManualLine(m.id)}
+                className="w-5 h-5 flex items-center justify-center rounded"
+                style={{ color: "var(--color-grey)" }}
+                aria-label="Remove line"
+                onMouseEnter={(ev) => (ev.currentTarget.style.background = "var(--color-cream)")}
+                onMouseLeave={(ev) => (ev.currentTarget.style.background = "transparent")}>
+                <X size={11} />
+              </button>
+            </div>
+          );
+        })}
+        <button type="button" onClick={addManualLine}
+          className="w-full text-left text-[11px] px-4 py-2 transition-colors"
+          style={{ color: "var(--color-grey)", background: "transparent" }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+          + Add line item
+        </button>
+        {/* Strip native number spinners. */}
+        <style>{`
+          .manual-num::-webkit-outer-spin-button,
+          .manual-num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+          .manual-num { -moz-appearance: textfield; }
+        `}</style>
+      </div>
 
       {/* Footer total */}
       <div className="flex items-center justify-between px-4 py-2.5"
