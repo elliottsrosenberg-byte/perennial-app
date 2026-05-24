@@ -114,12 +114,13 @@ export async function GET() {
     }
   }
 
-  // Return the joined list — same shape Teller returns, so the UI is
-  // provider-agnostic.
+  // Return the joined list, scoped to Plaid so Teller rows (if any
+  // linger from a prior connection) don't leak into the Plaid UI.
   const { data: transactions } = await supabase
     .from("bank_transactions")
     .select("*, bank_account:bank_accounts(name, institution, last_four, type, subtype)")
     .eq("user_id", user.id)
+    .eq("provider", "plaid")
     .order("date", { ascending: false })
     .limit(100);
 

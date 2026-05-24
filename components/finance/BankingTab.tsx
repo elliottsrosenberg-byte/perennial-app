@@ -107,12 +107,6 @@ export default function BankingTab() {
   const [connecting,   setConnecting]   = useState(false);
   const [scriptReady,  setScriptReady]  = useState(false);
   const [error,        setError]        = useState<string | null>(null);
-  // After a fresh enrollment we open a small picker listing the just-
-  // linked accounts so the user can untick any they didn't want. Plaid
-  // Link has an account-selector built in (so this picker only adds
-  // value on Teller, or as a "did I pick the right ones?" safety net),
-  // but the modal works for both.
-  const [justAddedIds, setJustAddedIds] = useState<string[] | null>(null);
 
   // Provider-specific env. The Teller bits are gated to the Teller branch.
   const tellerAppId = process.env.NEXT_PUBLIC_TELLER_APPLICATION_ID ?? "";
@@ -202,9 +196,6 @@ export default function BankingTab() {
             catch { body = (await res.text()) || `HTTP ${res.status}`; }
             setError(body);
           } else {
-            const json = (await res.json()) as { accounts?: { id: string }[] };
-            const newIds = (json.accounts ?? []).map(a => a.id);
-            if (newIds.length > 0) setJustAddedIds(newIds);
             await fetchData();
           }
         } catch (err) {
@@ -248,9 +239,6 @@ export default function BankingTab() {
             catch { body = (await res.text()) || `HTTP ${res.status}`; }
             setError(body);
           } else {
-            const json = (await res.json()) as { accounts?: { id: string }[] };
-            const newIds = (json.accounts ?? []).map(a => a.id);
-            if (newIds.length > 0) setJustAddedIds(newIds);
             await fetchData();
           }
         } catch (err) {
@@ -492,126 +480,6 @@ export default function BankingTab() {
           </>
         )}
       </div>
-
-      {justAddedIds && justAddedIds.length > 0 && (
-        <PostEnrollPicker
-          accounts={accounts.filter(a => justAddedIds.includes(a.id))}
-          onConfirm={async (keepIds) => {
-            const toRemove = justAddedIds.filter(id => !keepIds.includes(id));
-            for (const id of toRemove) {
-              await fetch(`${API_BASE}/accounts?id=${encodeURIComponent(id)}`, { method: "DELETE" });
-            }
-            setJustAddedIds(null);
-            await fetchData();
-          }}
-          onCancel={() => setJustAddedIds(null)}
-        />
-      )}
     </>
-  );
-}
-
-function PostEnrollPicker({ accounts, onConfirm, onCancel }: {
-  accounts: BankAccount[];
-  onConfirm: (keepIds: string[]) => Promise<void> | void;
-  onCancel: () => void;
-}) {
-  const [keep,   setKeep]   = useState<Set<string>>(() => new Set(accounts.map(a => a.id)));
-  const [busy,   setBusy]   = useState(false);
-
-  function toggle(id: string) {
-    setKeep(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }
-
-  async function confirm() {
-    if (busy) return;
-    setBusy(true);
-    try { await onConfirm(Array.from(keep)); }
-    finally { setBusy(false); }
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(31,33,26,0.45)", backdropFilter: "blur(4px)" }}
-      onClick={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}
-    >
-      <div
-        className="rounded-2xl w-full max-w-md overflow-hidden"
-        style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 12px 40px rgba(0,0,0,0.2)" }}
-      >
-        <div className="px-5 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-          <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--color-sage)" }}>
-            New connection
-          </p>
-          <h3 className="text-[15px] font-semibold mb-1" style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>
-            Which accounts to keep?
-          </h3>
-          <p className="text-[12px]" style={{ color: "var(--color-grey)" }}>
-            Untick anything you don&apos;t want in Perennial. You can always add them back later.
-          </p>
-        </div>
-
-        <div className="px-3 py-2 max-h-[50vh] overflow-y-auto">
-          {accounts.map((a) => {
-            const checked = keep.has(a.id);
-            return (
-              <label
-                key={a.id}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer"
-                style={{ background: checked ? "var(--color-cream)" : "transparent" }}
-                onMouseEnter={e => { if (!checked) e.currentTarget.style.background = "var(--color-warm-white)"; }}
-                onMouseLeave={e => { if (!checked) e.currentTarget.style.background = "transparent"; }}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggle(a.id)}
-                  style={{ accentColor: "var(--color-sage)" }}
-                />
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                  style={{ background: "var(--color-warm-white)", color: "var(--color-grey)" }}>
-                  {accountIcon(a.type, a.subtype)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-medium truncate" style={{ color: "var(--color-charcoal)" }}>
-                    {a.institution} {a.name}
-                  </p>
-                  <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>
-                    {a.subtype ? `${a.subtype.charAt(0).toUpperCase() + a.subtype.slice(1)} · ` : ""}
-                    {a.last_four ? `••••${a.last_four}` : ""}
-                  </p>
-                </div>
-              </label>
-            );
-          })}
-        </div>
-
-        <div className="flex justify-end gap-2 px-5 py-4" style={{ borderTop: "0.5px solid var(--color-border)" }}>
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={busy}
-            className="px-4 py-2 text-[12px] rounded-lg"
-            style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}
-          >
-            Keep all
-          </button>
-          <button
-            type="button"
-            onClick={confirm}
-            disabled={busy}
-            className="px-4 py-2 text-[12px] font-medium rounded-lg text-white"
-            style={{ background: "var(--color-sage)", border: "none", cursor: "pointer", fontFamily: "inherit", opacity: busy ? 0.5 : 1 }}
-          >
-            {busy ? "Saving…" : `Keep ${keep.size} account${keep.size === 1 ? "" : "s"}`}
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
