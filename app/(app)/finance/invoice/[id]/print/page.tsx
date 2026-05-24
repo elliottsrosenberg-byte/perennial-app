@@ -42,23 +42,29 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
   const isOverdue = inv.status === "sent" && !!inv.due_at && inv.due_at < new Date().toISOString().split("T")[0];
 
   // Studio identity for the "From" header — pulled from profiles so the
-  // printable invoice reflects the user's real studio name + email rather
-  // than placeholder copy.
+  // printable invoice reflects the user's real studio (logo, address,
+  // phone, EIN) rather than placeholder copy. All fields are optional;
+  // missing values just collapse out of the layout.
   const { data: { user } } = await supabase.auth.getUser();
   const { data: profile } = user
     ? await supabase
         .from("profiles")
-        .select("studio_name, display_name, location, website")
+        .select("studio_name, display_name, location, website, address, phone, ein, logo_url")
         .eq("user_id", user.id)
         .maybeSingle()
     : { data: null };
-  const studioName = profile?.studio_name?.trim() || profile?.display_name?.trim() || "Your studio";
-  const studioContact = user?.email ?? "";
-  const studioLocation = profile?.location ?? null;
+  const studioName    = profile?.studio_name?.trim() || profile?.display_name?.trim() || "Your studio";
+  const studioEmail   = user?.email ?? "";
+  const studioAddress = (profile?.address ?? "").trim();
+  const studioPhone   = (profile?.phone ?? "").trim();
+  const studioEin     = (profile?.ein ?? "").trim();
+  const studioLogo    = profile?.logo_url ?? null;
+  // Fallback used only when address is blank — keeps the "From" column
+  // from looking empty for users who haven't filled in the new fields.
+  const fallbackLocation = profile?.location ?? null;
 
   return (
     <>
-      <PrintTrigger />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Albert+Sans:wght@300;400;500;600;700&display=swap');
 
@@ -100,9 +106,12 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
           .print-btn:hover { background: #3a3d35; }
         }
 
-        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 52px; }
-        .studio-mark { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: #1f211a; margin-bottom: 4px; }
-        .studio-sub { font-size: 11px; color: #9a9690; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 52px; gap: 32px; }
+        .studio-block { max-width: 360px; }
+        .studio-logo { display: block; height: 96px; max-width: 240px; object-fit: contain; margin-bottom: 14px; }
+        .studio-mark { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: #1f211a; margin-bottom: 6px; }
+        .studio-line { font-size: 11.5px; color: #6b6860; line-height: 1.55; white-space: pre-line; }
+        .studio-ein { font-size: 10.5px; color: #9a9690; margin-top: 8px; letter-spacing: 0.01em; }
         .inv-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #9a9690; text-align: right; margin-bottom: 4px; }
         .inv-number { font-size: 28px; font-weight: 700; color: #1f211a; text-align: right; letter-spacing: -0.02em; }
 
@@ -152,18 +161,26 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
         .status-overdue { background: rgba(220,62,13,0.1);   color: #dc3e0d; }
       `}</style>
 
-      {/* Screen-only print button */}
-      <button className="print-btn no-print" onClick={() => window.print()}>Print / Save PDF</button>
+      {/* PrintTrigger is the client-side bit — it auto-fires window.print()
+          on mount AND renders the on-screen Print button. We can't put the
+          onClick handler on a button directly in this Server Component. */}
+      <PrintTrigger />
 
       <div className="page">
         {/* Header */}
         <div className="header">
-          <div>
+          <div className="studio-block">
+            {studioLogo && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className="studio-logo" src={studioLogo} alt={`${studioName} logo`} />
+            )}
             <div className="studio-mark">{studioName}</div>
-            <div className="studio-sub">
-              {studioContact}
-              {studioLocation ? ` · ${studioLocation}` : ""}
+            <div className="studio-line">
+              {studioAddress || (fallbackLocation ?? "")}
+              {studioPhone   ? `${(studioAddress || fallbackLocation) ? "\n" : ""}${studioPhone}` : ""}
+              {studioEmail   ? `${(studioAddress || fallbackLocation || studioPhone) ? "\n" : ""}${studioEmail}` : ""}
             </div>
+            {studioEin && <div className="studio-ein">EIN: {studioEin}</div>}
           </div>
           <div>
             <div className="inv-label">Invoice</div>
