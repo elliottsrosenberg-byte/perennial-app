@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 import Topbar from "@/components/layout/Topbar";
 import ProviderIcon from "@/components/integrations/ProviderIcon";
 import { createClient } from "@/lib/supabase/client";
+import {
+  uploadStudioLogo,
+  deleteStudioLogo,
+  STUDIO_LOGO_MAX_BYTES,
+  isUploadableLogoType,
+} from "@/lib/uploads/studio-logo";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -24,6 +30,12 @@ interface Profile {
   hourly_rate:          number | null;
   invoice_prefix:       string;
   payment_terms:        string;
+  // Invoice / studio-identity fields surfaced on PDFs + the public payment view
+  address:              string | null;
+  phone:                string | null;
+  ein:                  string | null;
+  logo_url:             string | null;
+  logo_path:            string | null;
   notif_email_enabled:  boolean;
   notif_deadlines:      boolean;
   notif_invoice_due:    boolean;
@@ -67,6 +79,7 @@ const DEFAULT_PROFILE: Profile = {
   practice_types: [], currency: "USD", fiscal_year: "January",
   date_format: "MM/DD/YYYY", week_start: "Monday", hourly_rate: null,
   invoice_prefix: "INV-", payment_terms: "Net 30",
+  address: "", phone: "", ein: "", logo_url: null, logo_path: null,
   notif_email_enabled: true, notif_deadlines: true, notif_invoice_due: true,
   notif_overdue: true, notif_weekly: false, notif_monthly: false,
   tour_dismissed: false,
@@ -239,6 +252,144 @@ function SaveBar({ saving, saved, onSave }: { saving: boolean; saved: boolean; o
   );
 }
 
+/** Logo uploader for the Studio → Invoice & studio identity block. Lives
+ *  inside settings/page.tsx because it shares the parent's `profile`
+ *  setter pattern and the upload commits to the DB immediately (logo
+ *  changes feel jankier when batched with the main Save button — uploads
+ *  take real seconds and the user expects the preview to swap right then).
+ *  The text fields next to it still ride the main save flow. */
+function StudioLogoField({
+  userId, logoUrl, logoPath, onChange,
+}: {
+  userId:   string | null;
+  logoUrl:  string | null;
+  logoPath: string | null;
+  onChange: (url: string | null, path: string | null) => void;
+}) {
+  const [busy,  setBusy]  = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function commitProfile(url: string | null, path: string | null) {
+    if (!userId) return;
+    const supabase = createClient();
+    await supabase.from("profiles").upsert({
+      user_id:   userId,
+      logo_url:  url,
+      logo_path: path,
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  async function handleFile(file: File | null) {
+    if (!file) return;
+    setError(null);
+    if (!isUploadableLogoType(file.type)) {
+      setError("Use JPEG, PNG, WebP, or SVG.");
+      return;
+    }
+    if (file.size > STUDIO_LOGO_MAX_BYTES) {
+      const mb = (file.size / (1024 * 1024)).toFixed(1);
+      setError(`Logo is ${mb} MB. Max is ${STUDIO_LOGO_MAX_BYTES / (1024 * 1024)} MB.`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const prevPath = logoPath;
+      const result = await uploadStudioLogo(file);
+      onChange(result.url, result.path);
+      await commitProfile(result.url, result.path);
+      // Best-effort cleanup of the previous file once the new one is in.
+      if (prevPath && prevPath !== result.path) {
+        await deleteStudioLogo(prevPath);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRemove() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const prev = logoPath;
+      onChange(null, null);
+      await commitProfile(null, null);
+      await deleteStudioLogo(prev);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Remove failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <FieldLabel>Studio logo</FieldLabel>
+      <div className="flex items-start gap-4">
+        <div
+          className="w-24 h-24 rounded-xl flex items-center justify-center overflow-hidden shrink-0"
+          style={{ background: "var(--color-cream)", border: "0.5px solid var(--color-border)" }}
+        >
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={logoUrl}
+              alt="Studio logo"
+              style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+            />
+          ) : (
+            <span className="text-[10px]" style={{ color: "var(--color-grey)" }}>No logo</span>
+          )}
+        </div>
+        <div className="flex-1">
+          <label
+            className="inline-flex items-center px-3 py-[6px] text-[11px] font-medium rounded-lg cursor-pointer transition-colors"
+            style={{
+              background: busy ? "var(--color-cream)" : "var(--color-charcoal)",
+              color:      busy ? "var(--color-grey)" : "var(--color-warm-white)",
+              opacity:    busy ? 0.7 : 1,
+            }}
+          >
+            {busy ? "Uploading…" : logoUrl ? "Replace logo" : "Upload logo"}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/svg+xml"
+              disabled={busy}
+              onChange={(e) => { handleFile(e.target.files?.[0] ?? null); e.target.value = ""; }}
+              style={{ display: "none" }}
+            />
+          </label>
+          {logoUrl && (
+            <button
+              type="button"
+              onClick={handleRemove}
+              disabled={busy}
+              className="ml-2 px-3 py-[6px] text-[11px] font-medium rounded-lg transition-colors"
+              style={{
+                background: "transparent",
+                color:      "var(--color-red-orange)",
+                border:     "0.5px solid rgba(220,62,13,0.3)",
+                opacity:    busy ? 0.5 : 1,
+              }}
+            >
+              Remove
+            </button>
+          )}
+          <p className="mt-2 text-[10px]" style={{ color: "var(--color-grey)" }}>
+            JPEG, PNG, WebP, or SVG. Up to 2 MB. Shown at the top of every invoice.
+          </p>
+          {error && (
+            <p className="mt-1 text-[10px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -319,6 +470,11 @@ export default function SettingsPage() {
           hourly_rate:         prof.hourly_rate ?? null,
           invoice_prefix:      prof.invoice_prefix ?? "INV-",
           payment_terms:       prof.payment_terms ?? "Net 30",
+          address:             prof.address ?? "",
+          phone:               prof.phone ?? "",
+          ein:                 prof.ein ?? "",
+          logo_url:            prof.logo_url ?? null,
+          logo_path:           prof.logo_path ?? null,
           notif_email_enabled: prof.notif_email_enabled ?? true,
           notif_deadlines:     prof.notif_deadlines ?? true,
           notif_invoice_due:   prof.notif_invoice_due ?? true,
@@ -365,6 +521,11 @@ export default function SettingsPage() {
         hourly_rate:          profile.hourly_rate,
         invoice_prefix:       profile.invoice_prefix,
         payment_terms:        profile.payment_terms,
+        address:              profile.address || null,
+        phone:                profile.phone || null,
+        ein:                  profile.ein || null,
+        logo_url:             profile.logo_url,
+        logo_path:            profile.logo_path,
         notif_email_enabled:  profile.notif_email_enabled,
         notif_deadlines:      profile.notif_deadlines,
         notif_invoice_due:    profile.notif_invoice_due,
@@ -649,6 +810,65 @@ export default function SettingsPage() {
                       </button>
                     );
                   })}
+                </div>
+
+                <Divider />
+
+                {/* ── Invoice & studio identity ── Surfaces on the invoice
+                    PDF and the public /i/[token] payment view. Optional —
+                    invoices render without these set, but a logo + address
+                    + EIN reads far more professional. */}
+                <h3
+                  className="text-[14px] font-semibold mb-1"
+                  style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}
+                >
+                  Invoice &amp; studio identity
+                </h3>
+                <p className="text-[12px] mb-5" style={{ color: "var(--color-grey)" }}>
+                  Shown on the invoice PDF and the payment page you send to clients.
+                </p>
+
+                <StudioLogoField
+                  userId={userId}
+                  logoUrl={profile.logo_url}
+                  logoPath={profile.logo_path}
+                  onChange={(url, path) => {
+                    setProfile((p) => ({ ...p, logo_url: url, logo_path: path }));
+                  }}
+                />
+
+                <div className="space-y-4 mt-5">
+                  <div>
+                    <FieldLabel>Studio address</FieldLabel>
+                    <TextArea
+                      value={profile.address ?? ""}
+                      onChange={(v) => set("address", v)}
+                      placeholder={"123 Main St, Suite 4\nBrooklyn, NY 11201"}
+                      rows={4}
+                    />
+                    <p className="mt-1 text-[10px]" style={{ color: "var(--color-grey)" }}>
+                      Multi-line is fine — line breaks render exactly as you write them.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <FieldLabel>Phone</FieldLabel>
+                      <TextInput
+                        value={profile.phone ?? ""}
+                        onChange={(v) => set("phone", v)}
+                        placeholder="+1 (555) 123-4567"
+                        type="tel"
+                      />
+                    </div>
+                    <div>
+                      <FieldLabel>EIN / tax ID</FieldLabel>
+                      <TextInput
+                        value={profile.ein ?? ""}
+                        onChange={(v) => set("ein", v)}
+                        placeholder="XX-XXXXXXX"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <SaveBar saving={saving} saved={saved} onSave={handleSave} />

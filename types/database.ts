@@ -356,12 +356,36 @@ export interface Invoice {
   notes: string | null;
   payment_method: string | null;
   payment_terms: string | null;
+  /** Random URL-safe token gating the public /i/[token] view. Minted lazily
+   *  the first time the invoice is sent (or via the "Copy public link"
+   *  affordance). Null for drafts that have never been shared. */
+  public_token: string | null;
+  /** Stripe PaymentIntent id for the embedded Payment Element on /i/[token].
+   *  Reused (re-fetched for `client_secret`) on subsequent loads so a client
+   *  refreshing the page doesn't double-mint intents. */
+  stripe_payment_intent_id: string | null;
+  /** Stripe Checkout Session id — reserved for a possible future redirect
+   *  flow. Not used by the embedded Payment Element path. */
+  stripe_session_id: string | null;
   created_at: string;
   updated_at: string;
   client_contact?: Contact | null;
   client_organization?: Organization | null;
   project?: Project | null;
   line_items?: InvoiceLineItem[];
+}
+
+/** Studio-identity fields on `profiles` that surface on invoices and the
+ *  public payment view. All optional — invoices fall back gracefully when
+ *  the user hasn't filled them in yet. */
+export interface ProfileInvoiceIdentity {
+  studio_name:  string | null;
+  display_name: string | null;
+  address:      string | null;
+  phone:        string | null;
+  logo_url:     string | null;
+  logo_path:    string | null;
+  ein:          string | null;
 }
 
 // ── Opportunities ─────────────────────────────────────────────────────────────
