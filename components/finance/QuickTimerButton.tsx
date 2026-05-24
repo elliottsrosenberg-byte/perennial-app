@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { ActiveTimer, Project } from "@/types/database";
+import Select from "@/components/ui/Select";
 
 function fmtTimer(s: number) {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
@@ -158,11 +159,14 @@ export default function QuickTimerButton({ initialTimer, projects }: Props) {
           <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 14 }}>New time entry</p>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <select value={projectId} onChange={e => setProjectId(e.target.value)}
-              className={inputCls} style={inputStyle}>
-              <option value="">No project</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-            </select>
+            <Select
+              value={projectId}
+              onChange={setProjectId}
+              options={[{ value: "", label: "No project" }, ...projects.map(p => ({ value: p.id, label: p.title }))]}
+              placeholder="No project"
+            />
+
+
 
             <textarea
               value={description}

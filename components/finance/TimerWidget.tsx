@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { ActiveTimer, Project } from "@/types/database";
+import Select from "@/components/ui/Select";
 
 interface Props {
   initialTimer: ActiveTimer | null;
@@ -155,12 +156,14 @@ export default function TimerWidget({ initialTimer, projects }: Props) {
 
           {/* Project + billable */}
           <div className="flex gap-2 items-center">
-            <select value={projectId} onChange={e => setProjectId(e.target.value)}
-              className="flex-1 text-[11px] px-2.5 py-1.5 rounded-lg focus:outline-none"
-              style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit" }}>
-              <option value="">No project</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-            </select>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Select
+                value={projectId}
+                onChange={setProjectId}
+                options={[{ value: "", label: "No project" }, ...projects.map(p => ({ value: p.id, label: p.title }))]}
+                placeholder="No project"
+              />
+            </div>
             <button type="button" onClick={() => setBillable(v => !v)}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] shrink-0 transition-colors"
               style={{ background: billable ? "rgba(61,107,79,0.08)" : "transparent", color: billable ? "var(--color-sage)" : "var(--color-grey)", border: `0.5px solid ${billable ? "rgba(61,107,79,0.2)" : "var(--color-border)"}` }}>

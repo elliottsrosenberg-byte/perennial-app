@@ -4,6 +4,8 @@ import { useState, useMemo } from "react";
 import type { Expense, Project, ExpenseCategory } from "@/types/database";
 import EmptyState from "@/components/ui/EmptyState";
 import { Receipt } from "lucide-react";
+import Select from "@/components/ui/Select";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 interface Props {
   expenses: Expense[];
@@ -25,10 +27,12 @@ function fmtCurrency(n: number) {
   return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
-export default function ExpensesTab({ expenses, projects, onExpenseCreated, onExpenseDeleted, onAddExpense }: Props) {
+export default function ExpensesTab({ expenses, projects, onExpenseDeleted, onAddExpense }: Props) {
+  // onExpenseCreated is consumed by the parent's modal flow; intentionally not used here.
   const [filterProject, setFilterProject] = useState("all");
   const [filterCat, setFilterCat]         = useState("all");
   const [filterPeriod, setFilterPeriod]   = useState("month");
+  const [pendingDelete, setPendingDelete] = useState<Expense | null>(null);
 
   const periodStart = useMemo(() => {
     const now = new Date();
@@ -76,27 +80,42 @@ export default function ExpensesTab({ expenses, projects, onExpenseCreated, onEx
 
   const maxCatAmt = Math.max(1, ...byCategory.map(([, v]) => v));
 
-  const selectCls = "px-3 py-1.5 text-[11px] rounded-lg focus:outline-none";
-  const selectStyle = { background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" };
-
   return (
     <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
       {/* Filter bar */}
       <div className="flex items-center gap-2">
-        <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)} className={selectCls} style={selectStyle}>
-          <option value="all">All projects</option>
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
-          <option value="__none__">Unattached</option>
-        </select>
-        <select value={filterCat} onChange={(e) => setFilterCat(e.target.value)} className={selectCls} style={selectStyle}>
-          <option value="all">All categories</option>
-          {Object.entries(CAT_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-        </select>
-        <select value={filterPeriod} onChange={(e) => setFilterPeriod(e.target.value)} className={selectCls} style={selectStyle}>
-          <option value="month">This month</option>
-          <option value="last">Last month</option>
-          <option value="ytd">YTD</option>
-        </select>
+        <div style={{ width: 160 }}>
+          <Select
+            value={filterProject}
+            onChange={setFilterProject}
+            options={[
+              { value: "all", label: "All projects" },
+              ...projects.map((p) => ({ value: p.id, label: p.title })),
+              { value: "__none__", label: "Unattached" },
+            ]}
+          />
+        </div>
+        <div style={{ width: 160 }}>
+          <Select
+            value={filterCat}
+            onChange={setFilterCat}
+            options={[
+              { value: "all", label: "All categories" },
+              ...Object.entries(CAT_CONFIG).map(([k, v]) => ({ value: k, label: v.label })),
+            ]}
+          />
+        </div>
+        <div style={{ width: 140 }}>
+          <Select
+            value={filterPeriod}
+            onChange={setFilterPeriod}
+            options={[
+              { value: "month", label: "This month" },
+              { value: "last",  label: "Last month" },
+              { value: "ytd",   label: "YTD"        },
+            ]}
+          />
+        </div>
         <div className="ml-auto text-[11px]" style={{ color: "var(--color-grey)" }}>
           Total: <strong style={{ color: "var(--color-charcoal)" }}>{fmtCurrency(total)}</strong>
           {unattached > 0 && <span style={{ color: "#b8860b" }}> · {fmtCurrency(unattached)} unattached</span>}
@@ -143,7 +162,7 @@ export default function ExpensesTab({ expenses, projects, onExpenseCreated, onEx
                   {fmtCurrency(Number(e.amount))}
                 </span>
                 <button
-                  onClick={() => { if (confirm("Delete this expense?")) onExpenseDeleted(e.id); }}
+                  onClick={() => setPendingDelete(e)}
                   className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded transition-opacity"
                   style={{ color: "var(--color-grey)" }}
                   onMouseEnter={ev => ev.currentTarget.style.color = "var(--color-red-orange)"}
@@ -226,6 +245,16 @@ export default function ExpensesTab({ expenses, projects, onExpenseCreated, onEx
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete expense?"
+        body={pendingDelete ? `“${pendingDelete.description}” (${fmtCurrency(Number(pendingDelete.amount))}) will be permanently removed.` : ""}
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={() => { if (pendingDelete) { onExpenseDeleted(pendingDelete.id); setPendingDelete(null); } }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

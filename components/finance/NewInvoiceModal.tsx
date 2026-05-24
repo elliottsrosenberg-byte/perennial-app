@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Invoice, Project, Contact, Organization } from "@/types/database";
 import { X } from "lucide-react";
+import Select from "@/components/ui/Select";
+import DatePicker from "@/components/ui/DatePicker";
 
 interface Props {
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
@@ -170,21 +172,36 @@ export default function NewInvoiceModal({ projects, nextNumber, onClose, onCreat
           {/* Project */}
           <div>
             <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Project</label>
-            <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={inputCls} style={inputStyle}>
-              <option value="">None</option>
-              {projects.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
-            </select>
+            <Select
+              value={projectId}
+              onChange={setProjectId}
+              options={[{ value: "", label: "None" }, ...projects.map((p) => ({ value: p.id, label: p.title }))]}
+              placeholder="None"
+            />
           </div>
 
           {/* Dates */}
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Issue date</label>
-              <input type="date" value={issuedAt} onChange={(e) => setIssuedAt(e.target.value)} className={inputCls} style={inputStyle} />
+              <DatePicker
+                value={issuedAt ? new Date(issuedAt + "T12:00:00") : null}
+                onChange={(d) => {
+                  const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const day = String(d.getDate()).padStart(2, "0");
+                  setIssuedAt(`${y}-${m}-${day}`);
+                }}
+              />
             </div>
             <div className="flex-1">
               <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Due date</label>
-              <input type="date" value={dueAt} onChange={(e) => setDueAt(e.target.value)} className={inputCls} style={inputStyle} />
+              <DatePicker
+                value={dueAt ? new Date(dueAt + "T12:00:00") : null}
+                onChange={(d) => {
+                  const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const day = String(d.getDate()).padStart(2, "0");
+                  setDueAt(`${y}-${m}-${day}`);
+                }}
+                placeholder="Pick a due date…"
+              />
             </div>
           </div>
 

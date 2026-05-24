@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Script from "next/script";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 // Provider switch — Plaid by default; flip NEXT_PUBLIC_BANK_PROVIDER to
 // "teller" in the env to fall back to the older Teller integration. The
@@ -107,6 +108,7 @@ export default function BankingTab() {
   const [connecting,   setConnecting]   = useState(false);
   const [scriptReady,  setScriptReady]  = useState(false);
   const [error,        setError]        = useState<string | null>(null);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
   // Provider-specific env. The Teller bits are gated to the Teller branch.
   const tellerAppId = process.env.NEXT_PUBLIC_TELLER_APPLICATION_ID ?? "";
@@ -254,7 +256,6 @@ export default function BankingTab() {
   }
 
   async function disconnect() {
-    if (!confirm("Disconnect all bank accounts? Your transaction history will be removed.")) return;
     await fetch(`${API_BASE}/accounts`, { method: "DELETE" });
     setAccounts([]);
     setTransactions([]);
@@ -324,7 +325,7 @@ export default function BankingTab() {
                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                 {syncing ? "Syncing…" : "Sync"}
               </button>
-              <button onClick={disconnect}
+              <button onClick={() => setConfirmDisconnect(true)}
                 className="px-3 py-1.5 text-[11px] rounded-lg transition-colors"
                 style={{ color: "var(--color-red-orange)", border: "0.5px solid rgba(220,62,13,0.2)" }}
                 onMouseEnter={e => e.currentTarget.style.background = "rgba(220,62,13,0.06)"}
@@ -480,6 +481,16 @@ export default function BankingTab() {
           </>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmDisconnect}
+        title="Disconnect all bank accounts?"
+        body="All connected accounts and their transaction history will be removed. You can reconnect at any time."
+        confirmLabel="Disconnect"
+        tone="danger"
+        onConfirm={() => { setConfirmDisconnect(false); void disconnect(); }}
+        onCancel={() => setConfirmDisconnect(false)}
+      />
     </>
   );
 }

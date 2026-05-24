@@ -4,6 +4,8 @@ import { useState, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Expense, ExpenseCategory, Project } from "@/types/database";
 import { X, Paperclip } from "lucide-react";
+import Select from "@/components/ui/Select";
+import DatePicker from "@/components/ui/DatePicker";
 
 interface Props {
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
@@ -108,9 +110,11 @@ export default function AddExpenseModal({ projects, onClose, onCreated }: Props)
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Category</label>
-              <select value={category} onChange={(e) => setCategory(e.target.value as ExpenseCategory)} className={inputCls} style={inputStyle}>
-                {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
+              <Select
+                value={category}
+                onChange={(v) => setCategory(v as ExpenseCategory)}
+                options={CATEGORIES.map((c) => ({ value: c.value, label: c.label }))}
+              />
             </div>
             <div className="flex-1">
               <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Amount *</label>
@@ -124,14 +128,22 @@ export default function AddExpenseModal({ projects, onClose, onCreated }: Props)
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Date</label>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} style={inputStyle} />
+              <DatePicker
+                value={date ? new Date(date + "T12:00:00") : null}
+                onChange={(d) => {
+                  const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const day = String(d.getDate()).padStart(2, "0");
+                  setDate(`${y}-${m}-${day}`);
+                }}
+              />
             </div>
             <div className="flex-1">
               <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Project</label>
-              <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={inputCls} style={inputStyle}>
-                <option value="">None (unattached)</option>
-                {projects.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
-              </select>
+              <Select
+                value={projectId}
+                onChange={setProjectId}
+                options={[{ value: "", label: "None (unattached)" }, ...projects.map((p) => ({ value: p.id, label: p.title }))]}
+                placeholder="None (unattached)"
+              />
             </div>
           </div>
 
