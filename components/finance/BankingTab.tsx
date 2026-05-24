@@ -205,6 +205,12 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
   const [convertTarget, setConvertTarget] = useState<BankTransaction | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [snackbar, setSnackbar] = useState<{ text: string; onUndo?: () => void } | null>(null);
+  // Auto-dismiss snackbars after 4s unless they carry an Undo.
+  useEffect(() => {
+    if (!snackbar || snackbar.onUndo) return;
+    const id = window.setTimeout(() => setSnackbar(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [snackbar]);
 
   const tellerAppId = process.env.NEXT_PUBLIC_TELLER_APPLICATION_ID ?? "";
   const tellerEnv   = process.env.NEXT_PUBLIC_TELLER_ENVIRONMENT ?? "sandbox";
@@ -720,7 +726,20 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
             </div>
 
             {/* ── Filter / sort bar ─────────────────────────────────── */}
-            <div className="flex items-center gap-2 flex-wrap shrink-0">
+            {/* Sticky so the table can scroll under it. Negative top
+                offset cancels the parent's flex-col gap (20px); the
+                bottom padding restores breathing room above the table. */}
+            <div className="flex items-center gap-2 flex-wrap shrink-0"
+              style={{
+                position:   "sticky",
+                top:        -20,
+                zIndex:     10,
+                background: "var(--color-warm-white)",
+                paddingTop:    10,
+                paddingBottom: 10,
+                marginTop:    -10,
+                marginBottom: -10,
+              }}>
               <FilterPills
                 value={status}
                 options={STATUS_OPTIONS}
