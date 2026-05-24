@@ -38,6 +38,10 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
   const [showLogTime, setShowLogTime]       = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [showNewInvoice, setShowNewInvoice] = useState(false);
+  // Edit mode: the modals get reused with a pre-loaded row. Passing
+  // these in is what flips them from "new" to "edit" mode.
+  const [editTimeEntry, setEditTimeEntry]   = useState<TimeEntry | null>(null);
+  const [editExpense, setEditExpense]       = useState<Expense | null>(null);
   const [optionsOpen, setOptionsOpen]       = useState(false);
   const optionsRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -258,6 +262,7 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
             onStartTimer={startTimer}
             onEntryCreated={(e) => setTimeEntries((prev) => [e, ...prev])}
             onEntryDeleted={deleteTimeEntry}
+            onEntryEdit={(entry) => setEditTimeEntry(entry)}
             onLogTime={() => setShowLogTime(true)}
           />
         )}
@@ -267,6 +272,7 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
             projects={projects}
             onExpenseCreated={(e) => setExpenses((prev) => [e, ...prev])}
             onExpenseDeleted={deleteExpense}
+            onExpenseEdit={(exp) => setEditExpense(exp)}
             onAddExpense={() => setShowAddExpense(true)}
           />
         )}
@@ -288,10 +294,24 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
           onClose={() => setShowLogTime(false)}
           onCreated={(e) => setTimeEntries((prev) => [e, ...prev])} />
       )}
+      {editTimeEntry && (
+        <LogTimeModal projects={projects}
+          entry={editTimeEntry}
+          onClose={() => setEditTimeEntry(null)}
+          onCreated={() => { /* unused in edit mode */ }}
+          onUpdated={(e) => setTimeEntries((prev) => prev.map((x) => x.id === e.id ? e : x))} />
+      )}
       {showAddExpense && (
         <AddExpenseModal projects={projects}
           onClose={() => setShowAddExpense(false)}
           onCreated={(e) => setExpenses((prev) => [e, ...prev])} />
+      )}
+      {editExpense && (
+        <AddExpenseModal projects={projects}
+          expense={editExpense}
+          onClose={() => setEditExpense(null)}
+          onCreated={() => { /* unused in edit mode */ }}
+          onUpdated={(e) => setExpenses((prev) => prev.map((x) => x.id === e.id ? e : x))} />
       )}
       {showNewInvoice && (
         <NewInvoiceModal

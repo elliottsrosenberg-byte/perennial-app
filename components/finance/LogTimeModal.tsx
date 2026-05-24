@@ -11,19 +11,25 @@ interface Props {
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
   onClose: () => void;
   onCreated: (entry: TimeEntry) => void;
+  /** When provided, the modal opens in edit mode and PATCHes the row. */
+  entry?: TimeEntry;
+  onUpdated?: (entry: TimeEntry) => void;
 }
 
 const inputCls = "w-full px-3 py-2 text-[13px] rounded-lg border transition-colors focus:outline-none";
 const inputStyle = { background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" };
 
-export default function LogTimeModal({ projects, onClose, onCreated }: Props) {
+export default function LogTimeModal({ projects, onClose, onCreated, entry, onUpdated }: Props) {
   const today = new Date().toISOString().split("T")[0];
-  const [description, setDescription] = useState("");
-  const [projectId, setProjectId]     = useState("");
-  const [hours, setHours]             = useState("");
-  const [minutes, setMinutes]         = useState("");
-  const [billable, setBillable]       = useState(true);
-  const [loggedAt, setLoggedAt]       = useState(today);
+  const isEdit = !!entry;
+  const initHrs = entry ? String(Math.floor(entry.duration_minutes / 60)) : "";
+  const initMin = entry ? String(entry.duration_minutes % 60) : "";
+  const [description, setDescription] = useState(entry?.description ?? "");
+  const [projectId, setProjectId]     = useState(entry?.project_id ?? "");
+  const [hours, setHours]             = useState(initHrs);
+  const [minutes, setMinutes]         = useState(initMin);
+  const [billable, setBillable]       = useState(entry?.billable ?? true);
+  const [loggedAt, setLoggedAt]       = useState(entry?.logged_at ?? today);
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState<string | null>(null);
 
@@ -36,6 +42,30 @@ export default function LogTimeModal({ projects, onClose, onCreated }: Props) {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setError("Not authenticated."); setLoading(false); return; }
+
+    if (isEdit && entry) {
+      // Scope the update by id AND user_id — defence in depth against
+      // RLS misconfig. Returning the full row with project keeps the
+      // parent's list update cheap.
+      const { data, error: dbErr } = await supabase
+        .from("time_entries")
+        .update({
+          project_id: projectId || null,
+          description: description.trim(),
+          duration_minutes: totalMinutes,
+          billable,
+          logged_at: loggedAt,
+        })
+        .eq("id", entry.id)
+        .eq("user_id", user.id)
+        .select("*, project:projects(id, title, type, rate)")
+        .single();
+      if (dbErr) { setError(dbErr.message); setLoading(false); return; }
+      onUpdated?.(data as TimeEntry);
+      onClose();
+      return;
+    }
+
     const { data, error: dbErr } = await supabase
       .from("time_entries")
       .insert({
@@ -61,7 +91,7 @@ export default function LogTimeModal({ projects, onClose, onCreated }: Props) {
         style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}>
         <div className="flex items-center justify-between px-5 py-4"
           style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-          <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>Log time</h2>
+          <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>{isEdit ? "Edit time entry" : "Log time"}</h2>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg"
             style={{ color: "var(--color-grey)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
@@ -130,7 +160,7 @@ export default function LogTimeModal({ projects, onClose, onCreated }: Props) {
             disabled={loading || totalMinutes < 1}
             className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50"
             style={{ background: "var(--color-sage)" }}>
-            {loading ? "Saving…" : "Log time"}
+            {loading ? "Saving…" : isEdit ? "Save changes" : "Log time"}
           </button>
         </div>
       </div>

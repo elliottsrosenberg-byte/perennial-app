@@ -11,6 +11,9 @@ interface Props {
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
   onClose: () => void;
   onCreated: (expense: Expense) => void;
+  /** When provided, the modal opens in edit mode and PATCHes the row. */
+  expense?: Expense;
+  onUpdated?: (expense: Expense) => void;
 }
 
 const CATEGORIES: { value: ExpenseCategory; label: string }[] = [
@@ -24,15 +27,16 @@ const CATEGORIES: { value: ExpenseCategory; label: string }[] = [
 const inputCls = "w-full px-3 py-2 text-[13px] rounded-lg border transition-colors focus:outline-none";
 const inputStyle = { background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" };
 
-export default function AddExpenseModal({ projects, onClose, onCreated }: Props) {
+export default function AddExpenseModal({ projects, onClose, onCreated, expense, onUpdated }: Props) {
   const today = new Date().toISOString().split("T")[0];
-  const [description, setDescription] = useState("");
-  const [category, setCategory]       = useState<ExpenseCategory>("materials");
-  const [amount, setAmount]           = useState("");
-  const [date, setDate]               = useState(today);
-  const [projectId, setProjectId]     = useState("");
-  const [receiptUrl, setReceiptUrl]   = useState<string | null>(null);
-  const [receiptName, setReceiptName] = useState<string | null>(null);
+  const isEdit = !!expense;
+  const [description, setDescription] = useState(expense?.description ?? "");
+  const [category, setCategory]       = useState<ExpenseCategory>(expense?.category ?? "materials");
+  const [amount, setAmount]           = useState(expense ? String(expense.amount) : "");
+  const [date, setDate]               = useState(expense?.date ?? today);
+  const [projectId, setProjectId]     = useState(expense?.project_id ?? "");
+  const [receiptUrl, setReceiptUrl]   = useState<string | null>(expense?.receipt_url ?? null);
+  const [receiptName, setReceiptName] = useState<string | null>(expense?.receipt_url ? "Existing receipt" : null);
   const [uploading, setUploading]     = useState(false);
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState<string | null>(null);
@@ -69,6 +73,29 @@ export default function AddExpenseModal({ projects, onClose, onCreated }: Props)
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setError("Not authenticated."); setLoading(false); return; }
+
+    if (isEdit && expense) {
+      // Scope by id AND user_id as defence-in-depth alongside RLS.
+      const { data, error: dbErr } = await supabase
+        .from("expenses")
+        .update({
+          project_id: projectId || null,
+          description: description.trim(),
+          category,
+          amount: amt,
+          date,
+          receipt_url: receiptUrl,
+        })
+        .eq("id", expense.id)
+        .eq("user_id", user.id)
+        .select("*, project:projects(id, title, type, rate)")
+        .single();
+      if (dbErr) { setError(dbErr.message); setLoading(false); return; }
+      onUpdated?.(data as Expense);
+      onClose();
+      return;
+    }
+
     const { data, error: dbErr } = await supabase
       .from("expenses")
       .insert({
@@ -94,7 +121,7 @@ export default function AddExpenseModal({ projects, onClose, onCreated }: Props)
       <div className="w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden"
         style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}>
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-          <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>Add expense</h2>
+          <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>{isEdit ? "Edit expense" : "Add expense"}</h2>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg"
             style={{ color: "var(--color-grey)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
@@ -190,7 +217,7 @@ export default function AddExpenseModal({ projects, onClose, onCreated }: Props)
             disabled={loading || !description.trim() || !amount}
             className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50"
             style={{ background: "var(--color-sage)" }}>
-            {loading ? "Saving…" : "Add expense"}
+            {loading ? "Saving…" : isEdit ? "Save changes" : "Add expense"}
           </button>
         </div>
       </div>

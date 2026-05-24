@@ -12,6 +12,7 @@ interface Props {
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
   onExpenseCreated: (e: Expense) => void;
   onExpenseDeleted: (id: string) => void;
+  onExpenseEdit?: (expense: Expense) => void;
   onAddExpense: () => void;
 }
 
@@ -27,7 +28,7 @@ function fmtCurrency(n: number) {
   return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
-export default function ExpensesTab({ expenses, projects, onExpenseDeleted, onAddExpense }: Props) {
+export default function ExpensesTab({ expenses, projects, onExpenseDeleted, onExpenseEdit, onAddExpense }: Props) {
   // onExpenseCreated is consumed by the parent's modal flow; intentionally not used here.
   const [filterProject, setFilterProject] = useState("all");
   const [filterCat, setFilterCat]         = useState("all");
@@ -140,7 +141,13 @@ export default function ExpensesTab({ expenses, projects, onExpenseDeleted, onAd
             const cfg = CAT_CONFIG[e.category];
             return (
               <div key={e.id} className="grid items-center px-4 py-2.5 group"
-                style={{ gridTemplateColumns: "28px 1fr 120px 64px 16px 72px 24px", gap: "0.625rem", borderBottom: "0.5px solid var(--color-border)" }}>
+                onClick={() => onExpenseEdit?.(e)}
+                role={onExpenseEdit ? "button" : undefined}
+                tabIndex={onExpenseEdit ? 0 : undefined}
+                onKeyDown={onExpenseEdit ? (ev) => { if (ev.key === "Enter") onExpenseEdit(e); } : undefined}
+                onMouseEnter={onExpenseEdit ? ev => ev.currentTarget.style.background = "rgba(31,33,26,0.025)" : undefined}
+                onMouseLeave={onExpenseEdit ? ev => ev.currentTarget.style.background = "transparent" : undefined}
+                style={{ gridTemplateColumns: "28px 1fr 120px 64px 16px 72px 24px", gap: "0.625rem", borderBottom: "0.5px solid var(--color-border)", cursor: onExpenseEdit ? "pointer" : "default" }}>
                 <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-semibold shrink-0"
                   style={{ background: cfg.bg, color: cfg.color }}>{cfg.initial}</div>
                 <div>
@@ -162,9 +169,11 @@ export default function ExpensesTab({ expenses, projects, onExpenseDeleted, onAd
                   {fmtCurrency(Number(e.amount))}
                 </span>
                 <button
-                  onClick={() => setPendingDelete(e)}
+                  onClick={(ev) => { ev.stopPropagation(); setPendingDelete(e); }}
+                  title="Delete expense"
+                  aria-label="Delete expense"
                   className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded transition-opacity"
-                  style={{ color: "var(--color-grey)" }}
+                  style={{ color: "var(--color-grey)", background: "transparent", border: "none", cursor: "pointer" }}
                   onMouseEnter={ev => ev.currentTarget.style.color = "var(--color-red-orange)"}
                   onMouseLeave={ev => ev.currentTarget.style.color = "var(--color-grey)"}
                 >
