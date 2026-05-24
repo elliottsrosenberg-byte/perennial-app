@@ -35,7 +35,7 @@ export async function GET() {
       try {
         let txRes: Response;
         try {
-          txRes = await tellerFetch(`/accounts/${account.teller_id}/transactions?count=50`, accessToken);
+          txRes = await tellerFetch(`/accounts/${account.external_id}/transactions?count=50`, accessToken);
         } catch (e) {
           if (e instanceof TellerNotConfiguredError) {
             return NextResponse.json({ error: e.message }, { status: 503 });
@@ -48,7 +48,8 @@ export async function GET() {
         const rows = txList.map(tx => ({
           user_id:         user.id,
           bank_account_id: account.id,
-          teller_id:       tx.id,
+          provider:        "teller",
+          external_id:     tx.id,
           amount:          parseFloat(tx.amount),
           type:            parseFloat(tx.amount) > 0 ? "credit" : "debit",
           description:     tx.description,
@@ -58,7 +59,7 @@ export async function GET() {
         }));
 
         await supabase.from("bank_transactions")
-          .upsert(rows, { onConflict: "user_id,teller_id" });
+          .upsert(rows, { onConflict: "user_id,provider,external_id" });
       } catch {
         // Continue on individual account failure
       }

@@ -81,7 +81,8 @@ export async function POST(req: Request) {
   const accountRows = tellerAccounts.map(a => ({
     user_id:        user.id,
     integration_id: integration.id,
-    teller_id:      a.id,
+    provider:       "teller",
+    external_id:    a.id,
     institution:    institutionName,
     name:           a.name,
     type:           a.type,
@@ -92,7 +93,7 @@ export async function POST(req: Request) {
 
   const { data: bankAccounts, error: baErr } = await supabase
     .from("bank_accounts")
-    .upsert(accountRows, { onConflict: "user_id,teller_id" })
+    .upsert(accountRows, { onConflict: "user_id,provider,external_id" })
     .select();
 
   if (baErr) {
