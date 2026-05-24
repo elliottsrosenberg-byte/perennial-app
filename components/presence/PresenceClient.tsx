@@ -2177,27 +2177,13 @@ export default function PresenceClient({ initialOpportunities }: { initialOpport
 
           {/* Primary CTA — jumps to Settings → Integrations, where every channel
               (Instagram, GA4, Newsletter) can be connected from one place.
-              Most useful when nothing's connected; we keep it visible always
-              so adding a second / third channel stays one click away. */}
-          <button
-            onClick={() => { window.location.href = "/settings?section=integrations"; }}
-            style={{
-              padding: "6px 12px", fontSize: 12, fontWeight: 500,
-              borderRadius: 7, border: "none", cursor: "pointer",
-              background: "var(--color-sage)", color: "white",
-              fontFamily: "inherit",
-              display: "inline-flex", alignItems: "center", gap: 6,
-              transition: "background 0.12s ease",
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-sage-hover, var(--color-sage))")}
-            onMouseLeave={e => (e.currentTarget.style.background = "var(--color-sage)")}
-            title={allConnected ? "Manage your connected channels" : "Connect a channel (Instagram, GA4, newsletter)"}
-          >
-            <Plus size={12} />
-            {allConnected ? "Manage channels" : "Connect channel"}
-          </button>
+              "Manage channels" is a setting (not a primary action), so
+              it's been demoted into the overflow menu. The 3-dot menu
+              sits to the LEFT of the primary action row so the eye
+              lands on real CTAs first; the menu is for less-frequent
+              maintenance items. */}
 
-          {/* 3-dot options menu — placeholder, matches Finance / Calendar pattern. */}
+          {/* 3-dot options menu — now left of any primary actions. */}
           <div ref={optionsRef} style={{ position: "relative" }}>
             <button
               type="button"
@@ -2226,20 +2212,50 @@ export default function PresenceClient({ initialOpportunities }: { initialOpport
                 borderRadius: 12,
                 boxShadow: "var(--shadow-overlay)",
                 overflow: "hidden",
-                padding: "10px 14px",
+                padding: 6,
               }}>
-                <p style={{
-                  fontSize: 10, fontWeight: 700, textTransform: "uppercase",
-                  letterSpacing: "0.08em", color: "var(--color-text-tertiary)",
-                }}>
-                  Presence options
-                </p>
-                <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 8, lineHeight: 1.5 }}>
-                  Settings will land here as the module grows.
-                </p>
+                <button
+                  type="button"
+                  onClick={() => { setOptionsOpen(false); window.location.href = "/settings?section=integrations"; }}
+                  style={{
+                    all: "unset", display: "flex", alignItems: "center", gap: 8,
+                    padding: "8px 10px", width: "100%", borderRadius: 8,
+                    fontSize: 12, color: "var(--color-charcoal)", cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-sunken)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                >
+                  Manage channels
+                </button>
               </div>
             )}
           </div>
+
+          {/* Primary actions live to the right of the menu. When nothing
+              is connected, "Connect channel" is the primary action. Once
+              everything's connected, no primary action is needed —
+              maintenance actions live in the ⋯ menu. Additional CTAs can
+              slot in here as features ship. */}
+          {!allConnected && (
+            <button
+              onClick={() => { window.location.href = "/settings?section=integrations"; }}
+              style={{
+                padding: "6px 12px", fontSize: 12, fontWeight: 500,
+                borderRadius: 7, border: "none", cursor: "pointer",
+                background: "var(--color-sage)", color: "white",
+                fontFamily: "inherit",
+                display: "inline-flex", alignItems: "center", gap: 6,
+                transition: "background 0.12s ease",
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--color-sage-hover, var(--color-sage))")}
+              onMouseLeave={e => (e.currentTarget.style.background = "var(--color-sage)")}
+              title="Connect a channel (Instagram, GA4, newsletter)"
+            >
+              <Plus size={12} />
+              Connect channel
+            </button>
+          )}
         </div>
       </header>
 
