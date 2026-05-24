@@ -81,7 +81,14 @@ export async function GET() {
               amount:          -tx.amount,
               type:            tx.amount < 0 ? "credit" : "debit",
               description:     tx.merchant_name ?? tx.name,
-              details:         {},
+              // Persist Plaid's enrichment payload so the review queue
+              // can show category chips + prefer merchant_name on
+              // display. Keep raw shape (snake_case) for forward compat.
+              details: {
+                merchant_name: tx.merchant_name ?? null,
+                personal_finance_category: tx.personal_finance_category ?? null,
+                category: tx.category ?? null,
+              },
               date:            tx.date,
               status:          tx.pending ? "pending" : "posted",
             };

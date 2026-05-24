@@ -106,6 +106,12 @@ export interface PlaidAccountsResponse {
   request_id: string;
 }
 
+export interface PlaidPersonalFinanceCategory {
+  primary:    string;
+  detailed:   string;
+  confidence_level?: string | null;
+}
+
 export interface PlaidTransaction {
   transaction_id: string;
   account_id:     string;
@@ -115,6 +121,11 @@ export interface PlaidTransaction {
   merchant_name:  string | null;
   pending:        boolean;
   iso_currency_code: string | null;
+  // Plaid's modern category taxonomy. Always present on /transactions/sync
+  // responses in newer API versions; tolerate null for older Items.
+  personal_finance_category?: PlaidPersonalFinanceCategory | null;
+  // Legacy category array (e.g. ["Travel", "Taxi"]). Kept as a fallback.
+  category?: string[] | null;
 }
 
 export interface PlaidTransactionsSyncResponse {
