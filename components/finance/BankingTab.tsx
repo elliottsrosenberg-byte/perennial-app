@@ -15,13 +15,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Script from "next/script";
 import {
-  Ban, ChevronRight, Loader2, Paperclip, StickyNote, Trash2, X,
+  Ban, ChevronRight, Loader2, MoreHorizontal, Paperclip, Plus, RefreshCw,
+  StickyNote, Trash2, Unplug, X,
   // Category-chip icons (lookup by name from plaidCategoryDisplay):
   ArrowDownToLine, ArrowLeftRight, Briefcase, Car, HeartPulse, Landmark,
   Lightbulb, Music, Plane, Receipt as ReceiptIcon, ShoppingBag, Tag,
   User as UserIcon, Utensils, Wrench,
 } from "lucide-react";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import Menu from "@/components/ui/Menu";
 import Select from "@/components/ui/Select";
 import AddExpenseModal from "./AddExpenseModal";
 import type { BankAccount, BankTransaction, Expense, ExpenseCategory, Project } from "@/types/database";
@@ -187,7 +189,6 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
   const [connecting, setConnecting]               = useState(false);
   const [scriptReady, setScriptReady]             = useState(false);
   const [error, setError]                         = useState<string | null>(null);
-  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
   // Filter / sort / page state
   const [status, setStatus]     = useState<StatusFilter>("needs_review");
@@ -394,13 +395,19 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
     teller.open();
   }
 
-  async function disconnect() {
-    await fetch(`${API_BASE}/accounts`, { method: "DELETE" });
-    setAccounts([]);
-    setTransactions([]);
-    setTotal(0);
-    setKpis({ in_this_month: 0, out_this_month: 0, net: 0 });
-    setOutstanding([]);
+  // Disconnect a single account. The provider DELETE supports ?id=<acctId>
+  // and tears down the parent Plaid Item if it was the last account on it.
+  async function disconnectAccount(acctId: string) {
+    const prev = accounts;
+    setAccounts((rows) => rows.filter((a) => a.id !== acctId));
+    const res = await fetch(`${API_BASE}/accounts?id=${encodeURIComponent(acctId)}`, { method: "DELETE" });
+    if (!res.ok) {
+      setAccounts(prev);
+      setError("Couldn't disconnect that account.");
+      return;
+    }
+    // Pull fresh table state — server cascaded the tx rows.
+    await fetchTransactions();
   }
 
   async function manualSync() {
@@ -411,6 +418,14 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
     } finally {
       setSyncing(false);
     }
+  }
+
+  // Per-account "Sync this account" — the provider's /transactions endpoint
+  // already syncs every Plaid Item the user owns (cursor-based, cheap when
+  // there are no deltas), so we fan out the same call and refresh balances.
+  async function syncAccount() {
+    await manualSync();
+    await initialLoad();
   }
 
   // ── Optimistic mutators ───────────────────────────────────────────────────
@@ -602,39 +617,20 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
       <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
 
         {/* ── Header ───────────────────────────────────────────────────── */}
+        {/* The top-right Sync / Disconnect / + Add account triple was killed
+            in v3: per-account controls now live in each card's ⋯ menu, and
+            a dashed "Add account" tile sits at the end of the strip (same
+            affordance as adding a new project card to a board). The empty
+            state below still owns the first-connect CTA. */}
         <div className="flex items-center gap-3 shrink-0">
           <div className="flex-1">
             <h2 style={SECTION_HEADER_STYLE}>Banking</h2>
             <p className="text-[11px] mt-0.5" style={{ color: "var(--color-grey)" }}>
               {accounts.length > 0
-                ? `${accounts.length} account${accounts.length !== 1 ? "s" : ""} · ${envLabel}`
+                ? `${accounts.length} account${accounts.length !== 1 ? "s" : ""} · ${envLabel}${syncing ? " · Syncing…" : ""}`
                 : "Connect a bank to start triaging transactions"}
             </p>
           </div>
-          {accounts.length > 0 && (
-            <>
-              <button onClick={manualSync} disabled={syncing}
-                className="px-3 py-1.5 text-[11px] rounded-lg transition-colors"
-                style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", background: "transparent" }}
-                onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                {syncing ? "Syncing…" : "Sync"}
-              </button>
-              <button onClick={() => setConfirmDisconnect(true)}
-                className="px-3 py-1.5 text-[11px] rounded-lg transition-colors"
-                style={{ color: "var(--color-red-orange)", border: "0.5px solid rgba(220,62,13,0.2)", background: "transparent" }}
-                onMouseEnter={e => e.currentTarget.style.background = "rgba(220,62,13,0.06)"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                Disconnect
-              </button>
-            </>
-          )}
-          <button onClick={openConnect} disabled={connecting || !scriptReady}
-            data-tour-target="finance.connect-bank"
-            className="px-3 py-1.5 text-[11px] font-medium rounded-lg text-white disabled:opacity-50"
-            style={{ background: "var(--color-sage)" }}>
-            {connecting ? "Connecting…" : accounts.length > 0 ? "+ Add account" : "Connect bank"}
-          </button>
         </div>
 
         {error && (
@@ -675,36 +671,57 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
         {!loading && accounts.length > 0 && (
           <>
             {/* ── Accounts strip ─────────────────────────────────────── */}
-            {/* shrink-0 + explicit minHeight protects against parent
-                flex-col collapsing the row when the table grows tall. */}
+            {/* Each card carries its own ⋯ menu with Sync + Disconnect for
+                that account only. The final dashed tile is the "+ Add
+                account" affordance (mirrors the projects board's
+                "+ New project" tile). shrink-0 + explicit minHeight
+                protects against parent flex-col collapsing the row when
+                the table grows tall. */}
             <div className="flex gap-2 overflow-x-auto pb-1 shrink-0"
                  style={{ scrollbarWidth: "thin", minHeight: 76 }}>
               {accounts.map((acct) => (
-                <div key={acct.id}
-                  className="shrink-0 px-3 py-2.5 flex flex-col justify-between"
-                  style={{
-                    ...CARD_STYLE,
-                    minWidth:  168,
-                    maxWidth:  208,
-                    minHeight: 68,
-                  }}>
-                  <p className="text-[10px] uppercase tracking-wider truncate" style={{ color: "var(--color-grey)" }}>
-                    {acct.institution}
-                  </p>
-                  <p className="text-[12px] font-medium truncate" style={{ color: "var(--color-charcoal)" }}>
-                    {trimAccountName(acct.name)}
-                    {acct.last_four ? <span style={{ color: "var(--color-grey)" }}> ••{acct.last_four}</span> : null}
-                  </p>
-                  <p className="text-[14px] font-semibold tabular-nums" style={{
-                    color: acct.type === "credit" && (acct.balance_current ?? 0) < 0 ? "#b8860b" : "var(--color-charcoal)",
-                    fontFamily: "var(--font-display)",
-                  }}>
-                    {acct.balance_available !== null
-                      ? fmtCurrency(acct.balance_available, { dp: 0 })
-                      : acct.balance_current !== null ? fmtCurrency(acct.balance_current, { dp: 0 }) : "—"}
-                  </p>
-                </div>
+                <AccountCard
+                  key={acct.id}
+                  acct={acct}
+                  syncing={syncing}
+                  onSync={syncAccount}
+                  onDisconnect={() => disconnectAccount(acct.id)}
+                />
               ))}
+              <button
+                type="button"
+                onClick={openConnect}
+                disabled={connecting || !scriptReady}
+                data-tour-target="finance.connect-bank"
+                className="shrink-0 flex flex-col items-center justify-center gap-1.5 transition-colors"
+                style={{
+                  minWidth:     168,
+                  maxWidth:     208,
+                  minHeight:    68,
+                  borderRadius: 12,
+                  border:       "1px dashed var(--color-border)",
+                  background:   "transparent",
+                  color:        "var(--color-grey)",
+                  cursor:       connecting || !scriptReady ? "not-allowed" : "pointer",
+                  opacity:      connecting || !scriptReady ? 0.5 : 1,
+                  fontFamily:   "inherit",
+                  fontSize:     12,
+                }}
+                onMouseEnter={(e) => {
+                  if (connecting || !scriptReady) return;
+                  e.currentTarget.style.borderColor = "var(--color-sage)";
+                  e.currentTarget.style.background  = "rgba(155,163,122,0.06)";
+                  e.currentTarget.style.color       = "var(--color-sage)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "var(--color-border)";
+                  e.currentTarget.style.background  = "transparent";
+                  e.currentTarget.style.color       = "var(--color-grey)";
+                }}
+              >
+                <Plus size={16} strokeWidth={1.75} />
+                <span>{connecting ? "Connecting…" : "Add account"}</span>
+              </button>
             </div>
 
             {/* ── KPI cards ─────────────────────────────────────────── */}
@@ -917,16 +934,113 @@ export default function BankingTab({ projects, onExpenseCreated, onInvoiceMarked
         />
       )}
 
+    </>
+  );
+}
+
+// ── Account card ────────────────────────────────────────────────────────────
+// Each connected bank gets its own card with a ⋯ menu carrying Sync +
+// Disconnect actions. The menu is anchored under the dots; click-outside
+// + Escape close it. Disconnect drops into a ConfirmDialog so a misclick
+// can't nuke an Item's history.
+
+interface AccountCardProps {
+  acct: BankAccount;
+  syncing: boolean;
+  onSync: () => Promise<void>;
+  onDisconnect: () => Promise<void>;
+}
+
+function AccountCard({ acct, syncing, onSync, onDisconnect }: AccountCardProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
+  const acctLabel = `${trimAccountName(acct.name)}${acct.last_four ? ` ••${acct.last_four}` : ""}`;
+
+  return (
+    <div ref={wrapRef}
+      className="shrink-0 px-3 py-2.5 flex flex-col justify-between relative"
+      style={{
+        ...CARD_STYLE,
+        minWidth:  168,
+        maxWidth:  208,
+        minHeight: 68,
+      }}>
+      <div className="flex items-start gap-2">
+        <p className="flex-1 text-[10px] uppercase tracking-wider truncate" style={{ color: "var(--color-grey)" }}>
+          {acct.institution}
+        </p>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); }}
+          aria-label={`Options for ${acctLabel}`}
+          className="w-5 h-5 -mt-0.5 -mr-1 flex items-center justify-center rounded-md transition-colors"
+          style={{ color: "var(--color-grey)", background: menuOpen ? "var(--color-cream)" : "transparent" }}
+          onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-cream)"}
+          onMouseLeave={(e) => { if (!menuOpen) e.currentTarget.style.background = "transparent"; }}>
+          <MoreHorizontal size={12} />
+        </button>
+      </div>
+      <p className="text-[12px] font-medium truncate" style={{ color: "var(--color-charcoal)" }}>
+        {trimAccountName(acct.name)}
+        {acct.last_four ? <span style={{ color: "var(--color-grey)" }}> ••{acct.last_four}</span> : null}
+      </p>
+      <p className="text-[14px] font-semibold tabular-nums" style={{
+        color: acct.type === "credit" && (acct.balance_current ?? 0) < 0 ? "#b8860b" : "var(--color-charcoal)",
+        fontFamily: "var(--font-display)",
+      }}>
+        {acct.balance_available !== null
+          ? fmtCurrency(acct.balance_available, { dp: 0 })
+          : acct.balance_current !== null ? fmtCurrency(acct.balance_current, { dp: 0 }) : "—"}
+      </p>
+
+      {menuOpen && (
+        <Menu
+          items={[
+            {
+              label:    syncing ? "Syncing…" : "Sync this account",
+              icon:     RefreshCw,
+              disabled: syncing,
+              onClick:  () => { void onSync(); },
+            },
+            "divider",
+            {
+              label:   "Disconnect this account",
+              icon:    Unplug,
+              danger:  true,
+              onClick: () => setConfirmOpen(true),
+            },
+          ]}
+          onClose={() => setMenuOpen(false)}
+          style={{ position: "absolute", top: "calc(100% + 4px)", right: 6, minWidth: 180, zIndex: 20 }}
+        />
+      )}
+
       <ConfirmDialog
-        open={confirmDisconnect}
-        title="Disconnect all bank accounts?"
-        body="All connected accounts and their transaction history will be removed. You can reconnect at any time."
+        open={confirmOpen}
+        title={`Disconnect ${acctLabel}?`}
+        body="This account and its transaction history will be removed. You can reconnect at any time."
         confirmLabel="Disconnect"
         tone="danger"
-        onConfirm={() => { setConfirmDisconnect(false); void disconnect(); }}
-        onCancel={() => setConfirmDisconnect(false)}
+        onConfirm={() => { setConfirmOpen(false); void onDisconnect(); }}
+        onCancel={() => setConfirmOpen(false)}
       />
-    </>
+    </div>
   );
 }
 
