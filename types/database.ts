@@ -277,6 +277,7 @@ export interface Expense {
   amount: number;
   date: string;
   receipt_url: string | null;
+  receipt_path: string | null;
   created_at: string;
   project?: Project | null;
 }
@@ -334,6 +335,10 @@ export interface BankTransaction {
   date: string;            // YYYY-MM-DD
   status: "pending" | "posted";
   is_personal: boolean;
+  /** User-supplied category override. When set, takes precedence over the
+   *  Plaid-derived `details.personal_finance_category.primary` for display
+   *  + the "Log expense" prefill. Null falls back to the Plaid mapping. */
+  manual_category: ExpenseCategory | null;
   linked_expense_id: string | null;
   matched_invoice_id: string | null;
   note: string | null;
@@ -437,6 +442,10 @@ export interface Resource {
   modal_key: string | null;
   actions: ResourceAction[];
   position: number;
+  /** Set when this Resource row mirrors a receipt attached to a
+   *  bank_transactions row, so a re-upload or delete from Banking can
+   *  find + replace/remove the same row. */
+  bank_transaction_id: string | null;
   created_at: string;
   updated_at: string;
 }
