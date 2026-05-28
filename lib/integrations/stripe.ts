@@ -36,8 +36,10 @@ export const stripeAdapter: OAuthProviderAdapter = {
       client_id:     clientId(),
       redirect_uri:  redirectUri,
       // Stripe Connect accepts "read_only" or "read_write". Default to
-      // read_only — v1 only surfaces balance + recent payments.
-      scope:         scopes[0] ?? "read_only",
+      // read_write — required to mint PaymentIntents on the connected
+      // account (the invoice payment flow). Callers can still pass
+      // "read_only" if they only want balance/charges/payouts visibility.
+      scope:         scopes[0] ?? "read_write",
       state,
       ...(options ?? {}),
     });

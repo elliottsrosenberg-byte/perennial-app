@@ -1287,9 +1287,9 @@ export default function SettingsPage() {
                     {
                       provider: "stripe",
                       name: "Stripe",
-                      desc: "Optional. Add a \"Pay online\" button to invoices you send, auto-mark them paid when payment lands, and see Stripe balance + payouts in Finance. Invoicing works without it.",
+                      desc: "Required to accept online invoice payments. Connect via Stripe so client payments land in your Stripe account, then payout to your bank. Without it, invoices send but clients can only pay you manually.",
                       iconBg: "rgba(99,91,255,0.10)",
-                      modal: "stripe",
+                      href: "/api/auth/stripe",
                     },
                   ].map(({ provider, name, desc, iconBg, href, note, soon, modal }: { provider: string; name: string; desc: string; iconBg: string; href?: string | null; note?: string; soon?: boolean; modal?: string }) => {
                     const connected = !!getIntegration(provider);
@@ -1596,15 +1596,8 @@ const CONNECT_FORMS: Record<string, ConnectFormConfig> = {
     ],
     helpUrl: { label: "Generate one at appleid.apple.com", href: "https://account.apple.com/account/manage/section/security" },
   },
-  stripe: {
-    title:       "Connect Stripe",
-    description: "Paste a Restricted API key (rk_…). For just viewing your data, set Read on: Balance, Charges, Payouts, Invoices, Customers. For sending invoices through Perennial later, also grant Write on: Invoices, Customers, Products, Prices.",
-    endpoint:    "/api/integrations/stripe/connect",
-    fields: [
-      { key: "api_key", label: "Stripe API key", placeholder: "rk_live_… or rk_test_…", type: "password", required: true },
-    ],
-    helpUrl: { label: "Create a restricted key at dashboard.stripe.com/apikeys", href: "https://dashboard.stripe.com/apikeys/create" },
-  },
+  // Stripe Connect uses OAuth via /api/auth/stripe — handled by the
+  // href-redirect path on the tile, not the API-key paste modal.
 };
 
 function ConnectFormModal({ formKey, onClose, onConnected }: {

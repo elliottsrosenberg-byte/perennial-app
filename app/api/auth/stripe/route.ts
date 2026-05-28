@@ -38,10 +38,10 @@ export async function GET(req: Request) {
     if (!user) return NextResponse.redirect(new URL("/login?next=/settings?section=integrations", req.url));
 
     const redirectUri = `${appUrl}/api/auth/stripe/callback`;
-    // v1 = read_only: balance, recent charges, payouts. Switch to
-    // read_write later when we want to programmatically issue invoices
-    // / charges on behalf of the connected account.
-    const scopes = ["read_only"];
+    // read_write is required to mint PaymentIntents on the connected
+    // account from the platform — i.e. the hosted-invoice payment flow.
+    // read_only would only allow reading balance / charges / payouts.
+    const scopes = ["read_write"];
 
     const state     = generateState();
     const nextParam = new URL(req.url).searchParams.get("next");
