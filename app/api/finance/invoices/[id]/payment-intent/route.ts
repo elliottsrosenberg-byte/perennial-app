@@ -12,7 +12,12 @@ function invoiceTotal(items: InvoiceLineItem[] | null | undefined): number {
 
 /** Mint (or reuse) a PaymentIntent for a tokenized invoice. The body
  *  carries the public_token from the /i/[token] URL; we re-verify it
- *  against the invoice row before doing anything Stripe-side. */
+ *  against the invoice row before doing anything Stripe-side.
+ *
+ *  Multi-tenant model: the charge is created on the invoice owner's
+ *  connected Stripe account (Stripe Connect Standard, direct charge).
+ *  Money lands directly in the user's Stripe → their bank. Perennial
+ *  is purely a facilitator and is not the merchant of record. */
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -52,6 +57,25 @@ export async function POST(
     return NextResponse.json({ error: "Invoice has already been paid." }, { status: 400 });
   }
 
+  // Look up the invoice owner's Stripe Connect account. account_id is
+  // populated with the acct_xxx ID at OAuth-callback time. If the user
+  // hasn't connected Stripe, we can't accept online payments for them.
+  const { data: integration } = await supabase
+    .from("integrations")
+    .select("account_id, status")
+    .eq("user_id", inv.user_id)
+    .eq("provider", "stripe")
+    .eq("status", "active")
+    .maybeSingle();
+
+  const stripeAccount = integration?.account_id;
+  if (!stripeAccount) {
+    return NextResponse.json({
+      error: "stripe_not_connected",
+      message: "Online payments aren't set up for this invoice yet. Please contact the sender for an alternative way to pay.",
+    }, { status: 503 });
+  }
+
   const amountCents = Math.round(invoiceTotal(inv.line_items) * 100);
   if (amountCents <= 0) {
     return NextResponse.json({ error: "Invoice total is zero." }, { status: 400 });
@@ -79,11 +103,16 @@ export async function POST(
 
   if (inv.stripe_payment_intent_id) {
     try {
-      const existing = await stripe.paymentIntents.retrieve(inv.stripe_payment_intent_id);
+      const existing = await stripe.paymentIntents.retrieve(
+        inv.stripe_payment_intent_id,
+        undefined,
+        { stripeAccount },
+      );
       if (REUSABLE_STATES.has(existing.status) && existing.amount === amountCents) {
         return NextResponse.json({
-          client_secret: existing.client_secret,
-          amount:        existing.amount,
+          client_secret:  existing.client_secret,
+          amount:         existing.amount,
+          stripe_account: stripeAccount,
         });
       }
     } catch (err) {
@@ -97,15 +126,18 @@ export async function POST(
   // configured. If the user hasn't enabled anything though, this comes
   // back with payment_method_types: [] and the PaymentElement renders
   // empty — see retry below.
-  let intent = await stripe.paymentIntents.create({
-    amount:   amountCents,
-    currency,
-    automatic_payment_methods: { enabled: true },
-    metadata: {
-      invoice_id:   inv.id,
-      public_token: token,
+  let intent = await stripe.paymentIntents.create(
+    {
+      amount:   amountCents,
+      currency,
+      automatic_payment_methods: { enabled: true },
+      metadata: {
+        invoice_id:   inv.id,
+        public_token: token,
+      },
     },
-  });
+    { stripeAccount },
+  );
 
   // Defense-in-depth: re-fetch and check whether automatic methods
   // actually produced anything. Empty payment_method_types is the
@@ -115,29 +147,34 @@ export async function POST(
   // account, but covers the much-more-common "nothing enabled at all"
   // case.)
   try {
-    const verified = await stripe.paymentIntents.retrieve(intent.id, {
-      expand: ["payment_method_options"],
-    });
+    const verified = await stripe.paymentIntents.retrieve(
+      intent.id,
+      { expand: ["payment_method_options"] },
+      { stripeAccount },
+    );
     const methods = verified.payment_method_types ?? [];
     if (methods.length === 0) {
       console.warn(
         `[payment-intent] Stripe returned no payment methods for intent ${intent.id}. ` +
         `Likely cause: no methods enabled in Stripe Dashboard → Settings → Payment Methods.`,
       );
-      const retried = await stripe.paymentIntents.create({
-        amount:   amountCents,
-        currency,
-        payment_method_types: ["card", "us_bank_account", "link"],
-        metadata: {
-          invoice_id:   inv.id,
-          public_token: token,
-          fallback:     "explicit_method_allowlist",
+      const retried = await stripe.paymentIntents.create(
+        {
+          amount:   amountCents,
+          currency,
+          payment_method_types: ["card", "us_bank_account", "link"],
+          metadata: {
+            invoice_id:   inv.id,
+            public_token: token,
+            fallback:     "explicit_method_allowlist",
+          },
         },
-      });
+        { stripeAccount },
+      );
       // Cancel the empty original so we don't leave an orphaned
       // unusable intent behind.
       try {
-        await stripe.paymentIntents.cancel(intent.id);
+        await stripe.paymentIntents.cancel(intent.id, undefined, { stripeAccount });
       } catch (cancelErr) {
         console.warn("[payment-intent] failed to cancel empty intent:", cancelErr);
       }
@@ -156,7 +193,8 @@ export async function POST(
     .eq("id", inv.id);
 
   return NextResponse.json({
-    client_secret: intent.client_secret,
-    amount:        intent.amount,
+    client_secret:  intent.client_secret,
+    amount:         intent.amount,
+    stripe_account: stripeAccount,
   });
 }

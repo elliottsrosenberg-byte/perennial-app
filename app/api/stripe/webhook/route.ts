@@ -6,15 +6,34 @@ import type Stripe from "stripe";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+// Two webhook configs in the Stripe Dashboard point at this one
+// endpoint: the platform webhook (events on Perennial's account, e.g.
+// future SaaS billing) and the Connect webhook (events on the user's
+// connected account, e.g. payment_intent.succeeded for invoice
+// payments). Each config has its own signing secret. We try platform
+// first, fall back to Connect — both arrive as `Stripe.Event` with the
+// same shape; the only externally visible difference is `event.account`,
+// which is set for Connect events.
+const platformSecret = process.env.STRIPE_WEBHOOK_SECRET;
+const connectSecret  = process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
 
-/** Stripe webhook receiver. Verifies the signature, then mutates the
- *  invoice row when a PaymentIntent succeeds. Idempotent — re-receiving
- *  the same event (Stripe retries up to 3 days) won't double-mark or
- *  error out. */
+function verify(raw: string, sig: string): Stripe.Event | null {
+  if (platformSecret) {
+    try { return stripe.webhooks.constructEvent(raw, sig, platformSecret); } catch {/* fallthrough */}
+  }
+  if (connectSecret) {
+    try { return stripe.webhooks.constructEvent(raw, sig, connectSecret); } catch {/* fallthrough */}
+  }
+  return null;
+}
+
+/** Stripe webhook receiver. Verifies the signature against whichever
+ *  signing secret matches, then mutates the invoice row when a
+ *  PaymentIntent succeeds. Idempotent — re-receiving the same event
+ *  (Stripe retries up to 3 days) won't double-mark or error out. */
 export async function POST(req: Request) {
-  if (!webhookSecret) {
-    console.error("STRIPE_WEBHOOK_SECRET missing — webhook cannot verify events.");
+  if (!platformSecret && !connectSecret) {
+    console.error("Neither STRIPE_WEBHOOK_SECRET nor STRIPE_CONNECT_WEBHOOK_SECRET is set — webhook cannot verify events.");
     return NextResponse.json({ error: "Webhook not configured." }, { status: 500 });
   }
 
@@ -28,13 +47,10 @@ export async function POST(req: Request) {
   // the original bytes.
   const raw = await req.text();
 
-  let event: Stripe.Event;
-  try {
-    event = stripe.webhooks.constructEvent(raw, sig, webhookSecret);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Signature verification failed";
-    console.error("Stripe webhook signature failed:", message);
-    return NextResponse.json({ error: message }, { status: 400 });
+  const event = verify(raw, sig);
+  if (!event) {
+    console.error("Stripe webhook signature failed against both platform and Connect secrets");
+    return NextResponse.json({ error: "Signature verification failed" }, { status: 400 });
   }
 
   switch (event.type) {

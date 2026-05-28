@@ -12,12 +12,21 @@ import type { StripeElementsOptions } from "@stripe/stripe-js";
 import type { InvoiceStatus } from "@/types/database";
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-// Memoized loader so we only call loadStripe() once across mounts.
-let stripeJsPromise: Promise<StripeJs | null> | null = null;
-function getStripeJs(): Promise<StripeJs | null> | null {
+
+// Memoized per-account loader. For Stripe Connect direct charges, the
+// Elements provider needs to know which connected account the
+// client_secret was minted on — so loadStripe() takes a stripeAccount
+// option and we cache by acct_xxx ID. Each hosted-invoice page only
+// loads a single account, so the cache stays tiny in practice.
+const stripeJsByAccount = new Map<string, Promise<StripeJs | null>>();
+function getStripeJsFor(stripeAccount: string): Promise<StripeJs | null> | null {
   if (!publishableKey) return null;
-  if (!stripeJsPromise) stripeJsPromise = loadStripe(publishableKey);
-  return stripeJsPromise;
+  let promise = stripeJsByAccount.get(stripeAccount);
+  if (!promise) {
+    promise = loadStripe(publishableKey, { stripeAccount });
+    stripeJsByAccount.set(stripeAccount, promise);
+  }
+  return promise;
 }
 
 function fmtCurrency(n: number) {
@@ -95,8 +104,9 @@ function PaymentFlow({
   amount:      number;
   clientEmail: string | null;
 }) {
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [error, setError]               = useState<string | null>(null);
+  const [clientSecret,  setClientSecret]  = useState<string | null>(null);
+  const [stripeAccount, setStripeAccount] = useState<string | null>(null);
+  const [error,         setError]         = useState<string | null>(null);
   const fetchedRef = useRef(false);
 
   useEffect(() => {
@@ -109,19 +119,23 @@ function PaymentFlow({
           headers: { "Content-Type": "application/json" },
           body:    JSON.stringify({ token }),
         });
-        const json = await res.json() as { client_secret?: string; error?: string };
-        if (!res.ok || !json.client_secret) {
-          setError(json.error ?? "Could not start payment.");
+        const json = await res.json() as { client_secret?: string; stripe_account?: string; error?: string; message?: string };
+        if (!res.ok || !json.client_secret || !json.stripe_account) {
+          setError(json.message ?? json.error ?? "Could not start payment.");
           return;
         }
         setClientSecret(json.client_secret);
+        setStripeAccount(json.stripe_account);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not start payment.");
       }
     })();
   }, [invoiceId, token]);
 
-  const stripeJs = useMemo(() => getStripeJs(), []);
+  const stripeJs = useMemo(
+    () => (stripeAccount ? getStripeJsFor(stripeAccount) : null),
+    [stripeAccount],
+  );
 
   if (error) {
     return (
