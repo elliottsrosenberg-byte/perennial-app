@@ -4,6 +4,7 @@ import type { TimeEntry, ActiveTimer, Expense, Invoice, Project } from "@/types/
 
 export default async function FinancePage() {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
   const [
     { data: timeEntries },
@@ -11,6 +12,7 @@ export default async function FinancePage() {
     { data: expenses },
     { data: invoices },
     { data: projects },
+    { data: profile },
   ] = await Promise.all([
     supabase
       .from("time_entries")
@@ -34,6 +36,9 @@ export default async function FinancePage() {
       .from("projects")
       .select("id, title, type, rate")
       .order("title", { ascending: true }),
+    user
+      ? supabase.from("profiles").select("invoice_prefix").eq("user_id", user.id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
   return (
@@ -44,6 +49,7 @@ export default async function FinancePage() {
         initialExpenses={(expenses ?? []) as Expense[]}
         initialInvoices={(invoices ?? []) as Invoice[]}
         projects={(projects ?? []) as Pick<Project, "id" | "title" | "type" | "rate">[]}
+        invoicePrefix={(profile as { invoice_prefix?: string | null } | null)?.invoice_prefix ?? null}
       />
     </div>
   );

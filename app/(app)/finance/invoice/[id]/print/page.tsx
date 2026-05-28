@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import type { Invoice } from "@/types/database";
+import { formatInvoiceNumber } from "@/lib/invoices/format";
 import PrintTrigger from "./PrintTrigger";
 
 function fmtDate(ds: string | null) {
@@ -49,10 +50,11 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
   const { data: profile } = user
     ? await supabase
         .from("profiles")
-        .select("studio_name, display_name, location, website, address, phone, ein, logo_url")
+        .select("studio_name, display_name, location, website, address, phone, ein, logo_url, invoice_prefix")
         .eq("user_id", user.id)
         .maybeSingle()
     : { data: null };
+  const displayNumber = formatInvoiceNumber(inv.number, profile?.invoice_prefix);
   const studioName    = profile?.studio_name?.trim() || profile?.display_name?.trim() || "Your studio";
   const studioEmail   = user?.email ?? "";
   const studioAddress = (profile?.address ?? "").trim();
@@ -185,7 +187,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
           <div>
             <div className="inv-label">Invoice</div>
             <div className="inv-number">
-              #{String(inv.number).padStart(3, "0")}
+              {displayNumber}
               <span className={`status-badge status-${isOverdue ? "overdue" : inv.status}`}>
                 {isOverdue ? "Overdue" : inv.status === "paid" ? "Paid" : inv.status === "sent" ? "Sent" : "Draft"}
               </span>
