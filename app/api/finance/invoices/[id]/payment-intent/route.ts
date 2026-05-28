@@ -22,6 +22,26 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  try {
+    return await handle(req, params);
+  } catch (err) {
+    // Catch-all: surface Stripe SDK errors (or any other thrown error)
+    // as JSON so the hosted invoice page can display them instead of
+    // dying with "Unexpected end of JSON input".
+    console.error("[payment-intent] unhandled error:", err);
+    const message =
+      err instanceof Error ? err.message : "Unexpected payment server error.";
+    return NextResponse.json({
+      error:   "payment_intent_failed",
+      message,
+    }, { status: 500 });
+  }
+}
+
+async function handle(
+  req: Request,
+  params: Promise<{ id: string }>,
+) {
   const { id } = await params;
   let body: { token?: string };
   try {
