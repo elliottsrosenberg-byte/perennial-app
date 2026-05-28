@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { mintPublicInvoiceToken } from "@/lib/invoices/token";
+import { formatInvoiceNumber } from "@/lib/invoices/format";
 import type { Invoice } from "@/types/database";
 
 function fmtCurrency(n: number) {
@@ -22,9 +23,9 @@ function clientName(inv: Invoice) {
   return "Client";
 }
 
-function buildEmail(inv: Invoice, to: string, message: string, appUrl: string, publicToken: string) {
+function buildEmail(inv: Invoice, to: string, message: string, appUrl: string, publicToken: string, invoicePrefix: string | null | undefined) {
   const total = invoiceTotal(inv);
-  const invNum = String(inv.number).padStart(3, "0");
+  const invNum = formatInvoiceNumber(inv.number, invoicePrefix);
   const printUrl  = `${appUrl}/finance/invoice/${inv.id}/print`;
   const publicUrl = `${appUrl}/i/${publicToken}`;
   const lineItemRows = (inv.line_items ?? []).map(li => `
@@ -44,7 +45,7 @@ function buildEmail(inv: Invoice, to: string, message: string, appUrl: string, p
     <!-- Header -->
     <div style="background:#1f211a;padding:28px 36px;display:flex;justify-content:space-between;align-items:center;">
       <div style="color:white;font-size:18px;font-weight:700;letter-spacing:-0.02em;">Perennial</div>
-      <div style="color:rgba(255,255,255,0.6);font-size:12px;">Invoice #${invNum}</div>
+      <div style="color:rgba(255,255,255,0.6);font-size:12px;">Invoice ${invNum}</div>
     </div>
 
     <!-- Body -->
@@ -61,7 +62,7 @@ function buildEmail(inv: Invoice, to: string, message: string, appUrl: string, p
             ${inv.due_at ? `<td style="font-size:11px;color:#9a9690;padding-bottom:4px;text-align:right;">Due</td>` : ""}
           </tr>
           <tr>
-            <td style="font-size:14px;font-weight:600;color:#1f211a;">#${invNum}</td>
+            <td style="font-size:14px;font-weight:600;color:#1f211a;">${invNum}</td>
             <td style="font-size:13px;color:#1f211a;text-align:right;">${fmtDate(inv.issued_at)}</td>
             ${inv.due_at ? `<td style="font-size:13px;color:#1f211a;text-align:right;font-weight:500;">${fmtDate(inv.due_at)}</td>` : ""}
           </tr>
@@ -111,7 +112,7 @@ function buildEmail(inv: Invoice, to: string, message: string, appUrl: string, p
 </body>
 </html>`;
 
-  return { html, subject: `Invoice #${invNum} — ${fmtCurrency(total)}` };
+  return { html, subject: `Invoice ${invNum} — ${fmtCurrency(total)}` };
 }
 
 export async function POST(req: Request) {
@@ -151,7 +152,16 @@ export async function POST(req: Request) {
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? `${new URL(req.url).origin}`;
-  const { html, subject } = buildEmail(inv as Invoice, to, message, appUrl, publicToken);
+
+  // Pull the user's invoice_prefix so the email subject + header use the
+  // configured prefix (e.g. "INV-007") instead of a bare "#007".
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("invoice_prefix")
+    .eq("user_id", (inv as Invoice).user_id)
+    .maybeSingle();
+
+  const { html, subject } = buildEmail(inv as Invoice, to, message, appUrl, publicToken, profile?.invoice_prefix);
 
   const { Resend } = await import("resend");
   const resend = new Resend(apiKey);

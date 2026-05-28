@@ -29,11 +29,12 @@ interface Props {
   initialExpenses: Expense[];
   initialInvoices: Invoice[];
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
+  invoicePrefix: string | null;
 }
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-export default function FinanceClient({ initialTimeEntries, initialActiveTimer, initialExpenses, initialInvoices, projects }: Props) {
+export default function FinanceClient({ initialTimeEntries, initialActiveTimer, initialExpenses, initialInvoices, projects, invoicePrefix }: Props) {
   const [activeTab, setActiveTab]       = useState<Tab>("overview");
   const [timeEntries, setTimeEntries]   = useState(initialTimeEntries);
   const [activeTimer, setActiveTimer]   = useState<ActiveTimer | null>(initialActiveTimer);
@@ -245,6 +246,7 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
             timerSeconds={timerSeconds}
             expenses={expenses}
             invoices={invoices}
+            invoicePrefix={invoicePrefix}
             onStopTimer={stopTimer}
             onSwitchTab={setActiveTab}
             onLogTime={() => setShowLogTime(true)}
@@ -272,6 +274,7 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
             timeEntries={timeEntries}
             expenses={expenses}
             projects={projects}
+            invoicePrefix={invoicePrefix}
             onInvoiceUpdated={(inv) => setInvoices((prev) => prev.map((i) => i.id === inv.id ? inv : i))}
             onInvoiceDeleted={(id) => setInvoices((prev) => prev.filter((i) => i.id !== id))}
             onInvoiceSent={handleInvoiceSent}

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { Invoice } from "@/types/database";
+import { formatInvoiceNumber } from "@/lib/invoices/format";
 import PrintButton from "./PrintButton";
 import PaymentSectionMount from "./PaymentSectionMount";
 
@@ -53,15 +54,15 @@ export default async function PublicInvoicePage({
   if (inv.status === "draft") notFound();
 
   const total = invoiceTotal(inv);
-  const invNum = String(inv.number).padStart(3, "0");
   const isOverdue = inv.status === "sent" && !!inv.due_at && inv.due_at < new Date().toISOString().split("T")[0];
 
   // Studio identity for the From block — same shape as the print page.
   const { data: profile } = await supabase
     .from("profiles")
-    .select("studio_name, display_name, location, address, phone, ein, logo_url")
+    .select("studio_name, display_name, location, address, phone, ein, logo_url, invoice_prefix")
     .eq("user_id", inv.user_id)
     .maybeSingle();
+  const invNum = formatInvoiceNumber(inv.number, profile?.invoice_prefix);
   const studioName    = profile?.studio_name?.trim() || profile?.display_name?.trim() || "Studio";
   const studioAddress = (profile?.address ?? "").trim();
   const studioPhone   = (profile?.phone ?? "").trim();
@@ -237,7 +238,7 @@ export default async function PublicInvoicePage({
                 <div>
                   <div className="pi-inv-label">Invoice</div>
                   <div className="pi-inv-num">
-                    #{invNum}
+                    {invNum}
                     <span className={`pi-status pi-status-${isOverdue ? "overdue" : inv.status}`}>
                       {isOverdue ? "Overdue" : inv.status === "paid" ? "Paid" : "Sent"}
                     </span>

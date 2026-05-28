@@ -2,6 +2,7 @@
 
 import type { TimeEntry, ActiveTimer, Expense, Invoice } from "@/types/database";
 import EmptyState from "@/components/ui/EmptyState";
+import { formatInvoiceNumber } from "@/lib/invoices/format";
 import { Landmark } from "lucide-react";
 
 type Tab = "overview" | "time" | "invoices" | "banking";
@@ -12,6 +13,7 @@ interface Props {
   timerSeconds: number;
   expenses: Expense[];
   invoices: Invoice[];
+  invoicePrefix: string | null;
   onStopTimer: () => void;
   onSwitchTab: (tab: Tab) => void;
   onLogTime: () => void;
@@ -63,7 +65,7 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }>
   overdue: { bg: "rgba(220,62,13,0.1)", color: "var(--color-red-orange)",  label: "Overdue" },
 };
 
-export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, expenses, invoices, onStopTimer, onSwitchTab, onLogTime, onAddExpense, onNewInvoice }: Props) {
+export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, expenses, invoices, invoicePrefix, onStopTimer, onSwitchTab, onLogTime, onAddExpense, onNewInvoice }: Props) {
   const now = new Date();
   const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
   const yearStart  = `${now.getFullYear()}-01-01`;
@@ -268,7 +270,7 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
               return (
                 <div key={inv.id} className="flex items-center gap-2.5 px-4 py-2.5"
                   style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-                  <span className="text-[10px] tabular-nums shrink-0" style={{ color: "var(--color-grey)" }}>#{inv.number}</span>
+                  <span className="text-[10px] tabular-nums shrink-0" style={{ color: "var(--color-grey)" }}>{formatInvoiceNumber(inv.number, invoicePrefix)}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-[12px] font-medium truncate" style={{ color: "var(--color-charcoal)" }}>{clientName}</p>
                     <p className="text-[10px] truncate" style={{ color: "var(--color-grey)" }}>{inv.project?.title ?? ""}</p>

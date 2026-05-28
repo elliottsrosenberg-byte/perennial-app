@@ -6,6 +6,7 @@ import type { Invoice, InvoiceLineItem, TimeEntry, Expense, Project } from "@/ty
 import EmptyState from "@/components/ui/EmptyState";
 import Menu from "@/components/ui/Menu";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { formatInvoiceNumber } from "@/lib/invoices/format";
 import { X, Download, Send, FileText, MoreHorizontal, Plus, Clock, Receipt, CheckCircle2, Sparkles, ChevronDown, Link2 } from "lucide-react";
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
   timeEntries: TimeEntry[];
   expenses: Expense[];
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
+  invoicePrefix: string | null;
   onInvoiceUpdated: (inv: Invoice) => void;
   onInvoiceDeleted: (invoiceId: string) => void;
   onInvoiceSent: (invoiceId: string) => void;
@@ -21,8 +23,9 @@ interface Props {
 
 // ── Send Invoice Modal ────────────────────────────────────────────────────────
 
-function SendInvoiceModal({ invoice, onClose, onSent }: {
+function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
   invoice: Invoice;
+  invoicePrefix: string | null;
   onClose: () => void;
   onSent: () => void;
 }) {
@@ -64,7 +67,7 @@ function SendInvoiceModal({ invoice, onClose, onSent }: {
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
           <div>
             <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>Send invoice</h2>
-            <p className="text-[11px] mt-0.5" style={{ color: "var(--color-grey)" }}>#{String(invoice.number).padStart(3, "0")} · {clientName(invoice)}</p>
+            <p className="text-[11px] mt-0.5" style={{ color: "var(--color-grey)" }}>{formatInvoiceNumber(invoice.number, invoicePrefix)} · {clientName(invoice)}</p>
           </div>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg"
             style={{ color: "var(--color-grey)" }}
@@ -157,7 +160,7 @@ const SOURCE_STYLE: Record<string, { bg: string; color: string }> = {
 };
 
 export default function InvoicesTab({
-  invoices, timeEntries, expenses, projects,
+  invoices, timeEntries, expenses, projects, invoicePrefix,
   onInvoiceUpdated, onInvoiceDeleted, onInvoiceSent, onNewInvoice,
 }: Props) {
   const [filter, setFilter]                   = useState<Filter>("all");
@@ -469,7 +472,7 @@ export default function InvoicesTab({
                 }}
                 onClick={() => setSelectedId(inv.id)}>
                 <div className="flex items-center gap-1.5 mb-1">
-                  <span className="text-[10px] tabular-nums" style={{ color: "var(--color-grey)" }}>#{inv.number}</span>
+                  <span className="text-[10px] tabular-nums" style={{ color: "var(--color-grey)" }}>{formatInvoiceNumber(inv.number, invoicePrefix)}</span>
                   <span className="text-[12px] font-semibold flex-1 truncate" style={{ color: "var(--color-charcoal)" }}>{clientName(inv)}</span>
                   <span className="text-[13px] font-semibold tabular-nums"
                     style={{ color: overdue ? "var(--color-red-orange)" : inv.status === "paid" ? "var(--color-sage)" : "var(--color-charcoal)" }}>
@@ -532,7 +535,7 @@ export default function InvoicesTab({
             <div className="flex-1 min-w-0">
               <p className="text-[15px] font-semibold truncate"
                 style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)", letterSpacing: "-0.01em" }}>
-                {clientName(selectedInvoice)} <span style={{ color: "var(--color-grey)", fontWeight: 400 }}>· #{String(selectedInvoice.number).padStart(3, "0")}</span>
+                {clientName(selectedInvoice)} <span style={{ color: "var(--color-grey)", fontWeight: 400 }}>· {formatInvoiceNumber(selectedInvoice.number, invoicePrefix)}</span>
               </p>
               <p className="text-[11px] mt-0.5" style={{ color: "var(--color-grey)" }}>
                 {selectedInvoice.project?.title ?? "No project"}{selectedInvoice.issued_at ? ` · Issued ${fmtDate(selectedInvoice.issued_at)}` : ""}
@@ -834,6 +837,7 @@ export default function InvoicesTab({
       {showSendModal && selectedInvoice && (
         <SendInvoiceModal
           invoice={selectedInvoice}
+          invoicePrefix={invoicePrefix}
           onClose={() => setShowSendModal(false)}
           onSent={() => onInvoiceSent(selectedInvoice.id)}
         />
