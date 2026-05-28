@@ -28,7 +28,6 @@ import Menu from "@/components/ui/Menu";
 import Select from "@/components/ui/Select";
 import AddExpenseModal from "./AddExpenseModal";
 import BankingReports from "./BankingReports";
-import StripeTab from "./StripeTab";
 import CustomizeCategoriesModal from "./CustomizeCategoriesModal";
 import type { BankAccount, BankTransaction, Expense, ExpenseCategory, Project } from "@/types/database";
 import { plaidCategoryToExpenseCategory } from "./plaidCategoryMap";
@@ -254,7 +253,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
   // (the placeholder analytics shell). Kept local — there's no URL
   // contract for these yet; if/when we want to deep-link into Reports,
   // promote this to a search-param.
-  const [subTab, setSubTab] = useState<"transactions" | "reports" | "stripe">("transactions");
+  const [subTab, setSubTab] = useState<"transactions" | "reports">("transactions");
 
   // Per-row UI state
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -963,10 +962,6 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
           <BankingReports />
         )}
 
-        {!loading && accounts.length > 0 && subTab === "stripe" && (
-          <StripeTab />
-        )}
-
         {!loading && accounts.length > 0 && subTab === "transactions" && (
           <>
             {/* ── Accounts strip ─────────────────────────────────────── */}
@@ -1527,13 +1522,12 @@ function AccountCard({ acct, syncing, onSync, onDisconnect }: AccountCardProps) 
 function SubTabToggle({
   value, onChange,
 }: {
-  value: "transactions" | "reports" | "stripe";
-  onChange: (v: "transactions" | "reports" | "stripe") => void;
+  value: "transactions" | "reports";
+  onChange: (v: "transactions" | "reports") => void;
 }) {
-  const options: { value: "transactions" | "reports" | "stripe"; label: string }[] = [
+  const options: { value: "transactions" | "reports"; label: string }[] = [
     { value: "transactions", label: "Transactions" },
     { value: "reports",      label: "Reports"      },
-    { value: "stripe",       label: "Stripe"       },
   ];
   return (
     <div style={{
