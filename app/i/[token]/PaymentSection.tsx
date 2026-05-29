@@ -45,27 +45,44 @@ export default function PaymentSection({
   // The page already 404s on draft, but defend in depth.
   if (status === "paid") return <PaidChip />;
 
-  // Show the success state when Stripe redirects back with ?paid=1.
-  // The webhook does the real DB mutation server-side; this is just UI.
-  const [returnedPaid, setReturnedPaid] = useState(false);
+  // After confirmPayment(), Stripe redirects to return_url with
+  // ?payment_intent, ?payment_intent_client_secret, and crucially
+  // ?redirect_status — one of: succeeded | processing |
+  // requires_payment_method | requires_action | requires_capture | …
+  //
+  // Previously we keyed the success UI off our own ?paid=1 query, but
+  // Stripe appends that redirect_status regardless of whether the PI
+  // actually succeeded — so 3DS drop-offs, declined cards, and
+  // requires_action stalls all showed up as "Payment received" lies.
+  // Reading redirect_status fixes this: only "succeeded" / "processing"
+  // get the friendly message; anything else falls through to the
+  // PaymentElement so the user can retry.
+  const [redirectStatus, setRedirectStatus] = useState<string | null>(null);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const sp = new URLSearchParams(window.location.search);
-    if (sp.get("paid") === "1") setReturnedPaid(true);
+    const s = sp.get("redirect_status");
+    if (s) setRedirectStatus(s);
   }, []);
 
-  if (returnedPaid) {
+  if (redirectStatus === "succeeded") {
     return (
-      <div
-        style={{
-          background: "rgba(61,107,79,0.12)", color: "#3d6b4f",
-          padding: "12px 14px", borderRadius: 8, fontSize: 12, lineHeight: 1.55, fontWeight: 500,
-        }}
-      >
-        Payment received — thank you. The invoice is being marked paid.
+      <div style={{ background: "rgba(61,107,79,0.12)", color: "#3d6b4f", padding: "12px 14px", borderRadius: 8, fontSize: 12, lineHeight: 1.55, fontWeight: 500 }}>
+        Payment received — thank you.
       </div>
     );
   }
+  if (redirectStatus === "processing") {
+    return (
+      <div style={{ background: "rgba(31,33,26,0.06)", color: "#1f211a", padding: "12px 14px", borderRadius: 8, fontSize: 12, lineHeight: 1.55 }}>
+        Payment is processing. You&apos;ll get a confirmation email when it clears.
+      </div>
+    );
+  }
+  // Any other redirect_status (requires_payment_method, requires_action,
+  // requires_capture, etc.) means the payment didn't actually finalize.
+  // Fall through to render the PaymentElement so the user can retry —
+  // and surface a quiet inline note explaining what happened.
 
   if (!publishableKey) {
     return (
@@ -76,7 +93,18 @@ export default function PaymentSection({
   }
 
   return (
-    <PaymentFlow invoiceId={invoiceId} token={token} amount={amount} clientEmail={clientEmail} />
+    <>
+      {redirectStatus && redirectStatus !== "succeeded" && redirectStatus !== "processing" && (
+        <div style={{
+          background: "rgba(220,62,13,0.07)", color: "#dc3e0d",
+          padding: "10px 12px", borderRadius: 8, fontSize: 11.5, lineHeight: 1.5,
+          marginBottom: 12, border: "0.5px solid rgba(220,62,13,0.2)",
+        }}>
+          Your last attempt didn&apos;t go through{redirectStatus === "requires_payment_method" ? " — the card was declined or authentication wasn't completed" : ""}. Please try again below.
+        </div>
+      )}
+      <PaymentFlow invoiceId={invoiceId} token={token} amount={amount} clientEmail={clientEmail} />
+    </>
   );
 }
 
