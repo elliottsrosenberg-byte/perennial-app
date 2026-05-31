@@ -46,6 +46,20 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
   const [sent,    setSent]    = useState(false);
+  const [studioName, setStudioName] = useState("Your studio");
+
+  // Pull the studio name so the preview header matches the real email.
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from("profiles")
+        .select("studio_name, display_name").eq("user_id", user.id).maybeSingle();
+      const name = (data?.studio_name as string | null)?.trim() || (data?.display_name as string | null)?.trim();
+      if (name) setStudioName(name);
+    })();
+  }, []);
 
   async function handleSend() {
     if (!to.trim()) { setError("Enter a recipient email."); return; }
@@ -66,16 +80,17 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
     setTimeout(() => { onSent(); onClose(); }, 1200);
   }
 
-  const inputCls = "w-full px-3 py-2 text-[12px] rounded-lg focus:outline-none";
+  const inputCls = "w-full px-3 py-2 text-[13px] rounded-lg focus:outline-none";
   const inputStyle = { background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit" };
+  const lineItems = invoice.line_items ?? [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
       style={{ background: "rgba(31,33,26,0.5)" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-3xl rounded-2xl overflow-hidden"
-        style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
+      <div className="w-full rounded-2xl overflow-hidden flex flex-col"
+        style={{ maxWidth: 1160, height: "92vh", background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+        <div className="flex items-center justify-between px-5 py-4 shrink-0" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
           <div>
             <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>Send invoice</h2>
             <p className="text-[11px] mt-0.5" style={{ color: "var(--color-grey)" }}>{invNum} · {clientName(invoice)}</p>
@@ -88,15 +103,15 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
           </button>
         </div>
         {sent ? (
-          <div className="px-5 py-14 text-center">
-            <p className="text-[22px] mb-2">✓</p>
-            <p className="text-[13px] font-semibold" style={{ color: "var(--color-charcoal)" }}>Invoice sent!</p>
+          <div className="flex-1 flex flex-col items-center justify-center text-center px-5">
+            <p className="text-[28px] mb-2">✓</p>
+            <p className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>Invoice sent!</p>
             <p className="text-[12px] mt-1" style={{ color: "var(--color-grey)" }}>Delivered to {to}</p>
           </div>
         ) : (
-          <div className="flex flex-col md:flex-row">
+          <div className="flex-1 flex flex-col md:flex-row min-h-0">
             {/* Compose */}
-            <div className="flex-1 px-5 py-4 space-y-4" style={{ borderRight: "0.5px solid var(--color-border)" }}>
+            <div className="px-5 py-4 space-y-4 overflow-y-auto shrink-0" style={{ width: 360, borderRight: "0.5px solid var(--color-border)" }}>
               <div>
                 <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--color-charcoal)" }}>To *</label>
                 <input type="email" value={to} onChange={e => setTo(e.target.value)}
@@ -109,42 +124,80 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
               </div>
               <div>
                 <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--color-charcoal)" }}>Message</label>
-                <textarea value={message} onChange={e => setMessage(e.target.value)} rows={9}
+                <textarea value={message} onChange={e => setMessage(e.target.value)} rows={10}
                   className={inputCls} style={{ ...inputStyle, resize: "none" }} />
               </div>
               {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
             </div>
 
-            {/* Live inbox preview */}
-            <div className="px-5 py-4 shrink-0" style={{ width: 320, background: "var(--color-cream)" }}>
-              <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-grey)" }}>Preview</p>
-              <div className="rounded-xl overflow-hidden" style={{ background: "white", border: "0.5px solid var(--color-border)", boxShadow: "0 2px 12px rgba(31,33,26,0.06)" }}>
-                <div className="flex items-center gap-2 px-3 py-2.5" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-                  <span className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shrink-0" style={{ background: "var(--color-charcoal)" }}>P</span>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold truncate" style={{ color: "var(--color-charcoal)" }}>Your studio</p>
-                    <p className="text-[10px] truncate" style={{ color: "var(--color-grey)" }}>via Perennial</p>
-                  </div>
-                  <span className="ml-auto text-[10px] shrink-0" style={{ color: "var(--color-grey)" }}>now</span>
+            {/* Live email preview — mirrors the actual email layout. */}
+            <div className="flex-1 overflow-y-auto p-6" style={{ background: "#f5f4f1" }}>
+              <p className="text-[10px] font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--color-grey)" }}>Email preview · to {to || "client"}</p>
+              <div style={{ maxWidth: 600, margin: "0 auto", background: "white", borderRadius: 12, overflow: "hidden", boxShadow: "0 2px 20px rgba(0,0,0,0.08)" }}>
+                {/* Header */}
+                <div style={{ background: "#1f211a", padding: "24px 32px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ color: "white", fontSize: 17, fontWeight: 700, letterSpacing: "-0.02em" }}>{studioName}</span>
+                  <span style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>Invoice {invNum}</span>
                 </div>
-                <div className="px-3 py-3">
-                  <p className="text-[12px] font-semibold mb-1.5" style={{ color: "var(--color-charcoal)" }}>{subject || `Invoice ${invNum}`}</p>
-                  <p className="text-[11px] mb-3" style={{ color: "var(--color-grey)", lineHeight: 1.6, whiteSpace: "pre-line", maxHeight: 120, overflow: "hidden" }}>{message}</p>
-                  <div className="rounded-lg px-3 py-2 mb-2 flex items-center justify-between" style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)" }}>
-                    <span className="text-[10px]" style={{ color: "var(--color-grey)" }}>{invNum}</span>
-                    <span className="text-[13px] font-bold tabular-nums" style={{ color: "var(--color-charcoal)" }}>{fmtCurrency(total)}</span>
+                {/* Body */}
+                <div style={{ padding: "28px 32px" }}>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: "#1f211a", margin: "0 0 8px" }}>Invoice from {studioName}</p>
+                  <p style={{ fontSize: 13, color: "#6b6860", margin: "0 0 20px", lineHeight: 1.6, whiteSpace: "pre-line" }}>{message}</p>
+
+                  <div style={{ background: "#f9faf4", borderRadius: 8, padding: "14px 18px", marginBottom: 20, display: "flex", gap: 28 }}>
+                    <div><div style={{ fontSize: 10, color: "#9a9690" }}>Invoice #</div><div style={{ fontSize: 13, fontWeight: 600, color: "#1f211a" }}>{invNum}</div></div>
+                    <div><div style={{ fontSize: 10, color: "#9a9690" }}>Issued</div><div style={{ fontSize: 13, color: "#1f211a" }}>{fmtDate(invoice.issued_at)}</div></div>
+                    {invoice.due_at && <div><div style={{ fontSize: 10, color: "#9a9690" }}>Due</div><div style={{ fontSize: 13, color: "#1f211a" }}>{fmtDate(invoice.due_at)}</div></div>}
                   </div>
-                  <div className="text-center text-[11px] font-semibold py-2 rounded-lg text-white" style={{ background: "var(--color-sage-hover)" }}>
-                    View &amp; pay invoice →
+
+                  {lineItems.length > 0 && (
+                    <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "#9a9690", textAlign: "left", padding: "0 0 8px", borderBottom: "2px solid #f0ede8" }}>Description</th>
+                          <th style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "#9a9690", textAlign: "right", padding: "0 0 8px", borderBottom: "2px solid #f0ede8" }}>Qty</th>
+                          <th style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "#9a9690", textAlign: "right", padding: "0 0 8px", borderBottom: "2px solid #f0ede8" }}>Rate</th>
+                          <th style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "#9a9690", textAlign: "right", padding: "0 0 8px", borderBottom: "2px solid #f0ede8" }}>Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {lineItems.map((li) => (
+                          <tr key={li.id}>
+                            <td style={{ padding: "10px 0", borderBottom: "1px solid #f0ede8", fontSize: 13, color: "#1f211a" }}>{li.description}</td>
+                            <td style={{ padding: "10px 0", borderBottom: "1px solid #f0ede8", fontSize: 13, color: "#9a9690", textAlign: "right" }}>{li.quantity}</td>
+                            <td style={{ padding: "10px 0", borderBottom: "1px solid #f0ede8", fontSize: 13, color: "#9a9690", textAlign: "right" }}>{fmtCurrency(li.rate)}</td>
+                            <td style={{ padding: "10px 0", borderBottom: "1px solid #f0ede8", fontSize: 13, fontWeight: 500, color: "#1f211a", textAlign: "right" }}>{fmtCurrency(Number(li.amount))}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
+                    <div style={{ minWidth: 200 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingTop: 12, borderTop: "2px solid #1f211a" }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "#1f211a" }}>Total due</span>
+                        <span style={{ fontSize: 22, fontWeight: 700, color: "#1f211a" }}>{fmtCurrency(total)}</span>
+                      </div>
+                    </div>
                   </div>
+
+                  <div style={{ textAlign: "center", marginBottom: 10 }}>
+                    <span style={{ background: "#3d6b4f", color: "white", padding: "12px 24px", borderRadius: 8, fontSize: 13, fontWeight: 600, display: "inline-block" }}>View &amp; pay invoice →</span>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <span style={{ fontSize: 12, color: "#6b6860", textDecoration: "underline" }}>Or download a PDF</span>
+                  </div>
+                </div>
+                <div style={{ background: "#f9faf4", padding: "14px 32px", borderTop: "1px solid #eff0e7" }}>
+                  <span style={{ fontSize: 11, color: "#9a9690" }}>Sent securely via Perennial</span>
                 </div>
               </div>
-              <p className="text-[10px] mt-2" style={{ color: "var(--color-grey)" }}>A simplified preview — the email is fully styled with your line items.</p>
             </div>
           </div>
         )}
         {!sent && (
-          <div className="flex items-center justify-end gap-2 px-5 py-3" style={{ borderTop: "0.5px solid var(--color-border)" }}>
+          <div className="flex items-center justify-end gap-2 px-5 py-3 shrink-0" style={{ borderTop: "0.5px solid var(--color-border)" }}>
             <button type="button" onClick={onClose}
               className="px-4 py-2 text-[12px] rounded-lg"
               style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
