@@ -58,13 +58,14 @@ function invoiceTotal(inv: Invoice) {
   return (inv.line_items ?? []).reduce((s, li) => s + Number(li.amount), 0);
 }
 
+// Draft & saved blue, sent yellow, paid green, voided grey, overdue red.
 const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  draft:   { bg: "rgba(31,33,26,0.07)",  color: "var(--color-grey)",       label: "Draft"   },
-  saved:   { bg: "rgba(184,134,11,0.12)", color: "#b8860b",                label: "Saved"   },
-  sent:    { bg: "rgba(37,99,171,0.1)",  color: "#2563ab",                  label: "Sent"    },
-  paid:    { bg: "rgba(61,107,79,0.1)",  color: "var(--color-sage)",        label: "Paid"    },
-  overdue: { bg: "rgba(220,62,13,0.1)",  color: "var(--color-red-orange)",  label: "Overdue" },
-  voided:  { bg: "rgba(31,33,26,0.07)",  color: "var(--color-grey)",        label: "Void"    },
+  draft:   { bg: "rgba(37,99,171,0.12)",  color: "#2563ab",                 label: "Draft"   },
+  saved:   { bg: "rgba(37,99,171,0.12)",  color: "#2563ab",                 label: "Saved"   },
+  sent:    { bg: "rgba(224,168,46,0.18)", color: "#9a6a00",                 label: "Sent"    },
+  paid:    { bg: "rgba(61,107,79,0.1)",   color: "var(--color-sage)",       label: "Paid"    },
+  overdue: { bg: "rgba(220,62,13,0.1)",   color: "var(--color-red-orange)", label: "Overdue" },
+  voided:  { bg: "rgba(31,33,26,0.07)",   color: "var(--color-grey)",       label: "Void"    },
 };
 
 export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, expenses, invoices, invoicePrefix, onStopTimer, onSwitchTab, onLogTime, onAddExpense, onNewInvoice }: Props) {

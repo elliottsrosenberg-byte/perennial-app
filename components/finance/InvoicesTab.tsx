@@ -8,7 +8,7 @@ import Menu from "@/components/ui/Menu";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Select from "@/components/ui/Select";
 import { formatInvoiceNumber, paymentMethodLabel } from "@/lib/invoices/format";
-import { X, Download, Send, FileText, MoreHorizontal, Plus, Clock, Receipt, CheckCircle2, Sparkles, ChevronDown, Link2, Check, Pencil, Search } from "lucide-react";
+import { X, Download, Send, FileText, MoreHorizontal, Plus, Clock, Receipt, CheckCircle2, Sparkles, ChevronDown, Link2, Check, Pencil, Search, ArrowUpDown, ArrowUp, ArrowDown, ListFilter } from "lucide-react";
 
 // Canonical join used whenever we re-fetch a single invoice after a write,
 // so the detail pane always has the client's contact details + project + lines.
@@ -125,10 +125,29 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
   );
 }
 
-type Filter = "all" | "draft" | "saved" | "sent" | "overdue" | "paid" | "voided";
+// Statuses available in the multi-select filter. "overdue" is a derived
+// cross-cut of sent invoices, not a stored status, but filterable here.
+const STATUS_KEYS = ["draft", "saved", "sent", "overdue", "paid", "voided"] as const;
+type StatusKey = typeof STATUS_KEYS[number];
+
+type SortBy = "issued" | "due" | "client" | "amount";
+const SORT_OPTIONS: { key: SortBy; label: string }[] = [
+  { key: "issued", label: "Issue date" },
+  { key: "due",    label: "Due date" },
+  { key: "client", label: "Client" },
+  { key: "amount", label: "Invoice amount" },
+];
 
 function isOverdue(inv: Invoice) {
   return inv.status === "sent" && !!inv.due_at && inv.due_at < new Date().toISOString().split("T")[0];
+}
+
+// Does an invoice match a given filter key? "sent" means sent-and-not-overdue
+// so it reads distinctly from the "overdue" option.
+function matchesStatusKey(inv: Invoice, key: StatusKey): boolean {
+  if (key === "overdue") return isOverdue(inv);
+  if (key === "sent")    return inv.status === "sent" && !isOverdue(inv);
+  return inv.status === key;
 }
 
 function invoiceTotal(inv: Invoice) {
@@ -152,23 +171,25 @@ function fmtDate(ds: string | null) {
 
 function fmtHours(mins: number) { return `${(mins / 60).toFixed(1)}h`; }
 
+// Status palette: draft & saved blue, sent yellow, paid green, voided grey,
+// overdue red (shown as an extra tag, never replacing the real status).
 const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  draft:   { bg: "var(--color-grey)",            color: "white", label: "Draft"   },
-  saved:   { bg: "#b8860b",                       color: "white", label: "Saved"   },
-  sent:    { bg: "#2563ab",                       color: "white", label: "Sent"    },
-  paid:    { bg: "var(--color-sage)",             color: "white", label: "Paid"    },
-  overdue: { bg: "var(--color-red-orange)",       color: "white", label: "Overdue" },
-  voided:  { bg: "var(--color-grey)",             color: "white", label: "Void"    },
+  draft:   { bg: "#2563ab",                  color: "white",   label: "Draft"   },
+  saved:   { bg: "#2563ab",                  color: "white",   label: "Saved"   },
+  sent:    { bg: "#e0a82e",                  color: "#1f211a", label: "Sent"    },
+  paid:    { bg: "var(--color-sage)",        color: "white",   label: "Paid"    },
+  overdue: { bg: "var(--color-red-orange)",  color: "white",   label: "Overdue" },
+  voided:  { bg: "var(--color-grey)",        color: "white",   label: "Void"    },
 };
 
 // Left-stripe color per status for the list rows.
 function stripeFor(status: string, overdue: boolean): string {
   if (overdue) return "var(--color-red-orange)";
-  if (status === "paid")   return "var(--color-sage)";
-  if (status === "sent")   return "#2563ab";
-  if (status === "saved")  return "#b8860b";
-  if (status === "voided") return "var(--color-grey)";
-  return "var(--color-border)"; // draft
+  if (status === "paid")                          return "var(--color-sage)";
+  if (status === "sent")                          return "#e0a82e";
+  if (status === "draft" || status === "saved")   return "#2563ab";
+  if (status === "voided")                        return "var(--color-grey)";
+  return "var(--color-border)";
 }
 
 // Shared grid template for the line-items table (description | qty | rate | amount | actions).
@@ -184,8 +205,17 @@ export default function InvoicesTab({
   invoices, timeEntries, expenses, projects, invoicePrefix,
   onInvoiceUpdated, onInvoiceDeleted, onInvoiceSent, onNewInvoice,
 }: Props) {
-  const [filter, setFilter]                   = useState<Filter>("all");
-  const [selectedId, setSelectedId]           = useState<string | null>(invoices[0]?.id ?? null);
+  // Nothing is selected on entry — the detail pane stays empty until the user
+  // picks an invoice.
+  const [selectedId, setSelectedId]           = useState<string | null>(null);
+  // Multi-select status filter (empty = show all) + sort controls.
+  const [statusFilter, setStatusFilter]       = useState<Set<StatusKey>>(new Set());
+  const [statusMenuOpen, setStatusMenuOpen]   = useState(false);
+  const [sortMenuOpen, setSortMenuOpen]       = useState(false);
+  const [sortBy, setSortBy]                   = useState<SortBy>("issued");
+  const [sortDir, setSortDir]                 = useState<"asc" | "desc">("desc");
+  const statusMenuRef = useRef<HTMLDivElement>(null);
+  const sortMenuRef   = useRef<HTMLDivElement>(null);
   const [addingLine, setAddingLine]           = useState(false);
   const [lineDesc, setLineDesc]               = useState("");
   const [lineQty, setLineQty]                 = useState("1");
@@ -237,6 +267,8 @@ export default function InvoicesTab({
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
       if (pullerRef.current && !pullerRef.current.contains(e.target as Node)) setPullerOpen(false);
       if (clientChooserRef.current && !clientChooserRef.current.contains(e.target as Node)) setClientChooserOpen(false);
+      if (statusMenuRef.current && !statusMenuRef.current.contains(e.target as Node)) setStatusMenuOpen(false);
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) setSortMenuOpen(false);
     }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -249,12 +281,41 @@ export default function InvoicesTab({
     setEditingSaved(false); setClientChooserOpen(false);
   }, [selectedId]);
 
-  const filteredInvoices = useMemo(() => invoices.filter((inv) => {
-    if (filter === "all") return true;
-    if (filter === "overdue") return isOverdue(inv);
-    if (filter === "sent")    return inv.status === "sent" && !isOverdue(inv);
-    return inv.status === filter;
-  }), [invoices, filter]);
+  // Filter by the selected statuses (empty = all), then sort.
+  const visibleInvoices = useMemo(() => {
+    const keys = [...statusFilter];
+    const filtered = invoices.filter((inv) =>
+      keys.length === 0 || keys.some((k) => matchesStatusKey(inv, k)),
+    );
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      let r = 0;
+      if (sortBy === "issued")      r = (a.issued_at ?? "").localeCompare(b.issued_at ?? "");
+      else if (sortBy === "due")    r = (a.due_at ?? "").localeCompare(b.due_at ?? "");
+      else if (sortBy === "client") r = clientName(a).localeCompare(clientName(b));
+      else if (sortBy === "amount") r = invoiceTotal(a) - invoiceTotal(b);
+      return r * dir;
+    });
+  }, [invoices, statusFilter, sortBy, sortDir]);
+
+  // Per-status counts for the filter dropdown.
+  const statusCounts = useMemo(() => {
+    const c = {} as Record<StatusKey, number>;
+    for (const k of STATUS_KEYS) c[k] = invoices.filter((inv) => matchesStatusKey(inv, k)).length;
+    return c;
+  }, [invoices]);
+
+  function toggleStatus(k: StatusKey) {
+    setStatusFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k); else next.add(k);
+      return next;
+    });
+  }
+  function pickSort(k: SortBy) {
+    if (sortBy === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortBy(k); setSortDir("desc"); }
+  }
 
   const outstanding   = invoices.filter((i) => i.status === "sent").reduce((s, i) => s + invoiceTotal(i), 0);
   const collectedYtd  = invoices.filter((i) => i.status === "paid").reduce((s, i) => s + invoiceTotal(i), 0);
@@ -537,16 +598,6 @@ export default function InvoicesTab({
     setConfirmDelete(false);
   }
 
-  const filterCounts: Record<Filter, number> = {
-    all: invoices.length,
-    overdue: invoices.filter(isOverdue).length,
-    sent: invoices.filter((i) => i.status === "sent" && !isOverdue(i)).length,
-    draft: invoices.filter((i) => i.status === "draft").length,
-    saved: invoices.filter((i) => i.status === "saved").length,
-    paid: invoices.filter((i) => i.status === "paid").length,
-    voided: invoices.filter((i) => i.status === "voided").length,
-  };
-
   const inputCls = "px-2 py-1.5 text-[12px] rounded-lg focus:outline-none";
   const inputStyle = { background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" };
 
@@ -561,27 +612,89 @@ export default function InvoicesTab({
         <div className="px-4 py-3 shrink-0"
           style={{ borderBottom: "0.5px solid var(--color-border)",
                    background: "var(--color-warm-white)", position: "sticky", top: 0, zIndex: 1 }}>
-          <p className="text-[13px] font-semibold mb-2"
+          <p className="text-[13px] font-semibold mb-2.5"
             style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>All invoices</p>
-          <div className="flex flex-wrap gap-1.5">
-            {(["all","draft","saved","sent","overdue","paid","voided"] as Filter[]).map((f) => {
-              const active = filter === f;
-              const overdueFilter = f === "overdue";
-              return (
-                <button key={f} type="button" onClick={() => setFilter(f)}
-                  className="px-2.5 py-1 rounded-full text-[11px] capitalize transition-colors"
-                  style={{
-                    background: active
-                      ? (overdueFilter ? "var(--color-red-orange)" : "var(--color-charcoal)")
-                      : "rgba(31,33,26,0.06)",
-                    color: active ? "white" : "var(--color-grey)",
-                    border: !active && overdueFilter && filterCounts.overdue > 0 ? "0.5px solid rgba(220,62,13,0.25)" : "none",
-                    fontWeight: active ? 600 : 400,
-                  }}>
-                  {f}{filterCounts[f] > 0 ? ` ${filterCounts[f]}` : ""}
-                </button>
-              );
-            })}
+
+          {/* Summary — moved up from the footer. */}
+          <div className="flex gap-4 mb-3">
+            {[
+              { label: "Outstanding", value: fmtCurrency(outstanding), color: outstanding > 0 ? "#b8860b" : "var(--color-charcoal)" },
+              { label: "Collected YTD", value: fmtCurrency(collectedYtd), color: "var(--color-charcoal)" },
+              { label: "Draft", value: fmtCurrency(draftTotal), color: "var(--color-charcoal)" },
+            ].map((item) => (
+              <div key={item.label} className="flex flex-col gap-0.5">
+                <span className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>{item.label}</span>
+                <span className="text-[12px] font-semibold tabular-nums" style={{ color: item.color }}>{item.value}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Filter + sort controls */}
+          <div className="flex items-center gap-2">
+            {/* Status multi-select */}
+            <div ref={statusMenuRef} className="relative flex-1">
+              <button type="button" onClick={() => { setStatusMenuOpen((v) => !v); setSortMenuOpen(false); }}
+                className="w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] transition-colors"
+                style={{ color: "var(--color-charcoal)", border: "0.5px solid var(--color-border)", background: statusFilter.size > 0 ? "var(--color-cream)" : "transparent" }}>
+                <ListFilter size={12} style={{ color: "var(--color-grey)" }} />
+                <span className="flex-1 text-left">{statusFilter.size === 0 ? "All statuses" : `${statusFilter.size} selected`}</span>
+                <ChevronDown size={11} style={{ color: "var(--color-grey)" }} />
+              </button>
+              {statusMenuOpen && (
+                <div className="absolute left-0 right-0 mt-1 rounded-xl overflow-hidden z-30"
+                  style={{ top: "100%", background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 24px rgba(31,33,26,0.14)" }}>
+                  {STATUS_KEYS.map((k) => {
+                    const on = statusFilter.has(k);
+                    const meta = STATUS_STYLE[k];
+                    return (
+                      <button key={k} type="button" onClick={() => toggleStatus(k)}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left"
+                        style={{ borderBottom: "0.5px solid var(--color-border)", background: on ? "rgba(155,163,122,0.10)" : "transparent" }}>
+                        <span className="w-3.5 h-3.5 rounded shrink-0 flex items-center justify-center"
+                          style={{ background: on ? "var(--color-sage)" : "transparent", border: on ? "none" : "1.5px solid var(--color-border)" }}>
+                          {on && <Check size={10} color="white" />}
+                        </span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider" style={{ background: meta.bg, color: meta.color }}>{meta.label}</span>
+                        <span className="ml-auto text-[11px] tabular-nums" style={{ color: "var(--color-grey)" }}>{statusCounts[k]}</span>
+                      </button>
+                    );
+                  })}
+                  {statusFilter.size > 0 && (
+                    <button type="button" onClick={() => setStatusFilter(new Set())}
+                      className="w-full px-3 py-2 text-[11px] text-center" style={{ color: "var(--color-grey)" }}>
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Sort */}
+            <div ref={sortMenuRef} className="relative">
+              <button type="button" onClick={() => { setSortMenuOpen((v) => !v); setStatusMenuOpen(false); }}
+                title="Sort invoices"
+                className="w-8 h-8 flex items-center justify-center rounded-lg"
+                style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}>
+                <ArrowUpDown size={13} />
+              </button>
+              {sortMenuOpen && (
+                <div className="absolute right-0 mt-1 rounded-xl overflow-hidden z-30"
+                  style={{ top: "100%", width: 180, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 24px rgba(31,33,26,0.14)" }}>
+                  <div className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider" style={{ color: "var(--color-grey)", borderBottom: "0.5px solid var(--color-border)" }}>Sort by</div>
+                  {SORT_OPTIONS.map((opt) => {
+                    const active = sortBy === opt.key;
+                    return (
+                      <button key={opt.key} type="button" onClick={() => pickSort(opt.key)}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-[12px]"
+                        style={{ borderBottom: "0.5px solid var(--color-border)", background: active ? "rgba(155,163,122,0.10)" : "transparent", color: "var(--color-charcoal)", fontWeight: active ? 600 : 400 }}>
+                        <span className="flex-1">{opt.label}</span>
+                        {active && (sortDir === "asc" ? <ArrowUp size={12} style={{ color: "var(--color-sage)" }} /> : <ArrowDown size={12} style={{ color: "var(--color-sage)" }} />)}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -606,27 +719,21 @@ export default function InvoicesTab({
             </div>
           )}
 
-          {filteredInvoices.map((inv) => {
+          {visibleInvoices.map((inv) => {
             const overdue = isOverdue(inv);
-            const statusKey = overdue ? "overdue" : inv.status;
-            const st = STATUS_STYLE[statusKey] ?? STATUS_STYLE.draft;
+            // The chip carries the real status; overdue is shown as a separate tag.
+            const st = STATUS_STYLE[inv.status] ?? STATUS_STYLE.draft;
             const total = invoiceTotal(inv);
             const isSelected = inv.id === selectedId;
-            // Left stripe carries status color so it's legible even when the
-            // row isn't selected. Selection widens the stripe (3px → reads as
-            // active without changing the row's chrome).
             const stripeColor = stripeFor(inv.status, overdue);
             return (
               <div key={inv.id}
                 className="px-4 py-3 cursor-pointer"
                 style={{
                   borderBottom: "0.5px solid var(--color-border)",
-                  // Sage tint reads clearly on both the light and dark
-                  // surfaces (a fixed dark overlay was invisible in dark mode).
+                  // Sage tint reads clearly on both the light and dark surfaces.
                   background: isSelected ? "rgba(155,163,122,0.18)" : "transparent",
-                  // Widen the stripe when selected; for drafts (faint border
-                  // stripe) promote it to sage so selection is unmistakable.
-                  borderLeft: `${isSelected ? 3 : 2}px solid ${isSelected && stripeColor === "var(--color-border)" ? "var(--color-sage)" : stripeColor}`,
+                  borderLeft: `${isSelected ? 3 : 2}px solid ${stripeColor}`,
                 }}
                 onClick={() => setSelectedId(inv.id)}>
                 <div className="flex items-center gap-1.5 mb-1">
@@ -639,15 +746,21 @@ export default function InvoicesTab({
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10px] flex-1 truncate" style={{ color: "var(--color-grey)" }}>{inv.project?.title ?? ""}</span>
-                  {inv.due_at && <span className="text-[10px]" style={{ color: "var(--color-grey)" }}>Due {fmtDate(inv.due_at)}</span>}
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: st.bg, color: st.color }}>
-                    {st.label.toUpperCase()}
+                  {!overdue && inv.due_at && <span className="text-[10px]" style={{ color: "var(--color-grey)" }}>Due {fmtDate(inv.due_at)}</span>}
+                  {overdue && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
+                      style={{ background: STATUS_STYLE.overdue.bg, color: STATUS_STYLE.overdue.color }}>
+                      Overdue
+                    </span>
+                  )}
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide" style={{ background: st.bg, color: st.color }}>
+                    {st.label}
                   </span>
                 </div>
               </div>
             );
           })}
-          {filteredInvoices.length === 0 && invoices.length === 0 && (
+          {visibleInvoices.length === 0 && invoices.length === 0 && (
             <div style={{ padding: "12px 0" }}>
               <EmptyState
                 icon={<FileText size={24} strokeWidth={1.5} color="var(--color-sage)" />}
@@ -662,23 +775,9 @@ export default function InvoicesTab({
               />
             </div>
           )}
-          {filteredInvoices.length === 0 && invoices.length > 0 && (
+          {visibleInvoices.length === 0 && invoices.length > 0 && (
             <p className="px-4 py-6 text-[12px] text-center" style={{ color: "var(--color-grey)" }}>No invoices match this filter.</p>
           )}
-        </div>
-
-        {/* Footer totals */}
-        <div className="flex gap-4 px-4 py-3 shrink-0" style={{ borderTop: "0.5px solid var(--color-border)", background: "rgba(31,33,26,0.04)" }}>
-          {[
-            { label: "Outstanding", value: fmtCurrency(outstanding), color: outstanding > 0 ? "#b8860b" : "var(--color-charcoal)" },
-            { label: "Collected YTD", value: fmtCurrency(collectedYtd), color: "var(--color-charcoal)" },
-            { label: "Draft", value: fmtCurrency(draftTotal), color: "var(--color-charcoal)" },
-          ].map((item) => (
-            <div key={item.label} className="flex flex-col gap-0.5">
-              <span className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>{item.label}</span>
-              <span className="text-[12px] font-semibold tabular-nums" style={{ color: item.color }}>{item.value}</span>
-            </div>
-          ))}
         </div>
       </div>
 
