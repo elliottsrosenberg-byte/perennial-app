@@ -38,7 +38,10 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
   onSent: () => void;
 }) {
   const clientEmail = (invoice.client_contact as { email?: string | null } | null)?.email ?? "";
+  const invNum = formatInvoiceNumber(invoice.number, invoicePrefix);
+  const total  = invoiceTotal(invoice);
   const [to,      setTo]      = useState(clientEmail);
+  const [subject, setSubject] = useState(`Invoice ${invNum} — ${fmtCurrency(total)}`);
   const [message, setMessage] = useState(`Hi,\n\nPlease find your invoice attached. Let me know if you have any questions.\n\nThank you for your business.`);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
@@ -50,7 +53,7 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
     const res = await fetch("/api/finance/send-invoice", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ invoiceId: invoice.id, to: to.trim(), message }),
+      body: JSON.stringify({ invoiceId: invoice.id, to: to.trim(), subject: subject.trim(), message }),
     });
     const json = await res.json() as { ok?: boolean; error?: string };
     if (!res.ok || json.error) {
@@ -70,12 +73,12 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(31,33,26,0.5)" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-md rounded-2xl overflow-hidden"
+      <div className="w-full max-w-3xl rounded-2xl overflow-hidden"
         style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
           <div>
             <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>Send invoice</h2>
-            <p className="text-[11px] mt-0.5" style={{ color: "var(--color-grey)" }}>{formatInvoiceNumber(invoice.number, invoicePrefix)} · {clientName(invoice)}</p>
+            <p className="text-[11px] mt-0.5" style={{ color: "var(--color-grey)" }}>{invNum} · {clientName(invoice)}</p>
           </div>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg"
             style={{ color: "var(--color-grey)" }}
@@ -85,24 +88,59 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
           </button>
         </div>
         {sent ? (
-          <div className="px-5 py-10 text-center">
+          <div className="px-5 py-14 text-center">
             <p className="text-[22px] mb-2">✓</p>
             <p className="text-[13px] font-semibold" style={{ color: "var(--color-charcoal)" }}>Invoice sent!</p>
             <p className="text-[12px] mt-1" style={{ color: "var(--color-grey)" }}>Delivered to {to}</p>
           </div>
         ) : (
-          <div className="px-5 py-4 space-y-4">
-            <div>
-              <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--color-charcoal)" }}>To *</label>
-              <input type="email" value={to} onChange={e => setTo(e.target.value)}
-                placeholder="client@email.com" className={inputCls} style={inputStyle} />
+          <div className="flex flex-col md:flex-row">
+            {/* Compose */}
+            <div className="flex-1 px-5 py-4 space-y-4" style={{ borderRight: "0.5px solid var(--color-border)" }}>
+              <div>
+                <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--color-charcoal)" }}>To *</label>
+                <input type="email" value={to} onChange={e => setTo(e.target.value)}
+                  placeholder="client@email.com" className={inputCls} style={inputStyle} />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--color-charcoal)" }}>Subject</label>
+                <input type="text" value={subject} onChange={e => setSubject(e.target.value)}
+                  placeholder={`Invoice ${invNum}`} className={inputCls} style={inputStyle} />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--color-charcoal)" }}>Message</label>
+                <textarea value={message} onChange={e => setMessage(e.target.value)} rows={9}
+                  className={inputCls} style={{ ...inputStyle, resize: "none" }} />
+              </div>
+              {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
             </div>
-            <div>
-              <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--color-charcoal)" }}>Message</label>
-              <textarea value={message} onChange={e => setMessage(e.target.value)} rows={5}
-                className={inputCls} style={{ ...inputStyle, resize: "none" }} />
+
+            {/* Live inbox preview */}
+            <div className="px-5 py-4 shrink-0" style={{ width: 320, background: "var(--color-cream)" }}>
+              <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-grey)" }}>Preview</p>
+              <div className="rounded-xl overflow-hidden" style={{ background: "white", border: "0.5px solid var(--color-border)", boxShadow: "0 2px 12px rgba(31,33,26,0.06)" }}>
+                <div className="flex items-center gap-2 px-3 py-2.5" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
+                  <span className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shrink-0" style={{ background: "var(--color-charcoal)" }}>P</span>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold truncate" style={{ color: "var(--color-charcoal)" }}>Your studio</p>
+                    <p className="text-[10px] truncate" style={{ color: "var(--color-grey)" }}>via Perennial</p>
+                  </div>
+                  <span className="ml-auto text-[10px] shrink-0" style={{ color: "var(--color-grey)" }}>now</span>
+                </div>
+                <div className="px-3 py-3">
+                  <p className="text-[12px] font-semibold mb-1.5" style={{ color: "var(--color-charcoal)" }}>{subject || `Invoice ${invNum}`}</p>
+                  <p className="text-[11px] mb-3" style={{ color: "var(--color-grey)", lineHeight: 1.6, whiteSpace: "pre-line", maxHeight: 120, overflow: "hidden" }}>{message}</p>
+                  <div className="rounded-lg px-3 py-2 mb-2 flex items-center justify-between" style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)" }}>
+                    <span className="text-[10px]" style={{ color: "var(--color-grey)" }}>{invNum}</span>
+                    <span className="text-[13px] font-bold tabular-nums" style={{ color: "var(--color-charcoal)" }}>{fmtCurrency(total)}</span>
+                  </div>
+                  <div className="text-center text-[11px] font-semibold py-2 rounded-lg text-white" style={{ background: "var(--color-sage-hover)" }}>
+                    View &amp; pay invoice →
+                  </div>
+                </div>
+              </div>
+              <p className="text-[10px] mt-2" style={{ color: "var(--color-grey)" }}>A simplified preview — the email is fully styled with your line items.</p>
             </div>
-            {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
           </div>
         )}
         {!sent && (
