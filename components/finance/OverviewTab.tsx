@@ -59,10 +59,12 @@ function invoiceTotal(inv: Invoice) {
 }
 
 const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  draft:   { bg: "rgba(31,33,26,0.07)", color: "var(--color-grey)",       label: "Draft"   },
-  sent:    { bg: "rgba(37,99,171,0.1)", color: "#2563ab",                  label: "Sent"    },
-  paid:    { bg: "rgba(61,107,79,0.1)", color: "var(--color-sage)",        label: "Paid"    },
-  overdue: { bg: "rgba(220,62,13,0.1)", color: "var(--color-red-orange)",  label: "Overdue" },
+  draft:   { bg: "rgba(31,33,26,0.07)",  color: "var(--color-grey)",       label: "Draft"   },
+  saved:   { bg: "rgba(184,134,11,0.12)", color: "#b8860b",                label: "Saved"   },
+  sent:    { bg: "rgba(37,99,171,0.1)",  color: "#2563ab",                  label: "Sent"    },
+  paid:    { bg: "rgba(61,107,79,0.1)",  color: "var(--color-sage)",        label: "Paid"    },
+  overdue: { bg: "rgba(220,62,13,0.1)",  color: "var(--color-red-orange)",  label: "Overdue" },
+  voided:  { bg: "rgba(31,33,26,0.07)",  color: "var(--color-grey)",        label: "Void"    },
 };
 
 export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, expenses, invoices, invoicePrefix, onStopTimer, onSwitchTab, onLogTime, onAddExpense, onNewInvoice }: Props) {
@@ -262,7 +264,7 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
             {recentInvoices.map((inv) => {
               const overdue = isOverdue(inv);
               const statusKey = overdue ? "overdue" : inv.status;
-              const st = STATUS_STYLE[statusKey];
+              const st = STATUS_STYLE[statusKey] ?? STATUS_STYLE.draft;
               const total = invoiceTotal(inv);
               const clientName = inv.client_contact
                 ? `${inv.client_contact.first_name} ${inv.client_contact.last_name}`

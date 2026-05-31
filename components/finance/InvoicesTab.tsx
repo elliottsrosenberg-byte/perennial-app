@@ -609,7 +609,7 @@ export default function InvoicesTab({
           {filteredInvoices.map((inv) => {
             const overdue = isOverdue(inv);
             const statusKey = overdue ? "overdue" : inv.status;
-            const st = STATUS_STYLE[statusKey];
+            const st = STATUS_STYLE[statusKey] ?? STATUS_STYLE.draft;
             const total = invoiceTotal(inv);
             const isSelected = inv.id === selectedId;
             // Left stripe carries status color so it's legible even when the
@@ -772,7 +772,7 @@ export default function InvoicesTab({
             {selectedInvoice.status !== "draft" && (() => {
               const overdue = isOverdue(selectedInvoice);
               const statusKey = overdue ? "overdue" : selectedInvoice.status;
-              const st = STATUS_STYLE[statusKey];
+              const st = STATUS_STYLE[statusKey] ?? STATUS_STYLE.draft;
               return (
                 <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shrink-0"
                   style={{ background: st.bg, color: st.color }}>
