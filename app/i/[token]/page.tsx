@@ -64,10 +64,11 @@ export default async function PublicInvoicePage({
   // Studio identity for the From block — same shape as the print page.
   const { data: profile } = await supabase
     .from("profiles")
-    .select("studio_name, display_name, location, address, phone, ein, logo_url, invoice_prefix")
+    .select("studio_name, display_name, location, address, phone, ein, logo_url, invoice_prefix, brand_color")
     .eq("user_id", inv.user_id)
     .maybeSingle();
   const invNum = formatInvoiceNumber(inv.number, profile?.invoice_prefix);
+  const brandColor    = profile?.brand_color?.trim() || null;
   const studioName    = profile?.studio_name?.trim() || profile?.display_name?.trim() || "Studio";
   const studioAddress = (profile?.address ?? "").trim();
   const studioPhone   = (profile?.phone ?? "").trim();
@@ -250,7 +251,7 @@ export default async function PublicInvoicePage({
                     // eslint-disable-next-line @next/next/no-img-element
                     <img className="pi-studio-logo" src={studioLogo} alt={`${studioName} logo`} />
                   )}
-                  <div className="pi-studio-name">{studioName}</div>
+                  <div className="pi-studio-name" style={brandColor ? { color: brandColor } : undefined}>{studioName}</div>
                   <div className="pi-studio-line">
                     {[studioAddress || fallbackLocation, studioPhone].filter(Boolean).join("\n")}
                   </div>

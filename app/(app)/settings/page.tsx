@@ -36,6 +36,7 @@ interface Profile {
   ein:                  string | null;
   logo_url:             string | null;
   logo_path:            string | null;
+  brand_color:          string | null;
   notif_email_enabled:  boolean;
   notif_deadlines:      boolean;
   notif_invoice_due:    boolean;
@@ -80,7 +81,7 @@ const DEFAULT_PROFILE: Profile = {
   practice_types: [], currency: "USD", fiscal_year: "January",
   date_format: "MM/DD/YYYY", week_start: "Monday", hourly_rate: null,
   invoice_prefix: "INV-", payment_terms: "Net 30",
-  address: "", phone: "", ein: "", logo_url: null, logo_path: null,
+  address: "", phone: "", ein: "", logo_url: null, logo_path: null, brand_color: null,
   notif_email_enabled: true, notif_deadlines: true, notif_invoice_due: true,
   notif_overdue: true, notif_payment_received: true, notif_weekly: false, notif_monthly: false,
   tour_dismissed: false,
@@ -475,6 +476,7 @@ export default function SettingsPage() {
           phone:               prof.phone ?? "",
           ein:                 prof.ein ?? "",
           logo_url:            prof.logo_url ?? null,
+          brand_color:         prof.brand_color ?? null,
           logo_path:           prof.logo_path ?? null,
           notif_email_enabled: prof.notif_email_enabled ?? true,
           notif_deadlines:     prof.notif_deadlines ?? true,
@@ -528,6 +530,7 @@ export default function SettingsPage() {
         ein:                  profile.ein || null,
         logo_url:             profile.logo_url,
         logo_path:            profile.logo_path,
+        brand_color:          profile.brand_color,
         notif_email_enabled:  profile.notif_email_enabled,
         notif_deadlines:      profile.notif_deadlines,
         notif_invoice_due:    profile.notif_invoice_due,
@@ -839,6 +842,29 @@ export default function SettingsPage() {
                     setProfile((p) => ({ ...p, logo_url: url, logo_path: path }));
                   }}
                 />
+
+                <div className="mt-5">
+                  <FieldLabel>Brand color</FieldLabel>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={profile.brand_color || "#9ba37a"}
+                      onChange={(e) => set("brand_color", e.target.value)}
+                      aria-label="Brand color"
+                      style={{ width: 38, height: 38, padding: 0, border: "0.5px solid var(--color-border)", borderRadius: 8, background: "transparent", cursor: "pointer" }}
+                    />
+                    <div style={{ width: 140 }}>
+                      <TextInput
+                        value={profile.brand_color ?? ""}
+                        onChange={(v) => set("brand_color", v)}
+                        placeholder="#9ba37a"
+                      />
+                    </div>
+                  </div>
+                  <p className="mt-1 text-[10px]" style={{ color: "var(--color-grey)" }}>
+                    Your accent color on invoices and the emails clients receive. Leave blank for the default sage.
+                  </p>
+                </div>
 
                 <div className="space-y-4 mt-5">
                   <div>

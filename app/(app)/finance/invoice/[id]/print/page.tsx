@@ -56,7 +56,7 @@ export default async function InvoicePrintPage({ params, searchParams }: { param
   const { data: profile } = user
     ? await supabase
         .from("profiles")
-        .select("studio_name, display_name, location, website, address, phone, ein, logo_url, invoice_prefix")
+        .select("studio_name, display_name, location, website, address, phone, ein, logo_url, invoice_prefix, brand_color")
         .eq("user_id", user.id)
         .maybeSingle()
     : { data: null };
@@ -67,6 +67,7 @@ export default async function InvoicePrintPage({ params, searchParams }: { param
   const studioPhone   = (profile?.phone ?? "").trim();
   const studioEin     = (profile?.ein ?? "").trim();
   const studioLogo    = profile?.logo_url ?? null;
+  const brandColor    = profile?.brand_color?.trim() || null;
   // Fallback used only when address is blank — keeps the "From" column
   // from looking empty for users who haven't filled in the new fields.
   const fallbackLocation = profile?.location ?? null;
@@ -184,7 +185,7 @@ export default async function InvoicePrintPage({ params, searchParams }: { param
               // eslint-disable-next-line @next/next/no-img-element
               <img className="studio-logo" src={studioLogo} alt={`${studioName} logo`} />
             )}
-            <div className="studio-mark">{studioName}</div>
+            <div className="studio-mark" style={brandColor ? { color: brandColor } : undefined}>{studioName}</div>
             <div className="studio-line">
               {studioAddress || (fallbackLocation ?? "")}
               {studioPhone   ? `${(studioAddress || fallbackLocation) ? "\n" : ""}${studioPhone}` : ""}
