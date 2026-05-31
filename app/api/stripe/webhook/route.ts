@@ -80,12 +80,38 @@ export async function POST(req: Request) {
         // Already handled — ignore the retry.
         break;
       }
+
+      // Pull payment-method details off the charge for bookkeeping (card
+      // brand / last4, or the method type for bank / Cash App / Klarna).
+      // The charge lives on the connected account (event.account), so the
+      // retrieve must be scoped there. Best-effort — never block marking paid.
+      let payment_method_type: string | null = null;
+      let payment_card_brand:  string | null = null;
+      let payment_card_last4:  string | null = null;
+      try {
+        const chargeId = typeof intent.latest_charge === "string"
+          ? intent.latest_charge
+          : intent.latest_charge?.id ?? null;
+        if (chargeId && event.account) {
+          const charge = await stripe.charges.retrieve(chargeId, {}, { stripeAccount: event.account });
+          const pmd = charge.payment_method_details as Stripe.Charge.PaymentMethodDetails | null;
+          payment_method_type = pmd?.type ?? null;
+          payment_card_brand  = pmd?.card?.brand ?? null;
+          payment_card_last4  = pmd?.card?.last4 ?? pmd?.us_bank_account?.last4 ?? null;
+        }
+      } catch (e) {
+        console.warn("Could not retrieve charge details for invoice", invoiceId, e);
+      }
+
       const { error } = await supabase
         .from("invoices")
         .update({
           status:                   "paid",
           paid_at:                  today,
           stripe_payment_intent_id: intent.id,
+          payment_method_type,
+          payment_card_brand,
+          payment_card_last4,
         })
         .eq("id", invoiceId);
       if (error) {

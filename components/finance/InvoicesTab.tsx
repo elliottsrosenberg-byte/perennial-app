@@ -7,7 +7,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import Menu from "@/components/ui/Menu";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Select from "@/components/ui/Select";
-import { formatInvoiceNumber } from "@/lib/invoices/format";
+import { formatInvoiceNumber, paymentMethodLabel } from "@/lib/invoices/format";
 import { X, Download, Send, FileText, MoreHorizontal, Plus, Clock, Receipt, CheckCircle2, Sparkles, ChevronDown, Link2, Check, Pencil, Search } from "lucide-react";
 
 // Canonical join used whenever we re-fetch a single invoice after a write,
@@ -844,11 +844,19 @@ export default function InvoicesTab({
                   {editingSaved ? "Done" : "Edit"}
                 </button>
               )}
-              {selectedInvoice.status === "paid" && (
-                <span className="text-[11px] font-medium" style={{ color: "var(--color-sage)" }}>
-                  Paid {fmtDate(selectedInvoice.paid_at)}
-                </span>
-              )}
+              {selectedInvoice.status === "paid" && (() => {
+                const payLabel = paymentMethodLabel(selectedInvoice.payment_method_type, selectedInvoice.payment_card_brand, selectedInvoice.payment_card_last4);
+                return (
+                  <div className="flex flex-col items-end leading-tight">
+                    <span className="text-[11px] font-medium" style={{ color: "var(--color-sage)" }}>
+                      Paid {fmtDate(selectedInvoice.paid_at)}
+                    </span>
+                    {payLabel && (
+                      <span className="text-[10px]" style={{ color: "var(--color-grey)" }}>{payLabel}</span>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Primary green CTA (rightmost) */}
               {(selectedInvoice.status === "draft" || selectedInvoice.status === "saved") && (
@@ -1431,7 +1439,7 @@ function LineItemEditableRow({ li, onSave, onDelete }: {
 // has no public token yet (e.g. voided before it was ever sent).
 
 function InvoicePdfPreview({ token, invoiceId, voided }: { token: string | null; invoiceId: string; voided: boolean }) {
-  const src = token ? `/i/${token}` : `/finance/invoice/${invoiceId}/print?preview=1`;
+  const src = token ? `/i/${token}?preview=1` : `/finance/invoice/${invoiceId}/print?preview=1`;
   return (
     <div className="relative w-full h-full" style={{ minHeight: 480 }}>
       <iframe

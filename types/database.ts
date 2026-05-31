@@ -381,6 +381,13 @@ export interface Invoice {
   /** Stripe Checkout Session id — reserved for a possible future redirect
    *  flow. Not used by the embedded Payment Element path. */
   stripe_session_id: string | null;
+  /** Captured from the successful Stripe charge for bookkeeping — the
+   *  payment method type (card / us_bank_account / cashapp / klarna …) and,
+   *  for cards/bank, the brand and last four digits. Null until paid via
+   *  Stripe (manually-marked-paid invoices have no card data). */
+  payment_method_type: string | null;
+  payment_card_brand: string | null;
+  payment_card_last4: string | null;
   created_at: string;
   updated_at: string;
   client_contact?: Contact | null;

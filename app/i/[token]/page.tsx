@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { Invoice } from "@/types/database";
-import { formatInvoiceNumber } from "@/lib/invoices/format";
+import { formatInvoiceNumber, paymentMethodLabel } from "@/lib/invoices/format";
 import PrintButton from "./PrintButton";
 import PaymentSectionMount from "./PaymentSectionMount";
 
@@ -28,10 +28,15 @@ export const dynamic = "force-dynamic";
 
 export default async function PublicInvoicePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>;
+  searchParams: Promise<{ preview?: string }>;
 }) {
   const { token } = await params;
+  // preview=1 is the owner's in-app embed — no payment UI (they don't pay
+  // their own invoice). The real client link omits it and can pay.
+  const preview = (await searchParams).preview === "1";
   if (!token || token.length < 12) notFound();
 
   // Service-role client — the visitor has no Supabase session. RLS can't
@@ -77,6 +82,12 @@ export default async function PublicInvoicePage({
   const clientAddress = cContact?.location ?? cOrg?.location ?? null;
   const showClient = inv.show_client_info;
 
+  const payLabel = paymentMethodLabel(inv.payment_method_type, inv.payment_card_brand, inv.payment_card_last4);
+  // Right-hand panel: a paid receipt always shows; the live payment form and
+  // the void notice only show on the real client link (hidden in the owner's
+  // in-app preview, where there's nothing to pay).
+  const showAside = inv.status === "paid" || (!preview && (inv.status === "sent" || inv.status === "voided"));
+
   return (
     <>
       <style>{`
@@ -112,6 +123,7 @@ export default async function PublicInvoicePage({
           display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px;
           align-items: start;
         }
+        .pi-grid.pi-solo { grid-template-columns: minmax(0, 1fr); max-width: 760px; }
         @media (max-width: 880px) {
           .pi-grid { grid-template-columns: 1fr; }
         }
@@ -187,11 +199,14 @@ export default async function PublicInvoicePage({
         .pi-due-label { font-size: 13px; font-weight: 700; color: #1f211a; }
         .pi-due-amt { font-size: 26px; font-weight: 700; color: #1f211a; letter-spacing: -0.02em; }
 
-        /* Right: payment card */
+        /* Right: payment card — soft sage panel (on-brand, not orange) */
         .pi-pay {
-          background: #fbe9d8; padding: 28px 24px; border-radius: 12px;
+          background: #eef1e6; border: 0.5px solid #dde2cf;
+          padding: 28px 24px; border-radius: 12px;
           box-shadow: 0 1px 3px rgba(31,33,26,0.04), 0 4px 24px rgba(31,33,26,0.06);
         }
+        .pi-pay-meta { font-size: 12px; color: #6b6860; margin-top: 6px; }
+        .pi-pay-meta strong { color: #1f211a; font-weight: 600; }
         .pi-pay-head {
           display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
         }
@@ -225,7 +240,7 @@ export default async function PublicInvoicePage({
           <PrintButton />
         </div>
 
-        <div className="pi-grid">
+        <div className={`pi-grid${showAside ? "" : " pi-solo"}`}>
           {/* Left: invoice paper */}
           <div className="pi-card">
             <div className="pi-paper">
@@ -315,10 +330,24 @@ export default async function PublicInvoicePage({
             </div>
           </div>
 
-          {/* Right: payment (or a void notice) */}
+          {/* Right: paid receipt / live payment / void notice */}
+          {showAside && (
           <aside>
-            {inv.status === "voided" ? (
-              <div className="pi-pay" style={{ background: "#eff0e7" }}>
+            {inv.status === "paid" ? (
+              <div className="pi-pay">
+                <div className="pi-pay-head">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3d6b4f" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                  <span className="pi-pay-title">Paid in full</span>
+                </div>
+                <div className="pi-pay-amt">Amount paid</div>
+                <div className="pi-pay-amount">{fmtCurrency(total)}</div>
+                {payLabel && <div className="pi-pay-meta">Paid with <strong>{payLabel}</strong></div>}
+                {inv.paid_at && <div className="pi-pay-meta">on {fmtDate(inv.paid_at)}</div>}
+              </div>
+            ) : inv.status === "voided" ? (
+              <div className="pi-pay" style={{ background: "#eff0e7", border: "0.5px solid #e6e4dd" }}>
                 <div className="pi-pay-title" style={{ marginBottom: 6 }}>Invoice voided</div>
                 <p style={{ fontSize: 12, color: "#6b6860", lineHeight: 1.6 }}>
                   This invoice has been voided and is no longer payable. Please contact the sender with any questions.
@@ -339,6 +368,7 @@ export default async function PublicInvoicePage({
               </div>
             )}
           </aside>
+          )}
         </div>
 
         <p className="pi-foot">Powered by Perennial</p>
