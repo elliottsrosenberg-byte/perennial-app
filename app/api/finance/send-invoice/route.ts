@@ -121,7 +121,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Email not configured. Add RESEND_API_KEY to your environment variables." }, { status: 503 });
   }
 
-  const { invoiceId, to, message } = await req.json() as { invoiceId: string; to: string; message: string };
+  const { invoiceId, to, message, subject } = await req.json() as { invoiceId: string; to: string; message: string; subject?: string };
   if (!invoiceId || !to) {
     return NextResponse.json({ error: "Missing invoiceId or to" }, { status: 400 });
   }
@@ -161,7 +161,8 @@ export async function POST(req: Request) {
     .eq("user_id", (inv as Invoice).user_id)
     .maybeSingle();
 
-  const { html, subject } = buildEmail(inv as Invoice, to, message, appUrl, publicToken, profile?.invoice_prefix);
+  const built = buildEmail(inv as Invoice, to, message, appUrl, publicToken, profile?.invoice_prefix);
+  const finalSubject = subject?.trim() || built.subject;
 
   const { Resend } = await import("resend");
   const resend = new Resend(apiKey);
@@ -169,8 +170,8 @@ export async function POST(req: Request) {
   const { error } = await resend.emails.send({
     from: process.env.RESEND_FROM ?? "onboarding@resend.dev",
     to,
-    subject,
-    html,
+    subject: finalSubject,
+    html: built.html,
   });
 
   if (error) {

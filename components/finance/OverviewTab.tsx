@@ -35,7 +35,7 @@ function fmtHrs(min: number) {
 }
 
 function fmtCurrency(n: number) {
-  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function fmtDuration(min: number) {
