@@ -617,8 +617,12 @@ export default function InvoicesTab({
                 className="px-4 py-3 cursor-pointer"
                 style={{
                   borderBottom: "0.5px solid var(--color-border)",
-                  background: isSelected ? "rgba(31,33,26,0.04)" : "transparent",
-                  borderLeft: `${isSelected ? 3 : 2}px solid ${stripeColor}`,
+                  // Sage tint reads clearly on both the light and dark
+                  // surfaces (a fixed dark overlay was invisible in dark mode).
+                  background: isSelected ? "rgba(155,163,122,0.18)" : "transparent",
+                  // Widen the stripe when selected; for drafts (faint border
+                  // stripe) promote it to sage so selection is unmistakable.
+                  borderLeft: `${isSelected ? 3 : 2}px solid ${isSelected && stripeColor === "var(--color-border)" ? "var(--color-sage)" : stripeColor}`,
                 }}
                 onClick={() => setSelectedId(inv.id)}>
                 <div className="flex items-center gap-1.5 mb-1">
