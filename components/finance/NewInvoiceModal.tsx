@@ -13,6 +13,7 @@ interface Props {
   expenses: Expense[];
   invoices: Invoice[];
   nextNumber: number;
+  invoicePrefix: string | null;
   onClose: () => void;
   onCreated: (invoice: Invoice) => void;
 }
@@ -36,9 +37,13 @@ function addDays(iso: string, n: number) {
 }
 
 export default function NewInvoiceModal({
-  projects, timeEntries, expenses, invoices, nextNumber, onClose, onCreated,
+  projects, timeEntries, expenses, invoices, nextNumber, invoicePrefix, onClose, onCreated,
 }: Props) {
   const today = new Date().toISOString().split("T")[0];
+  // Invoice number is editable at creation — pre-filled with the next
+  // sequential number but the user can override it.
+  const [numberDraft, setNumberDraft] = useState(String(nextNumber));
+  const numberAffix = (invoicePrefix ?? "").trim() || "#";
   const [clientContact, setClientContact]     = useState<Contact | null>(null);
   const [projectId, setProjectId]             = useState("");
 
@@ -282,7 +287,7 @@ export default function NewInvoiceModal({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        number: nextNumber,
+        number: parseInt(numberDraft, 10) || nextNumber,
         client_contact_id:      clientContact.id,
         client_organization_id: null,
         project_id:             projectId || null,
@@ -329,7 +334,18 @@ export default function NewInvoiceModal({
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
           <div>
             <h2 className="text-[15px] font-semibold" style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>New invoice</h2>
-            <p className="text-[11px] mt-0.5" style={{ color: "var(--color-grey)" }}>#{nextNumber}</p>
+            <div className="flex items-center gap-1.5 mt-1">
+              <label className="text-[11px]" style={{ color: "var(--color-grey)" }}>Invoice no.</label>
+              <span className="text-[11px]" style={{ color: "var(--color-grey)" }}>{numberAffix}</span>
+              <input
+                value={numberDraft}
+                onChange={(e) => setNumberDraft(e.target.value.replace(/[^0-9]/g, ""))}
+                inputMode="numeric"
+                aria-label="Invoice number"
+                className="w-16 px-1.5 py-0.5 text-[11px] rounded tabular-nums focus:outline-none"
+                style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit" }}
+              />
+            </div>
           </div>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg"
             style={{ color: "var(--color-grey)" }}
@@ -429,44 +445,9 @@ export default function NewInvoiceModal({
             )
           )}
 
-          {/* Ready to bill — appears once a project is selected, or once
-              the user starts composing a manual line on a project-less
-              invoice. */}
-          {hasReady && (
-            <ReadyToBillPanel
-              projectRate={projectRate}
-              uninvoicedTime={uninvoicedTime}
-              uninvoicedExpenses={uninvoicedExpenses}
-              excludedTimeIds={excludedTimeIds}
-              excludedExpenseIds={excludedExpenseIds}
-              toggleTime={toggleTimeExclusion}
-              toggleExpense={toggleExpenseExclusion}
-              timeTotalMinutes={timeTotalMinutes}
-              timeTotalDollars={timeTotalDollars}
-              expenseTotal={expenseTotal}
-              manualLines={manualLines}
-              manualTotal={manualTotal}
-              addManualLine={addManualLine}
-              updateManualLine={updateManualLine}
-              removeManualLine={removeManualLine}
-              grandTotal={grandTotal}
-              includedTimeCount={includedTime.length}
-              includedExpenseCount={includedExpenses.length}
-            />
-          )}
-          {/* If no project picked AND no manual lines yet, offer a quiet
-              entrypoint so users can still compose a one-off invoice. */}
-          {!projectId && manualLines.length === 0 && (
-            <button type="button" onClick={addManualLine}
-              className="w-full rounded-xl py-2.5 text-[12px] transition-colors"
-              style={{ border: "0.5px dashed var(--color-border)", background: "transparent", color: "var(--color-grey)" }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-              + Add a line item
-            </button>
-          )}
-
-          {/* Dates */}
+          {/* Dates — kept above the line-item / ready-to-bill section so the
+              date pickers open into clear space and the invoice's terms are
+              set before composing lines. */}
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Issue date</label>
@@ -504,6 +485,43 @@ export default function NewInvoiceModal({
                 placeholder="Bank transfer" className={inputCls} style={inputStyle} />
             </div>
           </div>
+
+          {/* Ready to bill — appears once a project is selected, or once
+              the user starts composing a manual line on a project-less
+              invoice. */}
+          {hasReady && (
+            <ReadyToBillPanel
+              projectRate={projectRate}
+              uninvoicedTime={uninvoicedTime}
+              uninvoicedExpenses={uninvoicedExpenses}
+              excludedTimeIds={excludedTimeIds}
+              excludedExpenseIds={excludedExpenseIds}
+              toggleTime={toggleTimeExclusion}
+              toggleExpense={toggleExpenseExclusion}
+              timeTotalMinutes={timeTotalMinutes}
+              timeTotalDollars={timeTotalDollars}
+              expenseTotal={expenseTotal}
+              manualLines={manualLines}
+              manualTotal={manualTotal}
+              addManualLine={addManualLine}
+              updateManualLine={updateManualLine}
+              removeManualLine={removeManualLine}
+              grandTotal={grandTotal}
+              includedTimeCount={includedTime.length}
+              includedExpenseCount={includedExpenses.length}
+            />
+          )}
+          {/* If no project picked AND no manual lines yet, offer a quiet
+              entrypoint so users can still compose a one-off invoice. */}
+          {!projectId && manualLines.length === 0 && (
+            <button type="button" onClick={addManualLine}
+              className="w-full rounded-xl py-2.5 text-[12px] transition-colors"
+              style={{ border: "0.5px dashed var(--color-border)", background: "transparent", color: "var(--color-grey)" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+              + Add a line item
+            </button>
+          )}
 
           {/* Notes */}
           <div>

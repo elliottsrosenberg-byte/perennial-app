@@ -327,6 +327,7 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
           expenses={expenses}
           invoices={invoices}
           nextNumber={nextInvoiceNumber}
+          invoicePrefix={invoicePrefix}
           onClose={() => setShowNewInvoice(false)}
           onCreated={(inv) => setInvoices((prev) => [inv, ...prev])} />
       )}
