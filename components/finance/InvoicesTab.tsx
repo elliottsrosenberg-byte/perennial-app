@@ -181,9 +181,6 @@ export default function InvoicesTab({
   const [savingLine, setSavingLine]           = useState(false);
   const [savingStatus, setSavingStatus]       = useState(false);
   const [showSendModal, setShowSendModal]     = useState(false);
-  const [editingNotes, setEditingNotes]       = useState(false);
-  const [notesdraft, setNotesDraft]           = useState("");
-  const [savingNotes, setSavingNotes]         = useState(false);
   const [menuOpen, setMenuOpen]               = useState(false);
   const [pullerOpen, setPullerOpen]           = useState(false);
   const [confirmDelete, setConfirmDelete]     = useState(false);
@@ -497,18 +494,17 @@ export default function InvoicesTab({
     }
   }
 
-  async function saveNotes() {
+  // Generic text save for the invoice's own free-text fields (payment terms /
+  // method / notes). Used by the always-open editors that commit on blur.
+  async function saveInvoiceText(field: "payment_terms" | "payment_method" | "notes", value: string) {
     if (!selectedInvoice) return;
-    setSavingNotes(true);
     const supabase = createClient();
     const { data } = await supabase.from("invoices")
-      .update({ notes: notesdraft.trim() || null })
+      .update({ [field]: value.trim() || null })
       .eq("id", selectedInvoice.id)
       .select(INVOICE_SELECT)
       .single();
     if (data) onInvoiceUpdated(data as Invoice);
-    setSavingNotes(false);
-    setEditingNotes(false);
   }
 
   async function deleteLineItem(lineId: string) {
@@ -724,16 +720,38 @@ export default function InvoicesTab({
                 </div>
               ) : (
                 <>
-                  <p className="text-[15px] font-semibold truncate"
-                    style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)", letterSpacing: "-0.01em" }}>
-                    {clientName(selectedInvoice)}{" "}
+                  <div className="flex items-center gap-1 min-w-0">
+                    {isDraft ? (
+                      <div ref={clientChooserRef} style={{ position: "relative" }} className="min-w-0">
+                        <button type="button" onClick={() => { setClientChooserOpen((v) => !v); loadContacts(); }}
+                          className="flex items-center gap-1 max-w-full rounded transition-colors hover:underline"
+                          style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)", letterSpacing: "-0.01em" }}
+                          title="Change client">
+                          <span className="text-[15px] font-semibold truncate">{clientName(selectedInvoice)}</span>
+                          <ChevronDown size={12} style={{ color: "var(--color-grey)", flexShrink: 0 }} />
+                        </button>
+                        {clientChooserOpen && (
+                          <ClientChooser
+                            contacts={allContacts}
+                            loaded={contactsLoaded}
+                            onPick={changeClient}
+                            onClose={() => setClientChooserOpen(false)}
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-[15px] font-semibold truncate"
+                        style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)", letterSpacing: "-0.01em" }}>
+                        {clientName(selectedInvoice)}
+                      </span>
+                    )}
                     <button type="button" onClick={startEditNumber}
-                      className="rounded transition-colors hover:underline"
+                      className="text-[15px] rounded transition-colors hover:underline shrink-0"
                       style={{ color: "var(--color-grey)", fontWeight: 400 }}
                       title="Edit invoice number">
                       · {formatInvoiceNumber(selectedInvoice.number, invoicePrefix)}
                     </button>
-                  </p>
+                  </div>
                   <p className="text-[11px] mt-0.5" style={{ color: "var(--color-grey)" }}>
                     {selectedInvoice.project?.title ?? "No project"}{selectedInvoice.issued_at ? ` · Issued ${fmtDate(selectedInvoice.issued_at)}` : ""}
                   </p>
@@ -869,6 +887,22 @@ export default function InvoicesTab({
                 </div>
               </div>
 
+              {/* Payment terms & method — top of the body, editable while draft. */}
+              <div className="rounded-xl overflow-hidden"
+                style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", boxShadow: cardShadow }}>
+                <div className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider"
+                  style={{ borderBottom: "0.5px solid var(--color-border)", color: "var(--color-grey)" }}>
+                  Payment
+                </div>
+                <PaymentEditor
+                  key={selectedInvoice.id}
+                  terms={selectedInvoice.payment_terms ?? ""}
+                  method={selectedInvoice.payment_method ?? ""}
+                  editable={isDraft}
+                  onSave={saveInvoiceText}
+                />
+              </div>
+
               {/* Bill to & project */}
               <div className="rounded-xl overflow-hidden"
                 style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", boxShadow: cardShadow }}>
@@ -880,31 +914,7 @@ export default function InvoicesTab({
                   )}
                 </div>
                 <div className="p-4 flex flex-col gap-3">
-                  {/* Client row */}
-                  <div className="flex items-center gap-3">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider shrink-0" style={{ color: "var(--color-grey)", width: 64 }}>Client</span>
-                    <span className="text-[13px] font-medium flex-1" style={{ color: "var(--color-charcoal)" }}>{clientName(selectedInvoice)}</span>
-                    {isDraft && (
-                      <div ref={clientChooserRef} style={{ position: "relative" }}>
-                        <button onClick={() => { setClientChooserOpen((v) => !v); loadContacts(); }}
-                          className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg"
-                          style={{ color: "var(--color-charcoal)", border: "0.5px solid var(--color-border)" }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-off-white)")}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-                          <Pencil size={10} /> Change
-                        </button>
-                        {clientChooserOpen && (
-                          <ClientChooser
-                            contacts={allContacts}
-                            loaded={contactsLoaded}
-                            onPick={changeClient}
-                            onClose={() => setClientChooserOpen(false)}
-                          />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  {/* Project row */}
+                  {/* Project row — the client itself is changed from the header title. */}
                   <div className="flex items-center gap-3">
                     <span className="text-[11px] font-semibold uppercase tracking-wider shrink-0" style={{ color: "var(--color-grey)", width: 64 }}>Project</span>
                     {isDraft ? (
@@ -1073,66 +1083,17 @@ export default function InvoicesTab({
                 )}
               </div>
 
-              {/* Payment */}
+              {/* Notes — always-open editor */}
               <div className="rounded-xl overflow-hidden"
                 style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", boxShadow: cardShadow }}>
-                <div className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider"
-                  style={{ borderBottom: "0.5px solid var(--color-border)", color: "var(--color-grey)" }}>
-                  Payment
-                </div>
-                <div className="p-4 flex flex-col gap-2.5">
-                  {[
-                    { label: "Method", value: selectedInvoice.payment_method ?? "—" },
-                    { label: "Terms",  value: selectedInvoice.payment_terms  ?? "—" },
-                  ].map((row) => (
-                    <div key={row.label} className="flex items-baseline justify-between text-[11px]">
-                      <span style={{ color: "var(--color-grey)" }}>{row.label}</span>
-                      <span style={{ color: "var(--color-charcoal)", fontWeight: 500 }}>{row.value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Notes — editable */}
-              <div className="rounded-xl overflow-hidden"
-                style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", boxShadow: cardShadow }}>
-                <div className="flex items-center justify-between px-4 py-2.5"
-                  style={{ borderBottom: editingNotes ? "0.5px solid var(--color-border)" : "none" }}>
+                <div className="px-4 py-2.5" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
                   <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>Notes</p>
-                  {!editingNotes && (
-                    <button onClick={() => { setNotesDraft(selectedInvoice.notes ?? ""); setEditingNotes(true); }}
-                      className="text-[11px]" style={{ color: "var(--color-grey)" }}
-                      onMouseEnter={e => e.currentTarget.style.color = "var(--color-charcoal)"}
-                      onMouseLeave={e => e.currentTarget.style.color = "var(--color-grey)"}>Edit</button>
-                  )}
                 </div>
-                {editingNotes ? (
-                  <div className="p-3 flex flex-col gap-2">
-                    <textarea value={notesdraft} onChange={e => setNotesDraft(e.target.value)} rows={4} autoFocus
-                      placeholder="Payment instructions, bank details, thank-you note…"
-                      className="w-full px-3 py-2 text-[12px] rounded-lg focus:outline-none resize-none"
-                      style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit" }} />
-                    <div className="flex gap-2 justify-end">
-                      <button onClick={() => setEditingNotes(false)}
-                        className="px-3 py-1 text-[11px] rounded-lg"
-                        style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-                        onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
-                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}>Cancel</button>
-                      <button onClick={saveNotes} disabled={savingNotes}
-                        className="px-3 py-1 text-[11px] font-medium rounded-lg text-white disabled:opacity-50"
-                        style={{ background: "var(--color-sage)" }}>
-                        {savingNotes ? "Saving…" : "Save"}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="px-4 py-3" onClick={() => { setNotesDraft(selectedInvoice.notes ?? ""); setEditingNotes(true); }}
-                    style={{ cursor: "text", minHeight: 44 }}>
-                    {selectedInvoice.notes
-                      ? <p className="text-[11px]" style={{ color: "var(--color-grey)", lineHeight: 1.6 }}>{selectedInvoice.notes}</p>
-                      : <p className="text-[11px] italic" style={{ color: "var(--color-grey)" }}>Click to add payment instructions, bank details…</p>}
-                  </div>
-                )}
+                <NotesEditor
+                  key={selectedInvoice.id}
+                  value={selectedInvoice.notes ?? ""}
+                  onSave={(v) => saveInvoiceText("notes", v)}
+                />
               </div>
             </div>
           </div>
@@ -1339,6 +1300,70 @@ function ClientInfoFields({ email, phone, address, editable, onSave }: {
   );
 }
 
+// ─── Payment editor ───────────────────────────────────────────────────────────
+// Terms + method. Editable inputs (commit on blur) while draft; read-only
+// rows otherwise. Keyed by invoice id upstream so drafts reset cleanly.
+
+function PaymentEditor({ terms, method, editable, onSave }: {
+  terms: string;
+  method: string;
+  editable: boolean;
+  onSave: (field: "payment_terms" | "payment_method", value: string) => void;
+}) {
+  const [t, setT] = useState(terms);
+  const [m, setM] = useState(method);
+
+  if (!editable) {
+    return (
+      <div className="p-4 flex flex-col gap-2.5">
+        {[{ label: "Terms", value: terms || "—" }, { label: "Method", value: method || "—" }].map((r) => (
+          <div key={r.label} className="flex items-baseline justify-between text-[11px]">
+            <span style={{ color: "var(--color-grey)" }}>{r.label}</span>
+            <span style={{ color: "var(--color-charcoal)", fontWeight: 500 }}>{r.value}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  const fieldStyle = { background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit" };
+  return (
+    <div className="p-4 flex gap-3">
+      <div className="flex-1">
+        <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--color-grey)" }}>Payment terms</label>
+        <input value={t} onChange={(e) => setT(e.target.value)}
+          onBlur={() => { if (t.trim() !== terms.trim()) onSave("payment_terms", t); }}
+          placeholder="Net 14"
+          className="w-full px-2.5 py-1.5 text-[12px] rounded-lg focus:outline-none" style={fieldStyle} />
+      </div>
+      <div className="flex-1">
+        <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--color-grey)" }}>Payment method</label>
+        <input value={m} onChange={(e) => setM(e.target.value)}
+          onBlur={() => { if (m.trim() !== method.trim()) onSave("payment_method", m); }}
+          placeholder="Bank transfer"
+          className="w-full px-2.5 py-1.5 text-[12px] rounded-lg focus:outline-none" style={fieldStyle} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Notes editor ─────────────────────────────────────────────────────────────
+// Always-open textarea; commits on blur. Keyed by invoice id upstream.
+
+function NotesEditor({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const [v, setV] = useState(value);
+  return (
+    <div className="p-3">
+      <textarea value={v} onChange={(e) => setV(e.target.value)}
+        onBlur={() => { if (v.trim() !== value.trim()) onSave(v); }}
+        rows={4}
+        placeholder="Payment instructions, bank details, thank-you note…"
+        className="w-full px-3 py-2 text-[12px] rounded-lg focus:outline-none resize-none"
+        style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit" }} />
+    </div>
+  );
+}
+
 // ─── Client chooser ───────────────────────────────────────────────────────────
 // Compact searchable contact list for re-pointing a draft invoice at a
 // different client.
@@ -1358,7 +1383,7 @@ function ClientChooser({ contacts, loaded, onPick, onClose }: {
     (c.email ?? "").toLowerCase().includes(q)
   );
   return (
-    <div className="absolute right-0 mt-1 rounded-xl overflow-hidden z-30"
+    <div className="absolute left-0 mt-1 rounded-xl overflow-hidden z-30"
       style={{ top: "100%", width: 280, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 24px rgba(31,33,26,0.14)" }}>
       <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: "0.5px solid var(--color-border)", background: "var(--color-warm-white)" }}>
         <Search size={12} style={{ color: "var(--color-grey)" }} />
