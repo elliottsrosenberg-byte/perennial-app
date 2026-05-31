@@ -47,7 +47,7 @@ export default async function PublicInvoicePage({
 
   const { data } = await supabase
     .from("invoices")
-    .select("*, client_contact:contacts(id, first_name, last_name, email, phone, location), client_organization:organizations(id, name, email, phone, location), project:projects(id, title), line_items:invoice_line_items(*)")
+    .select("*, client_contact:contacts(id, first_name, last_name, email, phone, location), client_organization:organizations(id, name, email, phone, location), project:projects(id, title), line_items:invoice_line_items(*), attachments:invoice_attachments(id, name, url)")
     .eq("public_token", token)
     .maybeSingle();
 
@@ -325,6 +325,20 @@ export default async function PublicInvoicePage({
                 <div style={{ marginTop: 28, paddingTop: 20, borderTop: "1px solid #eff0e7" }}>
                   <div className="pi-meta-label">Notes</div>
                   <p style={{ fontSize: 12, color: "#6b6860", lineHeight: 1.6 }}>{inv.notes}</p>
+                </div>
+              )}
+
+              {(inv.attachments ?? []).length > 0 && (
+                <div style={{ marginTop: 28, paddingTop: 20, borderTop: "1px solid #eff0e7" }}>
+                  <div className="pi-meta-label">Attachments</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
+                    {(inv.attachments ?? []).map((a) => (
+                      <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 12, color: "#3d6b4f", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <span aria-hidden>📎</span> {a.name}
+                      </a>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

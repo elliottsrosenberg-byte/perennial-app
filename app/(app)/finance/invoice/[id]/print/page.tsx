@@ -30,7 +30,7 @@ export default async function InvoicePrintPage({ params, searchParams }: { param
 
   const { data } = await supabase
     .from("invoices")
-    .select("*, client_contact:contacts(id, first_name, last_name, email, phone, location, organization_id), client_organization:organizations(id, name, email, phone, location), project:projects(id, title, rate), line_items:invoice_line_items(*)")
+    .select("*, client_contact:contacts(id, first_name, last_name, email, phone, location, organization_id), client_organization:organizations(id, name, email, phone, location), project:projects(id, title, rate), line_items:invoice_line_items(*), attachments:invoice_attachments(id, name, url)")
     .eq("id", id)
     .single();
 
@@ -283,6 +283,17 @@ export default async function InvoicePrintPage({ params, searchParams }: { param
                 <div className="footer-val">{inv.notes}</div>
               </div>
             )}
+          </div>
+        )}
+
+        {(inv.attachments ?? []).length > 0 && (
+          <div style={{ marginTop: 24, paddingTop: 16, borderTop: "1px solid #eff0e7" }}>
+            <div className="footer-label">Attachments</div>
+            {(inv.attachments ?? []).map((a) => (
+              <div key={a.id} className="footer-val">
+                <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ color: "#3d6b4f" }}>{a.name}</a>
+              </div>
+            ))}
           </div>
         )}
       </div>

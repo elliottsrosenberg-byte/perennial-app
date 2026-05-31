@@ -105,11 +105,14 @@ export async function POST(req: Request) {
     }
   }
 
-  // 2c. Expenses → one row each, qty=1, rate=amount.
+  // 2c. Expenses → one row each, qty=1, rate=amount. Expenses with a receipt
+  // also auto-attach that receipt to the invoice (collected here, inserted
+  // after the line items in step 3b).
+  const receiptAttachments: Array<Record<string, unknown>> = [];
   if (body.expense_ids && body.expense_ids.length > 0) {
     const { data: exps } = await supabase
       .from("expenses")
-      .select("id, description, amount")
+      .select("id, description, amount, receipt_url")
       .in("id", body.expense_ids)
       .eq("user_id", user.id);
     for (const x of exps ?? []) {
@@ -124,6 +127,16 @@ export async function POST(req: Request) {
         source:      "expense",
         expense_id:  x.id,
       });
+      if (x.receipt_url) {
+        receiptAttachments.push({
+          invoice_id: inv.id,
+          user_id:    user.id,
+          name:       `${x.description || "Expense"} — receipt`,
+          url:        x.receipt_url,
+          path:       null,
+          source:     "expense_receipt",
+        });
+      }
     }
   }
 
@@ -152,10 +165,15 @@ export async function POST(req: Request) {
     }
   }
 
+  // 3b. Auto-attach any pulled expense receipts (non-fatal).
+  if (receiptAttachments.length > 0) {
+    await supabase.from("invoice_attachments").insert(receiptAttachments);
+  }
+
   // 4. Re-fetch the invoice with all joins for the client.
   const { data: full } = await supabase
     .from("invoices")
-    .select("*, client_contact:contacts(id, first_name, last_name, email, phone, location), client_organization:organizations(id, name, email, phone, location), project:projects(id, title, rate), line_items:invoice_line_items(*)")
+    .select("*, client_contact:contacts(id, first_name, last_name, email, phone, location), client_organization:organizations(id, name, email, phone, location), project:projects(id, title, rate), line_items:invoice_line_items(*), attachments:invoice_attachments(*)")
     .eq("id", inv.id)
     .single();
 
