@@ -40,6 +40,7 @@ interface Profile {
   notif_deadlines:      boolean;
   notif_invoice_due:    boolean;
   notif_overdue:        boolean;
+  notif_payment_received: boolean;
   notif_weekly:         boolean;
   notif_monthly:        boolean;
   tour_dismissed:       boolean;
@@ -81,7 +82,7 @@ const DEFAULT_PROFILE: Profile = {
   invoice_prefix: "INV-", payment_terms: "Net 30",
   address: "", phone: "", ein: "", logo_url: null, logo_path: null,
   notif_email_enabled: true, notif_deadlines: true, notif_invoice_due: true,
-  notif_overdue: true, notif_weekly: false, notif_monthly: false,
+  notif_overdue: true, notif_payment_received: true, notif_weekly: false, notif_monthly: false,
   tour_dismissed: false,
 };
 
@@ -479,6 +480,7 @@ export default function SettingsPage() {
           notif_deadlines:     prof.notif_deadlines ?? true,
           notif_invoice_due:   prof.notif_invoice_due ?? true,
           notif_overdue:       prof.notif_overdue ?? true,
+          notif_payment_received: prof.notif_payment_received ?? true,
           notif_weekly:        prof.notif_weekly ?? false,
           notif_monthly:       prof.notif_monthly ?? false,
           tour_dismissed:      prof.tour_dismissed ?? false,
@@ -530,6 +532,7 @@ export default function SettingsPage() {
         notif_deadlines:      profile.notif_deadlines,
         notif_invoice_due:    profile.notif_invoice_due,
         notif_overdue:        profile.notif_overdue,
+        notif_payment_received: profile.notif_payment_received,
         notif_weekly:         profile.notif_weekly,
         notif_monthly:        profile.notif_monthly,
         tour_dismissed:       profile.tour_dismissed,
@@ -1084,6 +1087,7 @@ export default function SettingsPage() {
                     { label: "Project deadline reminders",  sub: "3 days before a project due date",        key: "notif_deadlines"   as const },
                     { label: "Invoice due date reminders",  sub: "3 days before an invoice becomes due",     key: "notif_invoice_due" as const },
                     { label: "Overdue invoice alerts",      sub: "When an invoice passes its due date",      key: "notif_overdue"     as const },
+                    { label: "Payment confirmations",       sub: "When an invoice is paid — to you and the client", key: "notif_payment_received" as const },
                     { label: "Weekly summary",              sub: "Every Monday — projects, finances, todos", key: "notif_weekly"      as const },
                     { label: "Monthly finance summary",     sub: "First of each month — billing overview",   key: "notif_monthly"     as const },
                   ].map(({ label, sub, key }) => (
