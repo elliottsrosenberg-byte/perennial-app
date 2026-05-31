@@ -216,43 +216,27 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: () =>
   );
 }
 
-// Brand-color picker — a design-system-styled swatch + popover (preset grid)
-// plus a hex field, in place of the browser's native OS color picker.
-const BRAND_PRESETS = [
-  "#9BA37A", "#3D6B4F", "#4A6232", "#1F211A", "#6B6860", "#7B94A3",
-  "#2563AB", "#B8860B", "#D4A017", "#C97B5A", "#DC3E0D", "#8A6D8F",
-];
+// Brand-color picker — the native color input (full any-color spectrum), with
+// a hex field alongside. The swatch is the clickable color input itself.
 function BrandColorField({ value, onChange }: { value: string | null; onChange: (v: string) => void }) {
-  const [open, setOpen] = useState(false);
   const current = (value && value.trim()) || "#9ba37a";
   return (
-    <div className="relative" style={{ width: "fit-content" }}>
-      <div className="flex items-center gap-2">
-        <button type="button" onClick={() => setOpen((v) => !v)} aria-label="Choose brand color"
-          style={{ width: 38, height: 38, aspectRatio: "1 / 1", borderRadius: 8, border: "0.5px solid var(--color-border)", background: current, cursor: "pointer" }} />
-        <div style={{ width: 140 }}>
-          <TextInput value={value ?? ""} onChange={onChange} placeholder="#9ba37a" />
-        </div>
+    <div className="flex items-center gap-2" style={{ width: "fit-content" }}>
+      <label
+        title="Pick any color"
+        style={{ position: "relative", width: 38, height: 38, aspectRatio: "1 / 1", borderRadius: 8, border: "0.5px solid var(--color-border)", background: current, cursor: "pointer", overflow: "hidden", display: "block" }}
+      >
+        <input
+          type="color"
+          value={current}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label="Brand color"
+          style={{ position: "absolute", inset: 0, width: "200%", height: "200%", border: "none", padding: 0, margin: 0, cursor: "pointer", opacity: 0 }}
+        />
+      </label>
+      <div style={{ width: 140 }}>
+        <TextInput value={value ?? ""} onChange={onChange} placeholder="#9ba37a" />
       </div>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 mt-2 z-20 rounded-xl p-3"
-            style={{ top: "100%", width: 224, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 24px rgba(31,33,26,0.14)" }}>
-            <p className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: "var(--color-grey)" }}>Presets</p>
-            <div className="grid grid-cols-6 gap-2">
-              {BRAND_PRESETS.map((c) => {
-                const sel = current.toLowerCase() === c.toLowerCase();
-                return (
-                  <button key={c} type="button" title={c} onClick={() => { onChange(c); setOpen(false); }}
-                    style={{ width: 24, height: 24, aspectRatio: "1 / 1", borderRadius: 6, background: c, cursor: "pointer", border: sel ? "2px solid var(--color-charcoal)" : "0.5px solid var(--color-border)" }} />
-                );
-              })}
-            </div>
-            <p className="text-[10px] mt-3" style={{ color: "var(--color-grey)" }}>Or type any hex code in the field.</p>
-          </div>
-        </>
-      )}
     </div>
   );
 }

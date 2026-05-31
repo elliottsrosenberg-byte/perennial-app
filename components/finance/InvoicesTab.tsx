@@ -10,6 +10,7 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
 import { formatInvoiceNumber, paymentMethodLabel } from "@/lib/invoices/format";
+import { buildInvoiceEmailHtml } from "@/lib/invoices/email-template";
 import { X, Download, Send, FileText, MoreHorizontal, Plus, Clock, Receipt, CheckCircle2, Sparkles, ChevronDown, Link2, Check, Pencil, Search, ArrowUpDown, ArrowUp, ArrowDown, ListFilter, Paperclip } from "lucide-react";
 
 // Canonical join used whenever we re-fetch a single invoice after a write,
@@ -135,72 +136,28 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
               {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
             </div>
 
-            {/* Live email preview — mirrors the actual email layout. */}
-            <div className="flex-1 overflow-y-auto p-6" style={{ background: "#f5f4f1" }}>
-              <p className="text-[10px] font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--color-grey)" }}>Email preview · to {to || "client"}</p>
-              <div style={{ maxWidth: 600, margin: "0 auto", background: "white", borderRadius: 12, overflow: "hidden", boxShadow: "0 2px 20px rgba(0,0,0,0.08)" }}>
-                {/* Header */}
-                <div style={{ background: "#1f211a", padding: "24px 32px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  {logoUrl
-                    // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={logoUrl} alt={studioName} style={{ height: 30, maxWidth: 170, objectFit: "contain" }} />
-                    : <span style={{ color: "white", fontSize: 17, fontWeight: 700, letterSpacing: "-0.02em" }}>{studioName}</span>}
-                  <span style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>Invoice {invNum}</span>
-                </div>
-                {/* Body */}
-                <div style={{ padding: "28px 32px" }}>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: "#1f211a", margin: "0 0 8px" }}>Invoice from {studioName}</p>
-                  <p style={{ fontSize: 13, color: "#6b6860", margin: "0 0 20px", lineHeight: 1.6, whiteSpace: "pre-line" }}>{message}</p>
-
-                  <div style={{ background: "#f9faf4", borderRadius: 8, padding: "14px 18px", marginBottom: 20, display: "flex", gap: 28 }}>
-                    <div><div style={{ fontSize: 10, color: "#9a9690" }}>Invoice #</div><div style={{ fontSize: 13, fontWeight: 600, color: "#1f211a" }}>{invNum}</div></div>
-                    <div><div style={{ fontSize: 10, color: "#9a9690" }}>Issued</div><div style={{ fontSize: 13, color: "#1f211a" }}>{fmtDate(invoice.issued_at)}</div></div>
-                    {invoice.due_at && <div><div style={{ fontSize: 10, color: "#9a9690" }}>Due</div><div style={{ fontSize: 13, color: "#1f211a" }}>{fmtDate(invoice.due_at)}</div></div>}
-                  </div>
-
-                  {lineItems.length > 0 && (
-                    <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
-                      <thead>
-                        <tr>
-                          <th style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "#9a9690", textAlign: "left", padding: "0 0 8px", borderBottom: "2px solid #f0ede8" }}>Description</th>
-                          <th style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "#9a9690", textAlign: "right", padding: "0 0 8px", borderBottom: "2px solid #f0ede8" }}>Qty</th>
-                          <th style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "#9a9690", textAlign: "right", padding: "0 0 8px", borderBottom: "2px solid #f0ede8" }}>Rate</th>
-                          <th style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "#9a9690", textAlign: "right", padding: "0 0 8px", borderBottom: "2px solid #f0ede8" }}>Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {lineItems.map((li) => (
-                          <tr key={li.id}>
-                            <td style={{ padding: "10px 0", borderBottom: "1px solid #f0ede8", fontSize: 13, color: "#1f211a" }}>{li.description}</td>
-                            <td style={{ padding: "10px 0", borderBottom: "1px solid #f0ede8", fontSize: 13, color: "#9a9690", textAlign: "right" }}>{li.quantity}</td>
-                            <td style={{ padding: "10px 0", borderBottom: "1px solid #f0ede8", fontSize: 13, color: "#9a9690", textAlign: "right" }}>{fmtCurrency(li.rate)}</td>
-                            <td style={{ padding: "10px 0", borderBottom: "1px solid #f0ede8", fontSize: 13, fontWeight: 500, color: "#1f211a", textAlign: "right" }}>{fmtCurrency(Number(li.amount))}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
-                    <div style={{ minWidth: 200 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingTop: 12, borderTop: "2px solid #1f211a" }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "#1f211a" }}>Total due</span>
-                        <span style={{ fontSize: 22, fontWeight: 700, color: "#1f211a" }}>{fmtCurrency(total)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ textAlign: "center", marginBottom: 10 }}>
-                    <span style={{ background: accent, color: "white", padding: "12px 24px", borderRadius: 8, fontSize: 13, fontWeight: 600, display: "inline-block" }}>View &amp; pay invoice →</span>
-                  </div>
-                  <div style={{ textAlign: "center" }}>
-                    <span style={{ fontSize: 12, color: "#6b6860", textDecoration: "underline" }}>Or download a PDF</span>
-                  </div>
-                </div>
-                <div style={{ background: "#f9faf4", padding: "14px 32px", borderTop: "1px solid #eff0e7" }}>
-                  <span style={{ fontSize: 11, color: "#9a9690" }}>Sent securely via Perennial</span>
-                </div>
-              </div>
+            {/* Live email preview — renders the exact same HTML the email
+                uses, in an iframe, so the preview matches the inbox 1:1. */}
+            <div className="flex-1 flex flex-col min-h-0" style={{ background: "#f5f4f1" }}>
+              <p className="text-[10px] font-semibold uppercase tracking-wider px-6 pt-4 pb-2 shrink-0" style={{ color: "var(--color-grey)" }}>Email preview · to {to || "client"}</p>
+              <iframe
+                title="Email preview"
+                className="flex-1 min-h-0 w-full"
+                style={{ border: "none" }}
+                srcDoc={buildInvoiceEmailHtml({
+                  invNum,
+                  studioName,
+                  accent,
+                  logoUrl,
+                  message,
+                  issuedLabel: fmtDate(invoice.issued_at),
+                  dueLabel:    invoice.due_at ? fmtDate(invoice.due_at) : null,
+                  lineItems:   lineItems.map((li) => ({ description: li.description, quantity: li.quantity, rate: Number(li.rate), amount: Number(li.amount) })),
+                  total,
+                  publicUrl:   "#",
+                  printUrl:    "#",
+                })}
+              />
             </div>
           </div>
         )}
@@ -839,8 +796,8 @@ export default function InvoicesTab({
             ))}
           </div>
 
-          {/* Filter + sort controls */}
-          <div className="flex items-center gap-2">
+          {/* Filter + sort controls — right-aligned */}
+          <div className="flex items-center justify-end gap-2">
             {/* Status multi-select — icon only, matches the sort icon */}
             <div ref={statusMenuRef} className="relative">
               <button type="button" onClick={() => { setStatusMenuOpen((v) => !v); setSortMenuOpen(false); }}
@@ -854,7 +811,7 @@ export default function InvoicesTab({
                 )}
               </button>
               {statusMenuOpen && (
-                <div className="absolute left-0 mt-1 rounded-xl overflow-hidden z-30"
+                <div className="absolute right-0 mt-1 rounded-xl overflow-hidden z-30"
                   style={{ top: "100%", width: 200, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 24px rgba(31,33,26,0.14)" }}>
                   {STATUS_KEYS.map((k) => {
                     const on = statusFilter.has(k);
