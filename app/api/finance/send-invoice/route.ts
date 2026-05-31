@@ -23,7 +23,7 @@ function clientName(inv: Invoice) {
   return "Client";
 }
 
-function buildEmail(inv: Invoice, to: string, message: string, appUrl: string, publicToken: string, invoicePrefix: string | null | undefined) {
+function buildEmail(inv: Invoice, to: string, message: string, appUrl: string, publicToken: string, invoicePrefix: string | null | undefined, studioName: string) {
   const total = invoiceTotal(inv);
   const invNum = formatInvoiceNumber(inv.number, invoicePrefix);
   const printUrl  = `${appUrl}/finance/invoice/${inv.id}/print`;
@@ -44,13 +44,13 @@ function buildEmail(inv: Invoice, to: string, message: string, appUrl: string, p
   <div style="max-width:600px;margin:40px auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.08);">
     <!-- Header -->
     <div style="background:#1f211a;padding:28px 36px;display:flex;justify-content:space-between;align-items:center;">
-      <div style="color:white;font-size:18px;font-weight:700;letter-spacing:-0.02em;">Perennial</div>
+      <div style="color:white;font-size:18px;font-weight:700;letter-spacing:-0.02em;">${studioName}</div>
       <div style="color:rgba(255,255,255,0.6);font-size:12px;">Invoice ${invNum}</div>
     </div>
 
     <!-- Body -->
     <div style="padding:32px 36px;">
-      <p style="font-size:15px;font-weight:600;color:#1f211a;margin:0 0 8px;">Invoice from your studio</p>
+      <p style="font-size:15px;font-weight:600;color:#1f211a;margin:0 0 8px;">Invoice from ${studioName}</p>
       <p style="font-size:13px;color:#6b6860;margin:0 0 24px;line-height:1.6;">${message.replace(/\n/g, "<br>")}</p>
 
       <!-- Meta -->
@@ -153,15 +153,17 @@ export async function POST(req: Request) {
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? `${new URL(req.url).origin}`;
 
-  // Pull the user's invoice_prefix so the email subject + header use the
-  // configured prefix (e.g. "INV-007") instead of a bare "#007".
+  // Pull the user's invoice_prefix + studio identity so the email uses the
+  // configured prefix (e.g. "INV-007") and the studio's own name in the
+  // header instead of Perennial branding.
   const { data: profile } = await supabase
     .from("profiles")
-    .select("invoice_prefix")
+    .select("invoice_prefix, studio_name, display_name")
     .eq("user_id", (inv as Invoice).user_id)
     .maybeSingle();
+  const studioName = profile?.studio_name?.trim() || profile?.display_name?.trim() || "Your studio";
 
-  const built = buildEmail(inv as Invoice, to, message, appUrl, publicToken, profile?.invoice_prefix);
+  const built = buildEmail(inv as Invoice, to, message, appUrl, publicToken, profile?.invoice_prefix, studioName);
   const finalSubject = subject?.trim() || built.subject;
 
   const { Resend } = await import("resend");
