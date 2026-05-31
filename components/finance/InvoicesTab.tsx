@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Invoice, InvoiceLineItem, TimeEntry, Expense, Project, Contact, Organization } from "@/types/database";
+import type { Invoice, InvoiceLineItem, InvoiceStatus, TimeEntry, Expense, Project, Contact, Organization } from "@/types/database";
 import EmptyState from "@/components/ui/EmptyState";
 import Menu from "@/components/ui/Menu";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -125,7 +125,7 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
   );
 }
 
-type Filter = "all" | "overdue" | "sent" | "draft" | "paid";
+type Filter = "all" | "draft" | "saved" | "sent" | "overdue" | "paid" | "voided";
 
 function isOverdue(inv: Invoice) {
   return inv.status === "sent" && !!inv.due_at && inv.due_at < new Date().toISOString().split("T")[0];
@@ -154,10 +154,22 @@ function fmtHours(mins: number) { return `${(mins / 60).toFixed(1)}h`; }
 
 const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
   draft:   { bg: "var(--color-grey)",            color: "white", label: "Draft"   },
+  saved:   { bg: "#b8860b",                       color: "white", label: "Saved"   },
   sent:    { bg: "#2563ab",                       color: "white", label: "Sent"    },
   paid:    { bg: "var(--color-sage)",             color: "white", label: "Paid"    },
   overdue: { bg: "var(--color-red-orange)",       color: "white", label: "Overdue" },
+  voided:  { bg: "var(--color-grey)",             color: "white", label: "Void"    },
 };
+
+// Left-stripe color per status for the list rows.
+function stripeFor(status: string, overdue: boolean): string {
+  if (overdue) return "var(--color-red-orange)";
+  if (status === "paid")   return "var(--color-sage)";
+  if (status === "sent")   return "#2563ab";
+  if (status === "saved")  return "#b8860b";
+  if (status === "voided") return "var(--color-grey)";
+  return "var(--color-border)"; // draft
+}
 
 // Shared grid template for the line-items table (description | qty | rate | amount | actions).
 const LINE_GRID = "1fr 70px 80px 90px 46px";
@@ -188,11 +200,9 @@ export default function InvoicesTab({
   const [numberDraft, setNumberDraft]         = useState("");
   const [savingNumber, setSavingNumber]       = useState(false);
   const [numberError, setNumberError]         = useState<string | null>(null);
-  // Inline line-item editing (draft mode).
-  const [editingLineId, setEditingLineId]     = useState<string | null>(null);
-  const [editDesc, setEditDesc]               = useState("");
-  const [editQty, setEditQty]                 = useState("");
-  const [editRate, setEditRate]               = useState("");
+  // Saved invoices are edited behind a pencil toggle (drafts are open by
+  // default). This flag opens a saved invoice's fields for editing.
+  const [editingSaved, setEditingSaved]       = useState(false);
   // Client chooser — lazily loads the contact list the first time it opens.
   const [clientChooserOpen, setClientChooserOpen] = useState(false);
   const [allContacts, setAllContacts]         = useState<Contact[]>([]);
@@ -213,7 +223,14 @@ export default function InvoicesTab({
   const pullerRef = useRef<HTMLDivElement>(null);
 
   const selectedInvoice = invoices.find((i) => i.id === selectedId) ?? null;
-  const isDraft = selectedInvoice?.status === "draft";
+  const status = selectedInvoice?.status;
+  const isDraft = status === "draft";
+  const isSaved = status === "saved";
+  // Fields are open while a draft, or while a saved invoice is being edited
+  // via the pencil. Sent / paid / voided invoices render the PDF preview.
+  const editable = isDraft || (isSaved && editingSaved);
+  // Sent / paid / voided show the invoice as the client sees it (PDF view).
+  const showPdfView = status === "sent" || status === "paid" || status === "voided";
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -229,7 +246,7 @@ export default function InvoicesTab({
   // carry one invoice's draft over to another.
   useEffect(() => {
     setEditingNumber(false); setNumberError(null);
-    setEditingLineId(null); setClientChooserOpen(false);
+    setEditingSaved(false); setClientChooserOpen(false);
   }, [selectedId]);
 
   const filteredInvoices = useMemo(() => invoices.filter((inv) => {
@@ -291,7 +308,7 @@ export default function InvoicesTab({
     );
   }, [selectedInvoice?.project_id, expenses, invoicedExpenseIds]);
 
-  async function updateStatus(inv: Invoice, status: "draft" | "sent" | "paid") {
+  async function updateStatus(inv: Invoice, status: InvoiceStatus) {
     setSavingStatus(true);
     const supabase = createClient();
     const patch: Record<string, unknown> = { status };
@@ -401,28 +418,21 @@ export default function InvoicesTab({
     if (data) onInvoiceUpdated(data as Invoice);
   }
 
-  function startEditLine(li: InvoiceLineItem) {
-    setEditingLineId(li.id);
-    setEditDesc(li.description);
-    setEditQty(String(li.quantity));
-    setEditRate(String(li.rate));
-  }
-  async function saveEditLine() {
-    if (!selectedInvoice || !editingLineId) return;
-    const qty = parseFloat(editQty) || 0;
-    const rate = parseFloat(editRate) || 0;
-    const amount = parseFloat((qty * rate).toFixed(2));
+  // Commit an inline edit to a single line item (open-by-default rows commit
+  // on blur). amount is recomputed from qty × rate.
+  async function saveLineItem(id: string, patch: { description: string; quantity: number; rate: number }) {
+    if (!selectedInvoice) return;
+    const amount = parseFloat((patch.quantity * patch.rate).toFixed(2));
     const supabase = createClient();
     const { data } = await supabase.from("invoice_line_items")
-      .update({ description: editDesc.trim() || "—", quantity: qty, rate, amount })
-      .eq("id", editingLineId)
+      .update({ ...patch, amount })
+      .eq("id", id)
       .select("*")
       .single();
     if (data) {
-      const updated = { ...selectedInvoice, line_items: (selectedInvoice.line_items ?? []).map((li) => li.id === editingLineId ? data as InvoiceLineItem : li) };
+      const updated = { ...selectedInvoice, line_items: (selectedInvoice.line_items ?? []).map((li) => li.id === id ? data as InvoiceLineItem : li) };
       onInvoiceUpdated(updated as Invoice);
     }
-    setEditingLineId(null);
   }
 
   async function addLineItem() {
@@ -532,7 +542,9 @@ export default function InvoicesTab({
     overdue: invoices.filter(isOverdue).length,
     sent: invoices.filter((i) => i.status === "sent" && !isOverdue(i)).length,
     draft: invoices.filter((i) => i.status === "draft").length,
+    saved: invoices.filter((i) => i.status === "saved").length,
     paid: invoices.filter((i) => i.status === "paid").length,
+    voided: invoices.filter((i) => i.status === "voided").length,
   };
 
   const inputCls = "px-2 py-1.5 text-[12px] rounded-lg focus:outline-none";
@@ -552,7 +564,7 @@ export default function InvoicesTab({
           <p className="text-[13px] font-semibold mb-2"
             style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>All invoices</p>
           <div className="flex flex-wrap gap-1.5">
-            {(["all","overdue","sent","draft","paid"] as Filter[]).map((f) => {
+            {(["all","draft","saved","sent","overdue","paid","voided"] as Filter[]).map((f) => {
               const active = filter === f;
               const overdueFilter = f === "overdue";
               return (
@@ -603,11 +615,7 @@ export default function InvoicesTab({
             // Left stripe carries status color so it's legible even when the
             // row isn't selected. Selection widens the stripe (3px → reads as
             // active without changing the row's chrome).
-            const stripeColor = overdue
-              ? "var(--color-red-orange)"
-              : inv.status === "paid" ? "var(--color-sage)"
-              : inv.status === "sent" ? "#2563ab"
-              : "var(--color-border)";
+            const stripeColor = stripeFor(inv.status, overdue);
             return (
               <div key={inv.id}
                 className="px-4 py-3 cursor-pointer"
@@ -773,9 +781,77 @@ export default function InvoicesTab({
               );
             })()}
 
-            {/* Contextual primary action */}
-            {selectedInvoice.status === "draft" && (
-              <>
+            {/* Action cluster — ⋯ menu on the left, primary green CTA on the right. */}
+            <div className="flex items-center gap-2">
+              {/* Overflow menu (leftmost) */}
+              <div ref={menuRef} style={{ position: "relative" }}>
+                <button onClick={() => setMenuOpen((v) => !v)}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg"
+                  style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--color-warm-white)"}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
+                  <MoreHorizontal size={14} />
+                </button>
+                {menuOpen && (
+                  <Menu
+                    onClose={() => setMenuOpen(false)}
+                    style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, minWidth: 200, zIndex: 30 }}
+                    items={[
+                      { label: "Download PDF", icon: Download, href: `/finance/invoice/${selectedInvoice.id}/print`, external: true },
+                      "divider",
+                      ...(selectedInvoice.status !== "draft" ? [{ label: "Move to draft", onClick: () => updateStatus(selectedInvoice, "draft") }] : []),
+                      ...((selectedInvoice.status === "draft" || selectedInvoice.status === "saved") ? [{ label: "Mark as sent", onClick: () => updateStatus(selectedInvoice, "sent") }] : []),
+                      ...((selectedInvoice.status === "draft" || selectedInvoice.status === "saved" || selectedInvoice.status === "sent") ? [{ label: "Mark as paid", onClick: () => updateStatus(selectedInvoice, "paid") }] : []),
+                      ...((selectedInvoice.status === "saved" || selectedInvoice.status === "sent") ? [{ label: "Void invoice", onClick: () => updateStatus(selectedInvoice, "voided") }] : []),
+                      "divider",
+                      { label: "Delete invoice", danger: true, onClick: () => setConfirmDelete(true) },
+                    ]}
+                  />
+                )}
+              </div>
+
+              {/* Overdue badge */}
+              {selectedInvoice.status === "sent" && isOverdue(selectedInvoice) && (
+                <span className="text-[10px] font-semibold px-2 py-1 rounded"
+                  style={{ background: "rgba(220,62,13,0.10)", color: "var(--color-red-orange)" }}>
+                  {overdueDays}d overdue
+                </span>
+              )}
+
+              {/* Copy public link — meaningful once shared (sent / paid). */}
+              {(selectedInvoice.status === "sent" || selectedInvoice.status === "paid") && (
+                <CopyPublicLinkButton invoiceId={selectedInvoice.id} />
+              )}
+
+              {/* Secondary action */}
+              {selectedInvoice.status === "draft" && (
+                <button onClick={() => updateStatus(selectedInvoice, "saved")} disabled={savingStatus}
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-semibold rounded-lg disabled:opacity-50 transition-colors"
+                  style={{ color: "var(--color-charcoal)", border: "0.5px solid var(--color-border)", background: "transparent" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "var(--color-warm-white)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  <Check size={12} />
+                  {savingStatus ? "…" : "Save"}
+                </button>
+              )}
+              {selectedInvoice.status === "saved" && (
+                <button onClick={() => setEditingSaved((v) => !v)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-semibold rounded-lg transition-colors"
+                  style={{ color: "var(--color-charcoal)", border: "0.5px solid var(--color-border)", background: editingSaved ? "var(--color-warm-white)" : "transparent" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "var(--color-warm-white)"}
+                  onMouseLeave={e => e.currentTarget.style.background = editingSaved ? "var(--color-warm-white)" : "transparent"}>
+                  <Pencil size={12} />
+                  {editingSaved ? "Done" : "Edit"}
+                </button>
+              )}
+              {selectedInvoice.status === "paid" && (
+                <span className="text-[11px] font-medium" style={{ color: "var(--color-sage)" }}>
+                  Paid {fmtDate(selectedInvoice.paid_at)}
+                </span>
+              )}
+
+              {/* Primary green CTA (rightmost) */}
+              {(selectedInvoice.status === "draft" || selectedInvoice.status === "saved") && (
                 <button onClick={() => setShowSendModal(true)}
                   className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-semibold rounded-lg text-white"
                   style={{ background: "var(--color-sage)" }}
@@ -784,72 +860,24 @@ export default function InvoicesTab({
                   <Send size={12} />
                   Send invoice
                 </button>
-                <button onClick={() => updateStatus(selectedInvoice, "sent")} disabled={savingStatus}
-                  className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-semibold rounded-lg disabled:opacity-50 transition-colors"
-                  style={{ color: "var(--color-charcoal)", border: "0.5px solid var(--color-border)", background: "transparent" }}
-                  onMouseEnter={e => e.currentTarget.style.background = "var(--color-warm-white)"}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                  <Check size={12} />
-                  {savingStatus ? "…" : "Mark as sent"}
-                </button>
-              </>
-            )}
-            {selectedInvoice.status === "sent" && (
-              <div className="flex items-center gap-2">
-                {isOverdue(selectedInvoice) && (
-                  <span className="text-[10px] font-semibold px-2 py-1 rounded"
-                    style={{ background: "rgba(220,62,13,0.10)", color: "var(--color-red-orange)" }}>
-                    {overdueDays}d overdue
-                  </span>
-                )}
+              )}
+              {selectedInvoice.status === "sent" && (
                 <button onClick={() => updateStatus(selectedInvoice, "paid")} disabled={savingStatus}
                   className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-semibold rounded-lg text-white disabled:opacity-50"
                   style={{ background: "var(--color-sage)" }}>
                   <CheckCircle2 size={12} />
                   {savingStatus ? "…" : "Mark paid"}
                 </button>
-              </div>
-            )}
-            {selectedInvoice.status === "paid" && (
-              <span className="text-[11px] font-medium"
-                style={{ color: "var(--color-sage)" }}>
-                Paid {fmtDate(selectedInvoice.paid_at)}
-              </span>
-            )}
-
-            {/* Public link affordance — available on every status, including
-                drafts (the endpoint mints a token on demand). */}
-            <CopyPublicLinkButton invoiceId={selectedInvoice.id} />
-
-            {/* Overflow menu */}
-            <div ref={menuRef} style={{ position: "relative" }}>
-              <button onClick={() => setMenuOpen((v) => !v)}
-                className="w-8 h-8 flex items-center justify-center rounded-lg"
-                style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--color-warm-white)"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
-                <MoreHorizontal size={14} />
-              </button>
-              {menuOpen && (
-                <Menu
-                  onClose={() => setMenuOpen(false)}
-                  style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, minWidth: 200, zIndex: 30 }}
-                  items={[
-                    { label: "Download PDF", icon: Download, href: `/finance/invoice/${selectedInvoice.id}/print`, external: true },
-                    "divider",
-                    ...(selectedInvoice.status !== "draft" ? [{ label: "Move to draft",  onClick: () => updateStatus(selectedInvoice, "draft") }] : []),
-                    ...(selectedInvoice.status === "paid"  ? [{ label: "Mark as sent",   onClick: () => updateStatus(selectedInvoice, "sent")  }] : []),
-                    ...(selectedInvoice.status !== "paid"  ? [{ label: "Mark as paid",   onClick: () => updateStatus(selectedInvoice, "paid")  }] : []),
-                    "divider",
-                    { label: "Delete invoice", danger: true, onClick: () => setConfirmDelete(true) },
-                  ]}
-                />
               )}
             </div>
           </div>
 
-          {/* Detail body — single full-width column */}
-          <div className="flex-1 overflow-y-auto">
+          {/* Detail body. Sent / paid / voided show the invoice as the client
+              sees it (PDF preview); draft / saved show the editable cards. */}
+          <div className="flex-1 overflow-y-auto" style={showPdfView ? { background: "var(--color-cream)" } : undefined}>
+            {showPdfView ? (
+              <InvoicePdfPreview token={selectedInvoice.public_token} invoiceId={selectedInvoice.id} voided={selectedInvoice.status === "voided"} />
+            ) : (
             <div className="flex flex-col gap-4 p-5">
               {/* Hero totals card */}
               <div className="rounded-xl p-5"
@@ -895,10 +923,10 @@ export default function InvoicesTab({
                   Payment
                 </div>
                 <PaymentEditor
-                  key={selectedInvoice.id}
+                  key={`${selectedInvoice.id}:${editable}`}
                   terms={selectedInvoice.payment_terms ?? ""}
                   method={selectedInvoice.payment_method ?? ""}
-                  editable={isDraft}
+                  editable={editable}
                   onSave={saveInvoiceText}
                 />
               </div>
@@ -909,15 +937,15 @@ export default function InvoicesTab({
                 <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
                   <span className="text-[13px] font-semibold flex-1"
                     style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>Bill to &amp; project</span>
-                  {isDraft && (
-                    <span className="text-[10px]" style={{ color: "var(--color-grey)" }}>Editable while draft</span>
+                  {editable && (
+                    <span className="text-[10px]" style={{ color: "var(--color-grey)" }}>Editing — changes save automatically</span>
                   )}
                 </div>
                 <div className="p-4 flex flex-col gap-3">
                   {/* Project row — the client itself is changed from the header title. */}
                   <div className="flex items-center gap-3">
                     <span className="text-[11px] font-semibold uppercase tracking-wider shrink-0" style={{ color: "var(--color-grey)", width: 64 }}>Project</span>
-                    {isDraft ? (
+                    {editable ? (
                       <div className="flex-1">
                         <Select
                           value={selectedInvoice.project_id ?? ""}
@@ -935,20 +963,20 @@ export default function InvoicesTab({
                       editable inline while draft (writes back to that record). */}
                   <div className="pt-1 mt-1" style={{ borderTop: "0.5px dashed var(--color-border)" }}>
                     <ClientInfoFields
-                      key={selectedInvoice.client_contact?.id ?? selectedInvoice.client_organization?.id ?? "none"}
+                      key={`${selectedInvoice.client_contact?.id ?? selectedInvoice.client_organization?.id ?? "none"}:${editable}`}
                       email={selectedInvoice.client_contact?.email ?? selectedInvoice.client_organization?.email ?? ""}
                       phone={selectedInvoice.client_contact?.phone ?? selectedInvoice.client_organization?.phone ?? ""}
                       address={selectedInvoice.client_contact?.location ?? selectedInvoice.client_organization?.location ?? ""}
-                      editable={isDraft && !!(selectedInvoice.client_contact || selectedInvoice.client_organization)}
+                      editable={editable && !!(selectedInvoice.client_contact || selectedInvoice.client_organization)}
                       onSave={saveClientField}
                     />
                   </div>
 
                   {/* Show-on-invoice toggle */}
-                  <button type="button" onClick={isDraft ? toggleShowClientInfo : undefined}
-                    disabled={!isDraft}
+                  <button type="button" onClick={editable ? toggleShowClientInfo : undefined}
+                    disabled={!editable}
                     className="flex items-center gap-2 mt-1 text-left"
-                    style={{ cursor: isDraft ? "pointer" : "default" }}>
+                    style={{ cursor: editable ? "pointer" : "default" }}>
                     <span className="relative inline-block shrink-0" style={{ width: 32, height: 18 }}>
                       <span className="absolute inset-0 rounded-full transition-colors"
                         style={{ background: selectedInvoice.show_client_info ? "var(--color-sage)" : "var(--color-border)" }} />
@@ -999,26 +1027,16 @@ export default function InvoicesTab({
                 </div>
                 {(selectedInvoice.line_items ?? []).map((li) => {
                   const src = SOURCE_STYLE[li.source] ?? SOURCE_STYLE.manual;
-                  if (editingLineId === li.id) {
+                  // Open-by-default editable row while editable; read-only otherwise.
+                  if (editable) {
                     return (
-                      <div key={li.id} className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-                        <input value={editDesc} onChange={(e) => setEditDesc(e.target.value)}
-                          placeholder="Description" className={`${inputCls} flex-1`} style={inputStyle} autoFocus />
-                        <input value={editQty} onChange={(e) => setEditQty(e.target.value)}
-                          placeholder="Qty" className={`${inputCls} w-16 text-right`} style={inputStyle} type="number" min="0" step="0.1" />
-                        <input value={editRate} onChange={(e) => setEditRate(e.target.value)}
-                          placeholder="Rate" className={`${inputCls} w-20 text-right`} style={inputStyle} type="number" min="0" />
-                        <button onClick={saveEditLine}
-                          className="px-3 py-1.5 text-[12px] font-medium rounded-lg text-white"
-                          style={{ background: "var(--color-sage)" }}>Save</button>
-                        <button onClick={() => setEditingLineId(null)}
-                          className="px-2 py-1.5 text-[12px] rounded-lg"
-                          style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}>✕</button>
-                      </div>
+                      <LineItemEditableRow key={li.id} li={li}
+                        onSave={saveLineItem}
+                        onDelete={() => deleteLineItem(li.id)} />
                     );
                   }
                   return (
-                    <div key={li.id} className="group grid items-center px-4 py-3"
+                    <div key={li.id} className="grid items-center px-4 py-3"
                       style={{ gridTemplateColumns: LINE_GRID, borderBottom: "0.5px solid var(--color-border)" }}>
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-[13px] truncate" style={{ color: "var(--color-charcoal)" }}>{li.description}</span>
@@ -1032,16 +1050,7 @@ export default function InvoicesTab({
                       <span className="text-[13px] tabular-nums text-right" style={{ color: "var(--color-charcoal)" }}>{li.quantity}</span>
                       <span className="text-[13px] tabular-nums text-right" style={{ color: "var(--color-charcoal)" }}>{fmtCurrency(li.rate)}</span>
                       <span className="text-[13px] font-semibold tabular-nums text-right" style={{ color: "var(--color-charcoal)" }}>{fmtCurrency(Number(li.amount))}</span>
-                      <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => startEditLine(li)}
-                          className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded transition-opacity"
-                          style={{ color: "var(--color-grey)" }} title="Edit line">
-                          <Pencil size={11} />
-                        </button>
-                        <button onClick={() => deleteLineItem(li.id)}
-                          className="opacity-0 group-hover:opacity-100 text-[10px] w-5 h-5 flex items-center justify-center rounded transition-opacity"
-                          style={{ color: "var(--color-red-orange)" }} title="Remove line">✕</button>
-                      </div>
+                      <div />
                     </div>
                   );
                 })}
@@ -1056,8 +1065,8 @@ export default function InvoicesTab({
                     <div />
                   </div>
                 )}
-                {/* Add line item */}
-                {addingLine ? (
+                {/* Add line item — only while editable */}
+                {editable && (addingLine ? (
                   <div className="flex items-center gap-2 px-4 py-3" style={{ borderTop: "0.5px solid var(--color-border)" }}>
                     <input value={lineDesc} onChange={(e) => setLineDesc(e.target.value)}
                       placeholder="Description" className={`${inputCls} flex-1`} style={inputStyle} />
@@ -1080,7 +1089,7 @@ export default function InvoicesTab({
                     onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
                     + Add line item
                   </button>
-                )}
+                ))}
               </div>
 
               {/* Notes — always-open editor */}
@@ -1090,12 +1099,14 @@ export default function InvoicesTab({
                   <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>Notes</p>
                 </div>
                 <NotesEditor
-                  key={selectedInvoice.id}
+                  key={`${selectedInvoice.id}:${editable}`}
                   value={selectedInvoice.notes ?? ""}
+                  editable={editable}
                   onSave={(v) => saveInvoiceText("notes", v)}
                 />
               </div>
             </div>
+            )}
           </div>
         </div>
       ) : (
@@ -1348,10 +1359,20 @@ function PaymentEditor({ terms, method, editable, onSave }: {
 }
 
 // ─── Notes editor ─────────────────────────────────────────────────────────────
-// Always-open textarea; commits on blur. Keyed by invoice id upstream.
+// Open textarea (commits on blur) while editable; read-only text otherwise.
+// Keyed by invoice id + editable upstream so it resets cleanly.
 
-function NotesEditor({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+function NotesEditor({ value, editable, onSave }: { value: string; editable: boolean; onSave: (v: string) => void }) {
   const [v, setV] = useState(value);
+  if (!editable) {
+    return (
+      <div className="px-4 py-3">
+        {value.trim()
+          ? <p className="text-[11px]" style={{ color: "var(--color-grey)", lineHeight: 1.6, whiteSpace: "pre-line" }}>{value}</p>
+          : <p className="text-[11px] italic" style={{ color: "var(--color-grey)" }}>No notes.</p>}
+      </div>
+    );
+  }
   return (
     <div className="p-3">
       <textarea value={v} onChange={(e) => setV(e.target.value)}
@@ -1360,6 +1381,75 @@ function NotesEditor({ value, onSave }: { value: string; onSave: (v: string) => 
         placeholder="Payment instructions, bank details, thank-you note…"
         className="w-full px-3 py-2 text-[12px] rounded-lg focus:outline-none resize-none"
         style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit" }} />
+    </div>
+  );
+}
+
+// ─── Line item editable row ────────────────────────────────────────────────────
+// Open-by-default editable row (description / qty / rate). Commits on blur;
+// amount is recomputed live. Keyed by line id upstream.
+
+function LineItemEditableRow({ li, onSave, onDelete }: {
+  li: InvoiceLineItem;
+  onSave: (id: string, patch: { description: string; quantity: number; rate: number }) => void;
+  onDelete: () => void;
+}) {
+  const [desc, setDesc] = useState(li.description);
+  const [qty, setQty]   = useState(String(li.quantity));
+  const [rate, setRate] = useState(String(li.rate));
+  const q = parseFloat(qty) || 0;
+  const r = parseFloat(rate) || 0;
+  const commit = () => {
+    if (desc.trim() !== li.description || q !== Number(li.quantity) || r !== Number(li.rate)) {
+      onSave(li.id, { description: desc.trim() || "—", quantity: q, rate: r });
+    }
+  };
+  const cell = { background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit" };
+  return (
+    <div className="group grid items-center px-4 py-2" style={{ gridTemplateColumns: LINE_GRID, borderBottom: "0.5px solid var(--color-border)" }}>
+      <input value={desc} onChange={(e) => setDesc(e.target.value)} onBlur={commit}
+        placeholder="Description"
+        className="mr-2 px-2 py-1.5 text-[12px] rounded-lg focus:outline-none" style={cell} />
+      <input value={qty} onChange={(e) => setQty(e.target.value)} onBlur={commit}
+        type="number" min="0" step="0.1"
+        className="ml-auto w-16 px-2 py-1.5 text-[12px] rounded-lg focus:outline-none text-right tabular-nums" style={cell} />
+      <input value={rate} onChange={(e) => setRate(e.target.value)} onBlur={commit}
+        type="number" min="0"
+        className="ml-auto w-20 px-2 py-1.5 text-[12px] rounded-lg focus:outline-none text-right tabular-nums" style={cell} />
+      <span className="text-[13px] font-semibold tabular-nums text-right" style={{ color: "var(--color-charcoal)" }}>{fmtCurrency(q * r)}</span>
+      <button onClick={onDelete}
+        className="opacity-0 group-hover:opacity-100 text-[10px] w-5 h-5 ml-auto flex items-center justify-center rounded transition-opacity"
+        style={{ color: "var(--color-red-orange)" }} title="Remove line">✕</button>
+    </div>
+  );
+}
+
+// ─── PDF preview ────────────────────────────────────────────────────────────────
+// Sent / paid / voided invoices show the invoice exactly as the client sees
+// it when they open the emailed link — the public /i/[token] page, embedded
+// in an iframe. Falls back to the chrome-free print preview if the invoice
+// has no public token yet (e.g. voided before it was ever sent).
+
+function InvoicePdfPreview({ token, invoiceId, voided }: { token: string | null; invoiceId: string; voided: boolean }) {
+  const src = token ? `/i/${token}` : `/finance/invoice/${invoiceId}/print?preview=1`;
+  return (
+    <div className="relative w-full h-full" style={{ minHeight: 480 }}>
+      <iframe
+        title="Invoice preview"
+        src={src}
+        className="w-full h-full"
+        style={{ border: "none", minHeight: 480, background: "transparent" }}
+      />
+      {/* Only the print fallback needs an overlay — the /i/[token] page shows
+          its own voided state. */}
+      {voided && !token && (
+        <div className="absolute inset-0 flex items-start justify-center pointer-events-none" style={{ paddingTop: 80 }}>
+          <span className="text-[64px] font-bold tracking-widest"
+            style={{ color: "rgba(220,62,13,0.18)", transform: "rotate(-18deg)", fontFamily: "var(--font-display)" }}>
+            VOID
+          </span>
+        </div>
+      )}
     </div>
   );
 }
