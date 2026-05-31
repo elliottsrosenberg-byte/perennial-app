@@ -470,6 +470,9 @@ export default function InvoicesTab({
     const patch: Record<string, unknown> = { status };
     if (status === "paid") patch.paid_at = new Date().toISOString().split("T")[0];
     if (status !== "paid") patch.paid_at = null;
+    // Stamp activity timestamps for the timeline.
+    if (status === "sent" && !inv.sent_at) patch.sent_at = new Date().toISOString();
+    if (status === "voided") patch.voided_at = new Date().toISOString();
     const { data } = await supabase
       .from("invoices")
       .update(patch)
@@ -1157,7 +1160,12 @@ export default function InvoicesTab({
               sees it (PDF preview); draft / saved show the editable cards. */}
           <div className="flex-1 overflow-y-auto" style={showPdfView ? { background: "var(--color-cream)" } : undefined}>
             {showPdfView ? (
-              <InvoicePdfPreview token={selectedInvoice.public_token} invoiceId={selectedInvoice.id} voided={selectedInvoice.status === "voided"} />
+              <div className="flex flex-col gap-4 p-5">
+                <InvoiceActivity invoice={selectedInvoice} />
+                <div className="rounded-xl overflow-hidden" style={{ border: "0.5px solid var(--color-border)", height: "78vh", background: "white" }}>
+                  <InvoicePdfPreview token={selectedInvoice.public_token} invoiceId={selectedInvoice.id} voided={selectedInvoice.status === "voided"} />
+                </div>
+              </div>
             ) : (
             <div className="flex flex-col gap-4 p-5">
               {/* Hero totals card */}
@@ -1771,6 +1779,71 @@ function LineItemEditableRow({ li, onSave, onDelete }: {
       <button onClick={onDelete}
         className="opacity-0 group-hover:opacity-100 text-[10px] w-5 h-5 ml-auto flex items-center justify-center rounded transition-opacity"
         style={{ color: "var(--color-red-orange)" }} title="Remove line">✕</button>
+    </div>
+  );
+}
+
+// ─── Invoice activity timeline ──────────────────────────────────────────────────
+// Milestone feed for sent/paid/voided invoices — created → sent → paid (or
+// voided), plus a "next step" hint. Derived from the invoice's timestamps.
+
+function fmtWhen(s: string | null): string | null {
+  if (!s) return null;
+  const d = s.length <= 10 ? new Date(s + "T12:00:00") : new Date(s);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function InvoiceActivity({ invoice }: { invoice: Invoice }) {
+  const overdue = isOverdue(invoice);
+  type Ev = { label: string; at: string | null; color: string };
+  const events: Ev[] = [
+    { label: "Invoice created", at: invoice.created_at, color: "var(--color-grey)" },
+  ];
+  if (invoice.sent_at) {
+    events.push({ label: "Sent to client", at: invoice.sent_at, color: "#e0a82e" });
+  } else if (invoice.status === "sent" || invoice.status === "paid") {
+    events.push({ label: "Sent to client", at: null, color: "#e0a82e" });
+  }
+  if (invoice.status === "paid") events.push({ label: "Payment received", at: invoice.paid_at, color: "var(--color-sage)" });
+  if (invoice.status === "voided") events.push({ label: "Voided", at: invoice.voided_at, color: "var(--color-grey)" });
+
+  let next: string | null = null;
+  if (invoice.status === "sent") next = overdue ? "Awaiting payment — past due" : "Awaiting payment";
+  else if (invoice.status === "paid") next = "Complete — paid in full";
+  else if (invoice.status === "voided") next = "This invoice is void";
+
+  const cardShadow = "0 2px 8px rgba(31,33,26,0.04)";
+  return (
+    <div className="rounded-xl overflow-hidden"
+      style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", boxShadow: cardShadow }}>
+      <div className="px-4 py-3 text-[13px] font-semibold" style={{ borderBottom: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>Activity</div>
+      <div className="p-4">
+        {events.map((e, i) => {
+          const hasMore = i < events.length - 1 || !!next;
+          return (
+            <div key={i} className="flex gap-3">
+              <div className="flex flex-col items-center" style={{ width: 12 }}>
+                <span style={{ width: 10, height: 10, borderRadius: "50%", background: e.color, marginTop: 3, flexShrink: 0 }} />
+                {hasMore && <span style={{ width: 1, flex: 1, background: "var(--color-border)", marginTop: 3 }} />}
+              </div>
+              <div style={{ paddingBottom: hasMore ? 16 : 0 }}>
+                <p className="text-[12px] font-medium" style={{ color: "var(--color-charcoal)" }}>{e.label}</p>
+                <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>{fmtWhen(e.at) ?? "Date not recorded"}</p>
+              </div>
+            </div>
+          );
+        })}
+        {next && (
+          <div className="flex gap-3">
+            <div className="flex flex-col items-center" style={{ width: 12 }}>
+              <span style={{ width: 10, height: 10, borderRadius: "50%", background: "transparent", border: "1.5px solid var(--color-border)", marginTop: 3, flexShrink: 0 }} />
+            </div>
+            <div>
+              <p className="text-[12px]" style={{ color: "var(--color-grey)" }}>{next}</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

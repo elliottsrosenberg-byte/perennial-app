@@ -363,6 +363,10 @@ export interface Invoice {
   issued_at: string;
   due_at: string | null;
   paid_at: string | null;
+  /** When the invoice was first emailed / marked sent, and when it was
+   *  voided — used to build the invoice activity timeline. */
+  sent_at: string | null;
+  voided_at: string | null;
   notes: string | null;
   payment_method: string | null;
   payment_terms: string | null;
