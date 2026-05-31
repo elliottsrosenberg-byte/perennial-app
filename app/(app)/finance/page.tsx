@@ -30,7 +30,7 @@ export default async function FinancePage() {
       .order("date", { ascending: false }),
     supabase
       .from("invoices")
-      .select("*, client_contact:contacts(id, first_name, last_name), client_organization:organizations(id, name), project:projects(id, title, rate), line_items:invoice_line_items(*)")
+      .select("*, client_contact:contacts(id, first_name, last_name, email, phone, location), client_organization:organizations(id, name, email, phone, location), project:projects(id, title, rate), line_items:invoice_line_items(*)")
       .order("created_at", { ascending: false }),
     supabase
       .from("projects")

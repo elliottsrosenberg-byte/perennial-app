@@ -366,6 +366,10 @@ export interface Invoice {
   notes: string | null;
   payment_method: string | null;
   payment_terms: string | null;
+  /** Whether the linked client's contact details (email / phone / address)
+   *  render on the client-facing invoice (PDF + public /i/[token] page).
+   *  The details themselves are pulled live from the contact/organization. */
+  show_client_info: boolean;
   /** Random URL-safe token gating the public /i/[token] view. Minted lazily
    *  the first time the invoice is sent (or via the "Copy public link"
    *  affordance). Null for drafts that have never been shared. */
