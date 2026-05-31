@@ -22,7 +22,7 @@ const inputCls = "w-full px-3 py-2 text-[13px] rounded-lg border transition-colo
 const inputStyle = { background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" };
 
 function fmtMoney(n: number) {
-  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function fmtHours(mins: number) {
   return `${(mins / 60).toFixed(1)}h`;
@@ -607,7 +607,7 @@ function ReadyToBillPanel({
         style={{ borderBottom: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
         <span className="text-[12px] font-semibold" style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>Ready to bill</span>
         <span className="text-[14px] font-semibold tabular-nums" style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>
-          {(grandTotal).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}
+          {(grandTotal).toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </span>
       </div>
 

@@ -7,6 +7,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import Menu from "@/components/ui/Menu";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Select from "@/components/ui/Select";
+import DatePicker from "@/components/ui/DatePicker";
 import { formatInvoiceNumber, paymentMethodLabel } from "@/lib/invoices/format";
 import { X, Download, Send, FileText, MoreHorizontal, Plus, Clock, Receipt, CheckCircle2, Sparkles, ChevronDown, Link2, Check, Pencil, Search, ArrowUpDown, ArrowUp, ArrowDown, ListFilter } from "lucide-react";
 
@@ -142,11 +143,10 @@ function isOverdue(inv: Invoice) {
   return inv.status === "sent" && !!inv.due_at && inv.due_at < new Date().toISOString().split("T")[0];
 }
 
-// Does an invoice match a given filter key? "sent" means sent-and-not-overdue
-// so it reads distinctly from the "overdue" option.
+// Does an invoice match a given filter key? Overdue is a tag, not a status —
+// "sent" includes overdue invoices, and "overdue" narrows to just those.
 function matchesStatusKey(inv: Invoice, key: StatusKey): boolean {
   if (key === "overdue") return isOverdue(inv);
-  if (key === "sent")    return inv.status === "sent" && !isOverdue(inv);
   return inv.status === key;
 }
 
@@ -161,7 +161,7 @@ function clientName(inv: Invoice) {
 }
 
 function fmtCurrency(n: number) {
-  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function fmtDate(ds: string | null) {
@@ -572,6 +572,20 @@ export default function InvoicesTab({
     const supabase = createClient();
     const { data } = await supabase.from("invoices")
       .update({ [field]: value.trim() || null })
+      .eq("id", selectedInvoice.id)
+      .select(INVOICE_SELECT)
+      .single();
+    if (data) onInvoiceUpdated(data as Invoice);
+  }
+
+  async function saveInvoiceDate(field: "issued_at" | "due_at", date: Date | null) {
+    if (!selectedInvoice) return;
+    const v = date
+      ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+      : null;
+    const supabase = createClient();
+    const { data } = await supabase.from("invoices")
+      .update({ [field]: v })
       .eq("id", selectedInvoice.id)
       .select(INVOICE_SELECT)
       .single();
@@ -1002,23 +1016,48 @@ export default function InvoicesTab({
                   }}>
                   {fmtCurrency(invoiceTotal(selectedInvoice))}
                 </p>
-                {/* Issued / Due / Paid — the single source of these dates. */}
+                {/* Issued / Due — editable date pickers while in draft (same
+                    control as the rest of the draft flow); read-only otherwise. */}
                 <div className="flex gap-5 mt-4 pt-4" style={{ borderTop: "0.5px solid var(--color-border)" }}>
-                  {[
-                    { label: "Issued", value: fmtDate(selectedInvoice.issued_at) },
-                    { label: "Due", value: fmtDate(selectedInvoice.due_at),
-                      color: isOverdue(selectedInvoice) ? "var(--color-red-orange)" : undefined },
-                    ...(selectedInvoice.status === "paid"
-                      ? [{ label: "Paid", value: fmtDate(selectedInvoice.paid_at), color: "var(--color-sage)" }]
-                      : []),
-                  ].map((row) => (
-                    <div key={row.label} className="flex flex-col gap-0.5">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider"
-                        style={{ color: "var(--color-grey)" }}>{row.label}</span>
-                      <span className="text-[12px] font-medium"
-                        style={{ color: row.color ?? "var(--color-charcoal)" }}>{row.value}</span>
-                    </div>
-                  ))}
+                  {editable ? (
+                    <>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>Issued</span>
+                        <div style={{ width: 156 }}>
+                          <DatePicker
+                            value={selectedInvoice.issued_at ? new Date(selectedInvoice.issued_at + "T12:00:00") : null}
+                            onChange={(d) => saveInvoiceDate("issued_at", d)}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>Due</span>
+                        <div style={{ width: 156 }}>
+                          <DatePicker
+                            value={selectedInvoice.due_at ? new Date(selectedInvoice.due_at + "T12:00:00") : null}
+                            onChange={(d) => saveInvoiceDate("due_at", d)}
+                            placeholder="Pick a due date…"
+                          />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    [
+                      { label: "Issued", value: fmtDate(selectedInvoice.issued_at) },
+                      { label: "Due", value: fmtDate(selectedInvoice.due_at),
+                        color: isOverdue(selectedInvoice) ? "var(--color-red-orange)" : undefined },
+                      ...(selectedInvoice.status === "paid"
+                        ? [{ label: "Paid", value: fmtDate(selectedInvoice.paid_at), color: "var(--color-sage)" }]
+                        : []),
+                    ].map((row) => (
+                      <div key={row.label} className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider"
+                          style={{ color: "var(--color-grey)" }}>{row.label}</span>
+                        <span className="text-[12px] font-medium"
+                          style={{ color: row.color ?? "var(--color-charcoal)" }}>{row.value}</span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 
