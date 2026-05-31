@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Invoice, InvoiceLineItem, InvoiceAttachment, InvoiceStatus, TimeEntry, Expense, Project, Contact, Organization } from "@/types/database";
 import { uploadReceipt, deleteReceipt } from "@/lib/uploads/receipt";
@@ -228,7 +228,7 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
 
 // Statuses available in the multi-select filter. "overdue" is a derived
 // cross-cut of sent invoices, not a stored status, but filterable here.
-const STATUS_KEYS = ["draft", "saved", "sent", "overdue", "paid", "voided"] as const;
+const STATUS_KEYS = ["draft", "saved", "sent", "paid", "voided", "overdue"] as const;
 type StatusKey = typeof STATUS_KEYS[number];
 
 type SortBy = "issued" | "due" | "client" | "amount";
@@ -418,6 +418,23 @@ export default function InvoicesTab({
   function pickSort(k: SortBy) {
     if (sortBy === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortBy(k); setSortDir("desc"); }
+  }
+
+  // Group label for the active sort: month break for date sorts, client name
+  // for the client sort, none for amount. Rows are already sorted, so we just
+  // break whenever this key changes between consecutive rows.
+  function groupInfo(inv: Invoice): { key: string; label: string } | null {
+    if (sortBy === "client") {
+      const n = clientName(inv);
+      return { key: "c:" + n.toLowerCase(), label: n };
+    }
+    if (sortBy === "issued" || sortBy === "due") {
+      const d = sortBy === "issued" ? inv.issued_at : inv.due_at;
+      if (!d) return { key: "none", label: sortBy === "due" ? "No due date" : "No issue date" };
+      const dt = new Date(d + "T12:00:00");
+      return { key: "m:" + d.slice(0, 7), label: dt.toLocaleDateString("en-US", { month: "long", year: "numeric" }) };
+    }
+    return null;
   }
 
   const outstanding   = invoices.filter((i) => i.status === "sent").reduce((s, i) => s + invoiceTotal(i), 0);
@@ -824,18 +841,21 @@ export default function InvoicesTab({
 
           {/* Filter + sort controls */}
           <div className="flex items-center gap-2">
-            {/* Status multi-select */}
-            <div ref={statusMenuRef} className="relative flex-1">
+            {/* Status multi-select — icon only, matches the sort icon */}
+            <div ref={statusMenuRef} className="relative">
               <button type="button" onClick={() => { setStatusMenuOpen((v) => !v); setSortMenuOpen(false); }}
-                className="w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] transition-colors"
-                style={{ color: "var(--color-charcoal)", border: "0.5px solid var(--color-border)", background: statusFilter.size > 0 ? "var(--color-cream)" : "transparent" }}>
-                <ListFilter size={12} style={{ color: "var(--color-grey)" }} />
-                <span className="flex-1 text-left">{statusFilter.size === 0 ? "All statuses" : `${statusFilter.size} selected`}</span>
-                <ChevronDown size={11} style={{ color: "var(--color-grey)" }} />
+                title="Filter by status"
+                className="relative w-8 h-8 flex items-center justify-center rounded-lg transition-colors"
+                style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", background: statusFilter.size > 0 ? "var(--color-cream)" : "transparent" }}>
+                <ListFilter size={13} />
+                {statusFilter.size > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center text-white text-[9px] font-bold rounded-full"
+                    style={{ minWidth: 15, height: 15, padding: "0 3px", background: "var(--color-sage)" }}>{statusFilter.size}</span>
+                )}
               </button>
               {statusMenuOpen && (
-                <div className="absolute left-0 right-0 mt-1 rounded-xl overflow-hidden z-30"
-                  style={{ top: "100%", background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 24px rgba(31,33,26,0.14)" }}>
+                <div className="absolute left-0 mt-1 rounded-xl overflow-hidden z-30"
+                  style={{ top: "100%", width: 200, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 24px rgba(31,33,26,0.14)" }}>
                   {STATUS_KEYS.map((k) => {
                     const on = statusFilter.has(k);
                     const meta = STATUS_STYLE[k];
@@ -912,47 +932,71 @@ export default function InvoicesTab({
             </div>
           )}
 
-          {visibleInvoices.map((inv) => {
-            const overdue = isOverdue(inv);
-            // The chip carries the real status; overdue is shown as a separate tag.
-            const st = STATUS_STYLE[inv.status] ?? STATUS_STYLE.draft;
-            const total = invoiceTotal(inv);
-            const isSelected = inv.id === selectedId;
-            const stripeColor = stripeFor(inv.status, overdue);
-            return (
-              <div key={inv.id}
-                className="px-4 py-3 cursor-pointer"
-                style={{
-                  borderBottom: "0.5px solid var(--color-border)",
-                  // Sage tint reads clearly on both the light and dark surfaces.
-                  background: isSelected ? "rgba(155,163,122,0.18)" : "transparent",
-                  borderLeft: `${isSelected ? 3 : 2}px solid ${stripeColor}`,
-                }}
-                onClick={() => setSelectedId(inv.id)}>
-                <div className="flex items-center gap-1.5 mb-1">
-                  <span className="text-[10px] tabular-nums" style={{ color: "var(--color-grey)" }}>{formatInvoiceNumber(inv.number, invoicePrefix)}</span>
-                  <span className="text-[12px] font-semibold flex-1 truncate" style={{ color: "var(--color-charcoal)" }}>{clientName(inv)}</span>
-                  <span className="text-[13px] font-semibold tabular-nums"
-                    style={{ color: overdue ? "var(--color-red-orange)" : inv.status === "paid" ? "var(--color-sage)" : "var(--color-charcoal)" }}>
-                    {fmtCurrency(total)}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] flex-1 truncate" style={{ color: "var(--color-grey)" }}>{inv.project?.title ?? ""}</span>
-                  {!overdue && inv.due_at && <span className="text-[10px]" style={{ color: "var(--color-grey)" }}>Due {fmtDate(inv.due_at)}</span>}
-                  {overdue && (
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
-                      style={{ background: STATUS_STYLE.overdue.bg, color: STATUS_STYLE.overdue.color }}>
-                      Overdue
+          {(() => {
+            const out: ReactNode[] = [];
+            let prevKey: string | null = null;
+            for (const inv of visibleInvoices) {
+              const overdue = isOverdue(inv);
+              // The chip carries the real status; overdue is shown as a separate tag.
+              const st = STATUS_STYLE[inv.status] ?? STATUS_STYLE.draft;
+              const total = invoiceTotal(inv);
+              const isSelected = inv.id === selectedId;
+              const stripeColor = stripeFor(inv.status, overdue);
+
+              // Month / client break when the group key changes.
+              const g = groupInfo(inv);
+              if (g && g.key !== prevKey) {
+                out.push(
+                  <div key={"h-" + g.key}
+                    className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider"
+                    style={{ color: "var(--color-grey)", background: "var(--color-off-white)", borderBottom: "0.5px solid var(--color-border)" }}>
+                    {g.label}
+                  </div>,
+                );
+              }
+              if (g) prevKey = g.key;
+
+              // The date shown tracks the active sort (issue vs due).
+              const dateLabel = sortBy === "issued" ? "Issued" : "Due";
+              const dateVal   = sortBy === "issued" ? inv.issued_at : inv.due_at;
+              const showDate  = sortBy === "issued" ? !!inv.issued_at : (!overdue && !!inv.due_at);
+
+              out.push(
+                <div key={inv.id}
+                  className="px-4 py-3 cursor-pointer"
+                  style={{
+                    borderBottom: "0.5px solid var(--color-border)",
+                    // Sage tint reads clearly on both the light and dark surfaces.
+                    background: isSelected ? "rgba(155,163,122,0.18)" : "transparent",
+                    borderLeft: `${isSelected ? 3 : 2}px solid ${stripeColor}`,
+                  }}
+                  onClick={() => setSelectedId(inv.id)}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-[10px] tabular-nums" style={{ color: "var(--color-grey)" }}>{formatInvoiceNumber(inv.number, invoicePrefix)}</span>
+                    <span className="text-[12px] font-semibold flex-1 truncate" style={{ color: "var(--color-charcoal)" }}>{clientName(inv)}</span>
+                    <span className="text-[13px] font-semibold tabular-nums"
+                      style={{ color: overdue ? "var(--color-red-orange)" : inv.status === "paid" ? "var(--color-sage)" : "var(--color-charcoal)" }}>
+                      {fmtCurrency(total)}
                     </span>
-                  )}
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide" style={{ background: st.bg, color: st.color }}>
-                    {st.label}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] flex-1 truncate" style={{ color: "var(--color-grey)" }}>{inv.project?.title ?? ""}</span>
+                    {showDate && <span className="text-[10px]" style={{ color: "var(--color-grey)" }}>{dateLabel} {fmtDate(dateVal)}</span>}
+                    {overdue && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
+                        style={{ background: STATUS_STYLE.overdue.bg, color: STATUS_STYLE.overdue.color }}>
+                        Overdue
+                      </span>
+                    )}
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide" style={{ background: st.bg, color: st.color }}>
+                      {st.label}
+                    </span>
+                  </div>
+                </div>,
+              );
+            }
+            return out;
+          })()}
           {visibleInvoices.length === 0 && invoices.length === 0 && (
             <div style={{ padding: "12px 0" }}>
               <EmptyState
