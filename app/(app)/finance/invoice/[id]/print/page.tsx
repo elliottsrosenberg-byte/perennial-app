@@ -23,23 +23,28 @@ function clientName(inv: Invoice) {
   return "—";
 }
 
-function clientEmail(inv: Invoice) {
-  return (inv.client_contact as { email?: string | null } | null)?.email ?? null;
-}
-
 export default async function InvoicePrintPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
 
   const { data } = await supabase
     .from("invoices")
-    .select("*, client_contact:contacts(id, first_name, last_name, email, organization_id), client_organization:organizations(id, name), project:projects(id, title, rate), line_items:invoice_line_items(*)")
+    .select("*, client_contact:contacts(id, first_name, last_name, email, phone, location, organization_id), client_organization:organizations(id, name, email, phone, location), project:projects(id, title, rate), line_items:invoice_line_items(*)")
     .eq("id", id)
     .single();
 
   if (!data) notFound();
   const inv = data as Invoice;
   const total = invoiceTotal(inv);
+
+  // Client contact details — surfaced on the invoice only when the user
+  // flipped "show client details" on. Pulled live from the contact/org.
+  const cContact = inv.client_contact as { email?: string | null; phone?: string | null; location?: string | null } | null;
+  const cOrg     = inv.client_organization as { email?: string | null; phone?: string | null; location?: string | null } | null;
+  const cEmail   = cContact?.email ?? cOrg?.email ?? null;
+  const cPhone   = cContact?.phone ?? cOrg?.phone ?? null;
+  const cAddress = cContact?.location ?? cOrg?.location ?? null;
+  const showClient = inv.show_client_info;
   const isOverdue = inv.status === "sent" && !!inv.due_at && inv.due_at < new Date().toISOString().split("T")[0];
 
   // Studio identity for the "From" header — pulled from profiles so the
@@ -200,7 +205,9 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
           <div>
             <div className="party-label">Bill to</div>
             <div className="party-name">{clientName(inv)}</div>
-            {clientEmail(inv) && <div className="party-sub">{clientEmail(inv)}</div>}
+            {showClient && cEmail && <div className="party-sub">{cEmail}</div>}
+            {showClient && cPhone && <div className="party-sub">{cPhone}</div>}
+            {showClient && cAddress && <div className="party-sub" style={{ whiteSpace: "pre-line" }}>{cAddress}</div>}
             {inv.project?.title && <div className="party-sub" style={{ marginTop: 4 }}>Re: {inv.project.title}</div>}
           </div>
           <div />

@@ -2,12 +2,18 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Invoice, InvoiceLineItem, TimeEntry, Expense, Project } from "@/types/database";
+import type { Invoice, InvoiceLineItem, TimeEntry, Expense, Project, Contact, Organization } from "@/types/database";
 import EmptyState from "@/components/ui/EmptyState";
 import Menu from "@/components/ui/Menu";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import Select from "@/components/ui/Select";
 import { formatInvoiceNumber } from "@/lib/invoices/format";
-import { X, Download, Send, FileText, MoreHorizontal, Plus, Clock, Receipt, CheckCircle2, Sparkles, ChevronDown, Link2, Check } from "lucide-react";
+import { X, Download, Send, FileText, MoreHorizontal, Plus, Clock, Receipt, CheckCircle2, Sparkles, ChevronDown, Link2, Check, Pencil, Search } from "lucide-react";
+
+// Canonical join used whenever we re-fetch a single invoice after a write,
+// so the detail pane always has the client's contact details + project + lines.
+const INVOICE_SELECT =
+  "*, client_contact:contacts(id, first_name, last_name, email, phone, location), client_organization:organizations(id, name, email, phone, location), project:projects(id, title, rate), line_items:invoice_line_items(*)";
 
 interface Props {
   invoices: Invoice[];
@@ -153,6 +159,9 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }>
   overdue: { bg: "var(--color-red-orange)",       color: "white", label: "Overdue" },
 };
 
+// Shared grid template for the line-items table (description | qty | rate | amount | actions).
+const LINE_GRID = "1fr 70px 80px 90px 46px";
+
 const SOURCE_STYLE: Record<string, { bg: string; color: string }> = {
   time:    { bg: "rgba(61,107,79,0.10)",  color: "var(--color-sage)" },
   expense: { bg: "rgba(220,153,13,0.10)", color: "var(--color-dark-orange)" },
@@ -182,6 +191,16 @@ export default function InvoicesTab({
   const [numberDraft, setNumberDraft]         = useState("");
   const [savingNumber, setSavingNumber]       = useState(false);
   const [numberError, setNumberError]         = useState<string | null>(null);
+  // Inline line-item editing (draft mode).
+  const [editingLineId, setEditingLineId]     = useState<string | null>(null);
+  const [editDesc, setEditDesc]               = useState("");
+  const [editQty, setEditQty]                 = useState("");
+  const [editRate, setEditRate]               = useState("");
+  // Client chooser — lazily loads the contact list the first time it opens.
+  const [clientChooserOpen, setClientChooserOpen] = useState(false);
+  const [allContacts, setAllContacts]         = useState<Contact[]>([]);
+  const [contactsLoaded, setContactsLoaded]   = useState(false);
+  const clientChooserRef = useRef<HTMLDivElement>(null);
   // Persist banner dismissal for the session so it doesn't re-appear every
   // tab switch. sessionStorage is intentional — the next browser tab can
   // remind them again.
@@ -197,19 +216,24 @@ export default function InvoicesTab({
   const pullerRef = useRef<HTMLDivElement>(null);
 
   const selectedInvoice = invoices.find((i) => i.id === selectedId) ?? null;
+  const isDraft = selectedInvoice?.status === "draft";
 
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
       if (pullerRef.current && !pullerRef.current.contains(e.target as Node)) setPullerOpen(false);
+      if (clientChooserRef.current && !clientChooserRef.current.contains(e.target as Node)) setClientChooserOpen(false);
     }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Drop any in-progress invoice-number edit when the selection changes so
-  // the editor never carries one invoice's draft over to another.
-  useEffect(() => { setEditingNumber(false); setNumberError(null); }, [selectedId]);
+  // Drop any in-progress edits when the selection changes so editors never
+  // carry one invoice's draft over to another.
+  useEffect(() => {
+    setEditingNumber(false); setNumberError(null);
+    setEditingLineId(null); setClientChooserOpen(false);
+  }, [selectedId]);
 
   const filteredInvoices = useMemo(() => invoices.filter((inv) => {
     if (filter === "all") return true;
@@ -280,7 +304,7 @@ export default function InvoicesTab({
       .from("invoices")
       .update(patch)
       .eq("id", inv.id)
-      .select("*, client_contact:contacts(id, first_name, last_name), client_organization:organizations(id, name), project:projects(id, title, rate), line_items:invoice_line_items(*)")
+      .select(INVOICE_SELECT)
       .single();
     if (data) onInvoiceUpdated(data as Invoice);
     setSavingStatus(false);
@@ -307,7 +331,7 @@ export default function InvoicesTab({
       .from("invoices")
       .update({ number: n })
       .eq("id", selectedInvoice.id)
-      .select("*, client_contact:contacts(id, first_name, last_name), client_organization:organizations(id, name), project:projects(id, title, rate), line_items:invoice_line_items(*)")
+      .select(INVOICE_SELECT)
       .single();
     setSavingNumber(false);
     if (error) {
@@ -317,6 +341,91 @@ export default function InvoicesTab({
     }
     if (data) onInvoiceUpdated(data as Invoice);
     setEditingNumber(false);
+  }
+
+  // ── Client / project / client-detail editing (draft mode) ──────────────────
+
+  async function loadContacts() {
+    if (contactsLoaded) return;
+    const supabase = createClient();
+    const { data } = await supabase.from("contacts")
+      .select("*").eq("archived", false).order("first_name");
+    setAllContacts((data as Contact[]) ?? []);
+    setContactsLoaded(true);
+  }
+
+  async function changeClient(contact: Contact) {
+    if (!selectedInvoice) return;
+    setClientChooserOpen(false);
+    const supabase = createClient();
+    const { data } = await supabase.from("invoices")
+      .update({ client_contact_id: contact.id, client_organization_id: null })
+      .eq("id", selectedInvoice.id)
+      .select(INVOICE_SELECT)
+      .single();
+    if (data) onInvoiceUpdated(data as Invoice);
+  }
+
+  async function changeProject(projectId: string) {
+    if (!selectedInvoice) return;
+    const supabase = createClient();
+    const { data } = await supabase.from("invoices")
+      .update({ project_id: projectId || null })
+      .eq("id", selectedInvoice.id)
+      .select(INVOICE_SELECT)
+      .single();
+    if (data) onInvoiceUpdated(data as Invoice);
+  }
+
+  // Write a client-detail field back to the underlying contact/organization
+  // record, then reflect the change on the invoice's joined client locally.
+  async function saveClientField(field: "email" | "phone" | "location", value: string) {
+    if (!selectedInvoice) return;
+    const v = value.trim() || null;
+    const supabase = createClient();
+    if (selectedInvoice.client_contact) {
+      await supabase.from("contacts").update({ [field]: v }).eq("id", selectedInvoice.client_contact.id);
+      onInvoiceUpdated({ ...selectedInvoice, client_contact: { ...selectedInvoice.client_contact, [field]: v } as Contact });
+    } else if (selectedInvoice.client_organization) {
+      await supabase.from("organizations").update({ [field]: v }).eq("id", selectedInvoice.client_organization.id);
+      onInvoiceUpdated({ ...selectedInvoice, client_organization: { ...selectedInvoice.client_organization, [field]: v } as Organization });
+    }
+  }
+
+  async function toggleShowClientInfo() {
+    if (!selectedInvoice) return;
+    const supabase = createClient();
+    const next = !selectedInvoice.show_client_info;
+    const { data } = await supabase.from("invoices")
+      .update({ show_client_info: next })
+      .eq("id", selectedInvoice.id)
+      .select(INVOICE_SELECT)
+      .single();
+    if (data) onInvoiceUpdated(data as Invoice);
+  }
+
+  function startEditLine(li: InvoiceLineItem) {
+    setEditingLineId(li.id);
+    setEditDesc(li.description);
+    setEditQty(String(li.quantity));
+    setEditRate(String(li.rate));
+  }
+  async function saveEditLine() {
+    if (!selectedInvoice || !editingLineId) return;
+    const qty = parseFloat(editQty) || 0;
+    const rate = parseFloat(editRate) || 0;
+    const amount = parseFloat((qty * rate).toFixed(2));
+    const supabase = createClient();
+    const { data } = await supabase.from("invoice_line_items")
+      .update({ description: editDesc.trim() || "—", quantity: qty, rate, amount })
+      .eq("id", editingLineId)
+      .select("*")
+      .single();
+    if (data) {
+      const updated = { ...selectedInvoice, line_items: (selectedInvoice.line_items ?? []).map((li) => li.id === editingLineId ? data as InvoiceLineItem : li) };
+      onInvoiceUpdated(updated as Invoice);
+    }
+    setEditingLineId(null);
   }
 
   async function addLineItem() {
@@ -395,7 +504,7 @@ export default function InvoicesTab({
     const { data } = await supabase.from("invoices")
       .update({ notes: notesdraft.trim() || null })
       .eq("id", selectedInvoice.id)
-      .select("*, client_contact:contacts(id, first_name, last_name), client_organization:organizations(id, name), project:projects(id, title, rate), line_items:invoice_line_items(*)")
+      .select(INVOICE_SELECT)
       .single();
     if (data) onInvoiceUpdated(data as Invoice);
     setSavingNotes(false);
@@ -717,207 +826,309 @@ export default function InvoicesTab({
             </div>
           </div>
 
-          {/* Detail body */}
+          {/* Detail body — single full-width column */}
           <div className="flex-1 overflow-y-auto">
-            <div className="flex gap-5 p-5 items-start">
-              {/* Main column */}
-              <div className="flex-1 flex flex-col gap-4 min-w-0">
-                {/* Hero totals card */}
-                <div className="rounded-xl p-5"
-                  style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", boxShadow: cardShadow }}>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider"
-                    style={{ color: "var(--color-grey)" }}>
-                    {selectedInvoice.status === "paid" ? "Paid in full" : "Total due"}
-                  </p>
-                  <p className="text-[32px] font-bold tabular-nums mt-1"
-                    style={{
-                      color: selectedInvoice.status === "paid" ? "var(--color-sage)" : "var(--color-charcoal)",
-                      fontFamily: "var(--font-display)",
-                      letterSpacing: "-0.02em",
-                      lineHeight: 1.05,
-                    }}>
-                    {fmtCurrency(invoiceTotal(selectedInvoice))}
-                  </p>
-                  <div className="flex gap-5 mt-4 pt-4" style={{ borderTop: "0.5px solid var(--color-border)" }}>
-                    {[
-                      { label: "Issued", value: fmtDate(selectedInvoice.issued_at) },
-                      { label: "Due", value: fmtDate(selectedInvoice.due_at),
-                        color: isOverdue(selectedInvoice) ? "var(--color-red-orange)" : undefined },
-                      ...(selectedInvoice.status === "paid"
-                        ? [{ label: "Paid", value: fmtDate(selectedInvoice.paid_at), color: "var(--color-sage)" }]
-                        : []),
-                    ].map((row) => (
-                      <div key={row.label} className="flex flex-col gap-0.5">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider"
-                          style={{ color: "var(--color-grey)" }}>{row.label}</span>
-                        <span className="text-[12px] font-medium"
-                          style={{ color: row.color ?? "var(--color-charcoal)" }}>{row.value}</span>
-                      </div>
-                    ))}
-                  </div>
+            <div className="flex flex-col gap-4 p-5">
+              {/* Hero totals card */}
+              <div className="rounded-xl p-5"
+                style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", boxShadow: cardShadow }}>
+                <p className="text-[10px] font-semibold uppercase tracking-wider"
+                  style={{ color: "var(--color-grey)" }}>
+                  {selectedInvoice.status === "paid" ? "Paid in full" : "Total due"}
+                </p>
+                <p className="text-[32px] font-bold tabular-nums mt-1"
+                  style={{
+                    color: selectedInvoice.status === "paid" ? "var(--color-sage)" : "var(--color-charcoal)",
+                    fontFamily: "var(--font-display)",
+                    letterSpacing: "-0.02em",
+                    lineHeight: 1.05,
+                  }}>
+                  {fmtCurrency(invoiceTotal(selectedInvoice))}
+                </p>
+                {/* Issued / Due / Paid — the single source of these dates. */}
+                <div className="flex gap-5 mt-4 pt-4" style={{ borderTop: "0.5px solid var(--color-border)" }}>
+                  {[
+                    { label: "Issued", value: fmtDate(selectedInvoice.issued_at) },
+                    { label: "Due", value: fmtDate(selectedInvoice.due_at),
+                      color: isOverdue(selectedInvoice) ? "var(--color-red-orange)" : undefined },
+                    ...(selectedInvoice.status === "paid"
+                      ? [{ label: "Paid", value: fmtDate(selectedInvoice.paid_at), color: "var(--color-sage)" }]
+                      : []),
+                  ].map((row) => (
+                    <div key={row.label} className="flex flex-col gap-0.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider"
+                        style={{ color: "var(--color-grey)" }}>{row.label}</span>
+                      <span className="text-[12px] font-medium"
+                        style={{ color: row.color ?? "var(--color-charcoal)" }}>{row.value}</span>
+                    </div>
+                  ))}
                 </div>
+              </div>
 
-                {/* Line items */}
-                <div className="rounded-xl overflow-hidden"
-                  style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", boxShadow: cardShadow }}>
-                  <div className="flex items-center gap-2 px-4 py-3"
-                    style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-                    <span className="text-[13px] font-semibold flex-1"
-                      style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>Line items</span>
-                    {selectedInvoice.project_id && (pullableTime.length > 0 || pullableExpenses.length > 0) && (
-                      <div ref={pullerRef} style={{ position: "relative" }}>
-                        <button onClick={() => setPullerOpen((v) => !v)}
-                          className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg transition-colors"
-                          style={{ color: "var(--color-sage)", border: "0.5px solid rgba(155,163,122,0.4)", background: "rgba(155,163,122,0.06)" }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(155,163,122,0.12)")}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(155,163,122,0.06)")}>
-                          <Plus size={10} /> Pull more
-                          <ChevronDown size={9} />
+              {/* Bill to & project */}
+              <div className="rounded-xl overflow-hidden"
+                style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", boxShadow: cardShadow }}>
+                <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
+                  <span className="text-[13px] font-semibold flex-1"
+                    style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>Bill to &amp; project</span>
+                  {isDraft && (
+                    <span className="text-[10px]" style={{ color: "var(--color-grey)" }}>Editable while draft</span>
+                  )}
+                </div>
+                <div className="p-4 flex flex-col gap-3">
+                  {/* Client row */}
+                  <div className="flex items-center gap-3">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider shrink-0" style={{ color: "var(--color-grey)", width: 64 }}>Client</span>
+                    <span className="text-[13px] font-medium flex-1" style={{ color: "var(--color-charcoal)" }}>{clientName(selectedInvoice)}</span>
+                    {isDraft && (
+                      <div ref={clientChooserRef} style={{ position: "relative" }}>
+                        <button onClick={() => { setClientChooserOpen((v) => !v); loadContacts(); }}
+                          className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg"
+                          style={{ color: "var(--color-charcoal)", border: "0.5px solid var(--color-border)" }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-off-white)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                          <Pencil size={10} /> Change
                         </button>
-                        {pullerOpen && (
-                          <PullMorePicker
-                            pullableTime={pullableTime}
-                            pullableExpenses={pullableExpenses}
-                            onPullTime={(ids) => { pullTimeEntries(ids); setPullerOpen(false); }}
-                            onPullExpenses={(ids) => { pullExpenses(ids); setPullerOpen(false); }}
-                            onClose={() => setPullerOpen(false)}
+                        {clientChooserOpen && (
+                          <ClientChooser
+                            contacts={allContacts}
+                            loaded={contactsLoaded}
+                            onPick={changeClient}
+                            onClose={() => setClientChooserOpen(false)}
                           />
                         )}
                       </div>
                     )}
                   </div>
-                  {/* Table header */}
-                  <div className="grid px-4 py-2 text-[9px] font-semibold uppercase tracking-wider"
-                    style={{ gridTemplateColumns: "1fr 80px 80px 90px 28px", background: "var(--color-off-white)", borderBottom: "0.5px solid var(--color-border)", color: "var(--color-grey)" }}>
-                    <div>Description</div><div className="text-right">Qty</div>
-                    <div className="text-right">Rate</div><div className="text-right">Amount</div><div />
-                  </div>
-                  {(selectedInvoice.line_items ?? []).map((li) => {
-                    const src = SOURCE_STYLE[li.source] ?? SOURCE_STYLE.manual;
-                    return (
-                      <div key={li.id} className="group grid items-center px-4 py-3"
-                        style={{ gridTemplateColumns: "1fr 80px 80px 90px 28px", borderBottom: "0.5px solid var(--color-border)" }}>
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-[13px] truncate" style={{ color: "var(--color-charcoal)" }}>{li.description}</span>
-                          {li.source !== "manual" && (
-                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0"
-                              style={{ background: src.bg, color: src.color }}>
-                              {li.source}
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[13px] tabular-nums text-right" style={{ color: "var(--color-charcoal)" }}>{li.quantity}</span>
-                        <span className="text-[13px] tabular-nums text-right" style={{ color: "var(--color-charcoal)" }}>{fmtCurrency(li.rate)}</span>
-                        <span className="text-[13px] font-semibold tabular-nums text-right" style={{ color: "var(--color-charcoal)" }}>{fmtCurrency(Number(li.amount))}</span>
-                        <button onClick={() => deleteLineItem(li.id)}
-                          className="opacity-0 group-hover:opacity-100 text-[10px] w-5 h-5 flex items-center justify-center rounded transition-opacity"
-                          style={{ color: "var(--color-red-orange)" }}>✕</button>
+                  {/* Project row */}
+                  <div className="flex items-center gap-3">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider shrink-0" style={{ color: "var(--color-grey)", width: 64 }}>Project</span>
+                    {isDraft ? (
+                      <div className="flex-1">
+                        <Select
+                          value={selectedInvoice.project_id ?? ""}
+                          onChange={(v) => changeProject(v)}
+                          options={[{ value: "", label: "None" }, ...projects.map((p) => ({ value: p.id, label: p.title }))]}
+                          placeholder="None"
+                        />
                       </div>
-                    );
-                  })}
-                  {/* Total row */}
-                  {(selectedInvoice.line_items ?? []).length > 0 && (
-                    <div className="grid px-4 py-3"
-                      style={{ gridTemplateColumns: "1fr 80px 80px 90px 28px", background: "var(--color-off-white)", borderTop: "0.5px solid var(--color-border)" }}>
-                      <span className="text-[12px] font-semibold uppercase tracking-wider col-span-3" style={{ color: "var(--color-grey)" }}>Total</span>
-                      <span className="text-[14px] font-bold tabular-nums text-right" style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>
-                        {fmtCurrency(invoiceTotal(selectedInvoice))}
-                      </span>
-                      <div />
-                    </div>
-                  )}
-                  {/* Add line item */}
-                  {addingLine ? (
-                    <div className="flex items-center gap-2 px-4 py-3" style={{ borderTop: "0.5px solid var(--color-border)" }}>
-                      <input value={lineDesc} onChange={(e) => setLineDesc(e.target.value)}
-                        placeholder="Description" className={`${inputCls} flex-1`} style={inputStyle} />
-                      <input value={lineQty} onChange={(e) => setLineQty(e.target.value)}
-                        placeholder="Qty" className={`${inputCls} w-14`} style={inputStyle} type="number" min="0" step="0.1" />
-                      <input value={lineRate} onChange={(e) => setLineRate(e.target.value)}
-                        placeholder="Rate" className={`${inputCls} w-20`} style={inputStyle} type="number" min="0" />
-                      <button onClick={addLineItem} disabled={savingLine || !lineDesc.trim()}
-                        className="px-3 py-1.5 text-[12px] font-medium rounded-lg text-white disabled:opacity-50"
-                        style={{ background: "var(--color-sage)" }}>Add</button>
-                      <button onClick={() => setAddingLine(false)}
-                        className="px-2 py-1.5 text-[12px] rounded-lg"
-                        style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}>✕</button>
-                    </div>
-                  ) : (
-                    <button onClick={() => setAddingLine(true)}
-                      className="w-full flex items-center gap-1.5 px-4 py-2.5 text-[11px] transition-colors"
-                      style={{ color: "var(--color-grey)", borderTop: "0.5px solid var(--color-border)" }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-off-white)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-                      + Add line item
-                    </button>
-                  )}
+                    ) : (
+                      <span className="text-[13px] flex-1" style={{ color: "var(--color-charcoal)" }}>{selectedInvoice.project?.title ?? "—"}</span>
+                    )}
+                  </div>
+
+                  {/* Client details — pulled from the contact/organization record;
+                      editable inline while draft (writes back to that record). */}
+                  <div className="pt-1 mt-1" style={{ borderTop: "0.5px dashed var(--color-border)" }}>
+                    <ClientInfoFields
+                      key={selectedInvoice.client_contact?.id ?? selectedInvoice.client_organization?.id ?? "none"}
+                      email={selectedInvoice.client_contact?.email ?? selectedInvoice.client_organization?.email ?? ""}
+                      phone={selectedInvoice.client_contact?.phone ?? selectedInvoice.client_organization?.phone ?? ""}
+                      address={selectedInvoice.client_contact?.location ?? selectedInvoice.client_organization?.location ?? ""}
+                      editable={isDraft && !!(selectedInvoice.client_contact || selectedInvoice.client_organization)}
+                      onSave={saveClientField}
+                    />
+                  </div>
+
+                  {/* Show-on-invoice toggle */}
+                  <button type="button" onClick={isDraft ? toggleShowClientInfo : undefined}
+                    disabled={!isDraft}
+                    className="flex items-center gap-2 mt-1 text-left"
+                    style={{ cursor: isDraft ? "pointer" : "default" }}>
+                    <span className="relative inline-block shrink-0" style={{ width: 32, height: 18 }}>
+                      <span className="absolute inset-0 rounded-full transition-colors"
+                        style={{ background: selectedInvoice.show_client_info ? "var(--color-sage)" : "var(--color-border)" }} />
+                      <span className="absolute rounded-full bg-white transition-all"
+                        style={{ width: 14, height: 14, top: 2, left: selectedInvoice.show_client_info ? 16 : 2, boxShadow: "0 1px 2px rgba(0,0,0,0.2)" }} />
+                    </span>
+                    <span className="text-[11px]" style={{ color: "var(--color-grey)" }}>
+                      Show these client details on the invoice the client sees
+                    </span>
+                  </button>
                 </div>
               </div>
 
-              {/* Right sidebar */}
-              <div className="flex flex-col gap-4 shrink-0" style={{ width: 220 }}>
-                {/* Payment */}
-                <div className="rounded-xl overflow-hidden"
-                  style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", boxShadow: cardShadow }}>
-                  <div className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider"
-                    style={{ borderBottom: "0.5px solid var(--color-border)", color: "var(--color-grey)" }}>
-                    Payment
-                  </div>
-                  <div className="p-4 flex flex-col gap-2.5">
-                    {[
-                      { label: "Method", value: selectedInvoice.payment_method ?? "—" },
-                      { label: "Terms",  value: selectedInvoice.payment_terms  ?? "—" },
-                      { label: "Due",    value: fmtDate(selectedInvoice.due_at), color: isOverdue(selectedInvoice) ? "var(--color-red-orange)" : undefined },
-                    ].map((row) => (
-                      <div key={row.label} className="flex items-baseline justify-between text-[11px]">
-                        <span style={{ color: "var(--color-grey)" }}>{row.label}</span>
-                        <span style={{ color: row.color ?? "var(--color-charcoal)", fontWeight: 500 }}>{row.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Notes — editable */}
-                <div className="rounded-xl overflow-hidden"
-                  style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", boxShadow: cardShadow }}>
-                  <div className="flex items-center justify-between px-4 py-2.5"
-                    style={{ borderBottom: editingNotes ? "0.5px solid var(--color-border)" : "none" }}>
-                    <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>Notes</p>
-                    {!editingNotes && (
-                      <button onClick={() => { setNotesDraft(selectedInvoice.notes ?? ""); setEditingNotes(true); }}
-                        className="text-[11px]" style={{ color: "var(--color-grey)" }}
-                        onMouseEnter={e => e.currentTarget.style.color = "var(--color-charcoal)"}
-                        onMouseLeave={e => e.currentTarget.style.color = "var(--color-grey)"}>Edit</button>
-                    )}
-                  </div>
-                  {editingNotes ? (
-                    <div className="p-3 flex flex-col gap-2">
-                      <textarea value={notesdraft} onChange={e => setNotesDraft(e.target.value)} rows={4} autoFocus
-                        placeholder="Payment instructions, bank details, thank-you note…"
-                        className="w-full px-3 py-2 text-[12px] rounded-lg focus:outline-none resize-none"
-                        style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit" }} />
-                      <div className="flex gap-2 justify-end">
-                        <button onClick={() => setEditingNotes(false)}
-                          className="px-3 py-1 text-[11px] rounded-lg"
-                          style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-                          onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
-                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>Cancel</button>
-                        <button onClick={saveNotes} disabled={savingNotes}
-                          className="px-3 py-1 text-[11px] font-medium rounded-lg text-white disabled:opacity-50"
-                          style={{ background: "var(--color-sage)" }}>
-                          {savingNotes ? "Saving…" : "Save"}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="px-4 py-3" onClick={() => { setNotesDraft(selectedInvoice.notes ?? ""); setEditingNotes(true); }}
-                      style={{ cursor: "text", minHeight: 44 }}>
-                      {selectedInvoice.notes
-                        ? <p className="text-[11px]" style={{ color: "var(--color-grey)", lineHeight: 1.6 }}>{selectedInvoice.notes}</p>
-                        : <p className="text-[11px] italic" style={{ color: "var(--color-grey)" }}>Click to add payment instructions, bank details…</p>}
+              {/* Line items */}
+              <div className="rounded-xl overflow-hidden"
+                style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", boxShadow: cardShadow }}>
+                <div className="flex items-center gap-2 px-4 py-3"
+                  style={{ borderBottom: "0.5px solid var(--color-border)" }}>
+                  <span className="text-[13px] font-semibold flex-1"
+                    style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>Line items</span>
+                  {selectedInvoice.project_id && (pullableTime.length > 0 || pullableExpenses.length > 0) && (
+                    <div ref={pullerRef} style={{ position: "relative" }}>
+                      <button onClick={() => setPullerOpen((v) => !v)}
+                        className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg transition-colors"
+                        style={{ color: "var(--color-sage)", border: "0.5px solid rgba(155,163,122,0.4)", background: "rgba(155,163,122,0.06)" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(155,163,122,0.12)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(155,163,122,0.06)")}>
+                        <Plus size={10} /> Pull more
+                        <ChevronDown size={9} />
+                      </button>
+                      {pullerOpen && (
+                        <PullMorePicker
+                          pullableTime={pullableTime}
+                          pullableExpenses={pullableExpenses}
+                          onPullTime={(ids) => { pullTimeEntries(ids); setPullerOpen(false); }}
+                          onPullExpenses={(ids) => { pullExpenses(ids); setPullerOpen(false); }}
+                          onClose={() => setPullerOpen(false)}
+                        />
+                      )}
                     </div>
                   )}
                 </div>
+                {/* Table header */}
+                <div className="grid px-4 py-2 text-[9px] font-semibold uppercase tracking-wider"
+                  style={{ gridTemplateColumns: LINE_GRID, background: "var(--color-off-white)", borderBottom: "0.5px solid var(--color-border)", color: "var(--color-grey)" }}>
+                  <div>Description</div><div className="text-right">Qty</div>
+                  <div className="text-right">Rate</div><div className="text-right">Amount</div><div />
+                </div>
+                {(selectedInvoice.line_items ?? []).map((li) => {
+                  const src = SOURCE_STYLE[li.source] ?? SOURCE_STYLE.manual;
+                  if (editingLineId === li.id) {
+                    return (
+                      <div key={li.id} className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
+                        <input value={editDesc} onChange={(e) => setEditDesc(e.target.value)}
+                          placeholder="Description" className={`${inputCls} flex-1`} style={inputStyle} autoFocus />
+                        <input value={editQty} onChange={(e) => setEditQty(e.target.value)}
+                          placeholder="Qty" className={`${inputCls} w-16 text-right`} style={inputStyle} type="number" min="0" step="0.1" />
+                        <input value={editRate} onChange={(e) => setEditRate(e.target.value)}
+                          placeholder="Rate" className={`${inputCls} w-20 text-right`} style={inputStyle} type="number" min="0" />
+                        <button onClick={saveEditLine}
+                          className="px-3 py-1.5 text-[12px] font-medium rounded-lg text-white"
+                          style={{ background: "var(--color-sage)" }}>Save</button>
+                        <button onClick={() => setEditingLineId(null)}
+                          className="px-2 py-1.5 text-[12px] rounded-lg"
+                          style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}>✕</button>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={li.id} className="group grid items-center px-4 py-3"
+                      style={{ gridTemplateColumns: LINE_GRID, borderBottom: "0.5px solid var(--color-border)" }}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[13px] truncate" style={{ color: "var(--color-charcoal)" }}>{li.description}</span>
+                        {li.source !== "manual" && (
+                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0"
+                            style={{ background: src.bg, color: src.color }}>
+                            {li.source}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[13px] tabular-nums text-right" style={{ color: "var(--color-charcoal)" }}>{li.quantity}</span>
+                      <span className="text-[13px] tabular-nums text-right" style={{ color: "var(--color-charcoal)" }}>{fmtCurrency(li.rate)}</span>
+                      <span className="text-[13px] font-semibold tabular-nums text-right" style={{ color: "var(--color-charcoal)" }}>{fmtCurrency(Number(li.amount))}</span>
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => startEditLine(li)}
+                          className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded transition-opacity"
+                          style={{ color: "var(--color-grey)" }} title="Edit line">
+                          <Pencil size={11} />
+                        </button>
+                        <button onClick={() => deleteLineItem(li.id)}
+                          className="opacity-0 group-hover:opacity-100 text-[10px] w-5 h-5 flex items-center justify-center rounded transition-opacity"
+                          style={{ color: "var(--color-red-orange)" }} title="Remove line">✕</button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {/* Total row */}
+                {(selectedInvoice.line_items ?? []).length > 0 && (
+                  <div className="grid px-4 py-3"
+                    style={{ gridTemplateColumns: LINE_GRID, background: "var(--color-off-white)", borderTop: "0.5px solid var(--color-border)" }}>
+                    <span className="text-[12px] font-semibold uppercase tracking-wider col-span-3" style={{ color: "var(--color-grey)" }}>Total</span>
+                    <span className="text-[14px] font-bold tabular-nums text-right" style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>
+                      {fmtCurrency(invoiceTotal(selectedInvoice))}
+                    </span>
+                    <div />
+                  </div>
+                )}
+                {/* Add line item */}
+                {addingLine ? (
+                  <div className="flex items-center gap-2 px-4 py-3" style={{ borderTop: "0.5px solid var(--color-border)" }}>
+                    <input value={lineDesc} onChange={(e) => setLineDesc(e.target.value)}
+                      placeholder="Description" className={`${inputCls} flex-1`} style={inputStyle} />
+                    <input value={lineQty} onChange={(e) => setLineQty(e.target.value)}
+                      placeholder="Qty" className={`${inputCls} w-16 text-right`} style={inputStyle} type="number" min="0" step="0.1" />
+                    <input value={lineRate} onChange={(e) => setLineRate(e.target.value)}
+                      placeholder="Rate" className={`${inputCls} w-20 text-right`} style={inputStyle} type="number" min="0" />
+                    <button onClick={addLineItem} disabled={savingLine || !lineDesc.trim()}
+                      className="px-3 py-1.5 text-[12px] font-medium rounded-lg text-white disabled:opacity-50"
+                      style={{ background: "var(--color-sage)" }}>Add</button>
+                    <button onClick={() => setAddingLine(false)}
+                      className="px-2 py-1.5 text-[12px] rounded-lg"
+                      style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}>✕</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setAddingLine(true)}
+                    className="w-full flex items-center gap-1.5 px-4 py-2.5 text-[11px] transition-colors"
+                    style={{ color: "var(--color-grey)", borderTop: "0.5px solid var(--color-border)" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-off-white)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                    + Add line item
+                  </button>
+                )}
+              </div>
+
+              {/* Payment */}
+              <div className="rounded-xl overflow-hidden"
+                style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", boxShadow: cardShadow }}>
+                <div className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider"
+                  style={{ borderBottom: "0.5px solid var(--color-border)", color: "var(--color-grey)" }}>
+                  Payment
+                </div>
+                <div className="p-4 flex flex-col gap-2.5">
+                  {[
+                    { label: "Method", value: selectedInvoice.payment_method ?? "—" },
+                    { label: "Terms",  value: selectedInvoice.payment_terms  ?? "—" },
+                  ].map((row) => (
+                    <div key={row.label} className="flex items-baseline justify-between text-[11px]">
+                      <span style={{ color: "var(--color-grey)" }}>{row.label}</span>
+                      <span style={{ color: "var(--color-charcoal)", fontWeight: 500 }}>{row.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Notes — editable */}
+              <div className="rounded-xl overflow-hidden"
+                style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", boxShadow: cardShadow }}>
+                <div className="flex items-center justify-between px-4 py-2.5"
+                  style={{ borderBottom: editingNotes ? "0.5px solid var(--color-border)" : "none" }}>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>Notes</p>
+                  {!editingNotes && (
+                    <button onClick={() => { setNotesDraft(selectedInvoice.notes ?? ""); setEditingNotes(true); }}
+                      className="text-[11px]" style={{ color: "var(--color-grey)" }}
+                      onMouseEnter={e => e.currentTarget.style.color = "var(--color-charcoal)"}
+                      onMouseLeave={e => e.currentTarget.style.color = "var(--color-grey)"}>Edit</button>
+                  )}
+                </div>
+                {editingNotes ? (
+                  <div className="p-3 flex flex-col gap-2">
+                    <textarea value={notesdraft} onChange={e => setNotesDraft(e.target.value)} rows={4} autoFocus
+                      placeholder="Payment instructions, bank details, thank-you note…"
+                      className="w-full px-3 py-2 text-[12px] rounded-lg focus:outline-none resize-none"
+                      style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit" }} />
+                    <div className="flex gap-2 justify-end">
+                      <button onClick={() => setEditingNotes(false)}
+                        className="px-3 py-1 text-[11px] rounded-lg"
+                        style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
+                        onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}>Cancel</button>
+                      <button onClick={saveNotes} disabled={savingNotes}
+                        className="px-3 py-1 text-[11px] font-medium rounded-lg text-white disabled:opacity-50"
+                        style={{ background: "var(--color-sage)" }}>
+                        {savingNotes ? "Saving…" : "Save"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="px-4 py-3" onClick={() => { setNotesDraft(selectedInvoice.notes ?? ""); setEditingNotes(true); }}
+                    style={{ cursor: "text", minHeight: 44 }}>
+                    {selectedInvoice.notes
+                      ? <p className="text-[11px]" style={{ color: "var(--color-grey)", lineHeight: 1.6 }}>{selectedInvoice.notes}</p>
+                      : <p className="text-[11px] italic" style={{ color: "var(--color-grey)" }}>Click to add payment instructions, bank details…</p>}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1060,6 +1271,114 @@ function PullMorePicker({
           style={{ background: "var(--color-sage)" }}>
           Add
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Client info fields ───────────────────────────────────────────────────────
+// Email / phone / address pulled from the linked contact (or organization).
+// Editable while the invoice is a draft — edits save on blur back to the
+// underlying record. Keyed by client id upstream, so it remounts (resetting
+// local drafts) whenever the invoice's client changes.
+
+function ClientInfoFields({ email, phone, address, editable, onSave }: {
+  email: string;
+  phone: string;
+  address: string;
+  editable: boolean;
+  onSave: (field: "email" | "phone" | "location", value: string) => void;
+}) {
+  const [e, setE] = useState(email);
+  const [p, setP] = useState(phone);
+  const [a, setA] = useState(address);
+
+  const rows: Array<{ key: "email" | "phone" | "location"; label: string; value: string; orig: string; set: (s: string) => void; placeholder: string }> = [
+    { key: "email",    label: "Email",   value: e, orig: email,   set: setE, placeholder: "client@email.com" },
+    { key: "phone",    label: "Phone",   value: p, orig: phone,   set: setP, placeholder: "(555) 123-4567" },
+    { key: "location", label: "Address", value: a, orig: address, set: setA, placeholder: "Street, city, state" },
+  ];
+
+  if (!editable) {
+    const present = rows.filter((r) => r.value.trim());
+    if (present.length === 0) {
+      return <p className="text-[11px] italic" style={{ color: "var(--color-grey)" }}>No client contact details on file.</p>;
+    }
+    return (
+      <div className="flex flex-col gap-1.5">
+        {present.map((r) => (
+          <div key={r.key} className="flex items-center gap-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wider shrink-0" style={{ color: "var(--color-grey)", width: 64 }}>{r.label}</span>
+            <span className="text-[12px]" style={{ color: "var(--color-charcoal)" }}>{r.value}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {rows.map((r) => (
+        <div key={r.key} className="flex items-center gap-3">
+          <span className="text-[11px] font-semibold uppercase tracking-wider shrink-0" style={{ color: "var(--color-grey)", width: 64 }}>{r.label}</span>
+          <input
+            value={r.value}
+            onChange={(ev) => r.set(ev.target.value)}
+            onBlur={() => { if (r.value.trim() !== r.orig.trim()) onSave(r.key, r.value); }}
+            placeholder={r.placeholder}
+            className="flex-1 px-2.5 py-1.5 text-[12px] rounded-lg focus:outline-none"
+            style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit" }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Client chooser ───────────────────────────────────────────────────────────
+// Compact searchable contact list for re-pointing a draft invoice at a
+// different client.
+
+function ClientChooser({ contacts, loaded, onPick, onClose }: {
+  contacts: Contact[];
+  loaded: boolean;
+  onPick: (c: Contact) => void;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const matches = contacts.filter((c) =>
+    !q ||
+    c.first_name.toLowerCase().includes(q) ||
+    c.last_name.toLowerCase().includes(q) ||
+    (c.email ?? "").toLowerCase().includes(q)
+  );
+  return (
+    <div className="absolute right-0 mt-1 rounded-xl overflow-hidden z-30"
+      style={{ top: "100%", width: 280, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 24px rgba(31,33,26,0.14)" }}>
+      <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: "0.5px solid var(--color-border)", background: "var(--color-warm-white)" }}>
+        <Search size={12} style={{ color: "var(--color-grey)" }} />
+        <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search contacts…"
+          className="flex-1 text-[12px] bg-transparent focus:outline-none"
+          style={{ color: "var(--color-charcoal)", fontFamily: "inherit" }} />
+        <button onClick={onClose} style={{ color: "var(--color-grey)" }}><X size={12} /></button>
+      </div>
+      <div style={{ maxHeight: 240, overflowY: "auto" }}>
+        {!loaded ? (
+          <p className="text-[12px] text-center py-4" style={{ color: "var(--color-grey)" }}>Loading…</p>
+        ) : matches.length === 0 ? (
+          <p className="text-[12px] text-center py-4" style={{ color: "var(--color-grey)" }}>No contacts match.</p>
+        ) : matches.map((c) => (
+          <button key={c.id} type="button" onClick={() => onPick(c)}
+            className="w-full text-left px-3 py-2 flex items-center gap-2"
+            style={{ borderBottom: "0.5px solid var(--color-border)" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+            <span className="text-[12px] font-medium" style={{ color: "var(--color-charcoal)" }}>{c.first_name} {c.last_name}</span>
+            {c.email && <span className="text-[11px] ml-auto truncate" style={{ color: "var(--color-grey)", maxWidth: 140 }}>{c.email}</span>}
+          </button>
+        ))}
       </div>
     </div>
   );

@@ -155,7 +155,7 @@ export async function POST(req: Request) {
   // 4. Re-fetch the invoice with all joins for the client.
   const { data: full } = await supabase
     .from("invoices")
-    .select("*, client_contact:contacts(id, first_name, last_name), client_organization:organizations(id, name), project:projects(id, title, rate), line_items:invoice_line_items(*)")
+    .select("*, client_contact:contacts(id, first_name, last_name, email, phone, location), client_organization:organizations(id, name, email, phone, location), project:projects(id, title, rate), line_items:invoice_line_items(*)")
     .eq("id", inv.id)
     .single();
 

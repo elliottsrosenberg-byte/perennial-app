@@ -42,7 +42,7 @@ export default async function PublicInvoicePage({
 
   const { data } = await supabase
     .from("invoices")
-    .select("*, client_contact:contacts(id, first_name, last_name, email), client_organization:organizations(id, name), project:projects(id, title), line_items:invoice_line_items(*)")
+    .select("*, client_contact:contacts(id, first_name, last_name, email, phone, location), client_organization:organizations(id, name, email, phone, location), project:projects(id, title), line_items:invoice_line_items(*)")
     .eq("public_token", token)
     .maybeSingle();
 
@@ -70,7 +70,12 @@ export default async function PublicInvoicePage({
   const studioLogo    = profile?.logo_url ?? null;
   const fallbackLocation = profile?.location ?? null;
 
-  const clientEmail = (inv.client_contact as { email?: string | null } | null)?.email ?? null;
+  const cContact = inv.client_contact as { email?: string | null; phone?: string | null; location?: string | null } | null;
+  const cOrg     = inv.client_organization as { email?: string | null; phone?: string | null; location?: string | null } | null;
+  const clientEmail = cContact?.email ?? cOrg?.email ?? null;
+  const clientPhone = cContact?.phone ?? cOrg?.phone ?? null;
+  const clientAddress = cContact?.location ?? cOrg?.location ?? null;
+  const showClient = inv.show_client_info;
 
   return (
     <>
@@ -250,7 +255,9 @@ export default async function PublicInvoicePage({
                 <div>
                   <div className="pi-meta-label">Bill to</div>
                   <div className="pi-meta-name">{clientName(inv)}</div>
-                  {clientEmail && <div className="pi-meta-sub">{clientEmail}</div>}
+                  {showClient && clientEmail && <div className="pi-meta-sub">{clientEmail}</div>}
+                  {showClient && clientPhone && <div className="pi-meta-sub">{clientPhone}</div>}
+                  {showClient && clientAddress && <div className="pi-meta-sub" style={{ whiteSpace: "pre-line" }}>{clientAddress}</div>}
                   {inv.project?.title && <div className="pi-meta-sub" style={{ marginTop: 4 }}>Re: {inv.project.title}</div>}
                 </div>
                 <div className="pi-dates">
