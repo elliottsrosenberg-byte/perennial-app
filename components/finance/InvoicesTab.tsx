@@ -2,19 +2,20 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Invoice, InvoiceLineItem, InvoiceStatus, TimeEntry, Expense, Project, Contact, Organization } from "@/types/database";
+import type { Invoice, InvoiceLineItem, InvoiceAttachment, InvoiceStatus, TimeEntry, Expense, Project, Contact, Organization } from "@/types/database";
+import { uploadReceipt, deleteReceipt } from "@/lib/uploads/receipt";
 import EmptyState from "@/components/ui/EmptyState";
 import Menu from "@/components/ui/Menu";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
 import { formatInvoiceNumber, paymentMethodLabel } from "@/lib/invoices/format";
-import { X, Download, Send, FileText, MoreHorizontal, Plus, Clock, Receipt, CheckCircle2, Sparkles, ChevronDown, Link2, Check, Pencil, Search, ArrowUpDown, ArrowUp, ArrowDown, ListFilter } from "lucide-react";
+import { X, Download, Send, FileText, MoreHorizontal, Plus, Clock, Receipt, CheckCircle2, Sparkles, ChevronDown, Link2, Check, Pencil, Search, ArrowUpDown, ArrowUp, ArrowDown, ListFilter, Paperclip } from "lucide-react";
 
 // Canonical join used whenever we re-fetch a single invoice after a write,
 // so the detail pane always has the client's contact details + project + lines.
 const INVOICE_SELECT =
-  "*, client_contact:contacts(id, first_name, last_name, email, phone, location), client_organization:organizations(id, name, email, phone, location), project:projects(id, title, rate), line_items:invoice_line_items(*)";
+  "*, client_contact:contacts(id, first_name, last_name, email, phone, location), client_organization:organizations(id, name, email, phone, location), project:projects(id, title, rate), line_items:invoice_line_items(*), attachments:invoice_attachments(*)";
 
 interface Props {
   invoices: Invoice[];
@@ -233,6 +234,9 @@ export default function InvoicesTab({
   // Saved invoices are edited behind a pencil toggle (drafts are open by
   // default). This flag opens a saved invoice's fields for editing.
   const [editingSaved, setEditingSaved]       = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   // Client chooser — lazily loads the contact list the first time it opens.
   const [clientChooserOpen, setClientChooserOpen] = useState(false);
   const [allContacts, setAllContacts]         = useState<Contact[]>([]);
@@ -559,10 +563,75 @@ export default function InvoicesTab({
       expense_id: x.id,
     }));
     const { data } = await supabase.from("invoice_line_items").insert(rows).select("*");
-    if (data) {
-      const updated = { ...selectedInvoice, line_items: [...(selectedInvoice.line_items ?? []), ...(data as InvoiceLineItem[])] };
+    // Auto-attach receipts from any pulled expense that has one.
+    const receiptRows = picked
+      .filter((x) => x.receipt_url)
+      .map((x) => ({
+        invoice_id: selectedInvoice.id,
+        user_id:    user.id,
+        name:       `${x.description || "Expense"} — receipt`,
+        url:        x.receipt_url as string,
+        path:       null,
+        source:     "expense_receipt" as const,
+      }));
+    let newAttachments: InvoiceAttachment[] = [];
+    if (receiptRows.length > 0) {
+      const { data: attData } = await supabase.from("invoice_attachments").insert(receiptRows).select("*");
+      newAttachments = (attData as InvoiceAttachment[]) ?? [];
+    }
+    if (data || newAttachments.length > 0) {
+      const updated = {
+        ...selectedInvoice,
+        line_items: [...(selectedInvoice.line_items ?? []), ...((data as InvoiceLineItem[]) ?? [])],
+        attachments: [...(selectedInvoice.attachments ?? []), ...newAttachments],
+      };
       onInvoiceUpdated(updated as Invoice);
     }
+  }
+
+  // ── Manual attachments ──────────────────────────────────────────────────────
+
+  async function addAttachment(file: File) {
+    if (!selectedInvoice) return;
+    setUploadingAttachment(true);
+    setAttachmentError(null);
+    try {
+      const up = await uploadReceipt(file);
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in.");
+      const { data, error } = await supabase.from("invoice_attachments")
+        .insert({
+          invoice_id: selectedInvoice.id,
+          user_id:    user.id,
+          name:       up.name,
+          url:        up.url,
+          path:       up.path,
+          file_type:  up.type,
+          size_bytes: file.size,
+          source:     "manual",
+        })
+        .select("*")
+        .single();
+      if (error) throw new Error(error.message);
+      onInvoiceUpdated({ ...selectedInvoice, attachments: [...(selectedInvoice.attachments ?? []), data as InvoiceAttachment] });
+    } catch (e) {
+      setAttachmentError(e instanceof Error ? e.message : "Upload failed.");
+    } finally {
+      setUploadingAttachment(false);
+    }
+  }
+
+  async function removeAttachment(att: InvoiceAttachment) {
+    if (!selectedInvoice) return;
+    const supabase = createClient();
+    await supabase.from("invoice_attachments").delete().eq("id", att.id);
+    // Only delete the stored object for manual uploads — expense receipts are
+    // owned by the expense and shared.
+    if (att.source === "manual" && att.path) {
+      try { await deleteReceipt(att.path); } catch { /* non-fatal */ }
+    }
+    onInvoiceUpdated({ ...selectedInvoice, attachments: (selectedInvoice.attachments ?? []).filter((a) => a.id !== att.id) });
   }
 
   // Generic text save for the invoice's own free-text fields (payment terms /
@@ -1236,6 +1305,51 @@ export default function InvoicesTab({
                     + Add line item
                   </button>
                 ))}
+              </div>
+
+              {/* Attachments */}
+              <div className="rounded-xl overflow-hidden"
+                style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", boxShadow: cardShadow }}>
+                <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
+                  <span className="text-[13px] font-semibold flex-1"
+                    style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>Attachments</span>
+                  {editable && (
+                    <>
+                      <input ref={fileInputRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }}
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) addAttachment(f); e.target.value = ""; }} />
+                      <button onClick={() => fileInputRef.current?.click()} disabled={uploadingAttachment}
+                        className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
+                        style={{ color: "var(--color-charcoal)", border: "0.5px solid var(--color-border)" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-off-white)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                        <Paperclip size={10} /> {uploadingAttachment ? "Uploading…" : "Add file"}
+                      </button>
+                    </>
+                  )}
+                </div>
+                {(selectedInvoice.attachments ?? []).length === 0 ? (
+                  <p className="px-4 py-3 text-[11px] italic" style={{ color: "var(--color-grey)" }}>
+                    {editable ? "Attach receipts, contracts, or other files for the client." : "No attachments."}
+                  </p>
+                ) : (selectedInvoice.attachments ?? []).map((att) => (
+                  <div key={att.id} className="flex items-center gap-2 px-4 py-2.5" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
+                    <Paperclip size={12} style={{ color: "var(--color-grey)", flexShrink: 0 }} />
+                    <a href={att.url} target="_blank" rel="noopener noreferrer"
+                      className="text-[12px] flex-1 truncate hover:underline" style={{ color: "var(--color-charcoal)" }}>{att.name}</a>
+                    {att.source === "expense_receipt" && (
+                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider"
+                        style={{ background: "rgba(220,153,13,0.10)", color: "var(--color-dark-orange)" }}>Receipt</span>
+                    )}
+                    {editable && (
+                      <button onClick={() => removeAttachment(att)}
+                        className="text-[10px] w-5 h-5 flex items-center justify-center rounded"
+                        style={{ color: "var(--color-red-orange)" }} title="Remove attachment">✕</button>
+                    )}
+                  </div>
+                ))}
+                {attachmentError && (
+                  <p className="px-4 py-2 text-[11px]" style={{ color: "var(--color-red-orange)" }}>{attachmentError}</p>
+                )}
               </div>
 
               {/* Notes — always-open editor */}

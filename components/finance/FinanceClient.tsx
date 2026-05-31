@@ -150,7 +150,7 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
     const supabase = createClient();
     const { data } = await supabase
       .from("invoices")
-      .select("*, client_contact:contacts(id, first_name, last_name, email, phone, location), client_organization:organizations(id, name, email, phone, location), project:projects(id, title, rate), line_items:invoice_line_items(*)")
+      .select("*, client_contact:contacts(id, first_name, last_name, email, phone, location), client_organization:organizations(id, name, email, phone, location), project:projects(id, title, rate), line_items:invoice_line_items(*), attachments:invoice_attachments(*)")
       .eq("id", invoiceId)
       .single();
     if (data) setInvoices(prev => prev.map(inv => inv.id === invoiceId ? data as Invoice : inv));

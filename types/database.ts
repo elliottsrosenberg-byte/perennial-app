@@ -394,6 +394,25 @@ export interface Invoice {
   client_organization?: Organization | null;
   project?: Project | null;
   line_items?: InvoiceLineItem[];
+  attachments?: InvoiceAttachment[];
+}
+
+/** A file attached to an invoice — uploaded manually or auto-pulled from an
+ *  expense's receipt. Stored in the public `receipts` bucket; surfaced on the
+ *  client-facing invoice (PDF + public page) for download. */
+export interface InvoiceAttachment {
+  id:         string;
+  invoice_id: string;
+  user_id:    string;
+  name:       string;
+  url:        string;
+  /** Storage path for manually-uploaded files (deleted on removal). Null for
+   *  expense-receipt attachments, which point at the expense's own object. */
+  path:       string | null;
+  file_type:  string | null;
+  size_bytes: number | null;
+  source:     "manual" | "expense_receipt";
+  created_at: string;
 }
 
 /** Studio-identity fields on `profiles` that surface on invoices and the
