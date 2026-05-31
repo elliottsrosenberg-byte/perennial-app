@@ -47,17 +47,22 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
   const [error,   setError]   = useState<string | null>(null);
   const [sent,    setSent]    = useState(false);
   const [studioName, setStudioName] = useState("Your studio");
+  const [brandColor, setBrandColor] = useState<string | null>(null);
+  const [logoUrl,    setLogoUrl]    = useState<string | null>(null);
+  const accent = brandColor || "#3d6b4f";
 
-  // Pull the studio name so the preview header matches the real email.
+  // Pull the studio identity so the preview matches the real email.
   useEffect(() => {
     (async () => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       const { data } = await supabase.from("profiles")
-        .select("studio_name, display_name").eq("user_id", user.id).maybeSingle();
+        .select("studio_name, display_name, brand_color, logo_url").eq("user_id", user.id).maybeSingle();
       const name = (data?.studio_name as string | null)?.trim() || (data?.display_name as string | null)?.trim();
       if (name) setStudioName(name);
+      setBrandColor((data?.brand_color as string | null)?.trim() || null);
+      setLogoUrl((data?.logo_url as string | null) ?? null);
     })();
   }, []);
 
@@ -136,7 +141,10 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
               <div style={{ maxWidth: 600, margin: "0 auto", background: "white", borderRadius: 12, overflow: "hidden", boxShadow: "0 2px 20px rgba(0,0,0,0.08)" }}>
                 {/* Header */}
                 <div style={{ background: "#1f211a", padding: "24px 32px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ color: "white", fontSize: 17, fontWeight: 700, letterSpacing: "-0.02em" }}>{studioName}</span>
+                  {logoUrl
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={logoUrl} alt={studioName} style={{ height: 30, maxWidth: 170, objectFit: "contain" }} />
+                    : <span style={{ color: "white", fontSize: 17, fontWeight: 700, letterSpacing: "-0.02em" }}>{studioName}</span>}
                   <span style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>Invoice {invNum}</span>
                 </div>
                 {/* Body */}
@@ -183,7 +191,7 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
                   </div>
 
                   <div style={{ textAlign: "center", marginBottom: 10 }}>
-                    <span style={{ background: "#3d6b4f", color: "white", padding: "12px 24px", borderRadius: 8, fontSize: 13, fontWeight: 600, display: "inline-block" }}>View &amp; pay invoice →</span>
+                    <span style={{ background: accent, color: "white", padding: "12px 24px", borderRadius: 8, fontSize: 13, fontWeight: 600, display: "inline-block" }}>View &amp; pay invoice →</span>
                   </div>
                   <div style={{ textAlign: "center" }}>
                     <span style={{ fontSize: 12, color: "#6b6860", textDecoration: "underline" }}>Or download a PDF</span>
@@ -1166,15 +1174,20 @@ export default function InvoicesTab({
 
           {/* Detail body. Sent / paid / voided show the invoice as the client
               sees it (PDF preview); draft / saved show the editable cards. */}
-          <div className="flex-1 overflow-y-auto" style={showPdfView ? { background: "var(--color-cream)" } : undefined}>
-            {showPdfView ? (
-              <div className="flex flex-col gap-4 p-5">
+          {showPdfView ? (
+            <div className="flex-1 min-h-0 flex flex-col" style={{ background: "var(--color-cream)" }}>
+              <div className="px-5 pt-5 shrink-0">
                 <InvoiceActivity invoice={selectedInvoice} />
-                <div className="rounded-xl overflow-hidden" style={{ border: "0.5px solid var(--color-border)", height: "78vh", background: "white" }}>
+              </div>
+              {/* Only the PDF scrolls — the body itself doesn't (avoids a double scrollbar). */}
+              <div className="flex-1 min-h-0 p-5 pt-4">
+                <div className="w-full h-full rounded-xl overflow-hidden" style={{ border: "0.5px solid var(--color-border)", background: "white" }}>
                   <InvoicePdfPreview token={selectedInvoice.public_token} invoiceId={selectedInvoice.id} voided={selectedInvoice.status === "voided"} />
                 </div>
               </div>
-            ) : (
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto">
             <div className="flex flex-col gap-4 p-5">
               {/* Hero totals card */}
               <div className="rounded-xl p-5"
@@ -1473,8 +1486,8 @@ export default function InvoicesTab({
                 />
               </div>
             </div>
+            </div>
             )}
-          </div>
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center ml-4 rounded-xl"

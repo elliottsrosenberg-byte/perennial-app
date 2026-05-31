@@ -24,7 +24,7 @@ function clientName(inv: Invoice) {
   return "your client";
 }
 
-function paidEmailHtml(studioName: string, invNum: string, total: number, who: string, isOwner: boolean) {
+function paidEmailHtml(studioName: string, invNum: string, total: number, who: string, isOwner: boolean, accent: string, logoUrl: string | null) {
   const headline = isOwner ? `Payment received from ${who}` : "Payment received — thank you";
   const body = isOwner
     ? `Invoice ${invNum} for ${fmtCurrency(total)} has been paid by ${who}.`
@@ -33,14 +33,16 @@ function paidEmailHtml(studioName: string, invNum: string, total: number, who: s
 <body style="margin:0;padding:0;background:#f5f4f1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
   <div style="max-width:520px;margin:40px auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.08);">
     <div style="background:#1f211a;padding:24px 32px;display:flex;justify-content:space-between;align-items:center;">
-      <span style="color:white;font-size:17px;font-weight:700;letter-spacing:-0.02em;">${studioName}</span>
+      ${logoUrl
+        ? `<img src="${logoUrl}" alt="${studioName}" style="height:28px;max-width:160px;object-fit:contain;" />`
+        : `<span style="color:white;font-size:17px;font-weight:700;letter-spacing:-0.02em;">${studioName}</span>`}
       <span style="color:rgba(255,255,255,0.6);font-size:12px;">Invoice ${invNum}</span>
     </div>
     <div style="padding:28px 32px;text-align:center;">
       <div style="font-size:30px;margin-bottom:8px;">✓</div>
       <p style="font-size:15px;font-weight:600;color:#1f211a;margin:0 0 8px;">${headline}</p>
       <p style="font-size:13px;color:#6b6860;margin:0 0 16px;line-height:1.6;">${body}</p>
-      <div style="font-size:28px;font-weight:700;color:#3d6b4f;">${fmtCurrency(total)}</div>
+      <div style="font-size:28px;font-weight:700;color:${accent};">${fmtCurrency(total)}</div>
     </div>
     <div style="background:#f9faf4;padding:14px 32px;border-top:1px solid #eff0e7;">
       <span style="font-size:11px;color:#9a9690;">Sent securely via Perennial</span>
@@ -66,11 +68,13 @@ export async function sendInvoicePaidEmails(invoiceId: string): Promise<void> {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("studio_name, display_name, invoice_prefix, notif_payment_received")
+      .select("studio_name, display_name, invoice_prefix, notif_payment_received, brand_color, logo_url")
       .eq("user_id", inv.user_id)
       .maybeSingle();
     const studioName = profile?.studio_name?.trim() || profile?.display_name?.trim() || "Your studio";
     const invNum = formatInvoiceNumber(inv.number, profile?.invoice_prefix);
+    const accent = profile?.brand_color?.trim() || "#3d6b4f";
+    const logoUrl = profile?.logo_url ?? null;
 
     const clientEmail =
       (inv.client_contact as { email?: string | null } | null)?.email ??
@@ -90,14 +94,14 @@ export async function sendInvoicePaidEmails(invoiceId: string): Promise<void> {
       await resend.emails.send({
         from, to: clientEmail,
         subject: `Payment received — Invoice ${invNum}`,
-        html: paidEmailHtml(studioName, invNum, total, who, false),
+        html: paidEmailHtml(studioName, invNum, total, who, false, accent, logoUrl),
       });
     }
     if (ownerEmail && ownerEmail !== clientEmail) {
       await resend.emails.send({
         from, to: ownerEmail,
         subject: `Invoice ${invNum} was paid`,
-        html: paidEmailHtml(studioName, invNum, total, who, true),
+        html: paidEmailHtml(studioName, invNum, total, who, true, accent, logoUrl),
       });
     }
   } catch (e) {

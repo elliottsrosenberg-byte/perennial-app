@@ -23,7 +23,7 @@ function clientName(inv: Invoice) {
   return "Client";
 }
 
-function buildEmail(inv: Invoice, to: string, message: string, appUrl: string, publicToken: string, invoicePrefix: string | null | undefined, studioName: string) {
+function buildEmail(inv: Invoice, to: string, message: string, appUrl: string, publicToken: string, invoicePrefix: string | null | undefined, studioName: string, accent: string, logoUrl: string | null) {
   const total = invoiceTotal(inv);
   const invNum = formatInvoiceNumber(inv.number, invoicePrefix);
   const printUrl  = `${appUrl}/finance/invoice/${inv.id}/print`;
@@ -44,7 +44,9 @@ function buildEmail(inv: Invoice, to: string, message: string, appUrl: string, p
   <div style="max-width:600px;margin:40px auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.08);">
     <!-- Header -->
     <div style="background:#1f211a;padding:28px 36px;display:flex;justify-content:space-between;align-items:center;">
-      <div style="color:white;font-size:18px;font-weight:700;letter-spacing:-0.02em;">${studioName}</div>
+      ${logoUrl
+        ? `<img src="${logoUrl}" alt="${studioName}" style="height:30px;max-width:170px;object-fit:contain;" />`
+        : `<div style="color:white;font-size:18px;font-weight:700;letter-spacing:-0.02em;">${studioName}</div>`}
       <div style="color:rgba(255,255,255,0.6);font-size:12px;">Invoice ${invNum}</div>
     </div>
 
@@ -95,7 +97,7 @@ function buildEmail(inv: Invoice, to: string, message: string, appUrl: string, p
 
       <!-- Primary CTA: hosted public view with embedded Stripe payment -->
       <div style="text-align:center;margin-bottom:12px;">
-        <a href="${publicUrl}" style="background:#3d6b4f;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-size:13px;font-weight:600;">View &amp; pay invoice →</a>
+        <a href="${publicUrl}" style="background:${accent};color:white;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-size:13px;font-weight:600;">View &amp; pay invoice →</a>
       </div>
       <!-- Secondary: plain PDF -->
       <div style="text-align:center;margin-bottom:8px;">
@@ -158,12 +160,14 @@ export async function POST(req: Request) {
   // header instead of Perennial branding.
   const { data: profile } = await supabase
     .from("profiles")
-    .select("invoice_prefix, studio_name, display_name")
+    .select("invoice_prefix, studio_name, display_name, brand_color, logo_url")
     .eq("user_id", (inv as Invoice).user_id)
     .maybeSingle();
   const studioName = profile?.studio_name?.trim() || profile?.display_name?.trim() || "Your studio";
+  const accent = profile?.brand_color?.trim() || "#3d6b4f";
+  const logoUrl = profile?.logo_url ?? null;
 
-  const built = buildEmail(inv as Invoice, to, message, appUrl, publicToken, profile?.invoice_prefix, studioName);
+  const built = buildEmail(inv as Invoice, to, message, appUrl, publicToken, profile?.invoice_prefix, studioName, accent, logoUrl);
   const finalSubject = subject?.trim() || built.subject;
 
   const { Resend } = await import("resend");
