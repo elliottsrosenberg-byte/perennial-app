@@ -628,8 +628,9 @@ export default function InvoicesTab({
               )}
             </div>
 
-            {/* Status pill (filled) */}
-            {(() => {
+            {/* Status pill (filled) — drafts read as a working state, so we
+                skip the pill there and let the action buttons carry it. */}
+            {selectedInvoice.status !== "draft" && (() => {
               const overdue = isOverdue(selectedInvoice);
               const statusKey = overdue ? "overdue" : selectedInvoice.status;
               const st = STATUS_STYLE[statusKey];
@@ -643,14 +644,24 @@ export default function InvoicesTab({
 
             {/* Contextual primary action */}
             {selectedInvoice.status === "draft" && (
-              <button onClick={() => setShowSendModal(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-semibold rounded-lg text-white"
-                style={{ background: "var(--color-sage)" }}
-                onMouseEnter={e => e.currentTarget.style.background = "var(--color-sage-hover)"}
-                onMouseLeave={e => e.currentTarget.style.background = "var(--color-sage)"}>
-                <Send size={12} />
-                Send invoice
-              </button>
+              <>
+                <button onClick={() => setShowSendModal(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-semibold rounded-lg text-white"
+                  style={{ background: "var(--color-sage)" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "var(--color-sage-hover)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "var(--color-sage)"}>
+                  <Send size={12} />
+                  Send invoice
+                </button>
+                <button onClick={() => updateStatus(selectedInvoice, "sent")} disabled={savingStatus}
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-semibold rounded-lg disabled:opacity-50 transition-colors"
+                  style={{ color: "var(--color-charcoal)", border: "0.5px solid var(--color-border)", background: "transparent" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "var(--color-warm-white)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  <Check size={12} />
+                  {savingStatus ? "…" : "Mark as sent"}
+                </button>
+              </>
             )}
             {selectedInvoice.status === "sent" && (
               <div className="flex items-center gap-2">
@@ -675,11 +686,9 @@ export default function InvoicesTab({
               </span>
             )}
 
-            {/* Public link affordance — only meaningful once the invoice
-                has been shared with the client (sent / overdue / paid). */}
-            {selectedInvoice.status !== "draft" && (
-              <CopyPublicLinkButton invoiceId={selectedInvoice.id} />
-            )}
+            {/* Public link affordance — available on every status, including
+                drafts (the endpoint mints a token on demand). */}
+            <CopyPublicLinkButton invoiceId={selectedInvoice.id} />
 
             {/* Overflow menu */}
             <div ref={menuRef} style={{ position: "relative" }}>
@@ -698,7 +707,7 @@ export default function InvoicesTab({
                     { label: "Download PDF", icon: Download, href: `/finance/invoice/${selectedInvoice.id}/print`, external: true },
                     "divider",
                     ...(selectedInvoice.status !== "draft" ? [{ label: "Move to draft",  onClick: () => updateStatus(selectedInvoice, "draft") }] : []),
-                    ...(selectedInvoice.status !== "sent"  ? [{ label: "Mark as sent",   onClick: () => updateStatus(selectedInvoice, "sent")  }] : []),
+                    ...(selectedInvoice.status === "paid"  ? [{ label: "Mark as sent",   onClick: () => updateStatus(selectedInvoice, "sent")  }] : []),
                     ...(selectedInvoice.status !== "paid"  ? [{ label: "Mark as paid",   onClick: () => updateStatus(selectedInvoice, "paid")  }] : []),
                     "divider",
                     { label: "Delete invoice", danger: true, onClick: () => setConfirmDelete(true) },
@@ -1103,7 +1112,8 @@ function CopyPublicLinkButton({ invoiceId }: { invoiceId: string }) {
         onClick={handleClick}
         disabled={busy}
         title="Copy a public link the client can use to pay"
-        className="flex items-center gap-1.5 px-2.5 py-2 text-[11.5px] font-medium rounded-lg transition-colors"
+        aria-label="Copy public link"
+        className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors"
         style={{
           color:      "var(--color-charcoal)",
           background: "transparent",
@@ -1113,8 +1123,7 @@ function CopyPublicLinkButton({ invoiceId }: { invoiceId: string }) {
         onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-warm-white)"; }}
         onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
       >
-        <Link2 size={11} />
-        Copy public link
+        <Link2 size={14} />
       </button>
       {toast && (
         <span
