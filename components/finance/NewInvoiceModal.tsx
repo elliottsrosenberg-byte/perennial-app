@@ -509,8 +509,8 @@ export default function NewInvoiceModal({
           <div>
             <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Notes</label>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
-              placeholder="Optional notes for this invoice…" rows={2}
-              className={inputCls} style={{ ...inputStyle, resize: "none" }} />
+              placeholder="Optional notes for this invoice…" rows={6}
+              className={inputCls} style={{ ...inputStyle, resize: "none", minHeight: 132 }} />
           </div>
 
           {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
