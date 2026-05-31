@@ -7,7 +7,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import Menu from "@/components/ui/Menu";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { formatInvoiceNumber } from "@/lib/invoices/format";
-import { X, Download, Send, FileText, MoreHorizontal, Plus, Clock, Receipt, CheckCircle2, Sparkles, ChevronDown, Link2 } from "lucide-react";
+import { X, Download, Send, FileText, MoreHorizontal, Plus, Clock, Receipt, CheckCircle2, Sparkles, ChevronDown, Link2, Check } from "lucide-react";
 
 interface Props {
   invoices: Invoice[];
@@ -178,6 +178,10 @@ export default function InvoicesTab({
   const [menuOpen, setMenuOpen]               = useState(false);
   const [pullerOpen, setPullerOpen]           = useState(false);
   const [confirmDelete, setConfirmDelete]     = useState(false);
+  const [editingNumber, setEditingNumber]     = useState(false);
+  const [numberDraft, setNumberDraft]         = useState("");
+  const [savingNumber, setSavingNumber]       = useState(false);
+  const [numberError, setNumberError]         = useState<string | null>(null);
   // Persist banner dismissal for the session so it doesn't re-appear every
   // tab switch. sessionStorage is intentional — the next browser tab can
   // remind them again.
@@ -202,6 +206,10 @@ export default function InvoicesTab({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  // Drop any in-progress invoice-number edit when the selection changes so
+  // the editor never carries one invoice's draft over to another.
+  useEffect(() => { setEditingNumber(false); setNumberError(null); }, [selectedId]);
 
   const filteredInvoices = useMemo(() => invoices.filter((inv) => {
     if (filter === "all") return true;
@@ -276,6 +284,39 @@ export default function InvoicesTab({
       .single();
     if (data) onInvoiceUpdated(data as Invoice);
     setSavingStatus(false);
+  }
+
+  function startEditNumber() {
+    if (!selectedInvoice) return;
+    setNumberDraft(String(selectedInvoice.number));
+    setNumberError(null);
+    setEditingNumber(true);
+  }
+  function cancelEditNumber() {
+    setEditingNumber(false);
+    setNumberError(null);
+  }
+  async function saveNumber() {
+    if (!selectedInvoice) return;
+    const n = parseInt(numberDraft, 10);
+    if (!Number.isInteger(n) || n <= 0) { setNumberError("Enter a positive whole number."); return; }
+    if (n === selectedInvoice.number) { cancelEditNumber(); return; }
+    setSavingNumber(true); setNumberError(null);
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("invoices")
+      .update({ number: n })
+      .eq("id", selectedInvoice.id)
+      .select("*, client_contact:contacts(id, first_name, last_name), client_organization:organizations(id, name), project:projects(id, title, rate), line_items:invoice_line_items(*)")
+      .single();
+    setSavingNumber(false);
+    if (error) {
+      // 23505 = unique_violation — another invoice already uses this number.
+      setNumberError(error.code === "23505" ? "That number is already in use." : error.message);
+      return;
+    }
+    if (data) onInvoiceUpdated(data as Invoice);
+    setEditingNumber(false);
   }
 
   async function addLineItem() {
@@ -533,13 +574,58 @@ export default function InvoicesTab({
           <div className="flex items-center gap-3 px-5 py-3 shrink-0"
             style={{ borderBottom: "0.5px solid var(--color-border)", background: detailBg }}>
             <div className="flex-1 min-w-0">
-              <p className="text-[15px] font-semibold truncate"
-                style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)", letterSpacing: "-0.01em" }}>
-                {clientName(selectedInvoice)} <span style={{ color: "var(--color-grey)", fontWeight: 400 }}>· {formatInvoiceNumber(selectedInvoice.number, invoicePrefix)}</span>
-              </p>
-              <p className="text-[11px] mt-0.5" style={{ color: "var(--color-grey)" }}>
-                {selectedInvoice.project?.title ?? "No project"}{selectedInvoice.issued_at ? ` · Issued ${fmtDate(selectedInvoice.issued_at)}` : ""}
-              </p>
+              {editingNumber ? (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[15px] font-semibold"
+                    style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)", letterSpacing: "-0.01em" }}>
+                    {clientName(selectedInvoice)}
+                  </span>
+                  <span className="text-[15px]" style={{ color: "var(--color-grey)", fontWeight: 400 }}>
+                    · {(invoicePrefix ?? "").trim() || "#"}
+                  </span>
+                  <input
+                    autoFocus
+                    value={numberDraft}
+                    onChange={(e) => setNumberDraft(e.target.value.replace(/[^0-9]/g, ""))}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter")  { e.preventDefault(); saveNumber(); }
+                      if (e.key === "Escape") { e.preventDefault(); cancelEditNumber(); }
+                    }}
+                    inputMode="numeric"
+                    className="w-16 px-1.5 py-0.5 text-[14px] rounded focus:outline-none tabular-nums"
+                    style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit" }}
+                  />
+                  <button type="button" onClick={saveNumber} disabled={savingNumber || !numberDraft}
+                    className="w-6 h-6 flex items-center justify-center rounded text-white disabled:opacity-50"
+                    style={{ background: "var(--color-sage)" }} title="Save">
+                    <Check size={12} />
+                  </button>
+                  <button type="button" onClick={cancelEditNumber}
+                    className="w-6 h-6 flex items-center justify-center rounded"
+                    style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }} title="Cancel">
+                    <X size={12} />
+                  </button>
+                  {numberError && (
+                    <span className="text-[10.5px]" style={{ color: "var(--color-red-orange)" }}>{numberError}</span>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <p className="text-[15px] font-semibold truncate"
+                    style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)", letterSpacing: "-0.01em" }}>
+                    {clientName(selectedInvoice)}{" "}
+                    <button type="button" onClick={startEditNumber}
+                      className="rounded transition-colors hover:underline"
+                      style={{ color: "var(--color-grey)", fontWeight: 400 }}
+                      title="Edit invoice number">
+                      · {formatInvoiceNumber(selectedInvoice.number, invoicePrefix)}
+                    </button>
+                  </p>
+                  <p className="text-[11px] mt-0.5" style={{ color: "var(--color-grey)" }}>
+                    {selectedInvoice.project?.title ?? "No project"}{selectedInvoice.issued_at ? ` · Issued ${fmtDate(selectedInvoice.issued_at)}` : ""}
+                  </p>
+                </>
+              )}
             </div>
 
             {/* Status pill (filled) */}
