@@ -178,8 +178,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: (error as { message?: string }).message ?? "Failed to send email." }, { status: 500 });
   }
 
-  // Mark invoice as sent if it's still draft
-  if (inv.status === "draft") {
+  // Mark invoice as sent if it hasn't been sent yet (draft or saved).
+  if (inv.status === "draft" || inv.status === "saved") {
     await supabase.from("invoices").update({ status: "sent" }).eq("id", invoiceId);
   }
 

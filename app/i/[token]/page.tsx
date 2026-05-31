@@ -49,9 +49,9 @@ export default async function PublicInvoicePage({
   if (!data) notFound();
   const inv = data as Invoice;
 
-  // Never expose drafts publicly — only sent or paid invoices are
-  // shareable. (A draft with a token slipped out somehow should 404.)
-  if (inv.status === "draft") notFound();
+  // Never expose pre-send invoices publicly — only sent / paid / voided are
+  // shareable. (A draft or saved invoice with a leaked token should 404.)
+  if (inv.status === "draft" || inv.status === "saved") notFound();
 
   const total = invoiceTotal(inv);
   const isOverdue = inv.status === "sent" && !!inv.due_at && inv.due_at < new Date().toISOString().split("T")[0];
@@ -152,6 +152,7 @@ export default async function PublicInvoicePage({
         .pi-status-sent    { background: rgba(37,99,171,0.10);  color: #2563ab; }
         .pi-status-paid    { background: rgba(61,107,79,0.12);  color: #3d6b4f; }
         .pi-status-overdue { background: rgba(220,62,13,0.10);  color: #dc3e0d; }
+        .pi-status-voided  { background: rgba(31,33,26,0.07);   color: #9a9690; }
 
         .pi-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-bottom: 28px; }
         .pi-meta-label {
@@ -245,7 +246,7 @@ export default async function PublicInvoicePage({
                   <div className="pi-inv-num">
                     {invNum}
                     <span className={`pi-status pi-status-${isOverdue ? "overdue" : inv.status}`}>
-                      {isOverdue ? "Overdue" : inv.status === "paid" ? "Paid" : "Sent"}
+                      {isOverdue ? "Overdue" : inv.status === "paid" ? "Paid" : inv.status === "voided" ? "Void" : "Sent"}
                     </span>
                   </div>
                 </div>
@@ -314,20 +315,29 @@ export default async function PublicInvoicePage({
             </div>
           </div>
 
-          {/* Right: payment */}
+          {/* Right: payment (or a void notice) */}
           <aside>
-            <div className="pi-pay">
-              <div className="pi-pay-head">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1f211a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <rect x="3" y="11" width="18" height="11" rx="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-                <span className="pi-pay-title">Secure payment</span>
+            {inv.status === "voided" ? (
+              <div className="pi-pay" style={{ background: "#eff0e7" }}>
+                <div className="pi-pay-title" style={{ marginBottom: 6 }}>Invoice voided</div>
+                <p style={{ fontSize: 12, color: "#6b6860", lineHeight: 1.6 }}>
+                  This invoice has been voided and is no longer payable. Please contact the sender with any questions.
+                </p>
               </div>
-              <div className="pi-pay-amt">Amount due</div>
-              <div className="pi-pay-amount">{fmtCurrency(total)}</div>
-              <PaymentSectionMount invoiceId={inv.id} token={token} amount={total} status={inv.status} clientEmail={clientEmail} />
-            </div>
+            ) : (
+              <div className="pi-pay">
+                <div className="pi-pay-head">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1f211a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  <span className="pi-pay-title">Secure payment</span>
+                </div>
+                <div className="pi-pay-amt">Amount due</div>
+                <div className="pi-pay-amount">{fmtCurrency(total)}</div>
+                <PaymentSectionMount invoiceId={inv.id} token={token} amount={total} status={inv.status} clientEmail={clientEmail} />
+              </div>
+            )}
           </aside>
         </div>
 

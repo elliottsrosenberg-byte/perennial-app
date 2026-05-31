@@ -141,10 +141,19 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
     setTimeEntries(prev => prev.filter(e => e.id !== id));
   }
 
-  function handleInvoiceSent(invoiceId: string) {
+  async function handleInvoiceSent(invoiceId: string) {
+    // Optimistically flip to sent, then re-fetch so we pick up the minted
+    // public_token (the detail pane's PDF preview embeds /i/[token]).
     setInvoices(prev => prev.map(inv =>
       inv.id === invoiceId ? { ...inv, status: "sent" as const } : inv
     ));
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("invoices")
+      .select("*, client_contact:contacts(id, first_name, last_name, email, phone, location), client_organization:organizations(id, name, email, phone, location), project:projects(id, title, rate), line_items:invoice_line_items(*)")
+      .eq("id", invoiceId)
+      .single();
+    if (data) setInvoices(prev => prev.map(inv => inv.id === invoiceId ? data as Invoice : inv));
   }
 
   const nextInvoiceNumber = (invoices.length === 0 ? 0 : Math.max(...invoices.map((i) => i.number))) + 1;

@@ -23,8 +23,9 @@ function clientName(inv: Invoice) {
   return "—";
 }
 
-export default async function InvoicePrintPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function InvoicePrintPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ preview?: string }> }) {
   const { id } = await params;
+  const preview = (await searchParams).preview === "1";
   const supabase = await createClient();
 
   const { data } = await supabase
@@ -164,14 +165,16 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
         }
         .status-paid    { background: rgba(61,107,79,0.12);  color: #3d6b4f; }
         .status-sent    { background: rgba(37,99,171,0.1);   color: #2563ab; }
+        .status-saved   { background: rgba(184,134,11,0.12); color: #b8860b; }
         .status-draft   { background: rgba(31,33,26,0.07);   color: #9a9690; }
         .status-overdue { background: rgba(220,62,13,0.1);   color: #dc3e0d; }
+        .status-voided  { background: rgba(31,33,26,0.07);   color: #9a9690; }
       `}</style>
 
       {/* PrintTrigger is the client-side bit — it auto-fires window.print()
           on mount AND renders the on-screen Print button. We can't put the
           onClick handler on a button directly in this Server Component. */}
-      <PrintTrigger />
+      <PrintTrigger preview={preview} />
 
       <div className="page">
         {/* Header */}
@@ -194,7 +197,12 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
             <div className="inv-number">
               {displayNumber}
               <span className={`status-badge status-${isOverdue ? "overdue" : inv.status}`}>
-                {isOverdue ? "Overdue" : inv.status === "paid" ? "Paid" : inv.status === "sent" ? "Sent" : "Draft"}
+                {isOverdue ? "Overdue"
+                  : inv.status === "paid" ? "Paid"
+                  : inv.status === "sent" ? "Sent"
+                  : inv.status === "saved" ? "Saved"
+                  : inv.status === "voided" ? "Void"
+                  : "Draft"}
               </span>
             </div>
           </div>

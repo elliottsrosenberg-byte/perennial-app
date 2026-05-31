@@ -244,7 +244,7 @@ export interface OutreachTargetProject {
 
 // ── Finance ───────────────────────────────────────────────────────────────────
 
-export type InvoiceStatus   = "draft" | "sent" | "paid";
+export type InvoiceStatus   = "draft" | "saved" | "sent" | "paid" | "voided";
 export type ExpenseCategory = "materials" | "travel" | "production" | "software" | "other";
 export type LineItemSource  = "time" | "expense" | "manual";
 
