@@ -466,10 +466,18 @@ export default function InvoicesTab({
 
   async function updateStatus(inv: Invoice, status: InvoiceStatus) {
     setSavingStatus(true);
+    // Completing an invoice goes through a server route so all parties get a
+    // payment-confirmation email (matching the Stripe webhook path).
+    if (status === "paid") {
+      const res = await fetch(`/api/finance/invoices/${inv.id}/mark-paid`, { method: "POST" });
+      const json = await res.json() as { invoice?: Invoice };
+      if (json.invoice) onInvoiceUpdated(json.invoice);
+      setSavingStatus(false);
+      return;
+    }
     const supabase = createClient();
-    const patch: Record<string, unknown> = { status };
-    if (status === "paid") patch.paid_at = new Date().toISOString().split("T")[0];
-    if (status !== "paid") patch.paid_at = null;
+    // Non-paid transitions. Moving off paid clears paid_at.
+    const patch: Record<string, unknown> = { status, paid_at: null };
     // Stamp activity timestamps for the timeline.
     if (status === "sent" && !inv.sent_at) patch.sent_at = new Date().toISOString();
     if (status === "voided") patch.voided_at = new Date().toISOString();

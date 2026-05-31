@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { sendInvoicePaidEmails } from "@/lib/invoices/notify";
 import type Stripe from "stripe";
 
 export const runtime = "nodejs";
@@ -119,6 +120,8 @@ export async function POST(req: Request) {
         // Return 500 so Stripe retries.
         return NextResponse.json({ error: "Failed to update invoice." }, { status: 500 });
       }
+      // Notify all parties that the invoice was completed (best-effort).
+      await sendInvoicePaidEmails(invoiceId);
       break;
     }
     case "payment_intent.payment_failed": {
