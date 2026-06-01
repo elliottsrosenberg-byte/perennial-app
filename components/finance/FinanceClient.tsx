@@ -30,12 +30,18 @@ interface Props {
   initialInvoices: Invoice[];
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
   invoicePrefix: string | null;
+  initialTab: string | null;
+  initialInvoiceId: string | null;
 }
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-export default function FinanceClient({ initialTimeEntries, initialActiveTimer, initialExpenses, initialInvoices, projects, invoicePrefix }: Props) {
-  const [activeTab, setActiveTab]       = useState<Tab>("overview");
+const VALID_TABS: Tab[] = ["overview", "time", "invoices", "banking"];
+
+export default function FinanceClient({ initialTimeEntries, initialActiveTimer, initialExpenses, initialInvoices, projects, invoicePrefix, initialTab, initialInvoiceId }: Props) {
+  const [activeTab, setActiveTab]       = useState<Tab>(
+    initialTab && (VALID_TABS as string[]).includes(initialTab) ? (initialTab as Tab) : "overview",
+  );
   const [timeEntries, setTimeEntries]   = useState(initialTimeEntries);
   const [activeTimer, setActiveTimer]   = useState<ActiveTimer | null>(initialActiveTimer);
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -284,6 +290,7 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
             expenses={expenses}
             projects={projects}
             invoicePrefix={invoicePrefix}
+            initialInvoiceId={initialInvoiceId}
             onInvoiceUpdated={(inv) => setInvoices((prev) => prev.map((i) => i.id === inv.id ? inv : i))}
             onInvoiceDeleted={(id) => setInvoices((prev) => prev.filter((i) => i.id !== id))}
             onInvoiceSent={handleInvoiceSent}

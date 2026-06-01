@@ -24,6 +24,8 @@ interface Props {
   expenses: Expense[];
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
   invoicePrefix: string | null;
+  /** Preselect an invoice on mount (e.g. returning from the print page). */
+  initialInvoiceId?: string | null;
   onInvoiceUpdated: (inv: Invoice) => void;
   onInvoiceDeleted: (invoiceId: string) => void;
   onInvoiceSent: (invoiceId: string) => void;
@@ -259,12 +261,12 @@ const SOURCE_STYLE: Record<string, { bg: string; color: string }> = {
 };
 
 export default function InvoicesTab({
-  invoices, timeEntries, expenses, projects, invoicePrefix,
+  invoices, timeEntries, expenses, projects, invoicePrefix, initialInvoiceId,
   onInvoiceUpdated, onInvoiceDeleted, onInvoiceSent, onNewInvoice,
 }: Props) {
   // Nothing is selected on entry — the detail pane stays empty until the user
-  // picks an invoice.
-  const [selectedId, setSelectedId]           = useState<string | null>(null);
+  // picks an invoice (unless we were deep-linked to one, e.g. back from print).
+  const [selectedId, setSelectedId]           = useState<string | null>(initialInvoiceId ?? null);
   // Multi-select status filter (empty = show all) + sort controls.
   const [statusFilter, setStatusFilter]       = useState<Set<StatusKey>>(new Set());
   const [statusMenuOpen, setStatusMenuOpen]   = useState(false);
@@ -1090,7 +1092,7 @@ export default function InvoicesTab({
                     onClose={() => setMenuOpen(false)}
                     style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, minWidth: 200, zIndex: 30 }}
                     items={[
-                      { label: "Download PDF", icon: Download, href: `/finance/invoice/${selectedInvoice.id}/print`, external: true },
+                      { label: "Download PDF", icon: Download, href: `/invoice/${selectedInvoice.id}/print`, external: true },
                       "divider",
                       ...(selectedInvoice.status !== "draft" ? [{ label: "Move to draft", onClick: () => updateStatus(selectedInvoice, "draft") }] : []),
                       ...((selectedInvoice.status === "draft" || selectedInvoice.status === "saved") ? [{ label: "Mark as sent", onClick: () => updateStatus(selectedInvoice, "sent") }] : []),
@@ -1877,7 +1879,7 @@ function InvoiceActivity({ invoice }: { invoice: Invoice }) {
 // has no public token yet (e.g. voided before it was ever sent).
 
 function InvoicePdfPreview({ token, invoiceId, voided }: { token: string | null; invoiceId: string; voided: boolean }) {
-  const src = token ? `/i/${token}?preview=1` : `/finance/invoice/${invoiceId}/print?preview=1`;
+  const src = token ? `/i/${token}?preview=1` : `/invoice/${invoiceId}/print?preview=1`;
   return (
     <div className="relative w-full h-full" style={{ minHeight: 480 }}>
       <iframe

@@ -96,10 +96,15 @@ export default async function InvoicePrintPage({ params, searchParams }: { param
           min-height: 100vh;
         }
 
-        /* Hide print button when printing */
+        /* margin:0 suppresses the browser's own date/URL header & footer. */
+        @page { size: auto; margin: 0; }
+
+        /* Powered-by tag at the foot of the document — screen + PDF. */
+        .pp-footer { margin-top: 44px; padding-top: 20px; border-top: 1px solid #eff0e7; text-align: center; font-size: 11px; color: #9a9690; }
+
         @media print {
           .no-print { display: none !important; }
-          .page { padding: 48px; }
+          .page { padding: 48px 48px 56px; }
           body { font-size: 12px; }
         }
 
@@ -113,6 +118,13 @@ export default async function InvoicePrintPage({ params, searchParams }: { param
             font-family: inherit; font-size: 12px; font-weight: 500;
           }
           .print-btn:hover { background: #3a3d35; }
+          .back-btn {
+            position: fixed; top: 24px; left: 24px; display: inline-flex; align-items: center; gap: 6px;
+            background: white; color: #1f211a; border: 0.5px solid #e6e4dd;
+            padding: 8px 14px; border-radius: 8px; cursor: pointer; text-decoration: none;
+            font-family: inherit; font-size: 12px; font-weight: 500;
+          }
+          .back-btn:hover { background: #fbf9f4; }
         }
 
         .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 52px; gap: 32px; }
@@ -176,6 +188,9 @@ export default async function InvoicePrintPage({ params, searchParams }: { param
           on mount AND renders the on-screen Print button. We can't put the
           onClick handler on a button directly in this Server Component. */}
       <PrintTrigger preview={preview} />
+      {!preview && (
+        <a className="back-btn no-print" href={`/finance?tab=invoices&invoice=${id}`}>← Back to invoices</a>
+      )}
 
       <div className="page">
         {/* Header */}
@@ -297,6 +312,8 @@ export default async function InvoicePrintPage({ params, searchParams }: { param
             ))}
           </div>
         )}
+
+        <div className="pp-footer">Powered by Perennial</div>
       </div>
     </>
   );

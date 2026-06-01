@@ -32,11 +32,10 @@ function paidEmailHtml(studioName: string, invNum: string, total: number, who: s
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f5f4f1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
   <div style="max-width:520px;margin:40px auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.08);">
-    <div style="background:#1f211a;padding:24px 32px;display:flex;justify-content:space-between;align-items:center;">
+    <div style="background:${accent};padding:24px 32px;">
       ${logoUrl
-        ? `<img src="${logoUrl}" alt="${studioName}" style="height:28px;max-width:160px;object-fit:contain;" />`
-        : `<span style="color:white;font-size:17px;font-weight:700;letter-spacing:-0.02em;">${studioName}</span>`}
-      <span style="color:rgba(255,255,255,0.6);font-size:12px;">Invoice ${invNum}</span>
+        ? `<img src="${logoUrl}" alt="${studioName}" height="28" style="height:28px;max-width:200px;object-fit:contain;display:block;" />`
+        : `<span style="color:#ffffff;font-size:17px;font-weight:700;letter-spacing:-0.02em;">${studioName}</span>`}
     </div>
     <div style="padding:28px 32px;text-align:center;">
       <div style="font-size:30px;margin-bottom:8px;">✓</div>

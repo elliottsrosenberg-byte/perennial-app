@@ -2,7 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import FinanceClient from "@/components/finance/FinanceClient";
 import type { TimeEntry, ActiveTimer, Expense, Invoice, Project } from "@/types/database";
 
-export default async function FinancePage() {
+export default async function FinancePage({ searchParams }: { searchParams: Promise<{ tab?: string; invoice?: string }> }) {
+  const sp = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -50,6 +51,8 @@ export default async function FinancePage() {
         initialInvoices={(invoices ?? []) as Invoice[]}
         projects={(projects ?? []) as Pick<Project, "id" | "title" | "type" | "rate">[]}
         invoicePrefix={(profile as { invoice_prefix?: string | null } | null)?.invoice_prefix ?? null}
+        initialTab={sp.tab ?? null}
+        initialInvoiceId={sp.invoice ?? null}
       />
     </div>
   );
