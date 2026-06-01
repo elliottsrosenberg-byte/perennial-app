@@ -7,6 +7,7 @@ import { Layers, Users, Receipt, Send, Clock, Globe, BookOpen, UploadCloud, X as
 import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import AshMark from "@/components/ui/AshMark";
+import { COUNTRIES, BUSINESS_TYPES, composeStudioAddress } from "@/lib/profile/business";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -153,6 +154,14 @@ interface OnboardingData {
   website:         string;
   tagline:         string;
   bio:             string;
+  // Billing identity — feeds invoices + Stripe Connect onboarding.
+  businessType:    string;
+  country:         string;
+  addressLine1:    string;
+  addressLine2:    string;
+  addressCity:     string;
+  addressState:    string;
+  addressZip:      string;
   practiceTypes:   string[];
   workTypes:       string[];
   sellingChannels: string[];
@@ -162,6 +171,30 @@ interface OnboardingData {
   businessIssues:  string;
   urgentNeeds:     string;
   goals:           string[];
+}
+
+/** The `profiles` billing-identity columns derived from onboarding data.
+ *  `address` is the composed display string invoices render; the
+ *  structured columns also feed Stripe Connect prefill. Shared by the
+ *  complete + skip save paths so neither drops what the user entered. */
+function billingPatch(d: OnboardingData) {
+  return {
+    business_type: d.businessType || null,
+    country:       d.country || null,
+    address_line1: d.addressLine1 || null,
+    address_line2: d.addressLine2 || null,
+    address_city:  d.addressCity || null,
+    address_state: d.addressState || null,
+    address_zip:   d.addressZip || null,
+    address: composeStudioAddress({
+      address_line1: d.addressLine1,
+      address_line2: d.addressLine2,
+      address_city:  d.addressCity,
+      address_state: d.addressState,
+      address_zip:   d.addressZip,
+      country:       d.country,
+    }) || null,
+  };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -312,6 +345,35 @@ function TextInput({
   );
 }
 
+function SelectInput({
+  value, onChange, options,
+}: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  return (
+    <div style={{ position: "relative" }}>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{
+          width: "100%", padding: "9px 30px 9px 13px", fontSize: 13,
+          background: "var(--color-off-white)",
+          border: "0.5px solid var(--color-border)", borderRadius: 9,
+          color: value ? "var(--color-charcoal)" : "var(--color-grey)",
+          fontFamily: "inherit", outline: "none", boxSizing: "border-box" as const,
+          appearance: "none" as const, cursor: "pointer",
+        }}
+        onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
+        onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
+      >
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="var(--color-grey)" strokeWidth="2"
+        style={{ position: "absolute", right: 11, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+        <path d="M4 6l4 4 4-4" />
+      </svg>
+    </div>
+  );
+}
+
 // ─── Main page component ──────────────────────────────────────────────────────
 
 export default function OnboardingClient({ userId }: { userId: string }) {
@@ -337,6 +399,8 @@ export default function OnboardingClient({ userId }: { userId: string }) {
   const [data, setData] = useState<OnboardingData>({
     displayName: "",
     studioName: "", city: "", website: "", tagline: "", bio: "",
+    businessType: "", country: "", addressLine1: "", addressLine2: "",
+    addressCity: "", addressState: "", addressZip: "",
     practiceTypes: [], workTypes: [], sellingChannels: [],
     priceRange: "", yearsInPractice: "", challenges: [],
     businessIssues: "", urgentNeeds: "",
@@ -441,6 +505,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
       bio:                 data.bio || null,
       location:            data.city || null,
       website:             data.website || null,
+      ...billingPatch(data),
       practice_types:      data.practiceTypes,
       work_types:          data.workTypes,
       selling_channels:    data.sellingChannels,
@@ -473,6 +538,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
       studio_name:         data.studioName || null,
       tagline:             data.tagline || null,
       bio:                 data.bio || null,
+      ...billingPatch(data),
       onboarding_complete: true,
       tour_visited:        {},
       tour_dismissed:      false,
@@ -709,6 +775,33 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                     onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
                     onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
                   />
+                </div>
+                <div>
+                  <FieldLabel>Billing &amp; payments</FieldLabel>
+                  <p style={{ fontSize: 11, color: "var(--color-grey)", lineHeight: 1.6, marginTop: -2, marginBottom: 12 }}>
+                    Used on your invoices and to prefill Stripe when you set up online payments. Optional — you can finish this later in Settings.
+                  </p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                      <SelectInput
+                        value={data.businessType}
+                        onChange={v => set("businessType", v)}
+                        options={[{ value: "", label: "Business type…" }, ...BUSINESS_TYPES]}
+                      />
+                      <SelectInput
+                        value={data.country}
+                        onChange={v => set("country", v)}
+                        options={[{ value: "", label: "Country…" }, ...COUNTRIES.map(c => ({ value: c.code, label: c.name }))]}
+                      />
+                    </div>
+                    <TextInput value={data.addressLine1} onChange={v => set("addressLine1", v)} placeholder="Street address" />
+                    <TextInput value={data.addressLine2} onChange={v => set("addressLine2", v)} placeholder="Apt, suite, unit (optional)" />
+                    <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 14 }}>
+                      <TextInput value={data.addressCity} onChange={v => set("addressCity", v)} placeholder="City" />
+                      <TextInput value={data.addressState} onChange={v => set("addressState", v)} placeholder="State" />
+                      <TextInput value={data.addressZip} onChange={v => set("addressZip", v)} placeholder="ZIP" />
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <FieldLabel>What do you make?</FieldLabel>
