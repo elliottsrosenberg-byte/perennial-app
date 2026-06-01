@@ -83,7 +83,7 @@ export async function POST(req: Request) {
     lineItems:   (invObj.line_items ?? []).map((li) => ({ description: li.description, quantity: li.quantity, rate: Number(li.rate), amount: Number(li.amount) })),
     total,
     publicUrl:   `${appUrl}/i/${publicToken}`,
-    printUrl:    `${appUrl}/finance/invoice/${invObj.id}/print`,
+    printUrl:    `${appUrl}/invoice/${invObj.id}/print`,
   });
   const finalSubject = subject?.trim() || `Invoice ${invNum} — ${fmtCurrency(total)}`;
 

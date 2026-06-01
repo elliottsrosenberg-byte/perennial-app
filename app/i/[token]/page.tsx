@@ -232,7 +232,7 @@ export default async function PublicInvoicePage({
         <div className="pi-topbar">
           <a
             className="pi-topbtn"
-            href={`/finance/invoice/${inv.id}/print`}
+            href={`/invoice/${inv.id}/print`}
             target="_blank"
             rel="noopener noreferrer"
           >
