@@ -12,14 +12,23 @@
 
 /** The subset of `profiles` columns we pull for prefill. */
 export interface StripePrefillProfile {
-  studio_name?:  string | null;
-  display_name?: string | null;
-  phone?:        string | null;
-  website?:      string | null;
-  address?:      string | null;
-  tagline?:      string | null;
-  bio?:          string | null;
-  currency?:     string | null;
+  studio_name?:   string | null;
+  display_name?:  string | null;
+  phone?:         string | null;
+  website?:       string | null;
+  tagline?:       string | null;
+  bio?:           string | null;
+  currency?:      string | null;
+  business_type?: string | null;
+  country?:       string | null;
+  // Structured address (preferred). `address` is the legacy freeform
+  // column, used only as a fallback when the structured fields are blank.
+  address?:        string | null;
+  address_line1?:  string | null;
+  address_line2?:  string | null;
+  address_city?:   string | null;
+  address_state?:  string | null;
+  address_zip?:    string | null;
 }
 
 /** Split a single display name into a best-effort first / last. One word
@@ -81,6 +90,8 @@ export function buildStripeConnectPrefill(
   set("url", profile?.website);
   set("phone_number", profile?.phone);
   set("product_description", profile?.tagline || profile?.bio);
+  set("business_type", profile?.business_type);
+  if (profile?.country) set("country", profile.country.toUpperCase());
 
   // Stripe wants the currency lowercased (e.g. "usd").
   if (profile?.currency) set("currency", profile.currency.toLowerCase());
@@ -91,7 +102,17 @@ export function buildStripeConnectPrefill(
     set("last_name", last);
   }
 
-  if (profile?.address) {
+  // Prefer the structured address; only parse the legacy freeform blob
+  // when none of the structured parts are filled in.
+  const hasStructured =
+    profile?.address_line1 || profile?.address_city || profile?.address_state || profile?.address_zip;
+  if (hasStructured) {
+    const line = [profile?.address_line1, profile?.address_line2].map((s) => s?.trim()).filter(Boolean).join(", ");
+    set("street_address", line);
+    set("city",  profile?.address_city);
+    set("state", profile?.address_state);
+    set("zip",   profile?.address_zip);
+  } else if (profile?.address) {
     const a = parseAddress(profile.address);
     set("street_address", a.street_address);
     set("city",  a.city);

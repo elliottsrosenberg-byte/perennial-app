@@ -53,7 +53,7 @@ export async function GET(req: Request) {
     // profile just means we fall back to email-only.
     const { data: profile } = await supabase
       .from("profiles")
-      .select("studio_name, display_name, phone, website, address, tagline, bio, currency")
+      .select("studio_name, display_name, phone, website, tagline, bio, currency, business_type, country, address, address_line1, address_line2, address_city, address_state, address_zip")
       .eq("user_id", user.id)
       .maybeSingle();
 

@@ -425,11 +425,22 @@ export interface InvoiceAttachment {
 export interface ProfileInvoiceIdentity {
   studio_name:  string | null;
   display_name: string | null;
+  /** Rendered display string for the invoice "From" block — derived from
+   *  the structured fields below on save (kept for backward-compatible
+   *  rendering). */
   address:      string | null;
   phone:        string | null;
   logo_url:     string | null;
   logo_path:    string | null;
   ein:          string | null;
+  // Structured business identity — also feeds Stripe Connect onboarding.
+  business_type:  string | null;   // Stripe business_type value (sole_prop/llc/…)
+  country:        string | null;   // 2-letter ISO code
+  address_line1:  string | null;
+  address_line2:  string | null;
+  address_city:   string | null;
+  address_state:  string | null;
+  address_zip:    string | null;
 }
 
 // ── Opportunities ─────────────────────────────────────────────────────────────
