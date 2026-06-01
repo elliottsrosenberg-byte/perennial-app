@@ -64,6 +64,8 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
   const [editTimeEntry, setEditTimeEntry]   = useState<TimeEntry | null>(null);
   const [editExpense, setEditExpense]       = useState<Expense | null>(null);
   const [optionsOpen, setOptionsOpen]       = useState(false);
+  // Set to a freshly-created invoice's id so the Invoices tab selects it.
+  const [selectInvoiceId, setSelectInvoiceId] = useState<string | null>(null);
   const optionsRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -169,6 +171,14 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
       .eq("id", invoiceId)
       .single();
     if (data) setInvoices(prev => prev.map(inv => inv.id === invoiceId ? data as Invoice : inv));
+  }
+
+  // A new invoice lands at the top of the list, jumps to the Invoices tab,
+  // and auto-selects in the detail pane so the user sees what they made.
+  function handleInvoiceCreated(inv: Invoice) {
+    setInvoices((prev) => [inv, ...prev]);
+    setActiveTab("invoices");
+    setSelectInvoiceId(inv.id);
   }
 
   const nextInvoiceNumber = (invoices.length === 0 ? 0 : Math.max(...invoices.map((i) => i.number))) + 1;
@@ -315,6 +325,7 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
             invoicePrefix={invoicePrefix}
             stripeStatus={stripeStatus}
             initialInvoiceId={initialInvoiceId}
+            selectInvoiceId={selectInvoiceId}
             onInvoiceUpdated={(inv) => setInvoices((prev) => prev.map((i) => i.id === inv.id ? inv : i))}
             onInvoiceDeleted={(id) => setInvoices((prev) => prev.filter((i) => i.id !== id))}
             onInvoiceSent={handleInvoiceSent}
@@ -369,7 +380,7 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
           nextNumber={nextInvoiceNumber}
           invoicePrefix={invoicePrefix}
           onClose={() => setShowNewInvoice(false)}
-          onCreated={(inv) => setInvoices((prev) => [inv, ...prev])} />
+          onCreated={handleInvoiceCreated} />
       )}
 
       <FinanceIntroModal />
