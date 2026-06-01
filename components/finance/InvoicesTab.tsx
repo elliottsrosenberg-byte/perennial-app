@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Invoice, InvoiceLineItem, InvoiceAttachment, InvoiceStatus, TimeEntry, Expense, Project, Contact, Organization } from "@/types/database";
 import { uploadReceipt, deleteReceipt } from "@/lib/uploads/receipt";
 import EmptyState from "@/components/ui/EmptyState";
+import InvoiceStripeGate from "./InvoiceStripeGate";
 import Menu from "@/components/ui/Menu";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Select from "@/components/ui/Select";
@@ -24,6 +25,8 @@ interface Props {
   expenses: Expense[];
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
   invoicePrefix: string | null;
+  /** Live Stripe connection health — invoicing is gated on it. */
+  stripeStatus: { connected: boolean; status: string | null; accountName: string | null };
   /** Preselect an invoice on mount (e.g. returning from the print page). */
   initialInvoiceId?: string | null;
   onInvoiceUpdated: (inv: Invoice) => void;
@@ -261,7 +264,7 @@ const SOURCE_STYLE: Record<string, { bg: string; color: string }> = {
 };
 
 export default function InvoicesTab({
-  invoices, timeEntries, expenses, projects, invoicePrefix, initialInvoiceId,
+  invoices, timeEntries, expenses, projects, invoicePrefix, stripeStatus, initialInvoiceId,
   onInvoiceUpdated, onInvoiceDeleted, onInvoiceSent, onNewInvoice,
 }: Props) {
   // Nothing is selected on entry — the detail pane stays empty until the user
@@ -772,6 +775,20 @@ export default function InvoicesTab({
 
   const cardShadow = "0 2px 8px rgba(31,33,26,0.04)";
   const detailBg   = "var(--color-cream)";   // a real step darker than the list pane
+
+  // Stripe is foundational here: no healthy connection, no invoicing. Gate
+  // the whole tab behind the connect prompt rather than letting the user
+  // build invoices they can't actually get paid on. `error` gets a
+  // distinct reconnect treatment; anything else not-connected is a fresh
+  // connect.
+  if (!stripeStatus.connected) {
+    return (
+      <InvoiceStripeGate
+        state={stripeStatus.status === "error" ? "error" : "disconnected"}
+        accountName={stripeStatus.accountName}
+      />
+    );
+  }
 
   return (
     <div className="flex gap-0 flex-1 overflow-hidden p-5">
