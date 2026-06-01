@@ -2,7 +2,14 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Invoice, Project, Contact, TimeEntry, Expense } from "@/types/database";
+import type { Invoice, Project, Contact, Organization, TimeEntry, Expense } from "@/types/database";
+
+// A client is either a contact (person) or an organization. The invoice
+// schema carries both client_contact_id and client_organization_id; this
+// union keeps exactly one set at a time.
+type SelectedClient =
+  | { kind: "contact"; contact: Contact }
+  | { kind: "organization"; org: Organization };
 import { X, AlertTriangle, Clock, Receipt, Plus, Check } from "lucide-react";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
@@ -44,12 +51,14 @@ export default function NewInvoiceModal({
   // sequential number but the user can override it.
   const [numberDraft, setNumberDraft] = useState(String(nextNumber));
   const numberAffix = (invoicePrefix ?? "").trim() || "#";
-  const [clientContact, setClientContact]     = useState<Contact | null>(null);
+  const [client, setClient]                   = useState<SelectedClient | null>(null);
   const [projectId, setProjectId]             = useState("");
 
-  // Contact picker: load every (non-archived) contact once, then group by
-  // whether they're attached to the selected project via project_contacts.
+  // Client picker: load every (non-archived) contact + organization once,
+  // then group by whether they're attached to the selected project via
+  // project_contacts (orgs are reached through their contacts).
   const [allContacts, setAllContacts]         = useState<Contact[]>([]);
+  const [allOrgs, setAllOrgs]                 = useState<Organization[]>([]);
   const [projectContactIds, setProjectContactIds] = useState<Set<string>>(new Set());
   const [contactsLoaded, setContactsLoaded]   = useState(false);
   const [pickerOpen, setPickerOpen]           = useState(false);
@@ -111,17 +120,19 @@ export default function NewInvoiceModal({
     setRateEditing(false);
   }
 
-  // Load every active contact once. Small payload (no joins) and lets the
-  // picker render the grouping client-side with zero latency.
+  // Load every active contact + organization once. Small payload (no
+  // joins) and lets the picker render the grouping client-side with zero
+  // latency.
   useEffect(() => {
     if (contactsLoaded) return;
     (async () => {
       const supabase = createClient();
-      const { data } = await supabase.from("contacts")
-        .select("*")
-        .eq("archived", false)
-        .order("first_name");
-      setAllContacts((data as Contact[]) ?? []);
+      const [{ data: contacts }, { data: orgs }] = await Promise.all([
+        supabase.from("contacts").select("*").eq("archived", false).order("first_name"),
+        supabase.from("organizations").select("*").eq("archived", false).order("name"),
+      ]);
+      setAllContacts((contacts as Contact[]) ?? []);
+      setAllOrgs((orgs as Organization[]) ?? []);
       setContactsLoaded(true);
     })();
   }, [contactsLoaded]);
@@ -143,16 +154,24 @@ export default function NewInvoiceModal({
       const ids = new Set<string>((data ?? []).map((r: { contact_id: string }) => r.contact_id));
       setProjectContactIds(ids);
 
-      if (autoSelectedFor !== projectId && !clientContact && ids.size > 0) {
-        const first = allContacts.find((c) => ids.has(c.id));
-        if (first) setClientContact(first);
+      // Auto-pick the client the first time a project is chosen (never
+      // clobbers a deliberate pick). Prefer the organization of a project
+      // contact — invoices usually bill the org — and fall back to the
+      // contact themselves when none has an organization. Wait for the
+      // contact/org payload so the org lookup can succeed.
+      if (contactsLoaded && autoSelectedFor !== projectId && !client && ids.size > 0) {
+        const projContacts = allContacts.filter((c) => ids.has(c.id));
+        const withOrg = projContacts.find((c) => c.organization_id);
+        const org = withOrg ? allOrgs.find((o) => o.id === withOrg.organization_id) : null;
+        if (org)                  setClient({ kind: "organization", org });
+        else if (projContacts[0]) setClient({ kind: "contact", contact: projContacts[0] });
         setAutoSelectedFor(projectId);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, allContacts]);
+  }, [projectId, allContacts, allOrgs, contactsLoaded]);
 
-  function clearClient() { setClientContact(null); }
+  function clearClient() { setClient(null); }
 
   async function createInlineContact() {
     const first = addFirst.trim();
@@ -193,15 +212,25 @@ export default function NewInvoiceModal({
         const next = new Set(prev); next.add(c.id); return next;
       });
     }
-    setClientContact(c);
+    setClient({ kind: "contact", contact: c });
     setAddFirst(""); setAddLast(""); setAddEmail("");
     setAddOpen(false); setAddBusy(false);
     setPickerOpen(false); setPickerQuery("");
   }
 
-  const clientLabel = clientContact
-    ? `${clientContact.first_name} ${clientContact.last_name}`
+  const clientLabel = client
+    ? client.kind === "contact"
+      ? `${client.contact.first_name} ${client.contact.last_name}`
+      : client.org.name
     : null;
+
+  // Is the selected client reachable from the chosen project? (a project
+  // contact directly, or an org one of the project contacts belongs to)
+  const clientFromProject = !!client && (
+    client.kind === "contact"
+      ? projectContactIds.has(client.contact.id)
+      : allContacts.some((c) => projectContactIds.has(c.id) && c.organization_id === client.org.id)
+  );
 
   // Build the "already invoiced" set from every existing invoice's line items
   // (any status). Once a time entry or expense has been attached to a line,
@@ -280,7 +309,7 @@ export default function NewInvoiceModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!clientContact) { setError("Select a client."); return; }
+    if (!client) { setError("Select a client."); return; }
     setLoading(true); setError(null);
 
     const res = await fetch("/api/finance/invoices", {
@@ -288,8 +317,8 @@ export default function NewInvoiceModal({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         number: parseInt(numberDraft, 10) || nextNumber,
-        client_contact_id:      clientContact.id,
-        client_organization_id: null,
+        client_contact_id:      client.kind === "contact" ? client.contact.id : null,
+        client_organization_id: client.kind === "organization" ? client.org.id : null,
         project_id:             projectId || null,
         issued_at:              issuedAt,
         due_at:                 dueAt || null,
@@ -379,24 +408,27 @@ export default function NewInvoiceModal({
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
                 style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)" }}>
                 <span className="flex-1 text-[13px]" style={{ color: "var(--color-charcoal)" }}>{clientLabel}</span>
-                {projectId && clientContact && projectContactIds.has(clientContact.id) && (
+                {projectId && clientFromProject && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded"
                     style={{ background: "rgba(61,107,79,0.12)", color: "var(--color-sage-hover)" }}>From project</span>
                 )}
                 <span className="text-[10px] px-1.5 py-0.5 rounded"
-                  style={{ background: "rgba(31,33,26,0.07)", color: "var(--color-grey)" }}>Contact</span>
+                  style={{ background: "rgba(31,33,26,0.07)", color: "var(--color-grey)" }}>
+                  {client?.kind === "organization" ? "Organization" : "Contact"}
+                </span>
                 <button type="button" onClick={clearClient} style={{ color: "var(--color-grey)" }}><X size={12} /></button>
               </div>
             ) : (
-              <ContactPicker
+              <ClientPicker
                 allContacts={allContacts}
+                allOrgs={allOrgs}
                 projectContactIds={projectContactIds}
                 hasProject={!!projectId}
                 open={pickerOpen}
                 setOpen={setPickerOpen}
                 query={pickerQuery}
                 setQuery={setPickerQuery}
-                onPick={(c) => { setClientContact(c); setPickerOpen(false); setPickerQuery(""); }}
+                onPick={(sel) => { setClient(sel); setPickerOpen(false); setPickerQuery(""); }}
                 addOpen={addOpen}
                 setAddOpen={setAddOpen}
                 addFirst={addFirst} setAddFirst={setAddFirst}
@@ -864,26 +896,29 @@ function RateInlinePanel({
   );
 }
 
-// ─── Contact picker ─────────────────────────────────────────────────────────
-// Custom inline picker (instead of plain <Select>) so we can group contacts
-// linked to the selected project at the top, then a divider, then everyone
-// else — and tuck a quiet "+ Add new contact" affordance at the bottom.
+// ─── Client picker ──────────────────────────────────────────────────────────
+// Custom inline picker (instead of plain <Select>) so we can group the
+// client candidates reachable from the selected project at the top —
+// organizations of the project's contacts, then those contacts — and a
+// flat Organizations / Contacts list below, with a quiet "+ Add new
+// contact" affordance at the bottom. A client is an org or a person.
 
-function ContactPicker({
-  allContacts, projectContactIds, hasProject,
+function ClientPicker({
+  allContacts, allOrgs, projectContactIds, hasProject,
   open, setOpen, query, setQuery, onPick,
   addOpen, setAddOpen,
   addFirst, setAddFirst, addLast, setAddLast, addEmail, setAddEmail,
   addBusy, addError, onCreate,
 }: {
   allContacts: Contact[];
+  allOrgs: Organization[];
   projectContactIds: Set<string>;
   hasProject: boolean;
   open: boolean;
   setOpen: (b: boolean) => void;
   query: string;
   setQuery: (s: string) => void;
-  onPick: (c: Contact) => void;
+  onPick: (sel: SelectedClient) => void;
   addOpen: boolean;
   setAddOpen: (b: boolean) => void;
   addFirst: string; setAddFirst: (s: string) => void;
@@ -894,19 +929,32 @@ function ContactPicker({
   onCreate: () => void;
 }) {
   const q = query.trim().toLowerCase();
-  const matches = (c: Contact) => {
-    if (!q) return true;
-    return (
-      c.first_name.toLowerCase().includes(q) ||
-      c.last_name.toLowerCase().includes(q) ||
-      (c.email ?? "").toLowerCase().includes(q)
-    );
-  };
-  const projectGroup = hasProject
-    ? allContacts.filter((c) => projectContactIds.has(c.id) && matches(c))
-    : [];
-  const otherGroup = allContacts.filter(
-    (c) => (!hasProject || !projectContactIds.has(c.id)) && matches(c),
+  const contactMatches = (c: Contact) =>
+    !q || c.first_name.toLowerCase().includes(q) || c.last_name.toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q);
+  const orgMatches = (o: Organization) =>
+    !q || o.name.toLowerCase().includes(q) || (o.email ?? "").toLowerCase().includes(q);
+
+  // "From this project": the orgs of the project's contacts (deduped),
+  // then the project's contacts themselves.
+  const projContacts = hasProject ? allContacts.filter((c) => projectContactIds.has(c.id)) : [];
+  const projOrgIds   = new Set(projContacts.map((c) => c.organization_id).filter(Boolean) as string[]);
+  const projOrgs     = allOrgs.filter((o) => projOrgIds.has(o.id));
+
+  const projectItems: SelectedClient[] = [
+    ...projOrgs.filter(orgMatches).map((org): SelectedClient => ({ kind: "organization", org })),
+    ...projContacts.filter(contactMatches).map((contact): SelectedClient => ({ kind: "contact", contact })),
+  ];
+  const projContactIdSet = new Set(projContacts.map((c) => c.id));
+  const otherOrgs     = allOrgs.filter((o) => !projOrgIds.has(o.id) && orgMatches(o));
+  const otherContacts = allContacts.filter((c) => !projContactIdSet.has(c.id) && contactMatches(c));
+  const nothing = projectItems.length === 0 && otherOrgs.length === 0 && otherContacts.length === 0;
+
+  const groupHeader = (label: string, accent: boolean) => (
+    <div className="px-4 py-1.5 text-[9.5px] font-bold uppercase tracking-wider"
+      style={{ color: "var(--color-grey)", background: accent ? "rgba(61,107,79,0.06)" : "rgba(31,33,26,0.03)",
+               borderTop: accent ? undefined : "0.5px solid var(--color-border)", borderBottom: "0.5px solid var(--color-border)" }}>
+      {label}
+    </div>
   );
 
   return (
@@ -914,7 +962,7 @@ function ContactPicker({
       <input type="text" value={query}
         onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
-        placeholder="Search contacts…"
+        placeholder="Search clients…"
         className={inputCls} style={inputStyle} />
       {open && (
         <>
@@ -923,28 +971,32 @@ function ContactPicker({
           <div className="absolute top-full left-0 right-0 mt-1 rounded-xl z-20 overflow-hidden"
             style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 4px 20px rgba(0,0,0,0.12)" }}>
             <div style={{ maxHeight: 260, overflowY: "auto" }}>
-              {projectGroup.length > 0 && (
+              {projectItems.length > 0 && (
                 <>
-                  <div className="px-4 py-1.5 text-[9.5px] font-bold uppercase tracking-wider"
-                    style={{ color: "var(--color-grey)", background: "rgba(61,107,79,0.06)", borderBottom: "0.5px solid var(--color-border)" }}>
-                    From this project
-                  </div>
-                  {projectGroup.map((c) => (
-                    <ContactRow key={c.id} contact={c} onPick={() => onPick(c)} />
+                  {groupHeader("From this project", true)}
+                  {projectItems.map((it) => (
+                    <ClientRow key={`${it.kind}:${it.kind === "organization" ? it.org.id : it.contact.id}`} item={it} onPick={() => onPick(it)} />
                   ))}
-                  {otherGroup.length > 0 && (
-                    <div className="px-4 py-1.5 text-[9.5px] font-bold uppercase tracking-wider"
-                      style={{ color: "var(--color-grey)", background: "rgba(31,33,26,0.03)", borderTop: "0.5px solid var(--color-border)", borderBottom: "0.5px solid var(--color-border)" }}>
-                      Other contacts
-                    </div>
-                  )}
                 </>
               )}
-              {otherGroup.length > 0 && otherGroup.map((c) => (
-                <ContactRow key={c.id} contact={c} onPick={() => onPick(c)} />
-              ))}
-              {projectGroup.length === 0 && otherGroup.length === 0 && (
-                <p className="text-[12px] text-center py-3" style={{ color: "var(--color-grey)" }}>No contacts match.</p>
+              {otherOrgs.length > 0 && (
+                <>
+                  {groupHeader("Organizations", false)}
+                  {otherOrgs.map((org) => (
+                    <ClientRow key={`organization:${org.id}`} item={{ kind: "organization", org }} onPick={() => onPick({ kind: "organization", org })} />
+                  ))}
+                </>
+              )}
+              {otherContacts.length > 0 && (
+                <>
+                  {groupHeader("Contacts", false)}
+                  {otherContacts.map((contact) => (
+                    <ClientRow key={`contact:${contact.id}`} item={{ kind: "contact", contact }} onPick={() => onPick({ kind: "contact", contact })} />
+                  ))}
+                </>
+              )}
+              {nothing && (
+                <p className="text-[12px] text-center py-3" style={{ color: "var(--color-grey)" }}>No clients match.</p>
               )}
             </div>
 
@@ -990,19 +1042,24 @@ function ContactPicker({
   );
 }
 
-function ContactRow({ contact, onPick }: { contact: Contact; onPick: () => void }) {
+function ClientRow({ item, onPick }: { item: SelectedClient; onPick: () => void }) {
+  const isOrg = item.kind === "organization";
+  const label = isOrg ? item.org.name : `${item.contact.first_name} ${item.contact.last_name}`;
+  const email = isOrg ? item.org.email : item.contact.email;
   return (
     <button type="button" onClick={onPick}
       className="w-full text-left px-4 py-2 flex items-center gap-2.5"
       style={{ borderBottom: "0.5px solid var(--color-border)" }}
       onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-      <span className="text-[12px] font-medium" style={{ color: "var(--color-charcoal)" }}>
-        {contact.first_name} {contact.last_name}
+      <span className="text-[12px] font-medium" style={{ color: "var(--color-charcoal)" }}>{label}</span>
+      <span className="text-[9px] px-1.5 py-0.5 rounded shrink-0"
+        style={{ background: "rgba(31,33,26,0.07)", color: "var(--color-grey)" }}>
+        {isOrg ? "Org" : "Contact"}
       </span>
-      {contact.email && (
-        <span className="text-[11px] ml-auto truncate" style={{ color: "var(--color-grey)", maxWidth: 220 }}>
-          {contact.email}
+      {email && (
+        <span className="text-[11px] ml-auto truncate" style={{ color: "var(--color-grey)", maxWidth: 200 }}>
+          {email}
         </span>
       )}
     </button>
