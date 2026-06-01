@@ -23,6 +23,14 @@ import FinanceTooltipTour from "@/components/tour/finance/FinanceTooltipTour";
 // workflow). Legacy `?tab=expenses` URLs / events redirect to banking.
 type Tab = "overview" | "time" | "invoices" | "banking";
 
+/** Live health of the user's Stripe Connect account. Invoicing is gated
+ *  on this — `connected` means a healthy, payable account. */
+export interface StripeStatus {
+  connected: boolean;
+  status: string | null;
+  accountName: string | null;
+}
+
 interface Props {
   initialTimeEntries: TimeEntry[];
   initialActiveTimer: ActiveTimer | null;
@@ -30,6 +38,7 @@ interface Props {
   initialInvoices: Invoice[];
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
   invoicePrefix: string | null;
+  stripeStatus: StripeStatus;
   initialTab: string | null;
   initialInvoiceId: string | null;
 }
@@ -38,7 +47,7 @@ const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov
 
 const VALID_TABS: Tab[] = ["overview", "time", "invoices", "banking"];
 
-export default function FinanceClient({ initialTimeEntries, initialActiveTimer, initialExpenses, initialInvoices, projects, invoicePrefix, initialTab, initialInvoiceId }: Props) {
+export default function FinanceClient({ initialTimeEntries, initialActiveTimer, initialExpenses, initialInvoices, projects, invoicePrefix, stripeStatus, initialTab, initialInvoiceId }: Props) {
   const [activeTab, setActiveTab]       = useState<Tab>(
     initialTab && (VALID_TABS as string[]).includes(initialTab) ? (initialTab as Tab) : "overview",
   );
@@ -164,16 +173,30 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
 
   const nextInvoiceNumber = (invoices.length === 0 ? 0 : Math.max(...invoices.map((i) => i.number))) + 1;
 
+  // Invoicing requires a healthy Stripe connection. Funnel every "New
+  // invoice" entry point (overview quick action + the invoices tab
+  // button) through here so the modal can never open without it — when
+  // it's missing we send the user to the invoices tab, which shows the
+  // connect gate, rather than popping a modal they can't complete.
+  function openNewInvoice() {
+    if (!stripeStatus.connected) { setActiveTab("invoices"); return; }
+    setShowNewInvoice(true);
+  }
+
   const tabActions: Record<Tab, React.ReactNode> = {
     overview: <>
       <Button variant="secondary" onClick={() => setShowLogTime(true)}>Log time</Button>
       <Button variant="secondary" onClick={() => setShowAddExpense(true)}>Add expense</Button>
-      <Button onClick={() => setShowNewInvoice(true)}><Plus size={12} />New invoice</Button>
+      <Button onClick={openNewInvoice}><Plus size={12} />New invoice</Button>
     </>,
     time:     <Button onClick={() => setShowLogTime(true)}><Plus size={12} />Log time</Button>,
-    invoices: <span data-tour-target="finance.new-invoice">
-      <Button onClick={() => setShowNewInvoice(true)}><Plus size={12} />New invoice</Button>
-    </span>,
+    // Suppress the New-invoice button entirely while gated — the tab body
+    // is the connect prompt, so an action button would be a dead end.
+    invoices: stripeStatus.connected ? (
+      <span data-tour-target="finance.new-invoice">
+        <Button onClick={openNewInvoice}><Plus size={12} />New invoice</Button>
+      </span>
+    ) : null,
     banking:  null,
   };
 
@@ -266,7 +289,7 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
             onSwitchTab={setActiveTab}
             onLogTime={() => setShowLogTime(true)}
             onAddExpense={() => setShowAddExpense(true)}
-            onNewInvoice={() => setShowNewInvoice(true)}
+            onNewInvoice={openNewInvoice}
           />
         )}
         {activeTab === "time" && (
@@ -290,11 +313,12 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
             expenses={expenses}
             projects={projects}
             invoicePrefix={invoicePrefix}
+            stripeStatus={stripeStatus}
             initialInvoiceId={initialInvoiceId}
             onInvoiceUpdated={(inv) => setInvoices((prev) => prev.map((i) => i.id === inv.id ? inv : i))}
             onInvoiceDeleted={(id) => setInvoices((prev) => prev.filter((i) => i.id !== id))}
             onInvoiceSent={handleInvoiceSent}
-            onNewInvoice={() => setShowNewInvoice(true)}
+            onNewInvoice={openNewInvoice}
           />
         )}
         {activeTab === "banking" && (
