@@ -11,6 +11,7 @@ import {
   STUDIO_LOGO_MAX_BYTES,
   isUploadableLogoType,
 } from "@/lib/uploads/studio-logo";
+import { COUNTRIES, BUSINESS_TYPES, composeStudioAddress } from "@/lib/profile/business";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -32,6 +33,14 @@ interface Profile {
   payment_terms:        string;
   // Invoice / studio-identity fields surfaced on PDFs + the public payment view
   address:              string | null;
+  // Structured business identity — also prefills Stripe Connect onboarding.
+  business_type:        string | null;
+  country:              string | null;
+  address_line1:        string | null;
+  address_line2:        string | null;
+  address_city:         string | null;
+  address_state:        string | null;
+  address_zip:          string | null;
   phone:                string | null;
   ein:                  string | null;
   logo_url:             string | null;
@@ -81,7 +90,9 @@ const DEFAULT_PROFILE: Profile = {
   practice_types: [], currency: "USD", fiscal_year: "January",
   date_format: "MM/DD/YYYY", week_start: "Monday", hourly_rate: null,
   invoice_prefix: "INV-", payment_terms: "Net 30",
-  address: "", phone: "", ein: "", logo_url: null, logo_path: null, brand_color: null,
+  address: "", business_type: null, country: null,
+  address_line1: "", address_line2: "", address_city: "", address_state: "", address_zip: "",
+  phone: "", ein: "", logo_url: null, logo_path: null, brand_color: null,
   notif_email_enabled: true, notif_deadlines: true, notif_invoice_due: true,
   notif_overdue: true, notif_payment_received: true, notif_weekly: false, notif_monthly: false,
   tour_dismissed: false,
@@ -498,6 +509,13 @@ export default function SettingsPage() {
           invoice_prefix:      prof.invoice_prefix ?? "INV-",
           payment_terms:       prof.payment_terms ?? "Net 30",
           address:             prof.address ?? "",
+          business_type:       prof.business_type ?? null,
+          country:             prof.country ?? null,
+          address_line1:       prof.address_line1 ?? "",
+          address_line2:       prof.address_line2 ?? "",
+          address_city:        prof.address_city ?? "",
+          address_state:       prof.address_state ?? "",
+          address_zip:         prof.address_zip ?? "",
           phone:               prof.phone ?? "",
           ein:                 prof.ein ?? "",
           logo_url:            prof.logo_url ?? null,
@@ -550,7 +568,16 @@ export default function SettingsPage() {
         hourly_rate:          profile.hourly_rate,
         invoice_prefix:       profile.invoice_prefix,
         payment_terms:        profile.payment_terms,
-        address:              profile.address || null,
+        // `address` is the rendered display string invoices read — derive
+        // it from the structured fields so the two never drift.
+        address:              composeStudioAddress(profile) || null,
+        business_type:        profile.business_type || null,
+        country:              profile.country || null,
+        address_line1:        profile.address_line1 || null,
+        address_line2:        profile.address_line2 || null,
+        address_city:         profile.address_city || null,
+        address_state:        profile.address_state || null,
+        address_zip:          profile.address_zip || null,
         phone:                profile.phone || null,
         ein:                  profile.ein || null,
         logo_url:             profile.logo_url,
@@ -877,16 +904,45 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="space-y-4 mt-5">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <FieldLabel>Business type</FieldLabel>
+                      <SelectInput
+                        value={profile.business_type ?? ""}
+                        onChange={(v) => set("business_type", v || null)}
+                        options={[{ value: "", label: "Select…" }, ...BUSINESS_TYPES]}
+                      />
+                    </div>
+                    <div>
+                      <FieldLabel>Country</FieldLabel>
+                      <SelectInput
+                        value={profile.country ?? ""}
+                        onChange={(v) => set("country", v || null)}
+                        options={[{ value: "", label: "Select…" }, ...COUNTRIES.map((c) => ({ value: c.code, label: c.name }))]}
+                      />
+                    </div>
+                  </div>
                   <div>
                     <FieldLabel>Studio address</FieldLabel>
-                    <TextArea
-                      value={profile.address ?? ""}
-                      onChange={(v) => set("address", v)}
-                      placeholder={"123 Main St, Suite 4\nBrooklyn, NY 11201"}
-                      rows={4}
-                    />
-                    <p className="mt-1 text-[10px]" style={{ color: "var(--color-grey)" }}>
-                      Multi-line is fine — line breaks render exactly as you write them.
+                    <div className="space-y-2.5">
+                      <TextInput
+                        value={profile.address_line1 ?? ""}
+                        onChange={(v) => set("address_line1", v)}
+                        placeholder="Street address"
+                      />
+                      <TextInput
+                        value={profile.address_line2 ?? ""}
+                        onChange={(v) => set("address_line2", v)}
+                        placeholder="Apt, suite, unit (optional)"
+                      />
+                      <div className="grid gap-2.5" style={{ gridTemplateColumns: "2fr 1fr 1fr" }}>
+                        <TextInput value={profile.address_city ?? ""} onChange={(v) => set("address_city", v)} placeholder="City" />
+                        <TextInput value={profile.address_state ?? ""} onChange={(v) => set("address_state", v)} placeholder="State" />
+                        <TextInput value={profile.address_zip ?? ""} onChange={(v) => set("address_zip", v)} placeholder="ZIP" />
+                      </div>
+                    </div>
+                    <p className="mt-1.5 text-[10px]" style={{ color: "var(--color-grey)" }}>
+                      Shown on your invoices, and used to prefill Stripe when you connect it.
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
