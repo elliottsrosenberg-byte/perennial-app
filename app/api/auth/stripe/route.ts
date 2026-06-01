@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { stripeAdapter } from "@/lib/integrations/stripe";
+import { buildStripeConnectPrefill } from "@/lib/integrations/stripe-prefill";
 import { appOrigin } from "@/lib/url";
 
 export const runtime = "nodejs";
@@ -45,9 +46,20 @@ export async function GET(req: Request) {
 
     const state     = generateState();
     const nextParam = new URL(req.url).searchParams.get("next");
-    const url       = stripeAdapter.getAuthUrl({
+
+    // Prefill Stripe's onboarding form from what the user already gave us
+    // (studio name, website, phone, address, name…) so connecting is a
+    // few taps instead of a re-typing chore. Best-effort: a missing
+    // profile just means we fall back to email-only.
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("studio_name, display_name, phone, website, address, tagline, bio, currency")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const url = stripeAdapter.getAuthUrl({
       state, redirectUri, scopes,
-      options: user.email ? { "stripe_user[email]": user.email } : undefined,
+      options: buildStripeConnectPrefill(profile, user.email),
     });
 
     const res = NextResponse.redirect(url);
