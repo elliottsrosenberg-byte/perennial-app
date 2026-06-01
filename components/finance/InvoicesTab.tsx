@@ -29,6 +29,8 @@ interface Props {
   stripeStatus: { connected: boolean; status: string | null; accountName: string | null };
   /** Preselect an invoice on mount (e.g. returning from the print page). */
   initialInvoiceId?: string | null;
+  /** Select this invoice when it changes (e.g. a just-created invoice). */
+  selectInvoiceId?: string | null;
   onInvoiceUpdated: (inv: Invoice) => void;
   onInvoiceDeleted: (invoiceId: string) => void;
   onInvoiceSent: (invoiceId: string) => void;
@@ -264,7 +266,7 @@ const SOURCE_STYLE: Record<string, { bg: string; color: string }> = {
 };
 
 export default function InvoicesTab({
-  invoices, timeEntries, expenses, projects, invoicePrefix, stripeStatus, initialInvoiceId,
+  invoices, timeEntries, expenses, projects, invoicePrefix, stripeStatus, initialInvoiceId, selectInvoiceId,
   onInvoiceUpdated, onInvoiceDeleted, onInvoiceSent, onNewInvoice,
 }: Props) {
   // Nothing is selected on entry — the detail pane stays empty until the user
@@ -345,6 +347,13 @@ export default function InvoicesTab({
     setEditingNumber(false); setNumberError(null);
     setEditingSaved(false); setClientChooserOpen(false);
   }, [selectedId]);
+
+  // Select a freshly-created invoice in the detail pane (the parent bumps
+  // selectInvoiceId when one is made). Guard the initial null so this
+  // never fights the mount-time initialInvoiceId selection.
+  useEffect(() => {
+    if (selectInvoiceId) setSelectedId(selectInvoiceId);
+  }, [selectInvoiceId]);
 
   // Filter by the selected statuses (empty = all), then sort.
   const visibleInvoices = useMemo(() => {
