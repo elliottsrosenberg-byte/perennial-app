@@ -340,6 +340,8 @@ export interface BankTransaction {
   /** How a manual transaction was paid (cash / venmo / card / …). Null for
    *  synced bank rows. */
   payment_method: string | null;
+  /** Free-text detail for the payment method (e.g. "Amex ••1234"). */
+  payment_detail: string | null;
   details: BankTransactionDetails | null;
   date: string;            // YYYY-MM-DD
   status: "pending" | "posted";
