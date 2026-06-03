@@ -825,35 +825,39 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
     await fetchTransactions();
   }
 
-  // Two-click ribbon action: first click arms the confirm (turns the button
-  // into a ✓/✕ pair), second click on ✓ runs it.
-  function ribbonConfirm(actionKey: "log" | "personal", label: string, run: () => void) {
-    if (pendingAction === actionKey) {
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full"
-          style={{ background: "rgba(255,255,255,0.18)", padding: "2px 4px 2px 11px" }}>
-          <span className="text-[11px] font-medium">{label}?</span>
-          <button onClick={() => { setPendingAction(null); run(); }} title="Confirm"
-            className="inline-flex items-center justify-center rounded-full"
-            style={{ width: 22, height: 22, background: "white", color: "var(--color-sage)", border: "none", cursor: "pointer" }}>
-            <Check size={13} strokeWidth={2.5} />
-          </button>
-          <button onClick={() => setPendingAction(null)} title="Cancel"
-            className="inline-flex items-center justify-center rounded-full"
-            style={{ width: 22, height: 22, background: "rgba(255,255,255,0.18)", color: "white", border: "none", cursor: "pointer" }}>
-            <X size={12} strokeWidth={2.5} />
-          </button>
-        </span>
-      );
-    }
+  // Two-click ribbon action: first click arms the confirm; the pill keeps a
+  // FIXED width so the ribbon never reflows — the armed state just splits the
+  // same pill into a ✓ / ✕ pair.
+  function ribbonConfirm(actionKey: "log" | "personal", label: string, run: () => void, width: number) {
     return (
-      <button onClick={() => setPendingAction(actionKey)}
-        className="px-3 py-1 text-[11px] font-medium rounded-full transition-colors"
-        style={{ background: "rgba(255,255,255,0.18)", color: "white", border: "none", cursor: "pointer" }}
-        onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.28)"}
-        onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.18)"}>
-        {label}
-      </button>
+      <div style={{ width, height: 26, position: "relative", flexShrink: 0 }}>
+        {pendingAction === actionKey ? (
+          <div className="flex h-full rounded-full overflow-hidden">
+            <button onClick={() => { setPendingAction(null); run(); }} title={`Confirm: ${label}`}
+              className="flex-1 inline-flex items-center justify-center transition-colors"
+              style={{ background: "white", color: "var(--color-sage)", border: "none", cursor: "pointer" }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.88)"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "white"}>
+              <Check size={14} strokeWidth={2.75} />
+            </button>
+            <button onClick={() => setPendingAction(null)} title="Cancel"
+              className="flex-1 inline-flex items-center justify-center transition-colors"
+              style={{ background: "rgba(255,255,255,0.18)", color: "white", border: "none", cursor: "pointer" }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.28)"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.18)"}>
+              <X size={13} strokeWidth={2.75} />
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => setPendingAction(actionKey)}
+            className="w-full h-full text-[11px] font-medium rounded-full transition-colors"
+            style={{ background: "rgba(255,255,255,0.18)", color: "white", border: "none", cursor: "pointer" }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.28)"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.18)"}>
+            {label}
+          </button>
+        )}
+      </div>
     );
   }
 
@@ -1320,8 +1324,8 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                   )}
                 </div>
 
-                {ribbonConfirm("log", "Log", bulkLog)}
-                {ribbonConfirm("personal", "Mark personal", bulkMarkPersonal)}
+                {ribbonConfirm("log", "Log", bulkLog, 60)}
+                {ribbonConfirm("personal", "Mark personal", bulkMarkPersonal, 112)}
                 <button onClick={() => { setRibbonCatOpen(false); setSelectedIds(new Set()); }}
                   className="px-2.5 py-1 text-[11px] rounded-full transition-colors"
                   style={{ background: "transparent", color: "rgba(255,255,255,0.85)", border: "none", cursor: "pointer" }}
