@@ -1403,6 +1403,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                   onAttachReceipt={(file) => attachReceipt(tx, file)}
                   onRemoveReceipt={() => removeReceipt(tx)}
                   onSetManualCategory={(c, cid) => setManualCategory(tx, c, cid)}
+                  onCustomize={() => setCustomizeOpen(true)}
                   onCollapse={() => setExpandedId(null)}
                   outstanding={outstanding}
                 />
@@ -1863,6 +1864,8 @@ interface RowProps {
   /** When `customId` is provided the row chip renders the custom's
    *  label/colour; `category` is the built-in we route persistence to. */
   onSetManualCategory: (c: string | null, customId?: string | null) => void;
+  /** Open the Customize-categories modal from the row picker. */
+  onCustomize:      () => void;
   onCollapse:       () => void;
   outstanding:      OutstandingInvoice[];
 }
@@ -1874,7 +1877,7 @@ function TransactionRow({
   onEditLinkedExpense, onDeleteLinkedExpense, onQuickLog,
   onMatch, onUnmatch, onUnmarkPersonal,
   onSaveNote, onRename, onAttachReceipt, onRemoveReceipt, onSetManualCategory,
-  onCollapse, outstanding,
+  onCustomize, onCollapse, outstanding,
 }: RowProps) {
   const amt        = Number(tx.amount);
   const isCredit   = amt > 0;
@@ -1965,6 +1968,7 @@ function TransactionRow({
             onSelect={(c, cid) => onSetManualCategory(c, cid)}
             onSelectPersonal={onMarkPersonal}
             onUnmarkPersonal={onUnmarkPersonal}
+            onCustomize={onCustomize}
           />
         </span>
 
@@ -2053,10 +2057,12 @@ interface CategoryPickerChipProps {
   onSelect:  (c: string | null, customId: string | null) => void;
   onSelectPersonal:   () => void;
   onUnmarkPersonal:   () => void;
+  /** Open the Customize-categories modal to add/edit custom categories. */
+  onCustomize:        () => void;
 }
 
 function CategoryPickerChip({
-  tx, stateChip, displayCat, customs, onSelect, onSelectPersonal, onUnmarkPersonal,
+  tx, stateChip, displayCat, customs, onSelect, onSelectPersonal, onUnmarkPersonal, onCustomize,
 }: CategoryPickerChipProps) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -2149,6 +2155,20 @@ function CategoryPickerChip({
               );
             })}
           </div>
+
+          {/* Make a new custom category, then come back and pick it. */}
+          <button type="button"
+            onClick={() => { onCustomize(); setOpen(false); }}
+            style={{
+              all: "unset", display: "flex", alignItems: "center", gap: 5,
+              width: "100%", boxSizing: "border-box",
+              padding: "7px 10px", marginTop: 6, borderRadius: 8,
+              fontSize: 11, cursor: "pointer", color: "var(--color-grey)",
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-surface-sunken)"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+            <Plus size={12} /> New category…
+          </button>
 
           {(tx.manual_category != null || tx.manual_custom_id != null) && (
             <button type="button"
