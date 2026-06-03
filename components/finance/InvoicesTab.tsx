@@ -456,6 +456,7 @@ export default function InvoicesTab({
     if (!selectedInvoice?.project_id) return [];
     return expenses.filter((x) =>
       x.project_id === selectedInvoice.project_id &&
+      x.billable &&
       !invoicedExpenseIds.has(x.id)
     );
   }, [selectedInvoice?.project_id, expenses, invoicedExpenseIds]);

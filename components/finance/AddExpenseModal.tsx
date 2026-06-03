@@ -56,6 +56,7 @@ export default function AddExpenseModal({ projects, onClose, onCreated, expense,
   );
   const [date, setDate]               = useState(expense?.date ?? prefill?.date ?? today);
   const [projectId, setProjectId]     = useState(expense?.project_id ?? "");
+  const [billable, setBillable]       = useState(expense?.billable ?? true);
   const [receiptUrl, setReceiptUrl]   = useState<string | null>(expense?.receipt_url ?? null);
   const [receiptName, setReceiptName] = useState<string | null>(expense?.receipt_url ? "Existing receipt" : null);
   const [uploading, setUploading]     = useState(false);
@@ -119,6 +120,7 @@ export default function AddExpenseModal({ projects, onClose, onCreated, expense,
           category,
           amount: amt,
           date,
+          billable,
           receipt_url: receiptUrl,
         })
         .eq("id", expense.id)
@@ -140,6 +142,7 @@ export default function AddExpenseModal({ projects, onClose, onCreated, expense,
         category,
         amount: amt,
         date,
+        billable,
         receipt_url: receiptUrl,
       })
       .select("*, project:projects(id, title, type, rate)")
@@ -208,6 +211,23 @@ export default function AddExpenseModal({ projects, onClose, onCreated, expense,
               />
             </div>
           </div>
+
+          {/* Billable — gates whether this expense can be pulled into an
+              invoice (mirrors billable time entries). On by default. */}
+          <label className="flex items-center gap-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={billable}
+              onChange={(e) => setBillable(e.target.checked)}
+              style={{ cursor: "pointer", accentColor: "var(--color-sage)", width: 15, height: 15 }}
+            />
+            <span className="text-[12px]" style={{ color: "var(--color-charcoal)" }}>
+              Billable to client
+              <span className="ml-1.5 text-[11px]" style={{ color: "var(--color-grey)" }}>
+                — can be added to an invoice
+              </span>
+            </span>
+          </label>
 
           {/* Receipt upload */}
           <div>
