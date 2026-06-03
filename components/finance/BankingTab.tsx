@@ -607,6 +607,23 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
     return { expense };
   }
 
+  // One-click log straight from the needs-review list — no expand, no
+  // receipt, no project. Uses the same resolved category the chip shows.
+  // The row flips to "Logged" in place; the user can still expand it later
+  // to attach a receipt or a project (the richer path we nudge toward).
+  async function quickLog(tx: BankTransaction) {
+    const primary  = tx.details?.personal_finance_category?.primary ?? null;
+    const category = findCustom(customs, tx.manual_custom_id)?.routesTo
+      ?? expenseForCategory(tx.manual_category, primary);
+    await submitConvert(tx, {
+      project_id:  null,
+      description: tx.details?.merchant_name ?? tx.description ?? "Expense",
+      category,
+      amount:      Math.abs(Number(tx.amount)),
+      date:        tx.date,
+    });
+  }
+
   // Open AddExpenseModal in edit mode against the expense linked to
   // this bank row. We do a tiny on-demand fetch instead of threading
   // the parent's expenses array down — the modal owns the form state,
@@ -1205,6 +1222,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                   onSubmitInlineLog={(values) => submitConvert(tx, values)}
                   onEditLinkedExpense={() => openEditLinkedExpense(tx)}
                   onDeleteLinkedExpense={(expenseId) => setConfirmDeleteExpense({ tx, expenseId })}
+                  onQuickLog={() => quickLog(tx)}
                   onMatch={(invoiceId) => matchInvoice(tx, invoiceId)}
                   onUnmatch={() => unmatch(tx)}
                   onUnmarkPersonal={() => markPersonal(tx, false)}
@@ -1616,6 +1634,8 @@ interface RowProps {
   }) => Promise<{ expense: Expense } | { error: string }>;
   onEditLinkedExpense:   () => void;
   onDeleteLinkedExpense: (expenseId: string) => void;
+  /** One-click "Log" from the row (no expand) — debits not yet handled. */
+  onQuickLog:     () => void;
   onMatch:        (invoiceId: string) => void;
   onUnmatch:      () => void;
   onUnmarkPersonal: () => void;
@@ -1633,7 +1653,7 @@ function TransactionRow({
   tx, first, expanded, selected, customs, projects,
   onToggleSelect, onToggleExpand,
   onMarkPersonal, onConvert, onSubmitInlineLog,
-  onEditLinkedExpense, onDeleteLinkedExpense,
+  onEditLinkedExpense, onDeleteLinkedExpense, onQuickLog,
   onMatch, onUnmatch, onUnmarkPersonal,
   onSaveNote, onAttachReceipt, onRemoveReceipt, onSetManualCategory,
   onCollapse, outstanding,
@@ -1664,11 +1684,18 @@ function TransactionRow({
   else if (tx.linked_expense_id)  stateChip = { label: "Logged",    bg: "rgba(155,163,122,0.14)", fg: "var(--color-sage)" };
   else if (tx.matched_invoice_id) stateChip = { label: "Matched",   bg: "rgba(155,163,122,0.14)", fg: "var(--color-sage)" };
 
+  // A debit that hasn't been handled yet can be logged in one click from
+  // the row. Credits route to invoice-matching instead, so they don't get
+  // the quick-log affordance.
+  const [hovered, setHovered] = useState(false);
+  const canQuickLog = !isCredit && !tx.linked_expense_id && !tx.matched_invoice_id && !tx.is_personal;
+
   return (
     <>
       <div
         className="grid items-center px-4 py-3 transition-colors"
         style={{
+          position: "relative",
           gridTemplateColumns: "24px 56px 1fr 180px 120px 18px",
           gap: 12,
           borderTop: first ? "none" : "0.5px solid var(--color-border)",
@@ -1676,8 +1703,8 @@ function TransactionRow({
           cursor: "pointer",
         }}
         onClick={onToggleExpand}
-        onMouseEnter={(e) => { if (!expanded) e.currentTarget.style.background = "rgba(31,33,26,0.025)"; }}
-        onMouseLeave={(e) => { if (!expanded) e.currentTarget.style.background = "transparent"; }}
+        onMouseEnter={(e) => { setHovered(true); if (!expanded) e.currentTarget.style.background = "rgba(31,33,26,0.025)"; }}
+        onMouseLeave={(e) => { setHovered(false); if (!expanded) e.currentTarget.style.background = "transparent"; }}
       >
         {/* Checkbox */}
         <span onClick={(e) => { e.stopPropagation(); onToggleSelect(); }}>
@@ -1732,6 +1759,35 @@ function TransactionRow({
             transition: "transform 0.12s ease",
           }} />
         </span>
+
+        {/* Quick-log — hover-revealed pill over the right edge. Fades in
+            over the amount (one row hovers at a time) so the needs-review
+            list can be cleared without expanding each row. */}
+        {canQuickLog && hovered && !expanded && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "absolute", right: 28, top: 0, bottom: 0,
+              display: "flex", alignItems: "center", paddingLeft: 44,
+              background: "linear-gradient(to right, transparent, rgba(255,254,252,0.97) 40%)",
+              zIndex: 2,
+            }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); onQuickLog(); }}
+              title="Log as an expense — expand the row to add a receipt or project"
+              style={{
+                display: "flex", alignItems: "center", gap: 4,
+                padding: "3px 11px", fontSize: 11, fontWeight: 600, fontFamily: "inherit",
+                color: "white", background: "var(--color-sage)",
+                border: "none", borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap",
+                boxShadow: "0 1px 4px rgba(31,33,26,0.18)",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-sage-hover)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-sage)")}>
+              <Plus size={11} /> Log
+            </button>
+          </div>
+        )}
       </div>
 
       {expanded && (
