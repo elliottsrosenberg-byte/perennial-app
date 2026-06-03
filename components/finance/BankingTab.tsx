@@ -1660,9 +1660,8 @@ function TransactionRow({
   // Manual category override beats the Plaid label. When a custom is
   // attached (manual_custom_id) we render its label + tinted colour;
   // otherwise we fall back to the built-in manual category, otherwise the
-  // Plaid mapping. A muted "Manual" pip flags any user override.
+  // Plaid mapping.
   const customMatch = findCustom(customs, tx.manual_custom_id);
-  const hasManual = !!tx.manual_category || !!customMatch;
   // Built-in manual categories should render in their OWN palette
   // (Travel = sage, Materials = warm-yellow, etc.) — not the Plaid
   // category's palette, which was nearly always grey/neutral and
@@ -1731,7 +1730,6 @@ function TransactionRow({
             tx={tx}
             stateChip={stateChip}
             displayCat={displayCat}
-            hasManual={hasManual}
             customs={customs}
             onSelect={(c, cid) => onSetManualCategory(c, cid)}
             onSelectPersonal={onMarkPersonal}
@@ -1799,7 +1797,6 @@ interface CategoryPickerChipProps {
   tx:        BankTransaction;
   stateChip: { label: string; bg: string; fg: string } | null;
   displayCat: { label: string; bg: string; fg: string; icon: React.ElementType };
-  hasManual: boolean;
   customs:   CustomCategory[];
   /** Pass (cat, null) for built-in, (cat, customId) for custom, (null, null) for Auto. */
   onSelect:  (c: ExpenseCategory | null, customId: string | null) => void;
@@ -1819,7 +1816,7 @@ const BUILTIN_DISPLAY: Record<ExpenseCategory, { fg: string; bg: string; icon: R
 };
 
 function CategoryPickerChip({
-  tx, stateChip, displayCat, hasManual, customs, onSelect, onSelectPersonal, onUnmarkPersonal,
+  tx, stateChip, displayCat, customs, onSelect, onSelectPersonal, onUnmarkPersonal,
 }: CategoryPickerChipProps) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -1856,15 +1853,6 @@ function CategoryPickerChip({
           <Chip bg={displayCat.bg} fg={displayCat.fg} icon={displayCat.icon} label={displayCat.label} />
         )}
       </button>
-      {hasManual && !stateChip && (
-        <span title="Manual category" style={{
-          fontSize: 9, lineHeight: 1, padding: "1px 4px", borderRadius: 3,
-          background: "rgba(31,33,26,0.05)", color: "var(--color-grey)",
-          letterSpacing: "0.04em", textTransform: "uppercase", fontWeight: 600,
-        }}>
-          Manual
-        </span>
-      )}
 
       {open && (
         <div
