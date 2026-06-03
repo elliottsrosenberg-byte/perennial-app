@@ -560,16 +560,6 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
       await fetchTransactions();
       return;
     }
-    if (isPersonal) {
-      setSnackbar({
-        text: "Marked personal",
-        onUndo: async () => {
-          setSnackbar(null);
-          await markPersonal({ ...tx, is_personal: true }, false);
-          await fetchTransactions();
-        },
-      });
-    }
   }
 
   async function matchInvoice(tx: BankTransaction, invoiceId: string) {
