@@ -19,7 +19,7 @@ import {
   ChevronRight, Loader2, MoreHorizontal, Paperclip, Plus, RefreshCw,
   Trash2, Unplug, X,
   // Category-chip icons (lookup by name from plaidCategoryDisplay):
-  ArrowDownToLine, ArrowLeftRight, Briefcase, Car, HeartPulse, Landmark,
+  ArrowDownToLine, ArrowLeftRight, Briefcase, Car, HeartPulse, Landmark, Laptop,
   Lightbulb, Music, Plane, Receipt as ReceiptIcon, ShoppingBag, Tag,
   User as UserIcon, Utensils, Wrench,
 } from "lucide-react";
@@ -30,8 +30,10 @@ import AddExpenseModal from "./AddExpenseModal";
 import BankingReports from "./BankingReports";
 import CustomizeCategoriesModal from "./CustomizeCategoriesModal";
 import type { BankAccount, BankTransaction, Expense, ExpenseCategory, Project } from "@/types/database";
-import { plaidCategoryToExpenseCategory } from "./plaidCategoryMap";
-import { categoryFor, PLAID_PRIMARY_KEYS } from "./plaidCategoryDisplay";
+import {
+  categoryFor, canonicalByKey, expenseForCategory,
+  CANONICAL_CATEGORIES,
+} from "./plaidCategoryDisplay";
 import { uploadReceipt, deleteReceipt } from "@/lib/uploads/receipt";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -159,22 +161,9 @@ const SECTION_HEADER_STYLE: React.CSSProperties = {
 // plaidCategoryDisplay returns icon NAMES (so it can stay framework-free);
 // resolve them here.
 const ICON_REGISTRY: Record<string, React.ElementType> = {
-  ArrowDownToLine, ArrowLeftRight, Briefcase, Car, HeartPulse, Landmark,
+  ArrowDownToLine, ArrowLeftRight, Briefcase, Car, HeartPulse, Landmark, Laptop,
   Lightbulb, Music, Plane, Receipt: ReceiptIcon, ShoppingBag, Tag, User: UserIcon, Utensils, Wrench,
 };
-
-// ── ExpenseCategory display ────────────────────────────────────────────────
-// Labels mirror AddExpenseModal so the picker reads the same as the
-// downstream "Log expense" form. Order is the AddExpenseModal order.
-const EXPENSE_CATEGORY_OPTIONS: { value: ExpenseCategory; label: string }[] = [
-  { value: "materials",  label: "Materials"  },
-  { value: "travel",     label: "Travel"     },
-  { value: "production", label: "Production" },
-  { value: "software",   label: "Software"   },
-  { value: "other",      label: "Other"      },
-];
-const EXPENSE_CATEGORY_LABEL: Record<ExpenseCategory, string> =
-  Object.fromEntries(EXPENSE_CATEGORY_OPTIONS.map((o) => [o.value, o.label])) as Record<ExpenseCategory, string>;
 
 // ── Filter / sort types ─────────────────────────────────────────────────────
 
@@ -674,7 +663,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
 
   async function setManualCategory(
     tx: BankTransaction,
-    next: ExpenseCategory | null,
+    next: string | null,
     customId: string | null = null,
   ) {
     const prevCat = tx.manual_category;
@@ -808,7 +797,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
 
   const categoryOptions = useMemo(() => ([
     { value: "all", label: "All categories" },
-    ...PLAID_PRIMARY_KEYS.map((k) => ({ value: k, label: categoryFor(k).label })),
+    ...CANONICAL_CATEGORIES.map((c) => ({ value: c.key, label: c.label })),
   ]), []);
 
   const envLabel = PROVIDER === "plaid"
@@ -1341,9 +1330,10 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
             description: convertTarget.details?.merchant_name ?? convertTarget.description ?? "",
             amount:      Math.abs(Number(convertTarget.amount)),
             date:        convertTarget.date,
-            // User's manual override wins over the Plaid-derived guess.
-            category:    convertTarget.manual_category
-              ?? plaidCategoryToExpenseCategory(convertTarget.details?.personal_finance_category?.primary ?? null),
+            // Resolve to an ExpenseCategory bucket: a custom's routesTo wins,
+            // then the canonical override / Plaid mapping.
+            category:    findCustom(customs, convertTarget.manual_custom_id)?.routesTo
+              ?? expenseForCategory(convertTarget.manual_category, convertTarget.details?.personal_finance_category?.primary ?? null),
           }}
           onSubmitOverride={(values) => submitConvert(convertTarget, values)}
           onClose={() => setConvertTarget(null)}
@@ -1634,7 +1624,7 @@ interface RowProps {
   onRemoveReceipt:  () => void;
   /** When `customId` is provided the row chip renders the custom's
    *  label/colour; `category` is the built-in we route persistence to. */
-  onSetManualCategory: (c: ExpenseCategory | null, customId?: string | null) => void;
+  onSetManualCategory: (c: string | null, customId?: string | null) => void;
   onCollapse:       () => void;
   outstanding:      OutstandingInvoice[];
 }
@@ -1653,27 +1643,17 @@ function TransactionRow({
   const merchant   = tx.details?.merchant_name ?? tx.description;
   const pending    = tx.status === "pending";
   const primary    = tx.details?.personal_finance_category?.primary ?? null;
-  const plaidCat   = categoryFor(primary);
-  const PlaidIcon  = ICON_REGISTRY[plaidCat.icon] ?? Tag;
   const acct       = tx.bank_account;
 
-  // Manual category override beats the Plaid label. When a custom is
-  // attached (manual_custom_id) we render its label + tinted colour;
-  // otherwise we fall back to the built-in manual category, otherwise the
-  // Plaid mapping.
+  // One taxonomy resolves the chip: a custom category (manual_custom_id)
+  // wins, then a canonical override key (manual_category), then Plaid's
+  // auto-detected primary. Each branch carries its own brand palette so
+  // the row chip and the picker pill read the same colour.
   const customMatch = findCustom(customs, tx.manual_custom_id);
-  // Built-in manual categories should render in their OWN palette
-  // (Travel = sage, Materials = warm-yellow, etc.) — not the Plaid
-  // category's palette, which was nearly always grey/neutral and
-  // washed every overridden chip out. BUILTIN_DISPLAY is the same
-  // palette the picker pills use, so the row chip and the picker
-  // selection now read the same color.
-  const builtin = tx.manual_category ? BUILTIN_DISPLAY[tx.manual_category as ExpenseCategory] : null;
-  const displayCat = customMatch
+  const canonical   = canonicalByKey(tx.manual_category) ?? categoryFor(primary);
+  const displayCat  = customMatch
     ? { label: customMatch.label, bg: tintForColor(customMatch.color), fg: customMatch.color, icon: Tag }
-    : builtin
-    ? { label: EXPENSE_CATEGORY_LABEL[tx.manual_category as ExpenseCategory], bg: builtin.bg, fg: builtin.fg, icon: builtin.icon }
-    : { label: plaidCat.label, bg: plaidCat.bg, fg: plaidCat.fg, icon: PlaidIcon };
+    : { label: canonical.label, bg: canonical.bg, fg: canonical.fg, icon: ICON_REGISTRY[canonical.icon] ?? Tag };
 
   // Personal is a state-chip but the user can now flip back to a normal
   // category via the picker, so it lives alongside (not instead of) the
@@ -1759,6 +1739,7 @@ function TransactionRow({
           tx={tx}
           projects={projects}
           displayCat={displayCat}
+          expenseCategory={customMatch?.routesTo ?? expenseForCategory(tx.manual_category, primary)}
           acctLabel={acct ? `${acct.institution} ${acct.last_four ? `••${acct.last_four}` : ""}` : "Account"}
           onConvert={onConvert}
           onSubmitInlineLog={onSubmitInlineLog}
@@ -1798,22 +1779,12 @@ interface CategoryPickerChipProps {
   stateChip: { label: string; bg: string; fg: string } | null;
   displayCat: { label: string; bg: string; fg: string; icon: React.ElementType };
   customs:   CustomCategory[];
-  /** Pass (cat, null) for built-in, (cat, customId) for custom, (null, null) for Auto. */
-  onSelect:  (c: ExpenseCategory | null, customId: string | null) => void;
+  /** Pass (key, null) for a canonical category, (null, customId) for a
+   *  custom, (null, null) for Auto (clear the override). */
+  onSelect:  (c: string | null, customId: string | null) => void;
   onSelectPersonal:   () => void;
   onUnmarkPersonal:   () => void;
 }
-
-// Display palette for built-in expense categories in the picker grid.
-// Echoes the Plaid chip palette so a label like "Travel" reads the same
-// in the picker as in a row whose Plaid mapping already gave it sage.
-const BUILTIN_DISPLAY: Record<ExpenseCategory, { fg: string; bg: string; icon: React.ElementType }> = {
-  materials:  { fg: "#a37f12",            bg: "rgba(232,197,71,0.18)", icon: Wrench       },
-  travel:     { fg: "var(--color-sage)",  bg: "rgba(155,163,122,0.18)", icon: Plane        },
-  production: { fg: "#7f6f9c",            bg: "rgba(173,163,192,0.22)", icon: Briefcase    },
-  software:   { fg: "var(--color-charcoal)", bg: "rgba(31,33,26,0.08)", icon: Lightbulb    },
-  other:      { fg: "var(--color-grey)",  bg: "rgba(31,33,26,0.06)",    icon: Tag          },
-};
 
 function CategoryPickerChip({
   tx, stateChip, displayCat, customs, onSelect, onSelectPersonal, onUnmarkPersonal,
@@ -1870,26 +1841,27 @@ function CategoryPickerChip({
             padding:      "10px 10px 8px",
             fontFamily:   "inherit",
           }}>
-          {/* Built-in + custom list. Single column reads faster than the
-              prior 2-col grid for short option lists, and lets long
-              custom-category labels render without truncation. */}
+          {/* Canonical (Plaid-derived) + custom list. Single column reads
+              faster and lets long custom labels render without truncation;
+              capped height keeps the now-longer canonical list scrollable. */}
           <div style={{
             display:             "grid",
             gridTemplateColumns: "1fr",
             gap:                 4,
+            maxHeight:           300,
+            overflowY:           "auto",
           }}>
-            {EXPENSE_CATEGORY_OPTIONS.map((opt) => {
-              const active = tx.manual_category === opt.value && !tx.manual_custom_id;
-              const d = BUILTIN_DISPLAY[opt.value];
+            {CANONICAL_CATEGORIES.map((opt) => {
+              const active = tx.manual_category === opt.key && !tx.manual_custom_id;
               return (
                 <PillButton
-                  key={opt.value}
+                  key={opt.key}
                   active={active}
-                  bg={d.bg}
-                  fg={d.fg}
-                  icon={d.icon}
+                  bg={opt.bg}
+                  fg={opt.fg}
+                  icon={ICON_REGISTRY[opt.icon] ?? Tag}
                   label={opt.label}
-                  onClick={() => { onSelect(opt.value, null); setOpen(false); }}
+                  onClick={() => { onSelect(opt.key, null); setOpen(false); }}
                 />
               );
             })}
@@ -1903,7 +1875,7 @@ function CategoryPickerChip({
                   fg={c.color}
                   icon={Tag}
                   label={c.label}
-                  onClick={() => { onSelect(c.routesTo, c.id); setOpen(false); }}
+                  onClick={() => { onSelect(null, c.id); setOpen(false); }}
                 />
               );
             })}
@@ -2028,6 +2000,9 @@ interface ExpandedProps {
    *  to render the "Category" confirm chip inside the inline log form,
    *  so the user sees the same chip they'd click on the row. */
   displayCat: { label: string; bg: string; fg: string; icon: React.ElementType };
+  /** Pre-resolved ExpenseCategory bucket for the row (custom routesTo /
+   *  canonical override / Plaid mapping), used when logging an expense. */
+  expenseCategory: ExpenseCategory;
   acctLabel: string;
   /** Legacy modal-based log flow (dormant; see Props.onConvert). */
   onConvert:        () => void;
@@ -2052,7 +2027,7 @@ interface ExpandedProps {
 }
 
 function ExpandedRow({
-  tx, projects, displayCat, acctLabel,
+  tx, projects, displayCat, expenseCategory, acctLabel,
   onConvert: _onConvert,
   onSubmitInlineLog, onEditLinkedExpense, onDeleteLinkedExpense,
   onMarkPersonal, onUnmarkPersonal, onMatch, onUnmatch,
@@ -2314,18 +2289,10 @@ function ExpandedRow({
               onClick={async () => {
                 setLogError(null);
                 setLogSaving(true);
-                // Resolve the category exactly the way the chip resolves
-                // it: explicit manual_category wins, otherwise we fall
-                // back to the Plaid map (which itself defaults to "other"
-                // when unmapped). Custom categories route through their
-                // built-in target (kept on tx.manual_category), so this
-                // covers both branches.
-                const resolvedCategory: ExpenseCategory = tx.manual_category
-                  ?? plaidCategoryToExpenseCategory(tx.details?.personal_finance_category?.primary ?? null);
                 const result = await onSubmitInlineLog({
                   project_id:  logProjectId || null,
                   description: logDescription.trim(),
-                  category:    resolvedCategory,
+                  category:    expenseCategory,
                   amount:      Math.abs(Number(tx.amount)),
                   date:        tx.date,
                 });

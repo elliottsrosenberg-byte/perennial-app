@@ -1,18 +1,26 @@
-// Visual mapping for Plaid's `personal_finance_category.primary` enum.
+// Single source of truth for the Banking category taxonomy.
 //
-// This is the cousin of plaidCategoryMap.ts — that one maps to our
-// internal ExpenseCategory taxonomy; this one drives the chip render in
-// the Banking transaction table. Each entry returns:
+// We lean on Plaid's `personal_finance_category.primary` enum but collapse
+// it into a deduped, brand-styled set of "canonical" categories used
+// EVERYWHERE in Banking: the row chip, the filter dropdown, and the manual
+// category picker. Before this, three surfaces spoke three different
+// vocabularies (Plaid's 16 primaries with duplicate labels, our 5
+// ExpenseCategory buckets, and custom categories) — now they all read from
+// CANONICAL_CATEGORIES.
 //
-//   - label : a human-friendly noun phrase (Rocket Money-style)
-//   - icon  : a lucide-react icon component name (the consumer imports it)
-//   - bg    : muted tint (~0.10–0.15 alpha) for the chip background
-//   - fg    : the full color for the icon + label text
+// Each canonical category:
+//   - has a stable `key` stored in bank_transactions.manual_category when a
+//     user overrides the auto-detected category (that column is plain text);
+//   - maps from zero or more Plaid primaries (so TRANSPORTATION + TRAVEL both
+//     resolve to "Travel", deduping the old double entries; an empty list
+//     means manual-only, e.g. Software, which Plaid never auto-detects);
+//   - carries an `expense` bucket so converting a row to an Expense still
+//     lands in one of the five ExpenseCategory buckets the expense form uses.
 //
-// Tints are intentionally muted so the chips don't dominate the row. The
-// palette pulls from the brand vars in globals.css where possible and
-// introduces only a handful of local tint constants to avoid polluting
-// the global stylesheet for this one surface.
+// Reference for the full Plaid taxonomy:
+// https://plaid.com/documents/transactions-personal-finance-category-taxonomy.csv
+
+import type { ExpenseCategory } from "@/types/database";
 
 export interface CategoryDisplay {
   label: string;
@@ -22,49 +30,61 @@ export interface CategoryDisplay {
   fg:    string;
 }
 
+export interface CanonicalCategory extends CategoryDisplay {
+  /** Stable id persisted to bank_transactions.manual_category on override. */
+  key:       string;
+  /** Plaid primaries that auto-resolve to this category. [] = manual-only. */
+  primaries: string[];
+  /** Bucket used when a row is converted into an Expense. */
+  expense:   ExpenseCategory;
+}
+
 // ── Local color constants ──────────────────────────────────────────────────
 // Anchors for chip tints. Keep these in sync with the brand palette in
-// app/globals.css if it shifts. Format: { full, tinted } pairs where the
-// tint is the same hue at ~12% alpha.
+// app/globals.css if it shifts.
 
-const SAGE_FG    = "var(--color-sage)";
-const SAGE_BG    = "rgba(155,163,122,0.12)";
+const SAGE_FG     = "var(--color-sage)";
+const SAGE_BG     = "rgba(155,163,122,0.12)";
+const LAVENDER_FG = "#7f6f9c";
+const LAVENDER_BG = "rgba(173,163,192,0.18)";
+const YELLOW_FG   = "#a37f12";
+const YELLOW_BG   = "rgba(232,197,71,0.15)";
+const RED_FG      = "var(--color-red-orange)";
+const RED_BG      = "rgba(220,62,13,0.10)";
+const GREY_FG     = "var(--color-grey)";
+const GREY_BG     = "rgba(31,33,26,0.06)";
+const NEUTRAL_FG  = "var(--color-charcoal)";
+const NEUTRAL_BG  = "rgba(31,33,26,0.05)";
 
-const LAVENDER_FG = "#7f6f9c";              // muted plum-lavender
-const LAVENDER_BG = "rgba(173,163,192,0.18)"; // #ada3c0 family @ ~18%
+// ── Canonical taxonomy ───────────────────────────────────────────────────────
+// Order drives both the filter dropdown and the picker grid.
 
-const YELLOW_FG  = "#a37f12";               // ink-on-paper version of warm yellow
-const YELLOW_BG  = "rgba(232,197,71,0.15)"; // warm-yellow @ 15%
+export const CANONICAL_CATEGORIES: CanonicalCategory[] = [
+  { key: "travel",        label: "Travel",          icon: "Plane",          bg: SAGE_BG,     fg: SAGE_FG,     primaries: ["TRAVEL", "TRANSPORTATION"], expense: "travel"     },
+  { key: "dining",        label: "Dining & Drinks", icon: "Utensils",       bg: LAVENDER_BG, fg: LAVENDER_FG, primaries: ["FOOD_AND_DRINK"],           expense: "other"      },
+  { key: "shopping",      label: "Shopping",        icon: "ShoppingBag",    bg: YELLOW_BG,   fg: YELLOW_FG,   primaries: ["GENERAL_MERCHANDISE"],      expense: "materials"  },
+  { key: "materials",     label: "Materials",       icon: "Wrench",         bg: YELLOW_BG,   fg: YELLOW_FG,   primaries: ["HOME_IMPROVEMENT"],         expense: "materials"  },
+  { key: "software",      label: "Software",        icon: "Laptop",         bg: NEUTRAL_BG,  fg: NEUTRAL_FG,  primaries: [],                           expense: "software"   },
+  { key: "services",      label: "Services",        icon: "Briefcase",      bg: NEUTRAL_BG,  fg: NEUTRAL_FG,  primaries: ["GENERAL_SERVICES"],         expense: "production" },
+  { key: "entertainment", label: "Entertainment",   icon: "Music",          bg: LAVENDER_BG, fg: LAVENDER_FG, primaries: ["ENTERTAINMENT"],            expense: "production" },
+  { key: "utilities",     label: "Utilities",       icon: "Lightbulb",      bg: NEUTRAL_BG,  fg: NEUTRAL_FG,  primaries: ["RENT_AND_UTILITIES"],       expense: "other"      },
+  { key: "personal_care", label: "Personal Care",   icon: "User",           bg: NEUTRAL_BG,  fg: NEUTRAL_FG,  primaries: ["PERSONAL_CARE"],            expense: "other"      },
+  { key: "health",        label: "Health",          icon: "HeartPulse",     bg: NEUTRAL_BG,  fg: NEUTRAL_FG,  primaries: ["MEDICAL"],                  expense: "other"      },
+  { key: "income",        label: "Income",          icon: "ArrowDownToLine", bg: SAGE_BG,    fg: SAGE_FG,     primaries: ["INCOME"],                   expense: "other"      },
+  { key: "transfer",      label: "Transfer",        icon: "ArrowLeftRight", bg: GREY_BG,     fg: GREY_FG,     primaries: ["TRANSFER_IN", "TRANSFER_OUT"], expense: "other"   },
+  { key: "loan",          label: "Loan",            icon: "Landmark",       bg: GREY_BG,     fg: GREY_FG,     primaries: ["LOAN_PAYMENTS"],            expense: "other"      },
+  { key: "bank_fees",     label: "Bank fees",       icon: "Receipt",        bg: RED_BG,      fg: RED_FG,      primaries: ["BANK_FEES"],                expense: "other"      },
+  { key: "gov",           label: "Gov & NGO",       icon: "Landmark",       bg: GREY_BG,     fg: GREY_FG,     primaries: ["GOVERNMENT_AND_NON_PROFIT"], expense: "other"     },
+];
 
-const RED_FG     = "var(--color-red-orange)";
-const RED_BG     = "rgba(220,62,13,0.10)";
+const BY_KEY     = new Map(CANONICAL_CATEGORIES.map((c) => [c.key, c]));
+const BY_PRIMARY = new Map<string, CanonicalCategory>();
+for (const c of CANONICAL_CATEGORIES) {
+  for (const p of c.primaries) BY_PRIMARY.set(p, c);
+}
 
-const GREY_FG    = "var(--color-grey)";
-const GREY_BG    = "rgba(31,33,26,0.06)";
-
-const NEUTRAL_FG = "var(--color-charcoal)";
-const NEUTRAL_BG = "rgba(31,33,26,0.05)";
-
-// ── Mapping ────────────────────────────────────────────────────────────────
-
-const MAP: Record<string, CategoryDisplay> = {
-  TRANSPORTATION:        { label: "Travel",            icon: "Car",            bg: SAGE_BG,     fg: SAGE_FG    },
-  TRAVEL:                { label: "Travel",            icon: "Plane",          bg: SAGE_BG,     fg: SAGE_FG    },
-  FOOD_AND_DRINK:        { label: "Dining & Drinks",   icon: "Utensils",       bg: LAVENDER_BG, fg: LAVENDER_FG},
-  GENERAL_MERCHANDISE:   { label: "Shopping",          icon: "ShoppingBag",    bg: YELLOW_BG,   fg: YELLOW_FG  },
-  HOME_IMPROVEMENT:      { label: "Materials",         icon: "Wrench",         bg: YELLOW_BG,   fg: YELLOW_FG  },
-  GENERAL_SERVICES:      { label: "Services",          icon: "Briefcase",      bg: NEUTRAL_BG,  fg: NEUTRAL_FG },
-  ENTERTAINMENT:         { label: "Entertainment",     icon: "Music",          bg: LAVENDER_BG, fg: LAVENDER_FG},
-  RENT_AND_UTILITIES:    { label: "Utilities",         icon: "Lightbulb",      bg: NEUTRAL_BG,  fg: NEUTRAL_FG },
-  PERSONAL_CARE:         { label: "Personal Care",     icon: "User",           bg: NEUTRAL_BG,  fg: NEUTRAL_FG },
-  MEDICAL:               { label: "Health",            icon: "HeartPulse",     bg: NEUTRAL_BG,  fg: NEUTRAL_FG },
-  INCOME:                { label: "Income",            icon: "ArrowDownToLine",bg: SAGE_BG,     fg: SAGE_FG    },
-  TRANSFER_IN:           { label: "Transfer",          icon: "ArrowLeftRight", bg: GREY_BG,     fg: GREY_FG    },
-  TRANSFER_OUT:          { label: "Transfer",          icon: "ArrowLeftRight", bg: GREY_BG,     fg: GREY_FG    },
-  LOAN_PAYMENTS:         { label: "Loan",              icon: "Landmark",       bg: GREY_BG,     fg: GREY_FG    },
-  BANK_FEES:             { label: "Bank fees",         icon: "Receipt",        bg: RED_BG,      fg: RED_FG     },
-  GOVERNMENT_AND_NON_PROFIT: { label: "Gov & NGO",     icon: "Landmark",       bg: GREY_BG,     fg: GREY_FG    },
-};
+/** Stable list of canonical keys — for API validation. */
+export const CANONICAL_CATEGORY_KEYS: string[] = CANONICAL_CATEGORIES.map((c) => c.key);
 
 const UNCATEGORIZED: CategoryDisplay = {
   label: "Uncategorized",
@@ -73,11 +93,33 @@ const UNCATEGORIZED: CategoryDisplay = {
   fg:    GREY_FG,
 };
 
-export function categoryFor(primary?: string | null): CategoryDisplay {
-  if (!primary) return UNCATEGORIZED;
-  return MAP[primary] ?? UNCATEGORIZED;
+/** Look up a canonical category by its stored override key. */
+export function canonicalByKey(key?: string | null): CanonicalCategory | null {
+  if (!key) return null;
+  return BY_KEY.get(key) ?? null;
 }
 
-/** Stable, alphabetised list of the Plaid primaries we render — for the
- *  filter dropdown. Caller is free to prepend an "All" option. */
-export const PLAID_PRIMARY_KEYS: string[] = Object.keys(MAP).sort();
+/** Resolve a Plaid primary to its canonical category. */
+export function canonicalForPrimary(primary?: string | null): CanonicalCategory | null {
+  if (!primary) return null;
+  return BY_PRIMARY.get(primary) ?? null;
+}
+
+/** Chip display for a raw Plaid primary — Uncategorized when unmapped/absent. */
+export function categoryFor(primary?: string | null): CategoryDisplay {
+  return canonicalForPrimary(primary) ?? UNCATEGORIZED;
+}
+
+/** Plaid primaries belonging to a canonical key — for server-side filtering. */
+export function primariesForKey(key: string): string[] {
+  return BY_KEY.get(key)?.primaries ?? [];
+}
+
+/** ExpenseCategory bucket for converting a row to an Expense. Override key
+ *  wins over the Plaid primary; falls back to "other". */
+export function expenseForCategory(
+  key?: string | null,
+  primary?: string | null,
+): ExpenseCategory {
+  return (canonicalByKey(key) ?? canonicalForPrimary(primary))?.expense ?? "other";
+}
