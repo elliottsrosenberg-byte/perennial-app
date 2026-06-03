@@ -2,6 +2,7 @@
 
 import type { TimeEntry, ActiveTimer, Expense, Invoice } from "@/types/database";
 import EmptyState from "@/components/ui/EmptyState";
+import OverviewCharts from "./OverviewCharts";
 import { formatInvoiceNumber } from "@/lib/invoices/format";
 import { Landmark } from "lucide-react";
 
@@ -202,6 +203,11 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
           </div>
         ))}
       </div>
+
+      {/* Insights — real-data charts (time / invoices / expenses) */}
+      {!isEmpty && (
+        <OverviewCharts timeEntries={timeEntries} expenses={expenses} invoices={invoices} />
+      )}
 
       {/* Main + side columns */}
       <div className="flex gap-4 flex-1">
