@@ -768,6 +768,11 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
     }
   }
 
+  const allVisibleSelected = transactions.length > 0 && transactions.every((t) => selectedIds.has(t.id));
+  function toggleSelectAll() {
+    setSelectedIds(allVisibleSelected ? new Set() : new Set(transactions.map((t) => t.id)));
+  }
+
   async function bulkMarkPersonal() {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
@@ -1237,7 +1242,14 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                   color: "var(--color-grey)",
                   background: "var(--color-warm-white)",
                 }}>
-                <span />
+                <span onClick={(e) => e.stopPropagation()}>
+                  {transactions.length > 0 && (
+                    <SelectCheckbox
+                      checked={allVisibleSelected}
+                      onToggle={toggleSelectAll}
+                    />
+                  )}
+                </span>
                 <span>Date</span>
                 <span>Name</span>
                 <span>Category</span>
