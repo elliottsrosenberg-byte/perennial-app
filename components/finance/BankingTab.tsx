@@ -1199,7 +1199,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
               {/* Column header */}
               <div className="grid items-center px-4 py-2 text-[10px] font-semibold uppercase tracking-wider"
                 style={{
-                  gridTemplateColumns: "24px 56px 1fr 180px 120px 18px",
+                  gridTemplateColumns: `24px 56px 1fr 180px 120px ${status === "needs_review" ? 64 : 18}px`,
                   gap: 12,
                   borderBottom: "0.5px solid var(--color-border)",
                   color: "var(--color-grey)",
@@ -1229,6 +1229,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                   first={i === 0}
                   expanded={expandedId === tx.id}
                   selected={selectedIds.has(tx.id)}
+                  reviewMode={status === "needs_review"}
                   customs={customs}
                   projects={projects}
                   onToggleSelect={() => {
@@ -1652,6 +1653,8 @@ interface RowProps {
   first: boolean;
   expanded: boolean;
   selected: boolean;
+  /** True in the To-review filter — swaps the trailing chevron for a Log button. */
+  reviewMode: boolean;
   customs: CustomCategory[];
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
   onToggleSelect: () => void;
@@ -1687,7 +1690,7 @@ interface RowProps {
 }
 
 function TransactionRow({
-  tx, first, expanded, selected, customs, projects,
+  tx, first, expanded, selected, reviewMode, customs, projects,
   onToggleSelect, onToggleExpand,
   onMarkPersonal, onConvert, onSubmitInlineLog,
   onEditLinkedExpense, onDeleteLinkedExpense, onQuickLog,
@@ -1723,9 +1726,11 @@ function TransactionRow({
 
   // A debit that hasn't been handled yet can be logged in one click from
   // the row. Credits route to invoice-matching instead, so they don't get
-  // the quick-log affordance.
-  const [hovered, setHovered] = useState(false);
+  // the quick-log affordance. In the To-review view the trailing chevron is
+  // replaced by an always-visible Log button (reviewMode).
   const canQuickLog = !isCredit && !tx.linked_expense_id && !tx.matched_invoice_id && !tx.is_personal;
+  const showLogButton = reviewMode && canQuickLog;
+  const trailingW = reviewMode ? 64 : 18;
 
   return (
     <>
@@ -1733,15 +1738,15 @@ function TransactionRow({
         className="grid items-center px-4 py-3 transition-colors"
         style={{
           position: "relative",
-          gridTemplateColumns: "24px 56px 1fr 180px 120px 18px",
+          gridTemplateColumns: `24px 56px 1fr 180px 120px ${trailingW}px`,
           gap: 12,
           borderTop: first ? "none" : "0.5px solid var(--color-border)",
           background: expanded ? "var(--color-surface-sunken)" : "transparent",
           cursor: "pointer",
         }}
         onClick={onToggleExpand}
-        onMouseEnter={(e) => { setHovered(true); if (!expanded) e.currentTarget.style.background = "rgba(31,33,26,0.025)"; }}
-        onMouseLeave={(e) => { setHovered(false); if (!expanded) e.currentTarget.style.background = "transparent"; }}
+        onMouseEnter={(e) => { if (!expanded) e.currentTarget.style.background = "rgba(31,33,26,0.025)"; }}
+        onMouseLeave={(e) => { if (!expanded) e.currentTarget.style.background = "transparent"; }}
       >
         {/* Checkbox */}
         <span onClick={(e) => { e.stopPropagation(); onToggleSelect(); }}>
@@ -1789,41 +1794,30 @@ function TransactionRow({
           {isCredit ? "+" : "−"}{fmtCurrency(amt)}
         </span>
 
-        {/* Chevron */}
-        <span style={{ color: "var(--color-grey)" }}>
-          <ChevronRight size={12} style={{
-            transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
-            transition: "transform 0.12s ease",
-          }} />
-        </span>
-
-        {/* Quick-log — hover-revealed pill over the right edge. Fades in
-            over the amount (one row hovers at a time) so the needs-review
-            list can be cleared without expanding each row. */}
-        {canQuickLog && hovered && !expanded && (
-          <div
-            onClick={(e) => e.stopPropagation()}
+        {/* Trailing cell — an always-visible Log button on To-review debits,
+            otherwise the expand chevron. */}
+        {showLogButton ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); onQuickLog(); }}
+            title="Log as an expense — open the row to add a receipt or project"
             style={{
-              position: "absolute", right: 28, top: 0, bottom: 0,
-              display: "flex", alignItems: "center", paddingLeft: 44,
-              background: "linear-gradient(to right, transparent, rgba(255,254,252,0.97) 40%)",
-              zIndex: 2,
-            }}>
-            <button
-              onClick={(e) => { e.stopPropagation(); onQuickLog(); }}
-              title="Log as an expense — expand the row to add a receipt or project"
-              style={{
-                display: "flex", alignItems: "center", gap: 4,
-                padding: "3px 11px", fontSize: 11, fontWeight: 600, fontFamily: "inherit",
-                color: "white", background: "var(--color-sage)",
-                border: "none", borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap",
-                boxShadow: "0 1px 4px rgba(31,33,26,0.18)",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-sage-hover)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-sage)")}>
-              <Plus size={11} /> Log
-            </button>
-          </div>
+              display: "inline-flex", alignItems: "center", gap: 3,
+              padding: "3px 9px", fontSize: 11, fontWeight: 600, fontFamily: "inherit",
+              color: "white", background: "var(--color-sage)",
+              border: "none", borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap",
+              justifySelf: "end",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-sage-hover)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-sage)")}>
+            <Plus size={11} /> Log
+          </button>
+        ) : (
+          <span style={{ color: "var(--color-grey)", justifySelf: "end" }}>
+            <ChevronRight size={12} style={{
+              transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+              transition: "transform 0.12s ease",
+            }} />
+          </span>
         )}
       </div>
 
