@@ -1337,7 +1337,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
               {/* Column header */}
               <div className="grid items-center px-4 py-2 text-[10px] font-semibold uppercase tracking-wider"
                 style={{
-                  gridTemplateColumns: `24px 56px 1fr 150px 132px 120px ${status === "needs_review" ? 64 : 18}px`,
+                  gridTemplateColumns: `24px 56px 1fr 180px 120px ${status === "needs_review" ? 64 : 18}px`,
                   gap: 12,
                   borderBottom: "0.5px solid var(--color-border)",
                   color: "var(--color-grey)",
@@ -1354,7 +1354,6 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                 <span>Date</span>
                 <span>Name</span>
                 <span>Category</span>
-                <span>Account</span>
                 <span style={{ textAlign: "right" }}>Amount</span>
                 <span />
               </div>
@@ -1913,7 +1912,7 @@ function TransactionRow({
         className="grid items-center px-4 py-3 transition-colors"
         style={{
           position: "relative",
-          gridTemplateColumns: `24px 56px 1fr 150px 132px 120px ${trailingW}px`,
+          gridTemplateColumns: `24px 56px 1fr 180px 120px ${trailingW}px`,
           gap: 12,
           borderTop: first ? "none" : "0.5px solid var(--color-border)",
           background: expanded ? "var(--color-surface-sunken)" : "transparent",
@@ -1933,10 +1932,15 @@ function TransactionRow({
           {fmtShortDate(tx.date)}
         </span>
 
-        {/* Name + pending */}
+        {/* Name + account + pending */}
         <span className="min-w-0">
           <span className="text-[13px] font-medium truncate block" style={{ color: "var(--color-charcoal)" }}>
             {merchant}
+            {acct && (
+              <span className="font-normal" style={{ color: "var(--color-grey)" }}>
+                {" · "}{acct.institution}{acct.last_four ? ` ••${acct.last_four}` : ""}
+              </span>
+            )}
             {pending && (
               <span className="ml-2 text-[10px] font-normal" style={{ color: "#b8860b" }}>
                 • Pending
@@ -1958,19 +1962,6 @@ function TransactionRow({
             onSelectPersonal={onMarkPersonal}
             onUnmarkPersonal={onUnmarkPersonal}
           />
-        </span>
-
-        {/* Account */}
-        <span className="text-[12px] truncate" style={{ color: "var(--color-grey)" }}
-          title={acct ? `${acct.institution}${acct.last_four ? ` ••${acct.last_four}` : ""}` : undefined}>
-          {acct ? (
-            <>
-              {acct.institution}
-              {acct.last_four && (
-                <span className="tabular-nums" style={{ opacity: 0.75 }}> ••{acct.last_four}</span>
-              )}
-            </>
-          ) : "—"}
         </span>
 
         {/* Amount */}
