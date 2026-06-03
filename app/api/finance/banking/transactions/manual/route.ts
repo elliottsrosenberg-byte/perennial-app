@@ -5,6 +5,9 @@
 // the Banking list like any synced row: a debit lands in To-review (log it
 // as an expense), a credit can be matched to a paid invoice.
 //
+// When `log` is true on a debit, we also create the linked expense in the
+// same call (the "Add + Log" action), carrying the billable flag + receipt.
+//
 // Body: {
 //   type: "debit" | "credit",
 //   amount: number,            // positive magnitude; sign derived from type
@@ -12,12 +15,17 @@
 //   date: string,              // YYYY-MM-DD
 //   category?: string | null,  // canonical category key (manual_category)
 //   payment_method?: string | null,
-//   note?: string | null,
+//   payment_detail?: string | null,
+//   bank_account_id?: string | null,  // when attributed to a linked account
+//   receipt_url?: string | null,
+//   receipt_path?: string | null,
+//   billable?: boolean,        // only used when log=true on a debit
+//   log?: boolean,             // also create + link an expense (debit only)
 // }
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { CANONICAL_CATEGORY_KEYS } from "@/components/finance/plaidCategoryDisplay";
+import { CANONICAL_CATEGORY_KEYS, expenseForCategory } from "@/components/finance/plaidCategoryDisplay";
 import { randomUUID } from "crypto";
 
 export const runtime = "nodejs";
@@ -36,7 +44,12 @@ export async function POST(req: Request) {
     date?: string;
     category?: string | null;
     payment_method?: string | null;
-    note?: string | null;
+    payment_detail?: string | null;
+    bank_account_id?: string | null;
+    receipt_url?: string | null;
+    receipt_path?: string | null;
+    billable?: boolean;
+    log?: boolean;
   } | null;
   if (!body) return NextResponse.json({ error: "invalid_body" }, { status: 400 });
 
@@ -55,17 +68,30 @@ export async function POST(req: Request) {
   const category = body.category && CANONICAL_CATEGORY_KEYS.includes(body.category) ? body.category : null;
   const paymentMethod = body.payment_method && PAYMENT_METHODS.has(body.payment_method)
     ? body.payment_method : null;
-  const note = typeof body.note === "string" && body.note.trim() ? body.note.trim() : null;
+  const paymentDetail = typeof body.payment_detail === "string" && body.payment_detail.trim()
+    ? body.payment_detail.trim() : null;
+
+  // Validate the linked account, if any, belongs to this user.
+  let bankAccountId: string | null = null;
+  if (body.bank_account_id) {
+    const { data: acct } = await supabase
+      .from("bank_accounts")
+      .select("id")
+      .eq("id", body.bank_account_id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (acct) bankAccountId = acct.id;
+  }
 
   // Signed amount: positive = money IN (credit), negative = OUT (debit) —
   // matches how synced rows are normalised for display.
   const signed = type === "credit" ? magnitude : -magnitude;
 
-  const { data, error } = await supabase
+  const { data: tx, error } = await supabase
     .from("bank_transactions")
     .insert({
       user_id:         user.id,
-      bank_account_id: null,
+      bank_account_id: bankAccountId,
       provider:        "manual",
       external_id:     `manual_${randomUUID()}`,
       amount:          signed,
@@ -77,11 +103,38 @@ export async function POST(req: Request) {
       status:          "posted",
       manual_category: category,
       payment_method:  paymentMethod,
-      note,
+      payment_detail:  paymentDetail,
+      receipt_url:     body.receipt_url ?? null,
+      receipt_path:    body.receipt_path ?? null,
     })
     .select("*, bank_account:bank_accounts(name, institution, last_four, type, subtype)")
     .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error || !tx) return NextResponse.json({ error: error?.message ?? "insert_failed" }, { status: 500 });
 
-  return NextResponse.json({ ok: true, transaction: data });
+  // "Add + Log": create the linked expense for a debit.
+  if (body.log && type === "debit") {
+    const { data: expense, error: expErr } = await supabase
+      .from("expenses")
+      .insert({
+        user_id:     user.id,
+        project_id:  null,
+        description: name,
+        category:    expenseForCategory(category, null),
+        amount:      magnitude,
+        date,
+        billable:    body.billable ?? true,
+        receipt_url: body.receipt_url ?? null,
+      })
+      .select("id")
+      .single();
+    if (!expErr && expense) {
+      await supabase.from("bank_transactions")
+        .update({ linked_expense_id: expense.id })
+        .eq("id", tx.id)
+        .eq("user_id", user.id);
+      tx.linked_expense_id = expense.id;
+    }
+  }
+
+  return NextResponse.json({ ok: true, transaction: tx });
 }

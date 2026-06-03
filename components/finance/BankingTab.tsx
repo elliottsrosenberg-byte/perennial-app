@@ -1482,12 +1482,14 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
       {manualExpenseOpen && (
         <ManualTransactionModal
           today={new Date().toISOString().split("T")[0]}
+          accounts={accounts}
           onClose={() => setManualExpenseOpen(false)}
           onCreated={(tx) => {
-            setSnackbar({ text: tx.type === "credit" ? "Payment added" : "Transaction added" });
-            // Surface it: a new manual row is always in To-review. Jump there
-            // (or just refetch if we're already on it) so it's visible.
-            if (status !== "needs_review") setStatus("needs_review");
+            setSnackbar({ text: tx.linked_expense_id ? "Logged as expense" : tx.type === "credit" ? "Payment added" : "Transaction added" });
+            // Surface it: jump to the filter the new row lands in (Logged if
+            // it was Add+Log, otherwise To-review) so it's visible.
+            const target: StatusFilter = tx.linked_expense_id ? "logged" : "needs_review";
+            if (status !== target) setStatus(target);
             else fetchTransactions();
           }}
         />
@@ -1959,7 +1961,7 @@ function TransactionRow({
               </span>
             ) : tx.payment_method ? (
               <span className="font-normal" style={{ color: "var(--color-grey)" }}>
-                {" · "}{PAYMENT_LABEL[tx.payment_method] ?? "Manual"}
+                {" · "}{tx.payment_detail || PAYMENT_LABEL[tx.payment_method] || "Manual"}
               </span>
             ) : null}
             {pending && (
@@ -2429,7 +2431,7 @@ function ExpandedRow({
               }}
             />
             <p className="text-[11px] mt-1" style={{ color: "var(--color-grey)" }}>
-              {(tx.payment_method ? PAYMENT_LABEL[tx.payment_method] ?? "Manual" : acctLabel)} · {fmtLongDate(tx.date)} · {tx.status === "pending" ? "Pending" : "Posted"}
+              {(tx.payment_method ? [PAYMENT_LABEL[tx.payment_method] ?? "Manual", tx.payment_detail].filter(Boolean).join(" · ") : acctLabel)} · {fmtLongDate(tx.date)} · {tx.status === "pending" ? "Pending" : "Posted"}
             </p>
           </div>
 
