@@ -59,6 +59,36 @@ export async function GET(req: Request) {
   const page      = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
   const pageSize  = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(url.searchParams.get("pageSize") ?? DEFAULT_PAGE_SIZE) || DEFAULT_PAGE_SIZE));
 
+  // All filters EXCEPT status — shared by the main query and the per-status
+  // pill counts, so the counts reflect the current account/category/type/
+  // search context but show how many sit in each pipeline stage.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const applyNonStatusFilters = <T extends { eq: any; or: any }>(query: T): T => {
+    let qq = query;
+    if (account !== "all") qq = qq.eq("bank_account_id", account);
+    if (txType  !== "all") qq = qq.eq("type", txType);
+    // Category filter is a canonical key. A row matches if the user pinned
+    // that key (manual_category), or — when there's no override — its Plaid
+    // primary maps to the key. details.personal_finance_category.primary is
+    // JSONB; an empty primaries list (e.g. "software") matches overrides only.
+    if (category !== "all" && CANONICAL_CATEGORY_KEYS.includes(category)) {
+      const primaries = primariesForKey(category);
+      const parts = [`manual_category.eq.${category}`];
+      if (primaries.length > 0) {
+        parts.push(
+          `and(manual_category.is.null,manual_custom_id.is.null,details->personal_finance_category->>primary.in.(${primaries.join(",")}))`,
+        );
+      }
+      qq = qq.or(parts.join(","));
+    }
+    if (search) {
+      // Case-insensitive across description + the JSONB merchant_name.
+      const escaped = search.replace(/[%,]/g, (m) => "\\" + m);
+      qq = qq.or(`description.ilike.%${escaped}%,details->>merchant_name.ilike.%${escaped}%`);
+    }
+    return qq;
+  };
+
   // ── Main filtered query ──────────────────────────────────────────────────
   let q = supabase
     .from("bank_transactions")
@@ -76,29 +106,7 @@ export async function GET(req: Request) {
     q = q.not("matched_invoice_id", "is", null);
   }
 
-  if (account !== "all") q = q.eq("bank_account_id", account);
-  if (txType  !== "all") q = q.eq("type", txType);
-
-  // Category filter is a canonical key. A row matches if the user pinned
-  // that key (manual_category), or — when there's no override — its Plaid
-  // primary maps to the key. details.personal_finance_category.primary is
-  // JSONB; an empty primaries list (e.g. "software") matches overrides only.
-  if (category !== "all" && CANONICAL_CATEGORY_KEYS.includes(category)) {
-    const primaries = primariesForKey(category);
-    const parts = [`manual_category.eq.${category}`];
-    if (primaries.length > 0) {
-      parts.push(
-        `and(manual_category.is.null,manual_custom_id.is.null,details->personal_finance_category->>primary.in.(${primaries.join(",")}))`,
-      );
-    }
-    q = q.or(parts.join(","));
-  }
-
-  if (search) {
-    // Case-insensitive across description + the JSONB merchant_name.
-    const escaped = search.replace(/[%,]/g, (m) => "\\" + m);
-    q = q.or(`description.ilike.%${escaped}%,details->>merchant_name.ilike.%${escaped}%`);
-  }
+  q = applyNonStatusFilters(q);
 
   // Sort
   if (sort === "date_desc")        q = q.order("date", { ascending: false }).order("id", { ascending: false });
@@ -147,11 +155,33 @@ export async function GET(req: Request) {
     net:            inSum - outSum,
   };
 
+  // ── Per-status pill counts ────────────────────────────────────────────────
+  // Head-only count queries (no rows transferred), one per pipeline stage,
+  // honouring every non-status filter. Run together to keep latency low.
+  const baseCount = () => applyNonStatusFilters(
+    supabase.from("bank_transactions").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+  );
+  const [allC, needsC, loggedC, matchedC, personalC] = await Promise.all([
+    baseCount(),
+    baseCount().eq("is_personal", false).is("linked_expense_id", null).is("matched_invoice_id", null),
+    baseCount().not("linked_expense_id", "is", null),
+    baseCount().not("matched_invoice_id", "is", null),
+    baseCount().eq("is_personal", true),
+  ]);
+  const counts = {
+    all:          allC.count ?? 0,
+    needs_review: needsC.count ?? 0,
+    logged:       loggedC.count ?? 0,
+    matched:      matchedC.count ?? 0,
+    personal:     personalC.count ?? 0,
+  };
+
   return NextResponse.json({
     transactions,
     total:    count ?? 0,
     page,
     pageSize,
     kpis,
+    counts,
   });
 }

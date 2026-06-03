@@ -16,7 +16,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from "react-dom";
 import Script from "next/script";
 import {
-  ChevronRight, Loader2, MoreHorizontal, Paperclip, Plus, RefreshCw,
+  ChevronRight, Link2, Loader2, MoreHorizontal, Paperclip, Plus, RefreshCw,
   Trash2, Unplug, X,
   // Category-chip icons (lookup by name from plaidCategoryDisplay):
   ArrowDownToLine, ArrowLeftRight, Briefcase, Car, HeartPulse, Landmark, Laptop,
@@ -83,12 +83,14 @@ interface KpiPayload {
   out_this_month: number;
   net:            number;
 }
+type StatusCounts = Record<"all" | "needs_review" | "logged" | "matched" | "personal", number>;
 interface TransactionsResponse {
   transactions: BankTransaction[];
   total:        number;
   page:         number;
   pageSize:     number;
   kpis:         KpiPayload;
+  counts:       StatusCounts;
 }
 interface OutstandingInvoice {
   id:     string;
@@ -171,12 +173,15 @@ type StatusFilter = "all" | "needs_review" | "logged" | "matched" | "personal";
 type TypeFilter   = "all" | "debit" | "credit";
 type SortKey      = "date_desc" | "date_asc" | "amount_desc" | "amount_asc";
 
-const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
-  { value: "needs_review", label: "Needs review" },
-  { value: "all",          label: "All"          },
-  { value: "logged",       label: "Logged"       },
-  { value: "matched",      label: "Matched"      },
-  { value: "personal",     label: "Personal"     },
+// Pipeline order, left→right: incoming review → the two ways to handle a
+// row (log as expense / match to a paid invoice) → excluded → everything.
+// Logged + Matched carry an icon that mirrors their action.
+const STATUS_OPTIONS: { value: StatusFilter; label: string; icon?: React.ElementType }[] = [
+  { value: "needs_review", label: "To review" },
+  { value: "logged",       label: "Logged",   icon: ReceiptIcon },
+  { value: "matched",      label: "Matched",  icon: Link2       },
+  { value: "personal",     label: "Personal"  },
+  { value: "all",          label: "All"       },
 ];
 const TYPE_OPTIONS: { value: TypeFilter; label: string }[] = [
   { value: "all",    label: "All types" },
@@ -211,6 +216,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
   const [transactions, setTransactions]           = useState<BankTransaction[]>([]);
   const [total, setTotal]                         = useState(0);
   const [kpis, setKpis]                           = useState<KpiPayload>({ in_this_month: 0, out_this_month: 0, net: 0 });
+  const [statusCounts, setStatusCounts]           = useState<StatusCounts>({ all: 0, needs_review: 0, logged: 0, matched: 0, personal: 0 });
   const [outstanding, setOutstanding]             = useState<OutstandingInvoice[]>([]);
   // Auto-match suggestions from the queue route. Only credits whose
   // amount matches an outstanding invoice within tolerance land here;
@@ -334,6 +340,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
       setTransactions(data.transactions);
       setTotal(data.total);
       setKpis(data.kpis);
+      if (data.counts) setStatusCounts(data.counts);
     } finally {
       if (myReqId === reqIdRef.current) setTableLoading(false);
     }
@@ -1122,6 +1129,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                 value={status}
                 options={STATUS_OPTIONS}
                 onChange={(v) => setStatus(v)}
+                counts={statusCounts}
               />
               <div style={{ width: 168 }}>
                 <Select value={account}  onChange={setAccount}  options={accountOptions}  />
@@ -1152,6 +1160,20 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                 <Select value={sort} onChange={(v) => setSort(v as SortKey)} options={SORT_OPTIONS} />
               </div>
             </div>
+
+            {/* Contextual hint — only in the To-review stage, naming the two
+                ways to clear a transaction so the pipeline reads clearly. */}
+            {status === "needs_review" && transactions.length > 0 && (
+              <div className="flex items-center gap-1.5 shrink-0 text-[11.5px]"
+                style={{ color: "var(--color-grey)", marginTop: -4 }}>
+                <span>
+                  Clear a transaction by{" "}
+                  <span style={{ color: "var(--color-charcoal)", fontWeight: 500 }}>logging it as an expense</span>
+                  {" "}(hover a row to Log, or open it to add a receipt) or{" "}
+                  <span style={{ color: "var(--color-charcoal)", fontWeight: 500 }}>matching it to a paid invoice</span>.
+                </span>
+              </div>
+            )}
 
             {/* ── Bulk action bar ───────────────────────────────────── */}
             {selectedIds.size > 0 && (
@@ -1565,25 +1587,40 @@ function SubTabToggle({
 // Matches the InvoicesTab list-pane pattern: filled charcoal when active,
 // quiet ghost otherwise. Kept inline (no new ui primitive).
 
-function FilterPills<T extends string>({ value, options, onChange }: {
+function FilterPills<T extends string>({ value, options, onChange, counts }: {
   value:   T;
-  options: { value: T; label: string }[];
+  options: { value: T; label: string; icon?: React.ElementType }[];
   onChange: (v: T) => void;
+  /** Optional per-option count, rendered as a trailing badge. */
+  counts?: Partial<Record<T, number>>;
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {options.map((o) => {
         const active = value === o.value;
+        const Icon   = o.icon;
+        const count  = counts?.[o.value];
         return (
           <button key={o.value} type="button" onClick={() => onChange(o.value)}
-            className="px-2.5 py-1 rounded-full text-[11px] transition-colors"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] transition-colors"
             style={{
               background: active ? "var(--color-charcoal)" : "rgba(31,33,26,0.06)",
               color:      active ? "white" : "var(--color-grey)",
               border:     "none",
               fontWeight: active ? 600 : 400,
             }}>
+            {Icon && <Icon size={11} style={{ opacity: active ? 0.9 : 0.6 }} />}
             {o.label}
+            {count != null && (
+              <span className="tabular-nums" style={{
+                fontSize: 10, fontWeight: 600, lineHeight: 1,
+                padding: "1.5px 5px", borderRadius: 999,
+                background: active ? "rgba(255,255,255,0.18)" : "rgba(31,33,26,0.07)",
+                color:      active ? "white" : "var(--color-grey)",
+              }}>
+                {count}
+              </span>
+            )}
           </button>
         );
       })}
