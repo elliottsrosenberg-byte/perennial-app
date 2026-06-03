@@ -1188,26 +1188,35 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                 <span>
                   Clear a transaction by{" "}
                   <span style={{ color: "var(--color-charcoal)", fontWeight: 500 }}>logging it as an expense</span>
-                  {" "}(hover a row to Log, or open it to add a receipt) or{" "}
+                  {" "}(hit Log, or open it to add a receipt) or{" "}
                   <span style={{ color: "var(--color-charcoal)", fontWeight: 500 }}>matching it to a paid invoice</span>.
                 </span>
               </div>
             )}
 
-            {/* ── Bulk action bar ───────────────────────────────────── */}
+            {/* ── Bulk action bar — floats centered at the bottom, sage in
+                both themes with white text. ──────────────────────────── */}
             {selectedIds.size > 0 && (
-              <div className="flex items-center gap-3 px-4 py-2 rounded-lg shrink-0"
-                style={{ background: "var(--color-charcoal)", color: "white" }}>
-                <span className="text-[12px]">{selectedIds.size} selected</span>
-                <div className="flex-1" />
+              <div className="flex items-center gap-3"
+                style={{
+                  position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
+                  zIndex: 60, padding: "9px 12px 9px 18px", borderRadius: 999,
+                  background: "var(--color-sage)", color: "white",
+                  boxShadow: "0 10px 30px rgba(31,33,26,0.30)",
+                }}>
+                <span className="text-[12px] font-semibold">{selectedIds.size} selected</span>
                 <button onClick={bulkMarkPersonal}
-                  className="px-3 py-1 text-[11px] rounded-md"
-                  style={{ background: "rgba(255,255,255,0.12)", color: "white" }}>
+                  className="px-3 py-1 text-[11px] font-medium rounded-full transition-colors"
+                  style={{ background: "rgba(255,255,255,0.18)", color: "white", border: "none", cursor: "pointer" }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.28)"}
+                  onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.18)"}>
                   Mark all personal
                 </button>
                 <button onClick={() => setSelectedIds(new Set())}
-                  className="px-3 py-1 text-[11px] rounded-md"
-                  style={{ background: "transparent", color: "rgba(255,255,255,0.7)" }}>
+                  className="px-2.5 py-1 text-[11px] rounded-full transition-colors"
+                  style={{ background: "transparent", color: "rgba(255,255,255,0.85)", border: "none", cursor: "pointer" }}
+                  onMouseEnter={(e) => e.currentTarget.style.color = "white"}
+                  onMouseLeave={(e) => e.currentTarget.style.color = "rgba(255,255,255,0.85)"}>
                   Cancel
                 </button>
               </div>
@@ -1667,6 +1676,32 @@ function EmptyForFilter({ status }: { status: StatusFilter }) {
   );
 }
 
+// ── Selection checkbox ───────────────────────────────────────────────────────
+// Matches the Tasks list checkbox: 16px rounded-square, border-strong outline
+// when empty, sage fill + white tick when selected.
+function SelectCheckbox({ checked, onToggle }: { checked: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onToggle(); }}
+      style={{
+        width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+        border: checked ? "none" : "1.5px solid var(--color-border-strong)",
+        background: checked ? "var(--color-sage)" : "transparent",
+        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+        transition: "all 0.12s ease", padding: 0,
+      }}
+      onMouseEnter={(e) => { if (!checked) e.currentTarget.style.borderColor = "var(--color-sage)"; }}
+      onMouseLeave={(e) => { if (!checked) e.currentTarget.style.borderColor = "var(--color-border-strong)"; }}>
+      {checked && (
+        <svg width="9" height="7" viewBox="0 0 10 8" fill="none">
+          <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 // ── Transaction row ─────────────────────────────────────────────────────────
 
 interface RowProps {
@@ -1772,9 +1807,8 @@ function TransactionRow({
         onMouseLeave={(e) => { if (!expanded) e.currentTarget.style.background = "transparent"; }}
       >
         {/* Checkbox */}
-        <span onClick={(e) => { e.stopPropagation(); onToggleSelect(); }}>
-          <input type="checkbox" checked={selected} readOnly
-            style={{ cursor: "pointer", accentColor: "var(--color-sage)" }} />
+        <span onClick={(e) => e.stopPropagation()}>
+          <SelectCheckbox checked={selected} onToggle={onToggleSelect} />
         </span>
 
         {/* Date */}
