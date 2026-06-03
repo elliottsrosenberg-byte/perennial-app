@@ -556,6 +556,10 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
       await fetchTransactions();
       return;
     }
+    // The row may no longer belong in the current filter (a personal row
+    // leaves To-review, an un-personal'd one leaves Personal) and the pill
+    // counts shifted — reconcile both.
+    await fetchTransactions();
   }
 
   async function matchInvoice(tx: BankTransaction, invoiceId: string) {
