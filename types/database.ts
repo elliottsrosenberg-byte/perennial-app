@@ -337,6 +337,9 @@ export interface BankTransaction {
   /** User-supplied display name override. When set, wins over the Plaid
    *  merchant_name / raw description for the row name. Null = use default. */
   custom_name: string | null;
+  /** How a manual transaction was paid (cash / venmo / card / …). Null for
+   *  synced bank rows. */
+  payment_method: string | null;
   details: BankTransactionDetails | null;
   date: string;            // YYYY-MM-DD
   status: "pending" | "posted";

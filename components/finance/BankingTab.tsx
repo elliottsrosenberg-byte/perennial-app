@@ -27,6 +27,7 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Menu from "@/components/ui/Menu";
 import Select from "@/components/ui/Select";
 import AddExpenseModal from "./AddExpenseModal";
+import ManualTransactionModal from "./ManualTransactionModal";
 import BankingReports from "./BankingReports";
 import CustomizeCategoriesModal from "./CustomizeCategoriesModal";
 import type { BankAccount, BankTransaction, Expense, ExpenseCategory, Project } from "@/types/database";
@@ -165,6 +166,11 @@ const SECTION_HEADER_STYLE: React.CSSProperties = {
 const ICON_REGISTRY: Record<string, React.ElementType> = {
   ArrowDownToLine, ArrowLeftRight, Briefcase, Car, HeartPulse, Landmark, Laptop,
   Lightbulb, Music, Plane, Receipt: ReceiptIcon, ShoppingBag, Tag, User: UserIcon, Utensils, Wrench,
+};
+
+// Display labels for a manual transaction's payment_method.
+const PAYMENT_LABEL: Record<string, string> = {
+  cash: "Cash", venmo: "Venmo", card: "Card", bank: "Bank account", other: "Manual",
 };
 
 // ── Filter / sort types ─────────────────────────────────────────────────────
@@ -962,12 +968,10 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
           {!loading && accounts.length > 0 && (
             <SubTabToggle value={subTab} onChange={setSubTab} />
           )}
-          {/* "+ Add manual expense" — discreet ghost button sitting
-              between the subtab toggle and the ⋯ menu. For cash, mileage,
-              or anything that didn't hit a bank account. Opens
-              AddExpenseModal with no prefill; the resulting expense
-              isn't surfaced in the Banking table (no tx to attach to)
-              but is pullable into invoices via NewInvoiceModal. */}
+          {/* "+ Add transaction" — manually log cash / Venmo / any unlinked
+              payment as a real transaction row (provider='manual'), which
+              then shows in the list: a debit goes to To-review, a credit can
+              be matched to an invoice. */}
           {!loading && accounts.length > 0 && (
             <button
               type="button"
@@ -987,7 +991,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-grey)"; }}
             >
               <Plus size={12} strokeWidth={1.75} />
-              Add manual expense
+              Add transaction
             </button>
           )}
           {/* Top-level ⋯ menu — sits where Sync / Disconnect used to live
@@ -1474,12 +1478,18 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
         />
       )}
 
-      {/* ── Manual expense modal (header "+ Add manual expense") ──── */}
+      {/* ── Manual transaction modal (header "+ Add transaction") ──── */}
       {manualExpenseOpen && (
-        <AddExpenseModal
-          projects={projects}
+        <ManualTransactionModal
+          today={new Date().toISOString().split("T")[0]}
           onClose={() => setManualExpenseOpen(false)}
-          onCreated={(e) => { onExpenseCreated(e); setSnackbar({ text: "Manual expense added" }); }}
+          onCreated={(tx) => {
+            setSnackbar({ text: tx.type === "credit" ? "Payment added" : "Transaction added" });
+            // Surface it: a new manual row is always in To-review. Jump there
+            // (or just refetch if we're already on it) so it's visible.
+            if (status !== "needs_review") setStatus("needs_review");
+            else fetchTransactions();
+          }}
         />
       )}
 
@@ -1943,11 +1953,15 @@ function TransactionRow({
         <span className="min-w-0">
           <span className="text-[13px] font-medium truncate block" style={{ color: "var(--color-charcoal)" }}>
             {merchant}
-            {acct && (
+            {acct ? (
               <span className="font-normal" style={{ color: "var(--color-grey)" }}>
                 {" · "}{acct.institution}{acct.last_four ? ` ••${acct.last_four}` : ""}
               </span>
-            )}
+            ) : tx.payment_method ? (
+              <span className="font-normal" style={{ color: "var(--color-grey)" }}>
+                {" · "}{PAYMENT_LABEL[tx.payment_method] ?? "Manual"}
+              </span>
+            ) : null}
             {pending && (
               <span className="ml-2 text-[10px] font-normal" style={{ color: "#b8860b" }}>
                 • Pending
@@ -2415,7 +2429,7 @@ function ExpandedRow({
               }}
             />
             <p className="text-[11px] mt-1" style={{ color: "var(--color-grey)" }}>
-              {acctLabel} · {fmtLongDate(tx.date)} · {tx.status === "pending" ? "Pending" : "Posted"}
+              {(tx.payment_method ? PAYMENT_LABEL[tx.payment_method] ?? "Manual" : acctLabel)} · {fmtLongDate(tx.date)} · {tx.status === "pending" ? "Pending" : "Posted"}
             </p>
           </div>
 
