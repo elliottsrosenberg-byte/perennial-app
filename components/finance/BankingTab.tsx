@@ -16,7 +16,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from "react-dom";
 import Script from "next/script";
 import {
-  ChevronRight, Link2, Loader2, MoreHorizontal, Paperclip, Plus, RefreshCw,
+  Check, ChevronRight, Link2, Loader2, MoreHorizontal, Paperclip, Plus, RefreshCw,
   Trash2, Unplug, X,
   // Category-chip icons (lookup by name from plaidCategoryDisplay):
   ArrowDownToLine, ArrowLeftRight, Briefcase, Car, HeartPulse, Landmark, Laptop,
@@ -284,6 +284,8 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
   const [customizeOpen, setCustomizeOpen]     = useState(false);
   // Bulk category drop-up (in the selection ribbon).
   const [ribbonCatOpen, setRibbonCatOpen]     = useState(false);
+  // Two-click confirm for the destructive-ish ribbon actions.
+  const [pendingAction, setPendingAction]     = useState<"log" | "personal" | null>(null);
   useEffect(() => {
     (async () => {
       const supabase = createClient();
@@ -385,6 +387,8 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
 
   // Reset to page 1 whenever a filter changes.
   useEffect(() => { setPage(1); }, [status, account, category, txType, search, sort]);
+  // Drop any pending ribbon confirm when the selection changes.
+  useEffect(() => { setPendingAction(null); }, [selectedIds]);
 
   // Provider SDK probe (verbatim).
   useEffect(() => {
@@ -819,6 +823,38 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
       }),
     ));
     await fetchTransactions();
+  }
+
+  // Two-click ribbon action: first click arms the confirm (turns the button
+  // into a ✓/✕ pair), second click on ✓ runs it.
+  function ribbonConfirm(actionKey: "log" | "personal", label: string, run: () => void) {
+    if (pendingAction === actionKey) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full"
+          style={{ background: "rgba(255,255,255,0.18)", padding: "2px 4px 2px 11px" }}>
+          <span className="text-[11px] font-medium">{label}?</span>
+          <button onClick={() => { setPendingAction(null); run(); }} title="Confirm"
+            className="inline-flex items-center justify-center rounded-full"
+            style={{ width: 22, height: 22, background: "white", color: "var(--color-sage)", border: "none", cursor: "pointer" }}>
+            <Check size={13} strokeWidth={2.5} />
+          </button>
+          <button onClick={() => setPendingAction(null)} title="Cancel"
+            className="inline-flex items-center justify-center rounded-full"
+            style={{ width: 22, height: 22, background: "rgba(255,255,255,0.18)", color: "white", border: "none", cursor: "pointer" }}>
+            <X size={12} strokeWidth={2.5} />
+          </button>
+        </span>
+      );
+    }
+    return (
+      <button onClick={() => setPendingAction(actionKey)}
+        className="px-3 py-1 text-[11px] font-medium rounded-full transition-colors"
+        style={{ background: "rgba(255,255,255,0.18)", color: "white", border: "none", cursor: "pointer" }}
+        onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.28)"}
+        onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.18)"}>
+        {label}
+      </button>
+    );
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -1284,26 +1320,14 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                   )}
                 </div>
 
-                <button onClick={bulkLog}
-                  className="px-3 py-1 text-[11px] font-medium rounded-full transition-colors"
-                  style={{ background: "rgba(255,255,255,0.18)", color: "white", border: "none", cursor: "pointer" }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.28)"}
-                  onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.18)"}>
-                  Log
-                </button>
-                <button onClick={bulkMarkPersonal}
-                  className="px-3 py-1 text-[11px] font-medium rounded-full transition-colors"
-                  style={{ background: "rgba(255,255,255,0.18)", color: "white", border: "none", cursor: "pointer" }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.28)"}
-                  onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.18)"}>
-                  Mark personal
-                </button>
+                {ribbonConfirm("log", "Log", bulkLog)}
+                {ribbonConfirm("personal", "Mark personal", bulkMarkPersonal)}
                 <button onClick={() => { setRibbonCatOpen(false); setSelectedIds(new Set()); }}
                   className="px-2.5 py-1 text-[11px] rounded-full transition-colors"
                   style={{ background: "transparent", color: "rgba(255,255,255,0.85)", border: "none", cursor: "pointer" }}
                   onMouseEnter={(e) => e.currentTarget.style.color = "white"}
                   onMouseLeave={(e) => e.currentTarget.style.color = "rgba(255,255,255,0.85)"}>
-                  Cancel
+                  Deselect
                 </button>
               </div>
             )}
