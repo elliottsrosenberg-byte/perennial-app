@@ -269,6 +269,7 @@ export default function NewInvoiceModal({
     if (!projectId) return [];
     return expenses.filter((x) =>
       x.project_id === projectId &&
+      x.billable &&
       !invoicedExpenseIds.has(x.id)
     );
   }, [projectId, expenses, invoicedExpenseIds]);

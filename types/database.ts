@@ -276,6 +276,9 @@ export interface Expense {
   category: ExpenseCategory;
   amount: number;
   date: string;
+  /** Whether the expense can be billed to a client — gates whether it's
+   *  pullable into an invoice (mirrors TimeEntry.billable). Defaults true. */
+  billable: boolean;
   receipt_url: string | null;
   receipt_path: string | null;
   created_at: string;
