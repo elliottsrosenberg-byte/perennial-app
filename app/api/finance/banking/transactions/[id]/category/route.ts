@@ -11,13 +11,11 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import type { ExpenseCategory } from "@/types/database";
+import { CANONICAL_CATEGORY_KEYS } from "@/components/finance/plaidCategoryDisplay";
 
 export const runtime = "nodejs";
 
-const VALID_CATEGORIES: readonly ExpenseCategory[] = [
-  "materials", "travel", "production", "software", "other",
-];
+const VALID_CATEGORIES = new Set(CANONICAL_CATEGORY_KEYS);
 
 export async function PATCH(
   req: Request,
@@ -31,7 +29,8 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
   const body = (await req.json().catch(() => null)) as {
-    manual_category?:   ExpenseCategory | null;
+    /** A canonical category key (see CANONICAL_CATEGORIES) or null to clear. */
+    manual_category?:   string | null;
     /** Optional UUID of a custom category from profiles.custom_categories.
      *  When provided, the row's chip renders the custom label/colour.
      *  Pass null to clear. */
@@ -42,7 +41,7 @@ export async function PATCH(
   }
 
   const next = body.manual_category;
-  if (next !== null && !VALID_CATEGORIES.includes(next as ExpenseCategory)) {
+  if (next !== null && !VALID_CATEGORIES.has(next as string)) {
     return NextResponse.json({ error: "invalid manual_category" }, { status: 400 });
   }
 

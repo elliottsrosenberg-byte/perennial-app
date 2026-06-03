@@ -335,14 +335,15 @@ export interface BankTransaction {
   date: string;            // YYYY-MM-DD
   status: "pending" | "posted";
   is_personal: boolean;
-  /** User-supplied category override. When set, takes precedence over the
-   *  Plaid-derived `details.personal_finance_category.primary` for display
-   *  + the "Log expense" prefill. Null falls back to the Plaid mapping. */
-  manual_category: ExpenseCategory | null;
+  /** User-supplied category override — a canonical category key (see
+   *  CANONICAL_CATEGORIES in plaidCategoryDisplay.ts). When set, takes
+   *  precedence over the Plaid-derived `details.personal_finance_category.primary`
+   *  for display + the "Log expense" prefill. Null falls back to the Plaid
+   *  mapping. */
+  manual_category: string | null;
   /** When set, references the UUID of an entry in profiles.custom_categories.
-   *  The row chip then renders the custom label/colour instead of the
-   *  built-in. `manual_category` still drives expense persistence (we route
-   *  to the custom's `routesTo` built-in on the client). */
+   *  The row chip then renders the custom label/colour, and the custom's
+   *  `routesTo` bucket drives expense persistence on convert. */
   manual_custom_id: string | null;
   linked_expense_id: string | null;
   matched_invoice_id: string | null;

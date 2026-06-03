@@ -7,7 +7,7 @@
 // Query params:
 //   status   = all | needs_review | logged | matched | personal   (default: needs_review)
 //   account  = <bank_account.id> | all                            (default: all)
-//   category = <plaid primary>  | all                             (default: all)
+//   category = <canonical category key> | all                     (default: all)
 //   type     = all | debit | credit                               (default: all)
 //   search   = substring against description + details.merchant_name
 //   sort     = date_desc | date_asc | amount_desc | amount_asc    (default: date_desc)
@@ -21,6 +21,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { BankTransaction } from "@/types/database";
+import { primariesForKey, CANONICAL_CATEGORY_KEYS } from "@/components/finance/plaidCategoryDisplay";
 
 export const runtime = "nodejs";
 
@@ -78,9 +79,19 @@ export async function GET(req: Request) {
   if (account !== "all") q = q.eq("bank_account_id", account);
   if (txType  !== "all") q = q.eq("type", txType);
 
-  // Plaid primary lives at details.personal_finance_category.primary (JSONB).
-  if (category !== "all") {
-    q = q.eq("details->personal_finance_category->>primary", category);
+  // Category filter is a canonical key. A row matches if the user pinned
+  // that key (manual_category), or — when there's no override — its Plaid
+  // primary maps to the key. details.personal_finance_category.primary is
+  // JSONB; an empty primaries list (e.g. "software") matches overrides only.
+  if (category !== "all" && CANONICAL_CATEGORY_KEYS.includes(category)) {
+    const primaries = primariesForKey(category);
+    const parts = [`manual_category.eq.${category}`];
+    if (primaries.length > 0) {
+      parts.push(
+        `and(manual_category.is.null,manual_custom_id.is.null,details->personal_finance_category->>primary.in.(${primaries.join(",")}))`,
+      );
+    }
+    q = q.or(parts.join(","));
   }
 
   if (search) {

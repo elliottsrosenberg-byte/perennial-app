@@ -16,7 +16,6 @@ import {
   type PlaidTransactionsSyncResponse,
   type PlaidErrorBody,
 } from "@/lib/integrations/plaid";
-import { plaidCategoryMap } from "@/components/finance/plaidCategoryMap";
 
 export const runtime = "nodejs";
 
@@ -64,39 +63,16 @@ export async function GET() {
           console.error("[plaid/transactions] sync failed", res.status, json);
           break;
         }
-        // Look up existing manual_category values for any rows in this
-        // page that already exist — we'll skip auto-seeding for those so
-        // a user's manual override never gets clobbered by a re-sync.
-        const candidateIds = [...json.added, ...json.modified].map(t => t.transaction_id);
-        const overriddenIds = new Set<string>();
-        if (candidateIds.length > 0) {
-          const { data: existing } = await supabase
-            .from("bank_transactions")
-            .select("external_id, manual_category")
-            .eq("user_id", user.id)
-            .eq("provider", "plaid")
-            .in("external_id", candidateIds);
-          for (const row of existing ?? []) {
-            if (row.manual_category !== null && row.manual_category !== undefined) {
-              overriddenIds.add(row.external_id);
-            }
-          }
-        }
-
-        // Insert/update added + modified.
+        // Insert/update added + modified. We do NOT seed manual_category —
+        // the chip derives its category live from Plaid's
+        // personal_finance_category.primary, so manual_category stays null
+        // unless the user explicitly overrides it via the picker. (Upsert
+        // never touches manual_category, so existing overrides survive a
+        // re-sync.)
         const upsertRows = [...json.added, ...json.modified]
           .map((tx) => {
             const bankAccountId = accountIdByPlaidId.get(tx.account_id);
             if (!bankAccountId) return null;
-            // Auto-seed manual_category from Plaid's personal_finance_category.primary
-            // when (a) the primary is in our explicit map (skip unmapped → leaves
-            // the chip on Plaid's auto-derived display) and (b) the existing row
-            // doesn't already carry a user-set manual_category. New rows always
-            // get seeded; existing rows with manual_category=null also get seeded
-            // since that means the user never touched it.
-            const primary = tx.personal_finance_category?.primary ?? null;
-            const mapped  = primary ? plaidCategoryMap[primary] ?? null : null;
-            const seedManual = mapped !== null && !overriddenIds.has(tx.transaction_id);
             return {
               user_id:         user.id,
               bank_account_id: bankAccountId,
@@ -120,7 +96,6 @@ export async function GET() {
               },
               date:            tx.date,
               status:          tx.pending ? "pending" : "posted",
-              ...(seedManual ? { manual_category: mapped } : {}),
             };
           })
           .filter((r): r is NonNullable<typeof r> => r !== null);
