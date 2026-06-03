@@ -624,7 +624,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
       ?? expenseForCategory(tx.manual_category, primary);
     await submitConvert(tx, {
       project_id:  null,
-      description: tx.details?.merchant_name ?? tx.description ?? "Expense",
+      description: tx.custom_name ?? tx.details?.merchant_name ?? tx.description ?? "Expense",
       category,
       amount:      Math.abs(Number(tx.amount)),
       date:        tx.date,
@@ -682,6 +682,25 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
     if (!res.ok) {
       patchLocal(tx.id, { note: prev });
       setError("Couldn't save note.");
+    }
+  }
+
+  // Rename a transaction — sets a custom_name override that wins over the
+  // Plaid merchant_name / raw description everywhere the row name shows.
+  // Autosaved from the expanded view; doesn't touch the logged-expense flow.
+  async function renameTransaction(tx: BankTransaction, name: string | null) {
+    const prev = tx.custom_name;
+    const next = name && name.trim() ? name.trim() : null;
+    if (next === (prev ?? null)) return;
+    patchLocal(tx.id, { custom_name: next });
+    const res = await fetch(`/api/finance/banking/transactions/${tx.id}/name`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ custom_name: next }),
+    });
+    if (!res.ok) {
+      patchLocal(tx.id, { custom_name: prev });
+      setError("Couldn't rename transaction.");
     }
   }
 
@@ -1251,6 +1270,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                   onUnmatch={() => unmatch(tx)}
                   onUnmarkPersonal={() => markPersonal(tx, false)}
                   onSaveNote={(note) => saveNote(tx, note)}
+                  onRename={(name) => renameTransaction(tx, name)}
                   onAttachReceipt={(file) => attachReceipt(tx, file)}
                   onRemoveReceipt={() => removeReceipt(tx)}
                   onSetManualCategory={(c, cid) => setManualCategory(tx, c, cid)}
@@ -1681,6 +1701,8 @@ interface RowProps {
   onUnmatch:      () => void;
   onUnmarkPersonal: () => void;
   onSaveNote:       (note: string | null) => void;
+  /** Rename the transaction (custom_name override). Null clears it. */
+  onRename:         (name: string | null) => void;
   onAttachReceipt:  (file: File) => void;
   onRemoveReceipt:  () => void;
   /** When `customId` is provided the row chip renders the custom's
@@ -1696,12 +1718,12 @@ function TransactionRow({
   onMarkPersonal, onConvert, onSubmitInlineLog,
   onEditLinkedExpense, onDeleteLinkedExpense, onQuickLog,
   onMatch, onUnmatch, onUnmarkPersonal,
-  onSaveNote, onAttachReceipt, onRemoveReceipt, onSetManualCategory,
+  onSaveNote, onRename, onAttachReceipt, onRemoveReceipt, onSetManualCategory,
   onCollapse, outstanding,
 }: RowProps) {
   const amt        = Number(tx.amount);
   const isCredit   = amt > 0;
-  const merchant   = tx.details?.merchant_name ?? tx.description;
+  const merchant   = tx.custom_name ?? tx.details?.merchant_name ?? tx.description;
   const pending    = tx.status === "pending";
   const primary    = tx.details?.personal_finance_category?.primary ?? null;
   const acct       = tx.bank_account;
@@ -1839,7 +1861,6 @@ function TransactionRow({
         <ExpandedRow
           tx={tx}
           projects={projects}
-          displayCat={displayCat}
           expenseCategory={customMatch?.routesTo ?? expenseForCategory(tx.manual_category, primary)}
           acctLabel={acct ? `${acct.institution} ${acct.last_four ? `••${acct.last_four}` : ""}` : "Account"}
           onConvert={onConvert}
@@ -1851,6 +1872,7 @@ function TransactionRow({
           onMatch={onMatch}
           onUnmatch={onUnmatch}
           onSaveNote={onSaveNote}
+          onRename={onRename}
           onAttachReceipt={onAttachReceipt}
           onRemoveReceipt={onRemoveReceipt}
           onCollapse={onCollapse}
@@ -2097,10 +2119,6 @@ function Chip({ bg, fg, icon: Icon, label }: {
 interface ExpandedProps {
   tx: BankTransaction;
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
-  /** Pre-resolved category chip (built-in/custom/Plaid fallback) used
-   *  to render the "Category" confirm chip inside the inline log form,
-   *  so the user sees the same chip they'd click on the row. */
-  displayCat: { label: string; bg: string; fg: string; icon: React.ElementType };
   /** Pre-resolved ExpenseCategory bucket for the row (custom routesTo /
    *  canonical override / Plaid mapping), used when logging an expense. */
   expenseCategory: ExpenseCategory;
@@ -2121,6 +2139,7 @@ interface ExpandedProps {
   onMatch:          (invoiceId: string) => void;
   onUnmatch:        () => void;
   onSaveNote:       (note: string | null) => void;
+  onRename:         (name: string | null) => void;
   onAttachReceipt:  (file: File) => void;
   onRemoveReceipt:  () => void;
   onCollapse:       () => void;
@@ -2128,14 +2147,19 @@ interface ExpandedProps {
 }
 
 function ExpandedRow({
-  tx, projects, displayCat, expenseCategory, acctLabel,
+  tx, projects, expenseCategory, acctLabel,
   onConvert: _onConvert,
   onSubmitInlineLog, onEditLinkedExpense, onDeleteLinkedExpense,
   onMarkPersonal, onUnmarkPersonal, onMatch, onUnmatch,
-  onSaveNote, onAttachReceipt, onRemoveReceipt,
+  onSaveNote, onRename, onAttachReceipt, onRemoveReceipt,
   onCollapse, outstanding,
 }: ExpandedProps) {
   const [noteDraft, setNoteDraft] = useState<string>(tx.note ?? "");
+  // Editable display name — seeded from the effective name (override →
+  // Plaid merchant → raw description). Autosaves on blur.
+  const defaultName = (tx.details?.merchant_name ?? tx.description ?? "").trim();
+  const [nameDraft, setNameDraft] = useState<string>(tx.custom_name ?? defaultName);
+  useEffect(() => { setNameDraft(tx.custom_name ?? defaultName); }, [tx.custom_name, defaultName]);
   const [chosenInvoice, setChosenInvoice] = useState<string>("");
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -2152,22 +2176,17 @@ function ExpandedRow({
   const showInlineLog = !isCredit && !isLogged && !tx.is_personal;
 
   // ── Inline log form state ──
-  // Defaults: description = merchant_name || description || a
-  // human-readable fallback so the field is never empty (the bank may
-  // ship a bare amount-only row with no description on rare merchants).
-  const initialDescription =
-    (tx.details?.merchant_name ?? tx.description ?? "").trim()
-    || `Bank transaction · ${tx.date}`;
-  const [logDescription, setLogDescription] = useState(initialDescription);
+  // The logged expense's description IS the transaction name (the Name
+  // field above), so there's no separate description input here anymore.
   const [logBillable,    setLogBillable]    = useState(false);
   const [logProjectId,   setLogProjectId]   = useState<string>("");
   const [logSaving,      setLogSaving]      = useState(false);
   const [logError,       setLogError]       = useState<string | null>(null);
 
-  // Re-seed when the underlying row mutates (e.g. user picked a new
-  // category from the chip → category prop changes → form should
-  // reflect that on re-mount of the expanded view).
-  useEffect(() => { setLogDescription(initialDescription); }, [initialDescription]);
+  // Description used when logging — the live name draft, the stored
+  // override, the Plaid merchant, or a dated fallback (never empty).
+  const logDescription =
+    (nameDraft.trim() || defaultName) || `Bank transaction · ${tx.date}`;
 
   const isImageReceipt = tx.receipt_url
     ? /\.(jpe?g|png|gif|webp)(\?|$)/i.test(tx.receipt_url)
@@ -2204,17 +2223,33 @@ function ExpandedRow({
         background: "var(--color-surface-sunken)",
       }}>
       <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
-        {/* Left column: metadata + note */}
+        {/* Left column: editable name + note */}
         <div className="flex flex-col gap-3 min-w-0">
           <div>
             <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--color-grey)" }}>
-              Details
+              Name
             </p>
-            <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>
+            <input
+              type="text"
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onBlur={() => {
+                const trimmed = nameDraft.trim();
+                onRename(trimmed && trimmed !== defaultName ? trimmed : null);
+              }}
+              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+              placeholder={defaultName || "Transaction name"}
+              className="w-full px-3 py-2 text-[13px] font-medium rounded-lg"
+              style={{
+                background: "var(--color-warm-white)",
+                border:     "0.5px solid var(--color-border)",
+                color:      "var(--color-charcoal)",
+                outline:    "none",
+                fontFamily: "inherit",
+              }}
+            />
+            <p className="text-[11px] mt-1" style={{ color: "var(--color-grey)" }}>
               {acctLabel} · {fmtLongDate(tx.date)} · {tx.status === "pending" ? "Pending" : "Posted"}
-            </p>
-            <p className="text-[12px] mt-1 break-words" style={{ color: "var(--color-charcoal)" }}>
-              {tx.description}
             </p>
           </div>
 
@@ -2243,9 +2278,10 @@ function ExpandedRow({
           </div>
         </div>
 
-        {/* Right column: receipt */}
+        {/* Right column: receipt — fills the column height so the drop
+            target is a large, easy hit. */}
         <div className="flex flex-col gap-3 min-w-0">
-          <div>
+          <div className="flex flex-col flex-1">
             <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--color-grey)" }}>
               Receipt
             </p>
@@ -2294,15 +2330,16 @@ function ExpandedRow({
                 onDragLeave={() => setDragOver(false)}
                 onDrop={onDrop}
                 disabled={uploadingReceipt}
-                className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-lg text-[12px] transition-colors"
+                className="w-full flex-1 flex flex-col items-center justify-center gap-2 px-3 py-4 rounded-lg text-[12px] transition-colors"
                 style={{
+                  minHeight:  96,
                   border:     `0.5px dashed ${dragOver ? "var(--color-sage)" : "var(--color-border)"}`,
                   background: dragOver ? "rgba(155,163,122,0.08)" : "transparent",
                   color:      "var(--color-grey)",
                   cursor:     "pointer",
                   fontFamily: "inherit",
                 }}>
-                <Paperclip size={12} />
+                <Paperclip size={16} />
                 {uploadingReceipt ? "Uploading…" : "Drop or click to upload receipt"}
               </button>
             )}
@@ -2310,49 +2347,13 @@ function ExpandedRow({
         </div>
       </div>
 
-      {/* Inline log form — the heart of the new Banking-as-expense-surface
-          design. Renders for unlogged, non-personal debits. Category is
-          implicit (already pickable via the row chip above) — we surface
-          it here as a read-only confirmation chip with a hint to use the
-          chip to change it, so the user doesn't have two pickers fighting
-          for the same field. Project becomes required when Billable is
-          checked. */}
+      {/* Inline log form — renders for unlogged, non-personal debits. The
+          category comes from the row chip above and the description from the
+          Name field above, so this form is just the billable + project
+          decision. Project becomes required when Billable is checked. */}
       {showInlineLog && (
         <div className="mt-4 pt-4 flex flex-col gap-3"
           style={{ borderTop: "0.5px solid var(--color-border)" }}>
-          <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
-            <div>
-              <label className="block text-[10px] uppercase tracking-wider mb-1.5" style={{ color: "var(--color-grey)" }}>
-                Category
-              </label>
-              <div className="flex items-center gap-2">
-                <Chip bg={displayCat.bg} fg={displayCat.fg} icon={displayCat.icon} label={displayCat.label} />
-                <span className="text-[10.5px]" style={{ color: "var(--color-grey)" }}>
-                  Use the chip above to change.
-                </span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-[10px] uppercase tracking-wider mb-1.5" style={{ color: "var(--color-grey)" }}>
-                Description
-              </label>
-              <input
-                type="text"
-                value={logDescription}
-                onChange={(e) => setLogDescription(e.target.value)}
-                placeholder="What this was for"
-                className="w-full px-3 py-1.5 text-[12px] rounded-lg"
-                style={{
-                  background: "var(--color-warm-white)",
-                  border:     "0.5px solid var(--color-border)",
-                  color:      "var(--color-charcoal)",
-                  outline:    "none",
-                  fontFamily: "inherit",
-                }}
-              />
-            </div>
-          </div>
-
           <div className="grid gap-3 items-end" style={{ gridTemplateColumns: "auto 1fr" }}>
             <label className="flex items-center gap-2 text-[11.5px] select-none"
               style={{ color: "var(--color-charcoal)", cursor: "pointer", paddingBottom: 6 }}>

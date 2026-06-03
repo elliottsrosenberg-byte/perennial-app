@@ -334,6 +334,9 @@ export interface BankTransaction {
   amount: number;          // Signed: positive = money IN (Teller-style)
   type: "debit" | "credit";
   description: string;
+  /** User-supplied display name override. When set, wins over the Plaid
+   *  merchant_name / raw description for the row name. Null = use default. */
+  custom_name: string | null;
   details: BankTransactionDetails | null;
   date: string;            // YYYY-MM-DD
   status: "pending" | "posted";
