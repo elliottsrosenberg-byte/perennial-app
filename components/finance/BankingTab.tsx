@@ -282,6 +282,8 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
   const [headerMenuOpen, setHeaderMenuOpen]   = useState(false);
   const headerMenuRef = useRef<HTMLDivElement>(null);
   const [customizeOpen, setCustomizeOpen]     = useState(false);
+  // Bulk category drop-up (in the selection ribbon).
+  const [ribbonCatOpen, setRibbonCatOpen]     = useState(false);
   useEffect(() => {
     (async () => {
       const supabase = createClient();
@@ -789,6 +791,36 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
     await fetchTransactions();
   }
 
+  // Bulk-log every selected unhandled debit as an expense (auto category,
+  // no project/receipt — same as the row Log button).
+  async function bulkLog() {
+    const rows = transactions.filter((t) =>
+      selectedIds.has(t.id) && Number(t.amount) < 0
+      && !t.linked_expense_id && !t.matched_invoice_id && !t.is_personal);
+    if (rows.length === 0) return;
+    setSelectedIds(new Set());
+    await Promise.all(rows.map((t) => quickLog(t)));
+    await fetchTransactions();
+  }
+
+  // Bulk-assign a category to every selected row. Pass (key, null) for a
+  // canonical category or (null, customId) for a custom one.
+  async function bulkSetCategory(key: string | null, customId: string | null) {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setSelectedIds(new Set());
+    setTransactions((rows) => rows.map((r) =>
+      ids.includes(r.id) ? { ...r, manual_category: key, manual_custom_id: customId } : r));
+    await Promise.all(ids.map((id) =>
+      fetch(`/api/finance/banking/transactions/${id}/category`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ manual_category: key, manual_custom_id: customId }),
+      }),
+    ));
+    await fetchTransactions();
+  }
+
   // ── Derived ───────────────────────────────────────────────────────────────
 
   // Auto-match banners. Source of truth: queue.invoice_activity rows
@@ -1214,14 +1246,59 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                   boxShadow: "0 10px 30px rgba(31,33,26,0.30)",
                 }}>
                 <span className="text-[12px] font-semibold">{selectedIds.size} selected</span>
+
+                {/* Category — opens a drop-up of the same canonical + custom
+                    categories as the row picker, applied to the selection. */}
+                <div style={{ position: "relative" }}>
+                  <button onClick={() => setRibbonCatOpen((o) => !o)}
+                    className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-medium rounded-full transition-colors"
+                    style={{ background: "rgba(255,255,255,0.18)", color: "white", border: "none", cursor: "pointer" }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.28)"}
+                    onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.18)"}>
+                    Category <ChevronRight size={11} style={{ transform: "rotate(-90deg)" }} />
+                  </button>
+                  {ribbonCatOpen && (
+                    <>
+                      <div onClick={() => setRibbonCatOpen(false)}
+                        style={{ position: "fixed", inset: 0, zIndex: 1 }} />
+                      <div role="menu"
+                        style={{
+                          position: "absolute", bottom: "calc(100% + 10px)", left: 0, zIndex: 2,
+                          width: 248, maxHeight: 300, overflowY: "auto",
+                          display: "grid", gridTemplateColumns: "1fr", gap: 4,
+                          background: "var(--color-off-white)", border: "0.5px solid var(--color-border)",
+                          borderRadius: 12, boxShadow: "0 -12px 28px rgba(31,33,26,0.18)", padding: 10,
+                        }}>
+                        {CANONICAL_CATEGORIES.map((opt) => (
+                          <PillButton key={opt.key} active={false} bg={opt.bg} fg={opt.fg}
+                            icon={ICON_REGISTRY[opt.icon] ?? Tag} label={opt.label}
+                            onClick={() => { bulkSetCategory(opt.key, null); setRibbonCatOpen(false); }} />
+                        ))}
+                        {customs.map((c) => (
+                          <PillButton key={c.id} active={false} bg={tintForColor(c.color)} fg={c.color}
+                            icon={Tag} label={c.label}
+                            onClick={() => { bulkSetCategory(null, c.id); setRibbonCatOpen(false); }} />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <button onClick={bulkLog}
+                  className="px-3 py-1 text-[11px] font-medium rounded-full transition-colors"
+                  style={{ background: "rgba(255,255,255,0.18)", color: "white", border: "none", cursor: "pointer" }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.28)"}
+                  onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.18)"}>
+                  Log
+                </button>
                 <button onClick={bulkMarkPersonal}
                   className="px-3 py-1 text-[11px] font-medium rounded-full transition-colors"
                   style={{ background: "rgba(255,255,255,0.18)", color: "white", border: "none", cursor: "pointer" }}
                   onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.28)"}
                   onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.18)"}>
-                  Mark all personal
+                  Mark personal
                 </button>
-                <button onClick={() => setSelectedIds(new Set())}
+                <button onClick={() => { setRibbonCatOpen(false); setSelectedIds(new Set()); }}
                   className="px-2.5 py-1 text-[11px] rounded-full transition-colors"
                   style={{ background: "transparent", color: "rgba(255,255,255,0.85)", border: "none", cursor: "pointer" }}
                   onMouseEnter={(e) => e.currentTarget.style.color = "white"}
