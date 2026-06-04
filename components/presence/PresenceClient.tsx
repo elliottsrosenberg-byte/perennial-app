@@ -1357,11 +1357,34 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
 // ═══════════════════════════════════════════════════════════════════════════════
 // NEWSLETTER TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function NewsletterTab({ integration, onConnect, onDisconnect }: {
+function NewsletterTab({ integration, onConnect, onDisconnect, onRefreshed }: {
   integration: Integration | null;
   onConnect: (p: ConnectProvider) => void;
   onDisconnect: (p: string) => void;
+  onRefreshed: (next: Integration) => void;
 }) {
+  // Pull fresh subscriber + open-rate stats on mount — like the GA4 and
+  // Instagram tabs do. Without this, the provider's numbers stay at whatever
+  // was stored at connect time (often null), so the tab looked empty.
+  useEffect(() => {
+    if (!integration) return;
+    let cancelled = false;
+    fetch("/api/integrations/newsletter/stats")
+      .then((r) => r.json())
+      .then((d: { connected?: boolean; results?: Record<string, unknown>[] }) => {
+        if (cancelled || !d.connected || !Array.isArray(d.results)) return;
+        const mine = d.results.find((r) => r.provider === integration.provider);
+        if (!mine) return;
+        onRefreshed({
+          ...integration,
+          metadata: { ...integration.metadata, ...mine },
+        });
+      })
+      .catch(() => { /* keep cached */ });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [integration?.id]);
+
   return (
     <div className="flex-1 overflow-y-auto" style={{ display:"flex", flexDirection:"column" }}>
       {!integration ? (
@@ -2338,6 +2361,7 @@ export default function PresenceClient({ initialOpportunities }: { initialOpport
           integration={newsletter}
           onConnect={setConnectModal}
           onDisconnect={(p) => disconnectIntegration(p)}
+          onRefreshed={updateIntegration}
         />
       )}
       {tab === "opportunities" && <OpportunitiesTab opps={upcomingOpps} deepLinkOppId={deepLinkOppId} />}

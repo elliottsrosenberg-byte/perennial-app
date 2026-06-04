@@ -52,11 +52,17 @@ export async function GET() {
           ?? pub.stats?.total_active_subscriptions
           ?? pub.stats?.total_subscriptions
           ?? meta.subscribers;
+        const openRate = pub.stats?.average_open_rate;
         const updatedMeta = {
           ...meta,
           subscribers:        subs,
+          // Mirror to subscriber_count so every reader (overview + newsletter
+          // tab) resolves it regardless of which key it checks first.
+          subscriber_count:   subs ?? meta.subscriber_count,
           total_sent:         pub.stats?.total_sent           ?? meta.total_sent,
-          average_open_rate:  pub.stats?.average_open_rate    ?? meta.average_open_rate,
+          average_open_rate:  openRate                         ?? meta.average_open_rate,
+          // Percentage form for display (Beehiiv returns a 0–1 fraction).
+          open_rate:          openRate != null ? parseFloat((openRate * 100).toFixed(1)) : meta.open_rate,
           average_ctr:        pub.stats?.average_click_through_rate ?? meta.average_ctr,
           last_fetched:       new Date().toISOString(),
         };
