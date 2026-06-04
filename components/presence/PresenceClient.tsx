@@ -233,6 +233,57 @@ function oppSection(o: Opportunity): "ongoing" | "actSoon" | "upcoming" | "later
   return "later";
 }
 
+// ─── Lifecycle status (computed from the dates) ───────────────────────────────
+interface Lifecycle { label: string; color: string; bg: string; open: boolean; rank: number; }
+function fmtShort(d: Date) { return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
+function fmtDateRange(sdRaw: string | null, edRaw: string | null): string | null {
+  const sd = parseDate(sdRaw), ed = parseDate(edRaw);
+  if (!sd) return null;
+  if (ed && ed.getTime() !== sd.getTime()) {
+    const sameMonth = sd.getMonth() === ed.getMonth() && sd.getFullYear() === ed.getFullYear();
+    if (sameMonth) return `${sd.toLocaleDateString("en-US", { month: "short" })} ${sd.getDate()}–${ed.getDate()}, ${ed.getFullYear()}`;
+    return `${fmtShort(sd)} – ${ed.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+  }
+  return sd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+// Rank: lower = more urgent (drives "Status" sort and visual priority).
+function lifecycleStatus(o: Opportunity): Lifecycle | null {
+  const now = today();
+  const so = parseDate(o.submissions_open);
+  const dl = parseDate(o.application_deadline);
+  const sd = parseDate(o.start_date);
+  const ed = parseDate(o.end_date);
+  const RED = "var(--color-red-orange)", REDBG = "rgba(220,62,13,0.10)";
+  const AMBER = "#b3760a", AMBERBG = "rgba(232,168,46,0.20)";
+  const SAGE = "var(--color-sage)", SAGEBG = "rgba(155,163,122,0.16)";
+  const BLUE = "#2563ab", BLUEBG = "rgba(37,99,171,0.12)";
+  const GREY = "var(--color-grey)", GREYBG = "rgba(31,33,26,0.07)";
+
+  if (sd && ed && sd <= now && ed >= now) return { label: "Happening now", color: SAGE, bg: SAGEBG, open: false, rank: 0 };
+
+  if (dl) {
+    const d = daysUntil(dl);
+    if (d < 0) {
+      if ((sd && sd > now) || (ed && ed > now)) return { label: "Submissions closed", color: GREY, bg: GREYBG, open: false, rank: 90 };
+      return null;
+    }
+    if (so && so > now) return { label: `Call opens ${fmtShort(so)}`, color: BLUE, bg: BLUEBG, open: false, rank: 50 };
+    if (d === 0) return { label: "Closes today", color: RED, bg: REDBG, open: true, rank: 1 };
+    if (d === 1) return { label: "Closes tomorrow", color: RED, bg: REDBG, open: true, rank: 2 };
+    if (d <= 7) return { label: `Closes in ${d} days`, color: RED, bg: REDBG, open: true, rank: 2 + d };
+    if (d <= 21) return { label: `Closing soon · ${fmtShort(dl)}`, color: AMBER, bg: AMBERBG, open: true, rank: 20 + d };
+    return { label: `Open · until ${fmtShort(dl)}`, color: SAGE, bg: SAGEBG, open: true, rank: 60 };
+  }
+  if (so && so > now) return { label: `Opens ${fmtShort(so)}`, color: BLUE, bg: BLUEBG, open: false, rank: 55 };
+  if (sd) {
+    const d = daysUntil(sd);
+    if (d < 0) return null;
+    if (d <= 14) return { label: `In ${d} day${d === 1 ? "" : "s"}`, color: AMBER, bg: AMBERBG, open: false, rank: 30 + d };
+    return { label: `Upcoming · ${fmtShort(sd)}`, color: BLUE, bg: BLUEBG, open: false, rank: 70 };
+  }
+  return null;
+}
+
 // ─── Calendar grid helpers ────────────────────────────────────────────────────
 interface CalEvent { id: string; title: string; category: string; start: Date; end: Date; }
 
@@ -1615,6 +1666,9 @@ function OppDetail({ opp, onClose, onDismiss, onStatusChange }: {
   const start = parseDate(opp.start_date);
   const end   = parseDate(opp.end_date);
   const { dark, light } = catColor(opp.category);
+  const life = lifecycleStatus(opp);
+  const deadline = parseDate(opp.application_deadline);
+  const subsOpen = parseDate(opp.submissions_open);
 
   async function setStatus(s: string) {
     const newStatus = opp.user_status === s ? null : s;
@@ -1643,6 +1697,9 @@ function OppDetail({ opp, onClose, onDismiss, onStatusChange }: {
           <div style={{ fontSize:13, fontWeight:650, lineHeight:1.35, marginBottom:6 }}>{opp.title}</div>
           <div className="flex items-center gap-2 flex-wrap">
             <TypeBadge type={opp.event_type} category={opp.category} />
+            {life && (
+              <span style={{ fontSize:9.5, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.03em", padding:"2px 8px", borderRadius:999, background:life.bg, color:life.color }}>{life.label}</span>
+            )}
             {opp.user_status && <StatusBadge status={opp.user_status} />}
           </div>
         </div>
@@ -1650,12 +1707,21 @@ function OppDetail({ opp, onClose, onDismiss, onStatusChange }: {
       </div>
 
       <div className="flex-1 overflow-y-auto" style={{ padding:"16px" }}>
-        {/* Date + Location */}
+        {/* Date + Location + deadline/price */}
         <div style={{ marginBottom:14, display:"flex", flexDirection:"column", gap:5 }}>
           <div className="flex items-center gap-6 flex-wrap" style={{ fontSize:12, color:"var(--color-grey)" }}>
             <span className="flex items-center gap-1"><IcCalSm />{dateStr}</span>
             {opp.location && <span className="flex items-center gap-1"><IcMapPin />{opp.location}</span>}
           </div>
+          {deadline && (
+            <div style={{ fontSize:12, color: life?.color ?? "var(--color-grey)", fontWeight:500 }}>
+              Application deadline · {deadline.toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}
+            </div>
+          )}
+          {subsOpen && subsOpen > today() && (
+            <div style={{ fontSize:12, color:"var(--color-grey)" }}>Submissions open · {subsOpen.toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}</div>
+          )}
+          {opp.cost && <div style={{ fontSize:12, color:"var(--color-grey)" }}>Entry · {opp.cost}</div>}
         </div>
 
         {/* Links */}
@@ -1739,37 +1805,18 @@ function OppDetail({ opp, onClose, onDismiss, onStatusChange }: {
 // detail panel still opens on click so the existing Work-on-this / Status
 // affordances aren't lost.
 function OppCard({
-  opp, onOpen, highlighted, refCallback, onStatusChange, onDismiss,
+  opp, onOpen, highlighted, selected, refCallback, onStatusChange, onDismiss,
 }: {
   opp: Opportunity;
   onOpen: () => void;
   highlighted: boolean;
+  selected: boolean;
   refCallback: (el: HTMLDivElement | null) => void;
   onStatusChange: (id: string, status: string | null) => void;
   onDismiss: (id: string) => void;
 }) {
-  const start = parseDate(opp.start_date);
-  const end   = parseDate(opp.end_date);
-  const isNow = start && end && start <= today() && end >= today();
-  const section = oppSection(opp);
-
-  // Deadline coloring — red-orange within 7 days, sage for just-opened
-  // long-running programs, grey otherwise.
-  let deadlineLabel: string | null = null;
-  let deadlineColor = "var(--color-grey)";
-  if (isNow) {
-    deadlineLabel = "Happening now";
-    deadlineColor = C.accent;
-  } else if (end) {
-    const d = daysUntil(end);
-    if (d >= 0) {
-      deadlineLabel = `Deadline ${end.toLocaleDateString("en-US",{month:"short",day:"numeric"})}`;
-      if (d <= 7) deadlineColor = "var(--color-red-orange)";
-      else if (section === "ongoing") deadlineColor = "var(--color-sage)";
-    }
-  } else if (start) {
-    deadlineLabel = `${start.toLocaleDateString("en-US",{month:"short",day:"numeric"})}`;
-  }
+  const life = lifecycleStatus(opp);
+  const dateRange = fmtDateRange(opp.start_date, opp.end_date);
 
   // Action-row buttons map to the existing user_status enum
   // (saved | attending | exhibiting | applied | hidden). We keep the
@@ -1802,31 +1849,42 @@ function OppCard({
     border:"none", background:"var(--color-sage)", color:"white", cursor:"pointer",
   };
 
+  const active = selected || highlighted;
   return (
     <div
       ref={refCallback}
       style={{
-        background:"var(--color-off-white)",
+        background: selected ? "var(--color-warm-white)" : "var(--color-off-white)",
         borderRadius:12,
-        boxShadow:"0 2px 8px rgba(31,33,26,0.04)",
-        outline: highlighted ? "1.5px solid var(--color-sage)" : "0.5px solid rgba(31,33,26,0.08)",
-        outlineOffset: highlighted ? 0 : undefined,
+        boxShadow: selected ? "0 4px 16px rgba(31,33,26,0.10)" : "0 2px 8px rgba(31,33,26,0.04)",
+        outline: active ? "1.5px solid var(--color-sage)" : "0.5px solid rgba(31,33,26,0.08)",
+        outlineOffset: 0,
         padding:"14px 16px",
         display:"flex", flexDirection:"column", gap:10,
-        transition:"outline 0.2s",
+        transition:"outline 0.15s, box-shadow 0.15s, background 0.15s",
       }}>
-      <div onClick={onOpen} style={{ cursor:"pointer", display:"flex", flexDirection:"column", gap:8, minWidth:0 }}>
+      <div onClick={onOpen} style={{ cursor:"pointer", display:"flex", flexDirection:"column", gap:7, minWidth:0 }}>
         <div className="flex items-start gap-2">
           <h3 style={{ flex:1, fontSize:14, fontWeight:650, lineHeight:1.3, fontFamily:"var(--font-display)", color:"var(--color-charcoal)", margin:0 }}>{opp.title}</h3>
           {status && <StatusBadge status={status} />}
         </div>
+        {/* Lifecycle status pill — the at-a-glance "where is this in its cycle" */}
+        {life && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.03em", padding:"2px 8px", borderRadius:999, background:life.bg, color:life.color, whiteSpace:"nowrap" }}>
+              {life.label}
+            </span>
+            {life.open && opp.cost && (
+              <span style={{ fontSize:11, color:"var(--color-grey)" }}>Entry {opp.cost}</span>
+            )}
+          </div>
+        )}
+        {/* Event dates + location */}
         <div className="flex items-center gap-2 flex-wrap" style={{ fontSize:11, color:"var(--color-grey)" }}>
           <TypeBadge type={opp.event_type} category={opp.category} />
+          {dateRange && <span>· {dateRange}</span>}
           {opp.location && <span>· {opp.location}</span>}
         </div>
-        {deadlineLabel && (
-          <div style={{ fontSize:11, fontWeight:500, color:deadlineColor }}>{deadlineLabel}</div>
-        )}
         {opp.about && (
           <p style={{ fontSize:12, color:"var(--color-grey)", lineHeight:1.5, margin:0, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" as const, overflow:"hidden" }}>{opp.about}</p>
         )}
@@ -1968,6 +2026,7 @@ function SuggestListingModal({ onClose }: { onClose: () => void }) {
 
 function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportunity[]; deepLinkOppId?: string | null }) {
   const [filter, setFilter]       = useState<string>("all");
+  const [sort, setSort]           = useState<"status" | "deadline" | "date" | "az">("status");
   const [view, setView]           = useState<OppView>("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -2028,7 +2087,24 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportun
     return [...known, ...extra];
   }, [visible]);
 
-  const filtered = visible.filter(o => filter === "all" || o.category === filter);
+  const filteredRaw = visible.filter(o => filter === "all" || o.category === filter);
+  const filtered = useMemo(() => {
+    const arr = [...filteredRaw];
+    const ts = (d: string | null) => { const p = parseDate(d); return p ? p.getTime() : Infinity; };
+    if (sort === "status") {
+      arr.sort((a, b) => {
+        const ra = lifecycleStatus(a)?.rank ?? 999, rb = lifecycleStatus(b)?.rank ?? 999;
+        return ra - rb || ts(a.application_deadline ?? a.start_date) - ts(b.application_deadline ?? b.start_date);
+      });
+    } else if (sort === "deadline") {
+      arr.sort((a, b) => ts(a.application_deadline ?? a.start_date) - ts(b.application_deadline ?? b.start_date));
+    } else if (sort === "date") {
+      arr.sort((a, b) => ts(a.start_date ?? a.application_deadline) - ts(b.start_date ?? b.application_deadline));
+    } else {
+      arr.sort((a, b) => a.title.localeCompare(b.title));
+    }
+    return arr;
+  }, [filteredRaw, sort]);
   const selectedOpp = selectedId ? visible.find(o => o.id === selectedId) ?? null : null;
 
   // Header counts — "{N} upcoming · {M} with deadlines this week".
@@ -2110,6 +2186,15 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportun
               </button>
             );
           })}
+          <div style={{ flex:1 }} />
+          <span style={{ fontSize:11, color:"var(--color-grey)" }}>Sort</span>
+          <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}
+            style={{ fontSize:11, padding:"4px 8px", borderRadius:6, border:"0.5px solid var(--color-border)", background:"var(--color-warm-white)", color:"var(--color-charcoal)", fontFamily:"inherit", cursor:"pointer" }}>
+            <option value="status">Status (most urgent)</option>
+            <option value="deadline">Deadline (soonest)</option>
+            <option value="date">Event date</option>
+            <option value="az">A–Z</option>
+          </select>
         </div>
       )}
 
@@ -2125,6 +2210,7 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportun
                     opp={o}
                     onOpen={() => setSelectedId(o.id === selectedId ? null : o.id)}
                     highlighted={highlightId === o.id}
+                    selected={selectedId === o.id}
                     refCallback={registerCard(o.id)}
                     onStatusChange={handleStatusChange}
                     onDismiss={dismiss}
