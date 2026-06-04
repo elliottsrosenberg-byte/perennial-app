@@ -1952,6 +1952,99 @@ function OppCard({
   );
 }
 
+// Styled native select — rounded pill + chevron, matching the design system.
+function PillSelect({ value, onChange, options }: {
+  value: string; onChange: (v: string) => void; options: { value: string; label: string }[];
+}) {
+  return (
+    <div style={{ position:"relative", display:"inline-flex", alignItems:"center" }}>
+      <select value={value} onChange={(e) => onChange(e.target.value)}
+        style={{
+          appearance:"none", WebkitAppearance:"none", MozAppearance:"none",
+          fontSize:11.5, fontWeight:500, fontFamily:"inherit", cursor:"pointer",
+          padding:"5px 26px 5px 11px", borderRadius:999,
+          border:"0.5px solid var(--color-border)", background:"var(--color-off-white)",
+          color:"var(--color-charcoal)", outline:"none",
+        }}>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+      <ChevronDown size={13} style={{ position:"absolute", right:9, color:"var(--color-grey)", pointerEvents:"none" }} />
+    </div>
+  );
+}
+
+// Multi-select discipline dropdown — styled to match PillSelect; carries the
+// "For you" recommendation shortcut at the top.
+function DisciplineFilter({ options, selected, onChange, recommendedTags }: {
+  options: string[]; selected: string[]; onChange: (next: string[]) => void; recommendedTags: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("mousedown", h); window.addEventListener("keydown", k);
+    return () => { window.removeEventListener("mousedown", h); window.removeEventListener("keydown", k); };
+  }, [open]);
+  const toggle = (t: string) => onChange(selected.includes(t) ? selected.filter(x => x !== t) : [...selected, t]);
+  const recPresent = recommendedTags.filter(t => options.includes(t));
+  const forYouOn = recPresent.length > 0 && selected.length === recPresent.length && recPresent.every(t => selected.includes(t));
+  const label = selected.length === 0 ? "Discipline" : `Discipline · ${selected.length}`;
+
+  return (
+    <div ref={ref} style={{ position:"relative", display:"inline-flex", alignItems:"center" }}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        style={{
+          fontSize:11.5, fontWeight:500, fontFamily:"inherit", cursor:"pointer",
+          padding:"5px 26px 5px 11px", borderRadius:999, position:"relative",
+          border:"0.5px solid var(--color-border)",
+          background: selected.length ? "rgba(155,163,122,0.12)" : "var(--color-off-white)",
+          color: selected.length ? "#5a7040" : "var(--color-charcoal)", outline:"none",
+        }}>
+        {label}
+        <ChevronDown size={13} style={{ position:"absolute", right:9, top:"50%", transform:"translateY(-50%)", color:"var(--color-grey)", pointerEvents:"none" }} />
+      </button>
+      {open && (
+        <div role="menu" style={{ position:"absolute", top:"calc(100% + 6px)", right:0, zIndex:40, width:200, maxHeight:320, overflowY:"auto", background:"var(--color-off-white)", border:"0.5px solid var(--color-border)", borderRadius:12, boxShadow:"0 12px 28px rgba(31,33,26,0.16)", padding:6 }}>
+          {recPresent.length > 0 && (
+            <>
+              <button type="button" onClick={() => onChange(forYouOn ? [] : recPresent)}
+                style={{ all:"unset", display:"flex", alignItems:"center", gap:8, width:"100%", boxSizing:"border-box", padding:"7px 10px", borderRadius:8, fontSize:12, cursor:"pointer", color:"#5a7040", fontWeight:600, background: forYouOn ? "rgba(155,163,122,0.14)" : "transparent" }}>
+                ✦ For you
+              </button>
+              <div style={{ height:"0.5px", background:"var(--color-border)", margin:"5px 4px" }} />
+            </>
+          )}
+          {options.map(t => {
+            const on = selected.includes(t);
+            return (
+              <button key={t} type="button" onClick={() => toggle(t)}
+                style={{ all:"unset", display:"flex", alignItems:"center", gap:8, width:"100%", boxSizing:"border-box", padding:"6px 10px", borderRadius:8, fontSize:12, cursor:"pointer", color:"var(--color-charcoal)" }}
+                onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-surface-sunken)"}
+                onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+                <span style={{ width:14, height:14, borderRadius:4, flexShrink:0, border: on ? "none" : "1.5px solid var(--color-border-strong)", background: on ? "var(--color-sage)" : "transparent", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  {on && <svg width="9" height="7" viewBox="0 0 10 8" fill="none"><path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </span>
+                {disciplineLabel(t)}
+              </button>
+            );
+          })}
+          {selected.length > 0 && (
+            <>
+              <div style={{ height:"0.5px", background:"var(--color-border)", margin:"5px 4px" }} />
+              <button type="button" onClick={() => onChange([])}
+                style={{ all:"unset", display:"block", width:"100%", boxSizing:"border-box", textAlign:"center", padding:"6px", fontSize:11, color:"var(--color-grey)", cursor:"pointer" }}>
+                Clear all
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Suggest-a-listing modal — submits to opportunity_suggestions (a review
 // queue), so designers can flag opportunities without writing to the feed.
 function SuggestListingModal({ onClose }: { onClose: () => void }) {
@@ -2230,66 +2323,16 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId, recommendedTags = 
             );
           })}
           <div style={{ flex:1 }} />
-          <div style={{ position:"relative", display:"inline-flex", alignItems:"center" }}>
-            <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}
-              style={{
-                appearance:"none", WebkitAppearance:"none", MozAppearance:"none",
-                fontSize:11.5, fontWeight:500, fontFamily:"inherit", cursor:"pointer",
-                padding:"5px 26px 5px 11px", borderRadius:999,
-                border:"0.5px solid var(--color-border)", background:"var(--color-off-white)",
-                color:"var(--color-charcoal)", outline:"none",
-              }}>
-              <option value="status">Sort: Most urgent</option>
-              <option value="deadline">Sort: Deadline</option>
-              <option value="date">Sort: Event date</option>
-              <option value="az">Sort: A–Z</option>
-            </select>
-            <ChevronDown size={13} style={{ position:"absolute", right:9, color:"var(--color-grey)", pointerEvents:"none" }} />
-          </div>
-        </div>
-      )}
-
-      {/* Discipline filter — tag chips, multi-select (OR). */}
-      {view === "list" && presentDisciplines.length > 0 && (
-        <div style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 24px", background:"var(--color-off-white)", borderBottom:"0.5px solid var(--color-border)", flexShrink:0, flexWrap:"wrap" }}>
-          {recommendedTags.length > 0 && (() => {
-            const forYouOn = disciplines.length === recommendedTags.length && recommendedTags.every(t => disciplines.includes(t));
-            return (
-              <button type="button"
-                onClick={() => setDisciplines(forYouOn ? [] : recommendedTags.filter(t => presentDisciplines.includes(t)))}
-                style={{
-                  padding:"3px 11px", borderRadius:20, fontSize:11, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap", fontWeight:600,
-                  background: forYouOn ? "var(--color-sage)" : "rgba(155,163,122,0.12)",
-                  color: forYouOn ? "white" : "#5a7040",
-                  border: "none", marginRight:4,
-                }}>
-                ✦ For you
-              </button>
-            );
-          })()}
-          <span style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.04em", color:"var(--color-grey)", marginRight:2 }}>Discipline</span>
-          {presentDisciplines.map(t => {
-            const on = disciplines.includes(t);
-            return (
-              <button key={t} type="button"
-                onClick={() => setDisciplines(prev => on ? prev.filter(x => x !== t) : [...prev, t])}
-                style={{
-                  padding:"3px 10px", borderRadius:20, fontSize:11, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap",
-                  background: on ? "rgba(155,163,122,0.18)" : "transparent",
-                  color: on ? "#5a7040" : "var(--color-grey)",
-                  border: on ? "0.5px solid rgba(155,163,122,0.5)" : "0.5px solid var(--color-border)",
-                  fontWeight: on ? 600 : 400,
-                }}>
-                {disciplineLabel(t)}
-              </button>
-            );
-          })}
-          {disciplines.length > 0 && (
-            <button type="button" onClick={() => setDisciplines([])}
-              style={{ fontSize:11, color:"var(--color-grey)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", textDecoration:"underline", textUnderlineOffset:2 }}>
-              Clear
-            </button>
+          {presentDisciplines.length > 0 && (
+            <DisciplineFilter options={presentDisciplines} selected={disciplines} onChange={setDisciplines} recommendedTags={recommendedTags} />
           )}
+          <PillSelect value={sort} onChange={(v) => setSort(v as typeof sort)}
+            options={[
+              { value:"status", label:"Sort: Most urgent" },
+              { value:"deadline", label:"Sort: Deadline" },
+              { value:"date", label:"Sort: Event date" },
+              { value:"az", label:"Sort: A–Z" },
+            ]} />
         </div>
       )}
 
