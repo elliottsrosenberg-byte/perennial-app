@@ -6,6 +6,7 @@ import type { Opportunity } from "@/types/database";
 import PresenceIntroModal from "@/components/tour/presence/PresenceIntroModal";
 import PresenceTooltipTour from "@/components/tour/presence/PresenceTooltipTour";
 import PresenceCharts from "./PresenceCharts";
+import PressTab from "./PressTab";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { detectHostingPlatform, guideFor } from "@/lib/presence/detectHostingPlatform";
 
@@ -192,7 +193,7 @@ const catColor = (cat: string) => ({
   residency: { dark: C.accent, light: C.accentL  },
 }[cat] ?? { dark: C.blue, light: C.blueL });
 
-type Tab = "overview" | "website" | "socials" | "newsletter" | "opportunities";
+type Tab = "overview" | "website" | "socials" | "newsletter" | "press" | "opportunities";
 type OppView = "list" | "calendar";
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -2074,6 +2075,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key:"website",       label:"Website" },
   { key:"socials",       label:"Socials" },
   { key:"newsletter",    label:"Newsletter" },
+  { key:"press",         label:"Press" },
   { key:"opportunities", label:"Opportunities" },
 ];
 
@@ -2124,7 +2126,7 @@ export default function PresenceClient({ initialOpportunities }: { initialOpport
     const sp = new URLSearchParams(window.location.search);
     const queryTab = sp.get("tab") as Tab | null;
     const oppId = sp.get("opportunityId");
-    if (queryTab && (["overview","website","socials","newsletter","opportunities"] as Tab[]).includes(queryTab)) {
+    if (queryTab && (["overview","website","socials","newsletter","press","opportunities"] as Tab[]).includes(queryTab)) {
       setTab(queryTab);
     }
     if (oppId) {
@@ -2324,6 +2326,7 @@ export default function PresenceClient({ initialOpportunities }: { initialOpport
           onRefreshed={updateIntegration}
         />
       )}
+      {tab === "press"         && <PressTab />}
       {tab === "opportunities" && <OpportunitiesTab opps={upcomingOpps} deepLinkOppId={deepLinkOppId} />}
 
       {connectModal && (

@@ -551,3 +551,18 @@ export interface UserCalendar {
   created_at:    string;
   updated_at:    string;
 }
+
+// ── Press ─────────────────────────────────────────────────────────────────────
+export type PressType = "feature" | "interview" | "mention" | "award" | "roundup" | "other";
+
+export interface PressMention {
+  id: string;
+  user_id: string;
+  publication: string;
+  title: string | null;
+  url: string | null;
+  type: PressType;
+  published_at: string | null; // YYYY-MM-DD
+  notes: string | null;
+  created_at: string;
+}
