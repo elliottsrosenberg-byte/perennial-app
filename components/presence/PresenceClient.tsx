@@ -281,6 +281,34 @@ const blueLink: React.CSSProperties = { fontSize: 11, color: "var(--color-sage)"
 
 function card(cn = "") { return `rounded-xl overflow-hidden ${cn}`; }
 
+// Hover-popup help — replaces the native `title` tooltip on the "?" chips so
+// the explanation reads in the brand vocabulary across every Presence tab.
+function HelpTip({ text }: { text: string }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span
+      style={{ position: "relative", display: "inline-flex" }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}>
+      <span className="flex items-center justify-center rounded-full shrink-0"
+        style={{ width: 14, height: 14, background: "var(--color-cream)", border: "0.5px solid rgba(31,33,26,0.13)", color: "var(--color-grey)", fontSize: 9, fontWeight: 700, cursor: "help" }}>?</span>
+      {show && (
+        <span role="tooltip"
+          style={{
+            position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 60,
+            width: 200, padding: "8px 10px", borderRadius: 8,
+            background: "var(--color-charcoal)", color: "white",
+            fontSize: 11, lineHeight: 1.5, fontWeight: 400,
+            letterSpacing: "normal", textTransform: "none",
+            boxShadow: "0 8px 24px rgba(31,33,26,0.25)", pointerEvents: "none",
+          }}>
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function StatCard({ label, value, sub, subUp = false, detail, helpText, askAsh, ashMessage, onClick, badge, badgeWarn }: {
   label: string; value: string; sub: string; subUp?: boolean; detail?: string;
   helpText?: string; askAsh?: boolean; ashMessage?: string; onClick?: () => void; badge?: string; badgeWarn?: boolean;
@@ -290,7 +318,7 @@ function StatCard({ label, value, sub, subUp = false, detail, helpText, askAsh, 
       <div className="flex items-center gap-2 mb-1">
         <span style={{ fontSize: 10, color: "var(--color-grey)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", flex: 1 }}>{label}</span>
         {badge && <span className="rounded-full" style={{ fontSize: 9, padding: "1px 6px", fontWeight: 600, background: badgeWarn ? C.amberL : C.accentL, color: badgeWarn ? C.amber : C.accent }}>{badge}</span>}
-        {helpText && <div title={helpText} className="flex items-center justify-center rounded-full shrink-0" style={{ width: 14, height: 14, background: "var(--color-cream)", border: "0.5px solid rgba(31,33,26,0.13)", color: "var(--color-grey)", fontSize: 9, fontWeight: 700, cursor: "help" }}>?</div>}
+        {helpText && <HelpTip text={helpText} />}
       </div>
       <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1.1 }}>{value}</div>
       <div style={{ fontSize: 11, color: subUp ? C.accent : "var(--color-grey)" }}>{sub}</div>
@@ -629,21 +657,20 @@ function WebsiteTab({ integration, onConnect, onDisconnect }: {
       return;
     }
     setStep("connected");
-    // Use cached stats if fresh (< 30 min)
-    const lastFetched = meta?.last_fetched as string | undefined;
-    if (lastFetched && Date.now() - new Date(lastFetched).getTime() < 30 * 60 * 1000) {
+    // Show cached stats immediately (no flash) — but always refresh in the
+    // background so the latest data "sticks" without a manual Check now. The
+    // `integration` prop is a page-load snapshot, so relying on its cached
+    // metadata alone leaves stale stats on every remount of this view.
+    if (meta?.last_fetched && !(meta as GA4Stats).report_error) {
       setStats(meta as GA4Stats);
-      return;
     }
-    setLoadingStats(true);
     fetch("/api/integrations/ga4/stats")
       .then(r => r.json())
       .then((d: GA4Stats & { step?: string }) => {
         if (d.step === "select_property") { setStep("select_property"); return; }
         if (d.connected) setStats(d);
-        setLoadingStats(false);
       })
-      .catch(() => setLoadingStats(false));
+      .catch(() => { /* keep cached */ });
   }, [integration]);
 
   function recheckStats() {
@@ -969,11 +996,6 @@ function WebsiteTab({ integration, onConnect, onDisconnect }: {
                 );
               })}
             </div>
-            {stats?.last_fetched && (
-              <div style={{ padding:"10px 14px", borderRadius:8, background:"var(--color-cream)", fontSize:11, color:"var(--color-grey)" }}>
-                Last synced {new Date(stats.last_fetched).toLocaleDateString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}
-              </div>
-            )}
           </div>
         </div>
         </>
@@ -1055,7 +1077,8 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
         }
         const d = JSON.parse(text) as {
           connected?: boolean; followers?: number; engagement_rate?: number | null;
-          recent_posts?: IGRecentPost[]; username?: string;
+          recent_posts?: IGRecentPost[]; username?: string; media_count?: number | null;
+          followers_history?: { d: string; f: number }[];
         };
         if (cancelled || !d.connected) return;
         onRefreshed({
@@ -1064,10 +1087,12 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
           last_synced_at: new Date().toISOString(),
           metadata: {
             ...instagram.metadata,
-            followers_count: d.followers ?? instagram.metadata.followers_count,
-            engagement_rate: d.engagement_rate ?? instagram.metadata.engagement_rate,
-            recent_posts:    d.recent_posts ?? instagram.metadata.recent_posts,
-            last_fetched:    new Date().toISOString(),
+            followers_count:   d.followers ?? instagram.metadata.followers_count,
+            media_count:       d.media_count ?? instagram.metadata.media_count,
+            engagement_rate:   d.engagement_rate ?? instagram.metadata.engagement_rate,
+            recent_posts:      d.recent_posts ?? instagram.metadata.recent_posts,
+            followers_history: d.followers_history ?? instagram.metadata.followers_history,
+            last_fetched:      new Date().toISOString(),
           },
         });
       } catch (err) {
@@ -1082,6 +1107,20 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
   }, [instagram?.id, retryNonce]);
 
   const recentPosts = (instagram?.metadata?.recent_posts as IGRecentPost[] | undefined) ?? [];
+
+  // 30-day follower change from the accumulated history snapshots. Baseline =
+  // the most recent point that's ≥30 days old, else the oldest point we have
+  // (so the card shows "since <date>" while history is still filling in).
+  const followerDelta = (() => {
+    const current = instagram?.metadata?.followers_count as number | undefined;
+    const hist = (instagram?.metadata?.followers_history as { d: string; f: number }[] | undefined) ?? [];
+    if (current == null || hist.length < 2) return null;
+    const cutoff = new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10);
+    const older = hist.filter((h) => h.d <= cutoff);
+    const baseline = older.length ? older[older.length - 1] : hist[0];
+    const full = baseline.d <= cutoff;
+    return { delta: current - baseline.f, since: baseline.d, full };
+  })();
 
   // Subtab state — Instagram is the only live network today; the rest are
   // present as disabled subtabs so the slot they'll occupy is visible. When
@@ -1164,7 +1203,13 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
         <StatCard label="Followers"  value={instagram.metadata.followers_count ? (instagram.metadata.followers_count as number).toLocaleString() : "—"} sub={instagram.account_name ?? "Instagram"} detail="Total followers" helpText="Total people following you." askAsh ashMessage="How can I grow my Instagram following as a designer?" />
         <StatCard label="Engagement" value={instagram.metadata.engagement_rate ? `${instagram.metadata.engagement_rate}%` : "—"} sub="Avg engagement rate" subUp={!!instagram.metadata.engagement_rate} detail="Industry avg: 1.8%" helpText="Likes + comments as % of followers." askAsh />
         <StatCard label="Media"      value={instagram.metadata.media_count ? String(instagram.metadata.media_count) : "—"} sub="Total posts" helpText="Posts on your account." askAsh />
-        <StatCard label="Last synced" value={refreshing ? "Syncing…" : instagram.last_synced_at ? new Date(instagram.last_synced_at).toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "—"} sub="Stats refresh" detail="Pull latest from Instagram" />
+        <StatCard
+          label="Follower change"
+          value={followerDelta ? `${followerDelta.delta >= 0 ? "+" : "−"}${Math.abs(followerDelta.delta).toLocaleString()}` : (refreshing ? "Syncing…" : "—")}
+          sub={followerDelta ? (followerDelta.full ? "Last 30 days" : `Since ${new Date(followerDelta.since + "T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}`) : "Tracking starts now"}
+          subUp={!!followerDelta && followerDelta.delta > 0}
+          detail={followerDelta ? undefined : "We'll chart your growth as data builds"}
+          helpText="Net change in followers over the last 30 days, from daily snapshots Perennial records." />
       </div>
         <div style={{ display:"flex", gap:16, flex:1, minHeight:0, padding:"0 24px 24px" }}>
           <div style={{ flex:1, display:"flex", flexDirection:"column", gap:12, minWidth:0 }}>

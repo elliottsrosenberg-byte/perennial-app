@@ -86,14 +86,29 @@ export async function GET() {
     }
   }
 
+  // Maintain a daily follower-count history (one point per day, capped at
+  // ~120 days) so the UI can show 30-day follower change. We accumulate
+  // going forward — there's no historical backfill from the Graph API.
+  const today = new Date().toISOString().slice(0, 10);
+  const prevHist = Array.isArray(integration.metadata?.followers_history)
+    ? (integration.metadata.followers_history as { d: string; f: number }[])
+    : [];
+  let history = prevHist.filter((h) => h && typeof h.d === "string" && typeof h.f === "number");
+  if (profile.followers_count != null) {
+    history = history.filter((h) => h.d !== today);
+    history.push({ d: today, f: profile.followers_count });
+    history = history.slice(-120);
+  }
+
   const updatedMeta = {
     ...integration.metadata,
-    username:        profile.username,
-    followers_count: profile.followers_count ?? null,
-    media_count:     profile.media_count ?? null,
-    engagement_rate: engagementRate,
-    recent_posts:    recentPosts,
-    last_fetched:    new Date().toISOString(),
+    username:           profile.username,
+    followers_count:    profile.followers_count ?? null,
+    media_count:        profile.media_count ?? null,
+    engagement_rate:    engagementRate,
+    recent_posts:       recentPosts,
+    followers_history:  history,
+    last_fetched:       new Date().toISOString(),
   };
 
   await supabase.from("integrations").update({
@@ -103,11 +118,13 @@ export async function GET() {
   }).eq("id", integration.id);
 
   return NextResponse.json({
-    connected:       true,
-    username:        profile.username,
-    followers:       profile.followers_count ?? null,
-    engagement_rate: engagementRate,
-    recent_posts:    recentPosts,
+    connected:         true,
+    username:          profile.username,
+    followers:         profile.followers_count ?? null,
+    media_count:       profile.media_count ?? null,
+    engagement_rate:   engagementRate,
+    recent_posts:      recentPosts,
+    followers_history: history,
   });
 }
 
