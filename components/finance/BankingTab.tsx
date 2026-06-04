@@ -1199,7 +1199,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
             {/* Sticky so the table can scroll under it. Negative top
                 offset cancels the parent's flex-col gap (20px); the
                 bottom padding restores breathing room above the table. */}
-            <div className="flex items-center gap-2 flex-wrap shrink-0"
+            <div className="flex flex-col gap-2 shrink-0"
               style={{
                 position:   "sticky",
                 top:        -20,
@@ -1210,39 +1210,45 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                 marginTop:    -10,
                 marginBottom: -10,
               }}>
-              <FilterPills
-                value={status}
-                options={STATUS_OPTIONS}
-                onChange={(v) => setStatus(v)}
-                counts={statusCounts}
-              />
-              <div style={{ width: 168 }}>
-                <Select value={account}  onChange={setAccount}  options={accountOptions}  />
+              {/* Stages (left) + search (right) */}
+              <div className="flex items-center gap-2">
+                <FilterPills
+                  value={status}
+                  options={STATUS_OPTIONS}
+                  onChange={(v) => setStatus(v)}
+                  counts={statusCounts}
+                />
+                <div className="flex-1" />
+                <input
+                  type="text"
+                  value={searchRaw}
+                  onChange={(e) => setSearchRaw(e.target.value)}
+                  placeholder="Search transactions…"
+                  className="px-3 py-2 text-[12px] rounded-lg"
+                  style={{
+                    width: 220,
+                    background: "var(--color-surface-sunken)",
+                    border:     "0.5px solid var(--color-border)",
+                    color:      "var(--color-charcoal)",
+                    outline:    "none",
+                    fontFamily: "inherit",
+                  }}
+                />
               </div>
-              <div style={{ width: 184 }}>
-                <Select value={category} onChange={setCategory} options={categoryOptions} />
-              </div>
-              <div style={{ width: 132 }}>
-                <Select value={txType}   onChange={(v) => setTxType(v as TypeFilter)} options={TYPE_OPTIONS} />
-              </div>
-              <div className="flex-1" />
-              <input
-                type="text"
-                value={searchRaw}
-                onChange={(e) => setSearchRaw(e.target.value)}
-                placeholder="Search transactions…"
-                className="px-3 py-2 text-[12px] rounded-lg"
-                style={{
-                  width: 200,
-                  background: "var(--color-surface-sunken)",
-                  border:     "0.5px solid var(--color-border)",
-                  color:      "var(--color-charcoal)",
-                  outline:    "none",
-                  fontFamily: "inherit",
-                }}
-              />
-              <div style={{ width: 156 }}>
-                <Select value={sort} onChange={(v) => setSort(v as SortKey)} options={SORT_OPTIONS} />
+              {/* Refine — account, category, type, date grouped together */}
+              <div className="flex items-center gap-2">
+                <div style={{ width: 176 }}>
+                  <Select value={account}  onChange={setAccount}  options={accountOptions}  />
+                </div>
+                <div style={{ width: 184 }}>
+                  <Select value={category} onChange={setCategory} options={categoryOptions} />
+                </div>
+                <div style={{ width: 140 }}>
+                  <Select value={txType}   onChange={(v) => setTxType(v as TypeFilter)} options={TYPE_OPTIONS} />
+                </div>
+                <div style={{ width: 156 }}>
+                  <Select value={sort} onChange={(v) => setSort(v as SortKey)} options={SORT_OPTIONS} />
+                </div>
               </div>
             </div>
 
