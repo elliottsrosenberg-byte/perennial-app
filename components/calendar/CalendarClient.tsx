@@ -10,6 +10,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import CalendarOptionsMenu from "./CalendarOptionsMenu";
 import CalendarSettingsModal from "./CalendarSettingsModal";
 import CalendarSourcesPanel from "./CalendarSourcesPanel";
+import SchedulingPanel from "@/components/scheduling/SchedulingPanel";
 import EventCard, { type EventCardEvent } from "./EventCard";
 import TaskQuickEditPopover from "./TaskQuickEditPopover";
 import QuickTaskCard, { type QuickTaskInput } from "./QuickTaskCard";
@@ -2140,6 +2141,15 @@ export default function CalendarClient({
               </div>
             );
           })()}
+
+          {/* Scheduling — Calendly-style booking links. Availability is
+              computed from the user's connected calendars, so only show this
+              once something is connected. */}
+          {anyConnected && (
+            <div style={{ borderTop: "1px solid var(--color-border)", marginTop: 4 }}>
+              <SchedulingPanel />
+            </div>
+          )}
 
           {/* Calendar integrations connect-CTAs — only shown when the user
               has nothing connected yet. The connected-state status cards
