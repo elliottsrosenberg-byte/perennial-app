@@ -5,8 +5,9 @@
 // happens in SchedulingLinkModal. Mirrors the Notion Calendar scheduling pane.
 
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Check, Repeat, Zap } from "lucide-react";
+import { Copy, Check, Repeat, Zap, Video } from "lucide-react";
 import SchedulingLinkModal from "./SchedulingLinkModal";
+import ManageConferencingModal from "./ManageConferencingModal";
 import type { SchedulingLink, SchedulingLinkKind } from "@/types/database";
 
 interface LinkRow extends SchedulingLink { booking_count?: number }
@@ -27,6 +28,7 @@ export default function SchedulingPanel({ onCompose, onEdit }: Props) {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<{ link: LinkRow | null; kind: SchedulingLinkKind } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [conferencing, setConferencing] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -67,10 +69,14 @@ export default function SchedulingPanel({ onCompose, onEdit }: Props) {
 
   return (
     <div style={{ padding: "10px 0 4px" }}>
-      <div style={{ padding: "0 14px 8px" }}>
+      <div style={{ padding: "0 14px 8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--color-grey)" }}>
           Scheduling
         </span>
+        <button onClick={() => setConferencing(true)} title="Manage conferencing"
+          className="flex items-center gap-1" style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>
+          <Video size={11} /> Conferencing
+        </button>
       </div>
 
       <div style={{ padding: "0 12px 8px", display: "flex", flexDirection: "column", gap: 6 }}>
@@ -116,6 +122,8 @@ export default function SchedulingPanel({ onCompose, onEdit }: Props) {
           onDeleted={(id) => { setLinks((prev) => prev.filter((l) => l.id !== id)); setEditing(null); }}
         />
       )}
+
+      {conferencing && <ManageConferencingModal onClose={() => setConferencing(false)} />}
     </div>
   );
 }
