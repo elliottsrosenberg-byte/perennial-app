@@ -26,6 +26,8 @@ interface GA4Stats {
   channels?: { channel: string; sessions: number; pct: number }[];
   last_fetched?: string;
   step?: string;
+  /** Set when the GA4 report call itself failed (vs. genuinely no traffic). */
+  report_error?: string;
 }
 
 interface PropertyOption {
@@ -808,10 +810,12 @@ function WebsiteTab({ integration, onConnect, onDisconnect }: {
               color:   "var(--color-charcoal)", fontFamily: "var(--font-display)",
               lineHeight: 1.3,
             }}>
-              No traffic yet
+              {stats?.report_error ? "Couldn’t load GA4 data" : "No traffic yet"}
             </h3>
             <p style={{ fontSize: 12, lineHeight: 1.7, color: "var(--color-grey)", marginBottom: 20 }}>
-              Your GA4 property is connected, but hasn&apos;t received any traffic yet. Add the GA4 snippet to your site to start tracking sessions, top pages, and traffic channels.
+              {stats?.report_error
+                ? stats.report_error
+                : "Your GA4 property is connected, but hasn’t received any traffic yet. Add the GA4 snippet to your site to start tracking sessions, top pages, and traffic channels."}
             </p>
 
             {/* Primary + secondary CTAs */}
