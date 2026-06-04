@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Task, Contact, UserCalendar } from "@/types/database";
 import { ChevronLeft, ChevronRight, Plus, CheckSquare, MoreHorizontal, CalendarClock } from "lucide-react";
@@ -11,6 +11,8 @@ import CalendarOptionsMenu from "./CalendarOptionsMenu";
 import CalendarSettingsModal from "./CalendarSettingsModal";
 import CalendarSourcesPanel from "./CalendarSourcesPanel";
 import SchedulingPanel from "@/components/scheduling/SchedulingPanel";
+import SchedulingComposePanel, { type ScheduleCompose, type ComposeWindow } from "@/components/scheduling/SchedulingComposePanel";
+import type { SchedulingLinkKind } from "@/types/database";
 import EventCard, { type EventCardEvent } from "./EventCard";
 import TaskQuickEditPopover from "./TaskQuickEditPopover";
 import QuickTaskCard, { type QuickTaskInput } from "./QuickTaskCard";
@@ -1129,6 +1131,33 @@ export default function CalendarClient({
   // they started, we treat it as a 30 minute create at that time.
   const DRAG_THRESHOLD_PX = 4;
 
+  // ── Scheduling compose mode. When active, dragging on the grid paints
+  //    availability windows for a new booking link instead of creating an
+  //    event, and the left rail shows the compose settings panel. A ref
+  //    mirrors the state so the (dragCreate-keyed) mouseup closure reads the
+  //    current windows without re-subscribing.
+  const [compose, setCompose] = useState<ScheduleCompose | null>(null);
+  const composeRef = useRef<ScheduleCompose | null>(null);
+  useEffect(() => { composeRef.current = compose; }, [compose]);
+  const composeIdRef = useRef(0);
+
+  const startCompose = useCallback((kind: SchedulingLinkKind) => {
+    const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return "America/New_York"; } })();
+    setViewMode("Week"); // windows are timed — drag needs the week time grid
+    setCompose({
+      kind,
+      title:              kind === "one_off" ? "One-off meeting" : "Meeting",
+      description:        "",
+      duration:           30,
+      location_type:      "google_meet",
+      location_detail:    "",
+      timezone:           tz,
+      single_use:         kind === "one_off",
+      target_calendar_id: "",
+      windows:            [],
+    });
+  }, []);
+
   // Freeze "did this user have any calendar connected at mount?" so the
   // tooltip tour can drop the connect-integration steps if so (mirrors the
   // hasPipelinesAtStart trick in OutreachTooltipTour).
@@ -1238,6 +1267,17 @@ export default function CalendarClient({
 
       const startDate = dayWithMinutes(drag.day, startMin);
       const endDate   = dayWithMinutes(drag.day, endMin);
+
+      // Compose mode: the drag paints an availability window for a new
+      // scheduling link, not an event. Commit it and clear the ghost (the
+      // window now renders from compose state).
+      const cmp = composeRef.current;
+      if (cmp) {
+        const id = `w${++composeIdRef.current}`;
+        setCompose((c) => (c ? { ...c, windows: [...c.windows, { id, start: startDate, end: endDate } as ComposeWindow] } : c));
+        setDragCreate(null);
+        return;
+      }
 
       // Keep the drag ghost rendered so the user can see what area they
       // just selected while the create card is open. We snap startY /
@@ -1982,7 +2022,18 @@ export default function CalendarClient({
         />
         <div style={{ height: "0.5px", background: "var(--color-border)", flexShrink: 0 }} />
 
-        <div className="flex-1 overflow-y-auto">
+        {/* Scheduling compose mode takes over the rail while the user drags
+            availability windows on the grid. */}
+        {compose && (
+          <SchedulingComposePanel
+            compose={compose}
+            setCompose={(updater) => setCompose((c) => (c ? updater(c) : c))}
+            onSaved={() => { setCompose(null); window.dispatchEvent(new Event("scheduling:refresh")); }}
+            onCancel={() => setCompose(null)}
+          />
+        )}
+
+        <div className={compose ? "hidden" : "flex-1 overflow-y-auto"}>
 
           {/* Upcoming (with due date) */}
           <div className="px-3 pt-3 pb-1 flex items-center justify-between">
@@ -2147,7 +2198,7 @@ export default function CalendarClient({
               once something is connected. */}
           {anyConnected && (
             <div style={{ borderTop: "1px solid var(--color-border)", marginTop: 4 }}>
-              <SchedulingPanel />
+              <SchedulingPanel onCompose={startCompose} />
             </div>
           )}
 
@@ -3191,13 +3242,39 @@ export default function CalendarClient({
                             overflow:     "hidden",
                           }}
                         >
-                          New event<br/>
+                          {compose ? "Available" : "New event"}<br/>
                           <span style={{ fontSize: 9, opacity: 0.85 }}>
                             {fmt(startD)} – {fmt(endD)}
                           </span>
                         </div>
                       );
                     })()}
+
+                    {/* Committed scheduling-compose windows. One-off windows
+                        show on their exact date; recurring windows repeat on
+                        every matching weekday. Click to remove. */}
+                    {compose && compose.windows
+                      .filter((w) => compose.kind === "one_off" ? isSameDay(w.start, day) : w.start.getDay() === day.getDay())
+                      .map((w) => {
+                        const topPx = timeToY(w.start.getHours(), w.start.getMinutes());
+                        const hPx   = Math.max(16, timeToY(w.end.getHours(), w.end.getMinutes()) - topPx);
+                        const fmt = (d: Date) => d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+                        return (
+                          <div
+                            key={w.id}
+                            title="Click to remove"
+                            onClick={(e) => { e.stopPropagation(); setCompose((c) => (c ? { ...c, windows: c.windows.filter((x) => x.id !== w.id) } : c)); }}
+                            style={{
+                              position: "absolute", top: `${topPx}px`, left: "2px", right: "2px", height: `${hPx}px`,
+                              background: "var(--color-sage)", opacity: 0.9, borderRadius: 5, zIndex: 4,
+                              padding: "2px 6px", color: "#fff", fontSize: 10, fontWeight: 600, cursor: "pointer", overflow: "hidden",
+                            }}
+                          >
+                            Available
+                            <span style={{ display: "block", fontSize: 9, fontWeight: 400, opacity: 0.9 }}>{fmt(w.start)} – {fmt(w.end)}</span>
+                          </div>
+                        );
+                      })}
 
                     {/* Current time indicator */}
                     {today && nowY !== null && (
