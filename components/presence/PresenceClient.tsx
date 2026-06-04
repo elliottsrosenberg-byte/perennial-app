@@ -7,7 +7,7 @@ import PresenceIntroModal from "@/components/tour/presence/PresenceIntroModal";
 import PresenceTooltipTour from "@/components/tour/presence/PresenceTooltipTour";
 import PresenceCharts from "./PresenceCharts";
 import PressTab from "./PressTab";
-import { MoreHorizontal, Plus } from "lucide-react";
+import { MoreHorizontal, Plus, ChevronDown } from "lucide-react";
 import { detectHostingPlatform, guideFor } from "@/lib/presence/detectHostingPlatform";
 
 function openAsh(message: string) {
@@ -2133,11 +2133,6 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportun
         <div style={{ flex:1, minWidth:240 }}>
           <div className="flex items-center gap-2 flex-wrap" style={{ marginBottom:4 }}>
             <h2 style={{ fontSize:20, fontWeight:650, fontFamily:"var(--font-display)", color:"var(--color-charcoal)", margin:0 }}>Opportunities</h2>
-            <span
-              title="Perennial curates this feed — designers don't add to it directly."
-              style={{ fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em", padding:"3px 8px", borderRadius:20, background:"rgba(31,33,26,0.06)", color:"var(--color-grey)", cursor:"help" }}>
-              Curated by Perennial
-            </span>
           </div>
           <p style={{ fontSize:12, color:"var(--color-grey)", margin:0 }}>
             {upcomingCount} upcoming
@@ -2187,14 +2182,22 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportun
             );
           })}
           <div style={{ flex:1 }} />
-          <span style={{ fontSize:11, color:"var(--color-grey)" }}>Sort</span>
-          <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}
-            style={{ fontSize:11, padding:"4px 8px", borderRadius:6, border:"0.5px solid var(--color-border)", background:"var(--color-warm-white)", color:"var(--color-charcoal)", fontFamily:"inherit", cursor:"pointer" }}>
-            <option value="status">Status (most urgent)</option>
-            <option value="deadline">Deadline (soonest)</option>
-            <option value="date">Event date</option>
-            <option value="az">A–Z</option>
-          </select>
+          <div style={{ position:"relative", display:"inline-flex", alignItems:"center" }}>
+            <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}
+              style={{
+                appearance:"none", WebkitAppearance:"none", MozAppearance:"none",
+                fontSize:11.5, fontWeight:500, fontFamily:"inherit", cursor:"pointer",
+                padding:"5px 26px 5px 11px", borderRadius:999,
+                border:"0.5px solid var(--color-border)", background:"var(--color-off-white)",
+                color:"var(--color-charcoal)", outline:"none",
+              }}>
+              <option value="status">Sort: Most urgent</option>
+              <option value="deadline">Sort: Deadline</option>
+              <option value="date">Sort: Event date</option>
+              <option value="az">Sort: A–Z</option>
+            </select>
+            <ChevronDown size={13} style={{ position:"absolute", right:9, color:"var(--color-grey)", pointerEvents:"none" }} />
+          </div>
         </div>
       )}
 
