@@ -473,6 +473,19 @@ export interface Opportunity {
   user_status: string | null; // null | 'saved' | 'attending' | 'exhibiting' | 'applied'
   ash_note: string | null;
   created_at: string;
+  // Expanded fields (2026-06-04) — deadlines + review workflow + monitoring.
+  application_deadline: string | null;
+  submissions_open: string | null;
+  frequency: string | null;
+  cost: string | null;
+  eligibility: string | null;
+  contact_email: string | null;
+  tags: string[] | null;
+  image_url: string | null;
+  source: string;            // 'curated' | 'seed' | 'research' | 'agent' | 'suggestion'
+  status: string;            // 'published' | 'draft' | 'archived'
+  last_verified_at: string | null;
+  updated_at: string;
 }
 
 // ── Resources ─────────────────────────────────────────────────────────────────

@@ -10,7 +10,9 @@ export default async function PresencePage() {
   const { data: opportunities } = await supabase
     .from("opportunities")
     .select("*")
-    .or(`end_date.gte.${today},end_date.is.null,start_date.gte.${today}`)
+    .eq("status", "published")
+    // Upcoming by either the event window or the application deadline.
+    .or(`end_date.gte.${today},end_date.is.null,start_date.gte.${today},application_deadline.gte.${today}`)
     // Exclude only explicitly-hidden rows. `.neq` alone drops NULL-status
     // rows (SQL: NULL <> 'hidden' is NULL → excluded), which silently hid
     // the entire feed since curated rows have no user_status.
