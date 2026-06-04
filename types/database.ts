@@ -565,6 +565,70 @@ export interface UserCalendar {
   updated_at:    string;
 }
 
+// ── Scheduling (Calendly-style booking links) ──────────────────────────────────
+export type SchedulingLinkKind = "recurring" | "one_off";
+export type SchedulingLocationType = "google_meet" | "teams" | "phone" | "in_person" | "custom";
+
+/** A single contiguous availability window in a day, local wall-clock time. */
+export interface DayWindow {
+  start: string; // "09:00"
+  end:   string; // "17:00"
+}
+
+/** Recurring links carry weekly_hours keyed by weekday (0=Sun … 6=Sat).
+ *  One-off links carry explicit absolute windows. Both shapes live in the
+ *  `availability` jsonb column; only the one matching `kind` is populated. */
+export interface SchedulingAvailability {
+  /** weekday (0–6) → list of wall-clock windows in the link's timezone */
+  weekly_hours?: Record<string, DayWindow[]>;
+  /** absolute UTC ISO ranges the organizer is offering (one-off links) */
+  windows?: { start: string; end: string }[];
+}
+
+export interface SchedulingLink {
+  id:                     string;
+  user_id:                string;
+  slug:                   string;
+  title:                  string;
+  description:            string | null;
+  kind:                   SchedulingLinkKind;
+  duration_minutes:       number;
+  slot_increment_minutes: number | null;
+  location_type:          SchedulingLocationType;
+  location_detail:        string | null;
+  timezone:               string;
+  availability:           SchedulingAvailability;
+  buffer_before_minutes:  number;
+  buffer_after_minutes:   number;
+  min_notice_minutes:     number;
+  booking_window_days:    number;
+  target_calendar_id:     string | null;
+  conflict_calendar_ids:  string[] | null;
+  expires_at:             string | null;
+  single_use:             boolean;
+  max_bookings:           number | null;
+  active:                 boolean;
+  created_at:             string;
+  updated_at:             string;
+}
+
+export interface SchedulingBooking {
+  id:                 string;
+  link_id:            string;
+  user_id:            string;
+  invitee_name:       string;
+  invitee_email:      string;
+  invitee_notes:      string | null;
+  start_at:           string;
+  end_at:             string;
+  timezone:           string | null;
+  status:             "confirmed" | "cancelled";
+  external_event_id:  string | null;
+  target_calendar_id: string | null;
+  meet_url:           string | null;
+  created_at:         string;
+}
+
 // ── Press ─────────────────────────────────────────────────────────────────────
 export type PressType = "feature" | "interview" | "mention" | "award" | "roundup" | "other";
 
