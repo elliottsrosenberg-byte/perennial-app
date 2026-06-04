@@ -83,6 +83,7 @@ export async function sendBookingEmails(bookingId: string): Promise<void> {
         case "custom":    return link.location_detail || null;
         case "teams":     return "Microsoft Teams";
         case "google_meet": return "Google Meet";
+        case "zoom":      return "Zoom";
         default:          return null;
       }
     })();

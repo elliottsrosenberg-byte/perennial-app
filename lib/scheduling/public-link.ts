@@ -17,6 +17,8 @@ export interface PublicLinkBundle {
   link:            SchedulingLink;
   organizer:       PublicOrganizer;
   confirmed_count: number;
+  /** Organizer-level conferencing settings (e.g. a saved Zoom link). */
+  conferencing:    { zoom_url: string | null };
 }
 
 export async function loadPublicLink(slug: string): Promise<PublicLinkBundle | null> {
@@ -32,7 +34,7 @@ export async function loadPublicLink(slug: string): Promise<PublicLinkBundle | n
   const [{ data: profile }, { count }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("display_name, studio_name, avatar_url, brand_color")
+      .select("display_name, studio_name, avatar_url, brand_color, conferencing")
       .eq("user_id", link.user_id)
       .maybeSingle(),
     supabase
@@ -51,6 +53,9 @@ export async function loadPublicLink(slug: string): Promise<PublicLinkBundle | n
       brand_color: profile?.brand_color ?? null,
     },
     confirmed_count: count ?? 0,
+    conferencing: {
+      zoom_url: ((profile?.conferencing as { zoom_url?: string } | null)?.zoom_url ?? null) || null,
+    },
   };
 }
 

@@ -14,7 +14,7 @@ const EDITABLE: (keyof SchedulingLink)[] = [
   "location_type", "location_detail", "timezone", "availability",
   "buffer_before_minutes", "buffer_after_minutes", "min_notice_minutes",
   "booking_window_days", "target_calendar_id", "conflict_calendar_ids",
-  "expires_at", "single_use", "max_bookings", "active",
+  "avoid_conflicts", "expires_at", "single_use", "max_bookings", "active",
 ];
 
 export async function PATCH(

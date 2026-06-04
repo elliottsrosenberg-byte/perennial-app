@@ -40,7 +40,7 @@ export async function GET(
 
   const supabase = createServiceClient();
   const [busy, { data: existing }] = await Promise.all([
-    fetchBusy(link.user_id, link.conflict_calendar_ids, busyMin, busyMax),
+    link.avoid_conflicts ? fetchBusy(link.user_id, link.conflict_calendar_ids, busyMin, busyMax) : Promise.resolve([]),
     supabase
       .from("scheduling_bookings")
       .select("start_at, end_at")

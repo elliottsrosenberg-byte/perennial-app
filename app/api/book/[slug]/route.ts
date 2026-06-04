@@ -26,11 +26,12 @@ interface BookBody {
   timezone?: string;
 }
 
-function locationText(link: SchedulingLink): string | null {
+function locationText(link: SchedulingLink, zoomUrl: string | null): string | null {
   switch (link.location_type) {
     case "phone":     return link.location_detail ? `Phone: ${link.location_detail}` : "Phone call";
     case "in_person": return link.location_detail || "In person";
     case "custom":    return link.location_detail || null;
+    case "zoom":      return zoomUrl ? `Zoom: ${zoomUrl}` : "Zoom";
     default:          return null; // google_meet / teams — link comes from the event
   }
 }
@@ -38,7 +39,7 @@ function locationText(link: SchedulingLink): string | null {
 function conferencingFor(link: SchedulingLink): "google_meet" | "teams" | "none" {
   if (link.location_type === "google_meet") return "google_meet";
   if (link.location_type === "teams")       return "teams";
-  return "none";
+  return "none"; // zoom uses a static URL, not provider-minted conferencing
 }
 
 export async function POST(
@@ -75,7 +76,7 @@ export async function POST(
   const busyMin = new Date(startMs - 24 * 60 * MIN_MS).toISOString();
   const busyMax = new Date(endMs + 24 * 60 * MIN_MS).toISOString();
   const [busy, { data: existing }] = await Promise.all([
-    fetchBusy(link.user_id, link.conflict_calendar_ids, busyMin, busyMax),
+    link.avoid_conflicts ? fetchBusy(link.user_id, link.conflict_calendar_ids, busyMin, busyMax) : Promise.resolve([]),
     supabase
       .from("scheduling_bookings")
       .select("start_at, end_at")
@@ -93,6 +94,11 @@ export async function POST(
   // the booking, but we do surface a hard failure to the invitee).
   let externalEventId: string | null = null;
   let meetUrl: string | null = null;
+  // Zoom uses the organizer's saved personal link (or a per-link override).
+  const zoomUrl = link.location_type === "zoom"
+    ? (link.location_detail?.trim() || bundle.conferencing.zoom_url)
+    : null;
+  const locText = locationText(link, zoomUrl);
   if (link.target_calendar_id) {
     try {
       const result = await createBookingEvent({
@@ -101,13 +107,13 @@ export async function POST(
         title:        `${link.title} — ${name}`,
         description:  [link.description, body.notes ? `Notes: ${body.notes}` : null, "Booked via Perennial"]
                         .filter(Boolean).join("\n\n"),
-        location:     locationText(link),
+        location:     locText,
         startIso, endIso,
         attendees:    [email],
         conferencing: conferencingFor(link),
       });
       externalEventId = result.externalEventId;
-      meetUrl = result.meetUrl;
+      meetUrl = result.meetUrl ?? zoomUrl;
     } catch (e) {
       console.error("[book] event create failed:", e);
       return NextResponse.json({ error: "Couldn't reach the organizer's calendar. Please try again." }, { status: 502 });
@@ -128,7 +134,7 @@ export async function POST(
       status:             "confirmed",
       external_event_id:  externalEventId,
       target_calendar_id: link.target_calendar_id,
-      meet_url:           meetUrl,
+      meet_url:           meetUrl ?? zoomUrl,
     })
     .select()
     .single();
@@ -151,8 +157,8 @@ export async function POST(
     booking: {
       start: startIso,
       end:   endIso,
-      meet_url: meetUrl,
-      location: locationText(link),
+      meet_url: meetUrl ?? zoomUrl,
+      location: locText,
       organizer: bundle.organizer.name,
     },
   });
