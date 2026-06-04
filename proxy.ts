@@ -57,6 +57,7 @@ export async function proxy(request: NextRequest) {
     "/share",   // public note-share pages
     "/legal",   // privacy policy / terms — must be reachable to Google's OAuth verification crawler
     "/i",       // hosted public invoice view at /i/[token] — auth is the token in the URL
+    "/book",    // public scheduling booking page at /book/[slug] — auth is the slug
   ];
   const isPublic = PUBLIC_PREFIXES.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`)
