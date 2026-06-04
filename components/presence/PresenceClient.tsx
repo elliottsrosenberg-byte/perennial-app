@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Opportunity } from "@/types/database";
 import PresenceIntroModal from "@/components/tour/presence/PresenceIntroModal";
 import PresenceTooltipTour from "@/components/tour/presence/PresenceTooltipTour";
+import PresenceCharts from "./PresenceCharts";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { detectHostingPlatform, guideFor } from "@/lib/presence/detectHostingPlatform";
 
@@ -536,6 +537,11 @@ function OverviewTab({ onTabChange, opps, instagram, plausible, newsletter, onCo
         )}
         <StatCard label="Opportunities" value={String(opps.length)} sub={nextOpp ? `Next: ${nextOpp.title.split(" ")[0]} · ${nextOpp.start_date?.slice(5).replace("-", "/")}` : "No upcoming"} detail="Perennial Feed" badge={deadlineSoon > 0 ? `${deadlineSoon} deadline soon` : undefined} badgeWarn helpText="Upcoming fairs, open calls, grants, and awards." askAsh onClick={() => onTabChange("opportunities")} />
       </div>
+
+      {/* Insights — audience visualisations, matching the Finance overview */}
+      {(plausible || instagram || newsletter) && (
+        <PresenceCharts website={plausible} instagram={instagram} newsletter={newsletter} />
+      )}
 
       {/* Two-column layout */}
       <div style={{ display:"flex", gap:16, flex:1, minHeight:0 }}>
