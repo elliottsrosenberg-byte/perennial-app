@@ -12,7 +12,7 @@ import CalendarSettingsModal from "./CalendarSettingsModal";
 import CalendarSourcesPanel from "./CalendarSourcesPanel";
 import SchedulingPanel from "@/components/scheduling/SchedulingPanel";
 import SchedulingComposePanel, { type ScheduleCompose, type ComposeWindow } from "@/components/scheduling/SchedulingComposePanel";
-import type { SchedulingLinkKind } from "@/types/database";
+import type { SchedulingLinkKind, SchedulingLink } from "@/types/database";
 import EventCard, { type EventCardEvent } from "./EventCard";
 import TaskQuickEditPopover from "./TaskQuickEditPopover";
 import QuickTaskCard, { type QuickTaskInput } from "./QuickTaskCard";
@@ -1154,7 +1154,51 @@ export default function CalendarClient({
       timezone:           tz,
       single_use:         kind === "one_off",
       target_calendar_id: "",
+      avoid_conflicts:    true,
+      conflict_calendar_ids: [],
       windows:            [],
+    });
+  }, []);
+
+  // Open an existing link in the compose panel (instead of the modal),
+  // reconstructing its dragged windows: one-off windows on their dates,
+  // recurring weekly hours on a representative day of each weekday this week.
+  const startEditCompose = useCallback((link: SchedulingLink) => {
+    setViewMode("Week");
+    const windows: ComposeWindow[] = [];
+    let idc = 0;
+    if (link.kind === "one_off") {
+      for (const w of link.availability?.windows ?? []) {
+        windows.push({ id: `e${++idc}`, start: new Date(w.start), end: new Date(w.end) });
+      }
+    } else {
+      const sun = new Date(); sun.setHours(0, 0, 0, 0); sun.setDate(sun.getDate() - sun.getDay());
+      for (const [wd, list] of Object.entries(link.availability?.weekly_hours ?? {})) {
+        for (const win of list) {
+          const base = new Date(sun); base.setDate(base.getDate() + Number(wd));
+          const [sh, sm] = win.start.split(":").map(Number);
+          const [eh, em] = win.end.split(":").map(Number);
+          const s = new Date(base); s.setHours(sh, sm, 0, 0);
+          const e = new Date(base); e.setHours(eh, em, 0, 0);
+          windows.push({ id: `e${++idc}`, start: s, end: e });
+        }
+      }
+    }
+    composeIdRef.current = idc;
+    setCompose({
+      id:                 link.id,
+      kind:               link.kind,
+      title:              link.title,
+      description:        link.description ?? "",
+      duration:           link.duration_minutes,
+      location_type:      link.location_type,
+      location_detail:    link.location_detail ?? "",
+      timezone:           link.timezone,
+      single_use:         link.single_use,
+      target_calendar_id: link.target_calendar_id ?? "",
+      avoid_conflicts:    link.avoid_conflicts,
+      conflict_calendar_ids: link.conflict_calendar_ids ?? [],
+      windows,
     });
   }, []);
 
@@ -2030,6 +2074,7 @@ export default function CalendarClient({
             setCompose={(updater) => setCompose((c) => (c ? updater(c) : c))}
             onSaved={() => { setCompose(null); window.dispatchEvent(new Event("scheduling:refresh")); }}
             onCancel={() => setCompose(null)}
+            onDeleted={() => { setCompose(null); window.dispatchEvent(new Event("scheduling:refresh")); }}
           />
         )}
 
@@ -2198,7 +2243,7 @@ export default function CalendarClient({
               once something is connected. */}
           {anyConnected && (
             <div style={{ borderTop: "1px solid var(--color-border)", marginTop: 4 }}>
-              <SchedulingPanel onCompose={startCompose} />
+              <SchedulingPanel onCompose={startCompose} onEdit={startEditCompose} />
             </div>
           )}
 
