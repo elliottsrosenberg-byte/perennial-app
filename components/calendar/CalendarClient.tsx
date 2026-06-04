@@ -1141,6 +1141,19 @@ export default function CalendarClient({
   useEffect(() => { composeRef.current = compose; }, [compose]);
   const composeIdRef = useRef(0);
 
+  // Existing scheduling links — their availability is drawn as thin hatched
+  // bars on the grid (like Notion Calendar). Refetched on the same event the
+  // compose flow fires after a save/delete.
+  const [schedLinks, setSchedLinks] = useState<SchedulingLink[]>([]);
+  useEffect(() => {
+    const loadLinks = () =>
+      fetch("/api/scheduling/links").then((r) => r.json()).then((d) => setSchedLinks(d.links ?? [])).catch(() => {});
+    loadLinks();
+    window.addEventListener("scheduling:refresh", loadLinks);
+    return () => window.removeEventListener("scheduling:refresh", loadLinks);
+  }, []);
+  const SCHED_PALETTE = ["var(--color-sage)", "#039BE5", "#c93a6a", "#e8850d", "#6d4fa3"];
+
   const startCompose = useCallback((kind: SchedulingLinkKind) => {
     const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return "America/New_York"; } })();
     setViewMode("Week"); // windows are timed — drag needs the week time grid
@@ -3194,6 +3207,11 @@ export default function CalendarClient({
 
             {/* Day columns */}
             <div style={{ flex: 1, display: "flex", position: "relative" }}>
+              {/* Compose-mode wash — a faint tint over the whole grid signals
+                  the user is painting availability, not browsing. */}
+              {compose && (
+                <div style={{ position: "absolute", inset: 0, background: "var(--color-sage)", opacity: 0.05, pointerEvents: "none", zIndex: 6 }} />
+              )}
               {visiblePanDays.map((day, colIdx) => {
                 const today = isToday(day);
                 const dragHere = dragCreate?.columnIdx === colIdx ? dragCreate : null;
@@ -3320,6 +3338,48 @@ export default function CalendarClient({
                           </div>
                         );
                       })}
+
+                    {/* Availability bars for existing scheduling links —
+                        thin hatched strips at the column edge so they don't
+                        cover events. Hidden while composing (the compose
+                        windows show instead). */}
+                    {!compose && (() => {
+                      const bars: { top: number; height: number; color: string; lane: number }[] = [];
+                      let lane = 0;
+                      schedLinks.forEach((lk, li) => {
+                        if (!lk.active) return;
+                        const ranges: [number, number][] = [];
+                        if (lk.kind === "recurring") {
+                          for (const w of lk.availability?.weekly_hours?.[String(day.getDay())] ?? []) {
+                            const [sh, sm] = w.start.split(":").map(Number);
+                            const [eh, em] = w.end.split(":").map(Number);
+                            ranges.push([sh * 60 + sm, eh * 60 + em]);
+                          }
+                        } else {
+                          for (const w of lk.availability?.windows ?? []) {
+                            const s = new Date(w.start), e = new Date(w.end);
+                            if (isSameDay(s, day)) ranges.push([s.getHours() * 60 + s.getMinutes(), e.getHours() * 60 + e.getMinutes()]);
+                          }
+                        }
+                        if (ranges.length === 0) return;
+                        const color = SCHED_PALETTE[li % SCHED_PALETTE.length];
+                        const myLane = lane++;
+                        for (const [a, b] of ranges) {
+                          const top = timeToY(Math.floor(a / 60), a % 60);
+                          const bottom = timeToY(Math.floor(b / 60), b % 60);
+                          bars.push({ top, height: Math.max(6, bottom - top), color, lane: myLane });
+                        }
+                      });
+                      return bars.map((bar, i) => (
+                        <div key={`av${i}`} title="Available for booking" style={{
+                          position: "absolute", top: `${bar.top}px`, height: `${bar.height}px`,
+                          left: `${2 + bar.lane * 5}px`, width: 3.5, borderRadius: 2,
+                          backgroundImage: `repeating-linear-gradient(45deg, ${bar.color} 0 2px, transparent 2px 4px)`,
+                          backgroundColor: `color-mix(in srgb, ${bar.color} 14%, transparent)`,
+                          opacity: 0.8, pointerEvents: "none", zIndex: 3,
+                        }} />
+                      ));
+                    })()}
 
                     {/* Current time indicator */}
                     {today && nowY !== null && (
