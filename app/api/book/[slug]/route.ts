@@ -9,6 +9,7 @@ import { loadPublicLink, linkClosedReason } from "@/lib/scheduling/public-link";
 import { fetchBusy } from "@/lib/scheduling/busy";
 import { computeOpenSlots, type Interval } from "@/lib/scheduling/availability";
 import { createBookingEvent } from "@/lib/scheduling/create-booking-event";
+import { sendBookingEmails } from "@/lib/scheduling/notify";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { SchedulingLink } from "@/types/database";
 
@@ -140,6 +141,10 @@ export async function POST(
   if (link.single_use) {
     await supabase.from("scheduling_links").update({ active: false }).eq("id", link.id);
   }
+
+  // Perennial-branded confirmation emails (best-effort; the calendar provider
+  // also sends its own invite via sendUpdates=all).
+  await sendBookingEmails(booking.id);
 
   return NextResponse.json({
     ok: true,
