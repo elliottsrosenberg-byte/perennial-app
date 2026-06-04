@@ -11,7 +11,7 @@ import {
   Receipt, Globe, FolderOpen, Settings, ChevronLeft, Palette,
   Sun, Moon, ChevronUp, LogOut, UserCog,
   Zap, BookOpen, MessageSquare, Share, ExternalLink, Hash, ChevronDown,
-  CheckSquare,
+  CheckSquare, ClipboardList,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import Menu, { type MenuContent } from "@/components/ui/Menu";
@@ -363,6 +363,16 @@ export default function Sidebar() {
           >
             <BookOpen size={15} strokeWidth={1.75} style={{ flexShrink: 0 }} />
             {expanded && <span style={{ fontSize: 12, fontWeight: 500 }}>Docs</span>}
+          </Link>
+
+          <Link
+            href="/admin"
+            style={{ ...itemBase, color: C.dimText, opacity: 0.65 }}
+            onMouseEnter={(e) => { tip(e, "Curate"); e.currentTarget.style.background = C.hoverBg; e.currentTarget.style.color = C.hoverText; e.currentTarget.style.opacity = "1"; }}
+            onMouseLeave={(e) => { hideTip(); e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.dimText; e.currentTarget.style.opacity = "0.65"; }}
+          >
+            <ClipboardList size={15} strokeWidth={1.75} style={{ flexShrink: 0 }} />
+            {expanded && <span style={{ fontSize: 12, fontWeight: 500 }}>Curate</span>}
           </Link>
 
           <button
