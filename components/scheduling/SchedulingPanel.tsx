@@ -12,7 +12,13 @@ import type { SchedulingLink, SchedulingLinkKind } from "@/types/database";
 interface LinkRow extends SchedulingLink { booking_count?: number }
 interface CalOpt { id: string; name: string; provider: string; account_email: string | null; }
 
-export default function SchedulingPanel() {
+interface Props {
+  /** Enter the in-grid compose flow (drag windows) for a new link. When
+   *  omitted, the create buttons fall back to the modal editor. */
+  onCompose?: (kind: SchedulingLinkKind) => void;
+}
+
+export default function SchedulingPanel({ onCompose }: Props) {
   const [links, setLinks] = useState<LinkRow[]>([]);
   const [calendars, setCalendars] = useState<CalOpt[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +39,17 @@ export default function SchedulingPanel() {
 
   useEffect(() => { load(); }, [load]);
 
+  // The in-grid compose flow dispatches this when a link is created so the
+  // list refreshes without a full remount.
+  useEffect(() => {
+    const h = () => load();
+    window.addEventListener("scheduling:refresh", h);
+    return () => window.removeEventListener("scheduling:refresh", h);
+  }, [load]);
+
+  const startCreate = (kind: SchedulingLinkKind) =>
+    onCompose ? onCompose(kind) : setEditing({ link: null, kind });
+
   function copyLink(slug: string) {
     const url = `${window.location.origin}/book/${slug}`;
     navigator.clipboard?.writeText(url);
@@ -52,12 +69,12 @@ export default function SchedulingPanel() {
       </div>
 
       <div style={{ padding: "0 12px 8px", display: "flex", flexDirection: "column", gap: 6 }}>
-        <button onClick={() => setEditing({ link: null, kind: "recurring" })}
+        <button onClick={() => startCreate("recurring")}
           className="flex items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-medium text-white"
           style={{ background: "var(--color-sage)" }}>
           <Repeat size={13} /> Create recurring link
         </button>
-        <button onClick={() => setEditing({ link: null, kind: "one_off" })}
+        <button onClick={() => startCreate("one_off")}
           className="flex items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-medium"
           style={{ border: "1px solid var(--color-border-strong)", color: "var(--color-text-secondary)" }}>
           <Zap size={13} /> Create one-off link
