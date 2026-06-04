@@ -300,7 +300,7 @@ function lifecycleStatus(o: Opportunity): Lifecycle | null {
 }
 
 // ─── Calendar grid helpers ────────────────────────────────────────────────────
-interface CalEvent { id: string; title: string; category: string; start: Date; end: Date; }
+interface CalEvent { id: string; oppId: string; title: string; category: string; start: Date; end: Date; kind: "event" | "deadline"; }
 
 function getWeekRows(month: Date): Date[][] {
   const firstDay = new Date(month.getFullYear(), month.getMonth(), 1);
@@ -1529,10 +1529,10 @@ function NewsletterTab({ integration, onConnect, onDisconnect, onRefreshed }: {
 // ═══════════════════════════════════════════════════════════════════════════════
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-const MAX_LANES = 3;
+const MAX_LANES = 6;
 const LANE_H = 22;
 const DAY_NUM_H = 28;
-const MIN_ROW_H = 110;
+const MIN_ROW_H = 96;
 
 // More opaque colors for calendar bars
 const calBg: Record<string, string> = {
@@ -1543,23 +1543,25 @@ const calBg: Record<string, string> = {
   residency: "rgba(61,107,79,0.18)",
 };
 
-function MonthCalendar({ opps }: { opps: Opportunity[] }) {
+function MonthCalendar({ opps, onSelect }: { opps: Opportunity[]; onSelect: (id: string) => void }) {
   const [month, setMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const now = today();
 
-  const calEvents: CalEvent[] = useMemo(() =>
-    opps.filter(o => o.start_date).map(o => ({
-      id:       o.id,
-      title:    o.title,
-      category: o.category,
-      start:    parseDate(o.start_date)!,
-      end:      parseDate(o.end_date) ?? parseDate(o.start_date)!,
-    })),
-    [opps]
-  );
+  // Plot BOTH event windows (start/end) and application deadlines (single-day
+  // markers) — previously deadline-only opportunities never showed at all.
+  const calEvents: CalEvent[] = useMemo(() => {
+    const out: CalEvent[] = [];
+    for (const o of opps) {
+      const sd = parseDate(o.start_date);
+      if (sd) out.push({ id: o.id, oppId: o.id, title: o.title, category: o.category, start: sd, end: parseDate(o.end_date) ?? sd, kind: "event" });
+      const dl = parseDate(o.application_deadline);
+      if (dl) out.push({ id: `${o.id}:dl`, oppId: o.id, title: o.title, category: o.category, start: dl, end: dl, kind: "deadline" });
+    }
+    return out;
+  }, [opps]);
 
   const weekRows = useMemo(() => getWeekRows(month), [month]);
 
@@ -1574,11 +1576,12 @@ function MonthCalendar({ opps }: { opps: Opportunity[] }) {
         <span style={{ fontSize:14, fontWeight:600, flex:1 }}>{MONTHS[month.getMonth()]} {month.getFullYear()}</span>
         <button onClick={nextMonth} className="flex items-center justify-center rounded-md" style={{ width:28, height:28, background:"var(--color-cream)", border:"0.5px solid var(--color-border)", cursor:"pointer" }}><IcChevR /></button>
         {/* Legend */}
-        <div className="flex items-center gap-3" style={{ marginLeft:8 }}>
-          {[["fair","Fairs"],["openCall","Open Calls"],["award","Awards"],["grant","Grants"]].map(([cat, label]) => {
+        <div className="flex items-center gap-3 flex-wrap" style={{ marginLeft:8 }}>
+          {[["fair","Fairs"],["openCall","Open calls"],["award","Awards"],["grant","Grants"],["residency","Residencies"]].map(([cat, label]) => {
             const { dark } = catColor(cat);
-            return <div key={cat} className="flex items-center gap-1" style={{ fontSize:10, color:"var(--color-grey)" }}><div style={{ width:10, height:10, borderRadius:2, background:calBg[cat], border:`1.5px solid ${dark}` }} />{label}</div>;
+            return <div key={cat} className="flex items-center gap-1" style={{ fontSize:10, color:"var(--color-grey)" }}><div style={{ width:10, height:10, borderRadius:2, background:calBg[cat] ?? calBg.fair, border:`1.5px solid ${dark}` }} />{label}</div>;
           })}
+          <div className="flex items-center gap-1" style={{ fontSize:10, color:"var(--color-grey)" }}><div style={{ width:10, height:10, borderRadius:2, background:"rgba(220,62,13,0.10)", border:"0.5px dashed var(--color-red-orange)" }} />⚑ Deadlines</div>
         </div>
       </div>
 
@@ -1619,14 +1622,17 @@ function MonthCalendar({ opps }: { opps: Opportunity[] }) {
               {weekEvents.map((we, ei) => {
                 if (we.lane >= MAX_LANES) return null;
                 const { dark } = catColor(we.event.category);
-                const bg = calBg[we.event.category] ?? calBg.fair;
+                const isDeadline = we.event.kind === "deadline";
+                const bg = isDeadline ? "rgba(220,62,13,0.10)" : (calBg[we.event.category] ?? calBg.fair);
+                const fg = isDeadline ? "var(--color-red-orange)" : dark;
                 const leftPct = (we.startCol / 7) * 100;
                 const widthPct = (we.span / 7) * 100;
                 const top = DAY_NUM_H + we.lane * LANE_H;
                 return (
                   <div
                     key={ei}
-                    title={we.event.title}
+                    title={isDeadline ? `${we.event.title} — deadline` : we.event.title}
+                    onClick={() => onSelect(we.event.oppId)}
                     style={{
                       position:"absolute",
                       left:`calc(${leftPct}% + ${we.isStart?3:0}px)`,
@@ -1634,12 +1640,13 @@ function MonthCalendar({ opps }: { opps: Opportunity[] }) {
                       top,
                       height:LANE_H - 4,
                       background:bg,
-                      borderLeft:we.isStart?`3px solid ${dark}`:"none",
+                      border: isDeadline ? `0.5px dashed ${fg}` : "none",
+                      borderLeft: isDeadline ? `0.5px dashed ${fg}` : (we.isStart?`3px solid ${dark}`:"none"),
                       borderRadius:we.isStart&&we.isEnd?"4px":we.isStart?"4px 0 0 4px":we.isEnd?"0 4px 4px 0":"0",
                       padding:"2px 6px",
                       fontSize:10,
                       fontWeight:600,
-                      color:dark,
+                      color:fg,
                       whiteSpace:"nowrap",
                       overflow:"hidden",
                       textOverflow:"ellipsis",
@@ -1647,7 +1654,7 @@ function MonthCalendar({ opps }: { opps: Opportunity[] }) {
                       zIndex:2,
                     }}
                   >
-                    {we.isStart ? we.event.title : ""}
+                    {we.isStart ? `${isDeadline ? "⚑ " : ""}${we.event.title}` : ""}
                   </div>
                 );
               })}
@@ -2345,7 +2352,12 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId, recommendedTags = 
       )}
 
       {/* Calendar view */}
-      {view === "calendar" && <MonthCalendar opps={filter === "all" ? visible : visible.filter(o => o.category === filter)} />}
+      {view === "calendar" && (
+        <MonthCalendar
+          opps={filtered}
+          onSelect={(id) => { setSelectedId(id); setView("list"); }}
+        />
+      )}
     </div>
   );
 }
