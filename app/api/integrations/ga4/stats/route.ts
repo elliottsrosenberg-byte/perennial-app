@@ -85,14 +85,39 @@ export async function GET() {
       orderBys:   [{ metric: { metricName: "screenPageViews" }, desc: true }],
       limit: 10,
     }),
-    // Traffic channels
+    // Traffic channels — GA4 Data API dimension is `sessionDefaultChannelGroup`
+    // (the UA-era `...Grouping` name is rejected by the API).
     runReport(propertyId, token, {
       dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
       metrics:    [{ name: "sessions" }, { name: "activeUsers" }],
-      dimensions: [{ name: "sessionDefaultChannelGrouping" }],
+      dimensions: [{ name: "sessionDefaultChannelGroup" }],
       orderBys:   [{ metric: { metricName: "sessions" }, desc: true }],
     }),
   ]);
+
+  // If the core report failed, surface a real error instead of silently
+  // rendering zeros (which the UI mislabels as "No traffic yet"). The most
+  // common cause is the Analytics Data API not being enabled on the app's
+  // Google Cloud project.
+  if (summaryReport.status === "rejected") {
+    const raw = String(
+      (summaryReport.reason as { message?: string })?.message ?? summaryReport.reason ?? "",
+    );
+    let message = "Couldn't load GA4 data. Try reconnecting.";
+    if (raw.includes("SERVICE_DISABLED") || raw.includes("has not been used in project")) {
+      message = "The Google Analytics Data API isn't enabled for Perennial yet. Once it's turned on in Google Cloud (a one-time setup), your traffic will appear here.";
+    } else if (raw.includes("PERMISSION_DENIED")) {
+      message = "Perennial doesn't have permission to read this GA4 property. Try disconnecting and reconnecting.";
+    }
+    console.error("[ga4/stats] report failed:", raw);
+    return NextResponse.json({
+      connected:     true,
+      step:          "connected",
+      report_error:  message,
+      property_name: meta.property_name as string,
+      property_id:   propertyId,
+    });
+  }
 
   // Extract summary
   const summary = summaryReport.status === "fulfilled" ? summaryReport.value : null;
