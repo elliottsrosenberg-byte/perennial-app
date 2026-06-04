@@ -11,7 +11,10 @@ export default async function PresencePage() {
     .from("opportunities")
     .select("*")
     .or(`end_date.gte.${today},end_date.is.null,start_date.gte.${today}`)
-    .neq("user_status", "hidden")
+    // Exclude only explicitly-hidden rows. `.neq` alone drops NULL-status
+    // rows (SQL: NULL <> 'hidden' is NULL → excluded), which silently hid
+    // the entire feed since curated rows have no user_status.
+    .or("user_status.is.null,user_status.neq.hidden")
     .order("start_date", { ascending: true, nullsFirst: false });
 
   return (

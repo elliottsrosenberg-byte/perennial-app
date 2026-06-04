@@ -2136,10 +2136,10 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportun
               <div style={{ padding: "40px 24px", textAlign: "center", maxWidth: 440, margin: "0 auto" }}>
                 <div style={{ fontSize: 32, marginBottom: 16 }}>🗓</div>
                 <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-charcoal)", fontFamily: "var(--font-display)", marginBottom: 8 }}>
-                  Opportunities feed is loading
+                  No upcoming opportunities right now
                 </p>
                 <p style={{ fontSize: 12, lineHeight: 1.7, color: "var(--color-grey)", marginBottom: 20 }}>
-                  Perennial curates upcoming art fairs, open calls, grants, residencies, and awards for independent designers. The feed is populated by the Perennial team and updates regularly.
+                  Perennial curates upcoming art fairs, open calls, grants, residencies, and awards for independent designers. New entries land here as the team updates the feed.
                 </p>
                 <button
                   onClick={() => openAsh("What opportunities — art fairs, open calls, grants, residencies — should I be aware of as an independent designer right now?")}
