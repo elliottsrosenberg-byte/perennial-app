@@ -237,6 +237,20 @@ function oppSection(o: Opportunity): "ongoing" | "actSoon" | "upcoming" | "later
 interface Lifecycle { label: string; color: string; bg: string; open: boolean; rank: number; }
 function fmtShort(d: Date) { return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
 function disciplineLabel(t: string) { return t === "fine-art" ? "Fine art" : t.charAt(0).toUpperCase() + t.slice(1); }
+// Maps onboarding practice types → discipline tags for recommendations.
+const PRACTICE_TAG_MAP: Record<string, string[]> = {
+  "Furniture": ["furniture"], "Objects & lighting": ["lighting", "product"],
+  "Ceramics & glass": ["ceramics", "glass"], "Textiles": ["textiles"],
+  "Jewelry": ["jewelry"], "Painting": ["painting", "fine-art"],
+  "Illustration": ["illustration"], "Sculpture": ["sculpture", "fine-art"],
+  "Printmaking": ["printmaking", "fine-art"], "Video": ["video", "fine-art"],
+  "Client-based work": ["interiors", "hospitality"],
+};
+function tagsForPractices(practices: string[]): string[] {
+  const s = new Set<string>();
+  for (const p of practices) for (const t of (PRACTICE_TAG_MAP[p] ?? [])) s.add(t);
+  return [...s];
+}
 function fmtDateRange(sdRaw: string | null, edRaw: string | null): string | null {
   const sd = parseDate(sdRaw), ed = parseDate(edRaw);
   if (!sd) return null;
@@ -1806,12 +1820,13 @@ function OppDetail({ opp, onClose, onDismiss, onStatusChange }: {
 // detail panel still opens on click so the existing Work-on-this / Status
 // affordances aren't lost.
 function OppCard({
-  opp, onOpen, highlighted, selected, refCallback, onStatusChange, onDismiss,
+  opp, onOpen, highlighted, selected, recommended, refCallback, onStatusChange, onDismiss,
 }: {
   opp: Opportunity;
   onOpen: () => void;
   highlighted: boolean;
   selected: boolean;
+  recommended: boolean;
   refCallback: (el: HTMLDivElement | null) => void;
   onStatusChange: (id: string, status: string | null) => void;
   onDismiss: (id: string) => void;
@@ -1867,6 +1882,9 @@ function OppCard({
       <div onClick={onOpen} style={{ cursor:"pointer", display:"flex", flexDirection:"column", gap:7, minWidth:0 }}>
         <div className="flex items-start gap-2">
           <h3 style={{ flex:1, fontSize:14, fontWeight:650, lineHeight:1.3, fontFamily:"var(--font-display)", color:"var(--color-charcoal)", margin:0 }}>{opp.title}</h3>
+          {recommended && !status && (
+            <span title="Matches your disciplines" style={{ fontSize:9, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.03em", padding:"2px 7px", borderRadius:999, background:"rgba(155,163,122,0.16)", color:"#5a7040", whiteSpace:"nowrap" }}>✦ For you</span>
+          )}
           {status && <StatusBadge status={status} />}
         </div>
         {/* Lifecycle status pill — the at-a-glance "where is this in its cycle" */}
@@ -2025,7 +2043,8 @@ function SuggestListingModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportunity[]; deepLinkOppId?: string | null }) {
+function OpportunitiesTab({ opps: initialOpps, deepLinkOppId, recommendedTags = [] }: { opps: Opportunity[]; deepLinkOppId?: string | null; recommendedTags?: string[] }) {
+  const isRecommended = (o: Opportunity) => recommendedTags.length > 0 && (o.tags ?? []).some(t => recommendedTags.includes(t));
   const [filter, setFilter]       = useState<string>("all");
   const [sort, setSort]           = useState<"status" | "deadline" | "date" | "az">("status");
   const [search, setSearch]       = useState<string>("");
@@ -2226,6 +2245,21 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportun
       {/* Discipline filter — tag chips, multi-select (OR). */}
       {view === "list" && presentDisciplines.length > 0 && (
         <div style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 24px", background:"var(--color-off-white)", borderBottom:"0.5px solid var(--color-border)", flexShrink:0, flexWrap:"wrap" }}>
+          {recommendedTags.length > 0 && (() => {
+            const forYouOn = disciplines.length === recommendedTags.length && recommendedTags.every(t => disciplines.includes(t));
+            return (
+              <button type="button"
+                onClick={() => setDisciplines(forYouOn ? [] : recommendedTags.filter(t => presentDisciplines.includes(t)))}
+                style={{
+                  padding:"3px 11px", borderRadius:20, fontSize:11, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap", fontWeight:600,
+                  background: forYouOn ? "var(--color-sage)" : "rgba(155,163,122,0.12)",
+                  color: forYouOn ? "white" : "#5a7040",
+                  border: "none", marginRight:4,
+                }}>
+                ✦ For you
+              </button>
+            );
+          })()}
           <span style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.04em", color:"var(--color-grey)", marginRight:2 }}>Discipline</span>
           {presentDisciplines.map(t => {
             const on = disciplines.includes(t);
@@ -2265,6 +2299,7 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportun
                     onOpen={() => setSelectedId(o.id === selectedId ? null : o.id)}
                     highlighted={highlightId === o.id}
                     selected={selectedId === o.id}
+                    recommended={isRecommended(o)}
                     refCallback={registerCard(o.id)}
                     onStatusChange={handleStatusChange}
                     onDismiss={dismiss}
@@ -2327,7 +2362,8 @@ const TABS: { key: Tab; label: string }[] = [
   { key:"opportunities", label:"Opportunities" },
 ];
 
-export default function PresenceClient({ initialOpportunities }: { initialOpportunities: Opportunity[] }) {
+export default function PresenceClient({ initialOpportunities, practiceTypes = [] }: { initialOpportunities: Opportunity[]; practiceTypes?: string[] }) {
+  const recommendedTags = useMemo(() => tagsForPractices(practiceTypes), [practiceTypes]);
   const [tab, setTabState] = useState<Tab>("overview");
 
   // Persist tab in the URL so reload + back/forward land on the same
@@ -2575,7 +2611,7 @@ export default function PresenceClient({ initialOpportunities }: { initialOpport
         />
       )}
       {tab === "press"         && <PressTab />}
-      {tab === "opportunities" && <OpportunitiesTab opps={upcomingOpps} deepLinkOppId={deepLinkOppId} />}
+      {tab === "opportunities" && <OpportunitiesTab opps={upcomingOpps} deepLinkOppId={deepLinkOppId} recommendedTags={recommendedTags} />}
 
       {connectModal && (
         <ConnectIntegrationModal
