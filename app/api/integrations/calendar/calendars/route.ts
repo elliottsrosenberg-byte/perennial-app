@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { syncUserCalendarList } from "@/lib/calendar/sync-calendar-list";
+import { liveAccountKeys, calendarAccountKey } from "@/lib/calendar/live-accounts";
 
 export const runtime = "nodejs";
 
@@ -91,7 +92,18 @@ export async function GET() {
     .order("account_email", { ascending: true })
     .order("name", { ascending: true });
 
-  return NextResponse.json({ calendars: cals ?? [], removed_calendars: removed ?? [], default_calendar_id: defaultId });
+  // Hide calendars whose account no longer has a live (active, calendar-
+  // scoped) integration — e.g. after the user disconnects that account in
+  // Settings. Otherwise the disconnected account ghosts in the rail.
+  const live = liveAccountKeys(integrations ?? []);
+  const isLive = (c: { provider: string; account_email: string | null }) =>
+    live.has(calendarAccountKey(c.provider, c.account_email));
+
+  return NextResponse.json({
+    calendars: (cals ?? []).filter(isLive),
+    removed_calendars: (removed ?? []).filter(isLive),
+    default_calendar_id: defaultId,
+  });
 }
 
 // Manually re-sync the calendar list from the connected providers (re-fetches

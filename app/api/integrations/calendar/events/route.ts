@@ -237,14 +237,23 @@ export async function GET(req: Request) {
   //   aggregator fans out to exactly these.
   const { data: userCalendars } = await supabase
     .from("user_calendars")
-    .select("id, provider, external_id, visible, writable, removed")
+    .select("id, provider, account_email, external_id, visible, writable, removed")
     .eq("user_id", user.id);
-  const calendarsByProvider = new Map<string, { metas: CalendarMeta[]; hasAny: boolean }>();
+  // Key by provider::account, NOT provider alone. With multiple accounts on
+  // the same provider (e.g. two Google logins), a provider-only bucket made
+  // every account's token try to fetch every account's calendar IDs — the
+  // foreign IDs 404, and a disconnected account's orphaned rows still hung
+  // around in the bucket. Per-account keying means each integration fans out
+  // to exactly its own calendars; the dead account simply has no active
+  // integration to pair with, so it's never fetched.
+  const calendarsByAccount = new Map<string, { metas: CalendarMeta[]; hasAny: boolean }>();
+  const acctKey = (provider: string, account: string | null) => `${provider}::${account ?? "primary"}`;
   for (const c of userCalendars ?? []) {
-    const entry = calendarsByProvider.get(c.provider) ?? { metas: [], hasAny: false };
+    const key = acctKey(c.provider, c.account_email);
+    const entry = calendarsByAccount.get(key) ?? { metas: [], hasAny: false };
     entry.hasAny = true;
     if (c.visible && !c.removed) entry.metas.push({ externalId: c.external_id, rowId: c.id, writable: !!c.writable });
-    calendarsByProvider.set(c.provider, entry);
+    calendarsByAccount.set(key, entry);
   }
 
   const work: Promise<CalendarEvent[]>[] = [];
@@ -258,8 +267,8 @@ export async function GET(req: Request) {
   //   3) no entry at all → fall back to primary-only and trigger a sync
   //      so the next request sees the real list. This is the legacy /
   //      first-load path.
-  function resolveMetas(provider: string): CalendarMeta[] | null {
-    const entry = calendarsByProvider.get(provider);
+  function resolveMetas(provider: string, account: string | null): CalendarMeta[] | null {
+    const entry = calendarsByAccount.get(acctKey(provider, account));
     if (!entry) {
       needsBackfill = true;
       return [{ externalId: "primary", rowId: null, writable: false }];
@@ -271,7 +280,7 @@ export async function GET(req: Request) {
     if (r.provider === "google_calendar") {
       const legacy = r as unknown as LegacyIntegrationRow;
       sources.push({ provider: "google_calendar", accountName: legacy.account_name ?? null });
-      const metas = resolveMetas("google_calendar") ?? [];
+      const metas = resolveMetas("google_calendar", legacy.account_name ?? null) ?? [];
       if (metas.length === 0) continue;
       work.push((async () => {
         const token = await refreshLegacyGcalToken(legacy);
@@ -282,7 +291,7 @@ export async function GET(req: Request) {
       const row = r as unknown as IntegrationRow;
       if (row.status !== "active" || !row.scopes?.calendar) continue;
       sources.push({ provider: "google", accountName: row.account_name ?? null });
-      const metas = resolveMetas("google") ?? [];
+      const metas = resolveMetas("google", row.account_name ?? null) ?? [];
       if (metas.length === 0) continue;
       work.push((async () => {
         try {
@@ -299,7 +308,7 @@ export async function GET(req: Request) {
       // Microsoft has a legacy fallback path (null metas → /me/calendarView
       // aggregate). Only use that when no entry exists at all; if the user
       // has tombstoned everything, fetch nothing.
-      const entry = calendarsByProvider.get("microsoft");
+      const entry = calendarsByAccount.get(acctKey("microsoft", row.account_name ?? null));
       let metas: CalendarMeta[] | null;
       if (!entry) {
         needsBackfill = true;
