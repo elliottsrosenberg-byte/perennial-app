@@ -236,6 +236,7 @@ function oppSection(o: Opportunity): "ongoing" | "actSoon" | "upcoming" | "later
 // ─── Lifecycle status (computed from the dates) ───────────────────────────────
 interface Lifecycle { label: string; color: string; bg: string; open: boolean; rank: number; }
 function fmtShort(d: Date) { return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
+function disciplineLabel(t: string) { return t === "fine-art" ? "Fine art" : t.charAt(0).toUpperCase() + t.slice(1); }
 function fmtDateRange(sdRaw: string | null, edRaw: string | null): string | null {
   const sd = parseDate(sdRaw), ed = parseDate(edRaw);
   if (!sd) return null;
@@ -2028,6 +2029,7 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportun
   const [filter, setFilter]       = useState<string>("all");
   const [sort, setSort]           = useState<"status" | "deadline" | "date" | "az">("status");
   const [search, setSearch]       = useState<string>("");
+  const [disciplines, setDisciplines] = useState<string[]>([]);
   const [view, setView]           = useState<OppView>("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -2091,9 +2093,16 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportun
   const q = search.trim().toLowerCase();
   const filteredRaw = visible.filter(o =>
     (filter === "all" || o.category === filter) &&
+    (disciplines.length === 0 || (o.tags ?? []).some(t => disciplines.includes(t))) &&
     (q === "" || [o.title, o.location, o.about, o.event_type, ...(o.tags ?? [])]
       .filter(Boolean).some(s => String(s).toLowerCase().includes(q)))
   );
+  // Disciplines present in the feed, most common first, for the filter chips.
+  const presentDisciplines = useMemo(() => {
+    const c = new Map<string, number>();
+    for (const o of visible) for (const t of o.tags ?? []) c.set(t, (c.get(t) ?? 0) + 1);
+    return [...c.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t);
+  }, [visible]);
   const filtered = useMemo(() => {
     const arr = [...filteredRaw];
     const ts = (d: string | null) => { const p = parseDate(d); return p ? p.getTime() : Infinity; };
@@ -2211,6 +2220,35 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportun
             </select>
             <ChevronDown size={13} style={{ position:"absolute", right:9, color:"var(--color-grey)", pointerEvents:"none" }} />
           </div>
+        </div>
+      )}
+
+      {/* Discipline filter — tag chips, multi-select (OR). */}
+      {view === "list" && presentDisciplines.length > 0 && (
+        <div style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 24px", background:"var(--color-off-white)", borderBottom:"0.5px solid var(--color-border)", flexShrink:0, flexWrap:"wrap" }}>
+          <span style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.04em", color:"var(--color-grey)", marginRight:2 }}>Discipline</span>
+          {presentDisciplines.map(t => {
+            const on = disciplines.includes(t);
+            return (
+              <button key={t} type="button"
+                onClick={() => setDisciplines(prev => on ? prev.filter(x => x !== t) : [...prev, t])}
+                style={{
+                  padding:"3px 10px", borderRadius:20, fontSize:11, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap",
+                  background: on ? "rgba(155,163,122,0.18)" : "transparent",
+                  color: on ? "#5a7040" : "var(--color-grey)",
+                  border: on ? "0.5px solid rgba(155,163,122,0.5)" : "0.5px solid var(--color-border)",
+                  fontWeight: on ? 600 : 400,
+                }}>
+                {disciplineLabel(t)}
+              </button>
+            );
+          })}
+          {disciplines.length > 0 && (
+            <button type="button" onClick={() => setDisciplines([])}
+              style={{ fontSize:11, color:"var(--color-grey)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", textDecoration:"underline", textUnderlineOffset:2 }}>
+              Clear
+            </button>
+          )}
         </div>
       )}
 
