@@ -209,7 +209,7 @@ export default function BookingClient({ slug, link, organizer }: Props) {
   // ── Main booking UI ─────────────────────────────────────────────────────────
   return (
     <Shell accent={accent}>
-      <div className="grid md:grid-cols-[280px_1fr] lg:grid-cols-[300px_1fr_300px]">
+      <div className="grid min-h-[560px] md:grid-cols-[280px_1fr] lg:grid-cols-[300px_1fr_300px]">
         {/* Meeting details */}
         <aside className="border-b border-[#eceae3] p-7 md:border-b-0 md:border-r">
           <div className="flex items-center gap-2.5">
@@ -226,8 +226,14 @@ export default function BookingClient({ slug, link, organizer }: Props) {
             <li className="flex items-center gap-2.5">
               <IconClock /> {link.duration_minutes} min
             </li>
-            <li className="flex items-center gap-2.5">
-              <IconPin /> {LOCATION_LABEL[link.location_type]}
+            <li className="flex items-start gap-2.5">
+              <span className="mt-0.5"><IconPin /></span>
+              <span>
+                {LOCATION_LABEL[link.location_type]}
+                {["in_person", "phone", "custom"].includes(link.location_type) && link.location_detail && (
+                  <span className="block text-[#9a9690]">{link.location_detail}</span>
+                )}
+              </span>
             </li>
           </ul>
           {link.description && <p className="mt-5 whitespace-pre-wrap text-sm leading-relaxed text-[#6b6961]">{link.description}</p>}
@@ -333,6 +339,11 @@ export default function BookingClient({ slug, link, organizer }: Props) {
             <p className="text-sm text-[#9a9690]">Select a day to see available times.</p>
           )}
         </section>
+      </div>
+      <div className="border-t border-[#eceae3] py-2.5 text-center">
+        <a href="https://app.perennial.design" target="_blank" rel="noreferrer" className="text-[11px] text-[#b8b4ac] transition-colors hover:text-[#9a9690]">
+          Powered by Perennial
+        </a>
       </div>
     </Shell>
   );
