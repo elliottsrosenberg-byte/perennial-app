@@ -16,9 +16,12 @@ interface Props {
   /** Enter the in-grid compose flow (drag windows) for a new link. When
    *  omitted, the create buttons fall back to the modal editor. */
   onCompose?: (kind: SchedulingLinkKind) => void;
+  /** Open an existing link in the compose panel. When omitted, clicking a
+   *  link falls back to the modal editor. */
+  onEdit?: (link: SchedulingLink) => void;
 }
 
-export default function SchedulingPanel({ onCompose }: Props) {
+export default function SchedulingPanel({ onCompose, onEdit }: Props) {
   const [links, setLinks] = useState<LinkRow[]>([]);
   const [calendars, setCalendars] = useState<CalOpt[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +52,8 @@ export default function SchedulingPanel({ onCompose }: Props) {
 
   const startCreate = (kind: SchedulingLinkKind) =>
     onCompose ? onCompose(kind) : setEditing({ link: null, kind });
+  const openLink = (l: LinkRow) =>
+    onEdit ? onEdit(l) : setEditing({ link: l, kind: l.kind });
 
   function copyLink(slug: string) {
     const url = `${window.location.origin}/book/${slug}`;
@@ -85,8 +90,8 @@ export default function SchedulingPanel({ onCompose }: Props) {
         <p style={{ padding: "4px 14px", fontSize: 11.5, color: "var(--color-text-tertiary)" }}>Loading…</p>
       ) : (
         <>
-          {recurring.length > 0 && <Group title="Recurring links" links={recurring} onOpen={(l) => setEditing({ link: l, kind: l.kind })} onCopy={copyLink} copied={copied} />}
-          {oneOff.length > 0 && <Group title="One-off links" links={oneOff} onOpen={(l) => setEditing({ link: l, kind: l.kind })} onCopy={copyLink} copied={copied} />}
+          {recurring.length > 0 && <Group title="Recurring links" links={recurring} onOpen={openLink} onCopy={copyLink} copied={copied} />}
+          {oneOff.length > 0 && <Group title="One-off links" links={oneOff} onOpen={openLink} onCopy={copyLink} copied={copied} />}
           {links.length === 0 && (
             <p style={{ padding: "2px 14px 6px", fontSize: 11.5, color: "var(--color-text-tertiary)", lineHeight: 1.5 }}>
               Create a link to let people book time with you. Availability comes from your connected calendars.
