@@ -81,13 +81,45 @@ export async function GET() {
     .maybeSingle();
   const defaultId = (profile?.default_calendar_id as string | null | undefined) ?? null;
 
-  return NextResponse.json({ calendars: cals ?? [], default_calendar_id: defaultId });
+  // Also return removed (tombstoned) calendars so the rail can offer to
+  // re-add them — previously they vanished with no path back.
+  const { data: removed } = await supabase
+    .from("user_calendars")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("removed", true)
+    .order("account_email", { ascending: true })
+    .order("name", { ascending: true });
+
+  return NextResponse.json({ calendars: cals ?? [], removed_calendars: removed ?? [], default_calendar_id: defaultId });
+}
+
+// Manually re-sync the calendar list from the connected providers (re-fetches
+// each account's calendars). Tombstoned (removed) calendars stay removed.
+export async function POST() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    await syncUserCalendarList(user.id);
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "sync failed" }, { status: 500 });
+  }
+  const { data: cals } = await supabase
+    .from("user_calendars").select("*").eq("user_id", user.id).eq("removed", false)
+    .order("account_email", { ascending: true }).order("is_primary", { ascending: false }).order("name", { ascending: true });
+  const { data: removed } = await supabase
+    .from("user_calendars").select("*").eq("user_id", user.id).eq("removed", true)
+    .order("account_email", { ascending: true }).order("name", { ascending: true });
+  return NextResponse.json({ ok: true, calendars: cals ?? [], removed_calendars: removed ?? [] });
 }
 
 interface PatchBody {
   id?:          string;
   visible?:     boolean;
   color?:       string | null;
+  /** Un-remove (re-add) or remove a calendar. false → re-adds + makes visible. */
+  removed?:     boolean;
   /** Mark this calendar as the user's default for new events. Writes to
    *  profiles.default_calendar_id, not user_calendars. */
   set_default?: boolean;
@@ -123,6 +155,11 @@ export async function PATCH(req: Request) {
   const patch: Record<string, unknown> = {};
   if (typeof body.visible === "boolean") patch.visible = body.visible;
   if (body.color !== undefined)          patch.color   = body.color;
+  if (typeof body.removed === "boolean") {
+    patch.removed = body.removed;
+    // Re-adding a calendar should make it visible again.
+    if (body.removed === false && typeof body.visible !== "boolean") patch.visible = true;
+  }
 
   let updated = null;
   if (Object.keys(patch).length > 0) {

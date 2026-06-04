@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { UserCalendar } from "@/types/database";
-import { ChevronDown, ChevronRight, Eye, EyeOff, MoreHorizontal, Plus, ExternalLink, Trash2, Star } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, EyeOff, MoreHorizontal, Plus, ExternalLink, Trash2, Star, RefreshCw } from "lucide-react";
 
 interface Props {
   /** Bumped by parent on connect/refresh so we re-fetch the list. */
@@ -55,11 +55,14 @@ function groupLabel(c: UserCalendar): { account: string; provider: string } {
 
 export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
   const [calendars, setCalendars] = useState<UserCalendar[]>([]);
+  const [removedCals, setRemovedCals] = useState<UserCalendar[]>([]);
   const [defaultId, setDefaultId] = useState<string | null>(null);
   const [loading,   setLoading]   = useState(true);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [addOpen,    setAddOpen]    = useState(false);
+  const [syncing,    setSyncing]    = useState(false);
+  const [expandedRemoved, setExpandedRemoved] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -70,15 +73,52 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
     // reconcile with the server in the background.
     fetch("/api/integrations/calendar/calendars")
       .then((r) => r.json())
-      .then((d: { calendars?: UserCalendar[]; default_calendar_id?: string | null }) => {
+      .then((d: { calendars?: UserCalendar[]; removed_calendars?: UserCalendar[]; default_calendar_id?: string | null }) => {
         if (cancelled) return;
         setCalendars(d.calendars ?? []);
+        setRemovedCals(d.removed_calendars ?? []);
         setDefaultId(d.default_calendar_id ?? null);
         setLoading(false);
       })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [refreshNonce]);
+
+  // Manual re-sync — re-fetch each connected account's calendar list.
+  async function resync() {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/integrations/calendar/calendars", { method: "POST" });
+      const d = await res.json() as { calendars?: UserCalendar[]; removed_calendars?: UserCalendar[] };
+      if (res.ok) {
+        setCalendars(d.calendars ?? []);
+        setRemovedCals(d.removed_calendars ?? []);
+        window.dispatchEvent(new Event("calendar:refresh-events"));
+      }
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  // Re-add a previously-removed calendar — flip removed=false and surface it.
+  async function reAdd(cal: UserCalendar) {
+    setRemovedCals((cs) => cs.filter(c => c.id !== cal.id));
+    const restored = { ...cal, removed: false, visible: true };
+    setCalendars((cs) => [...cs, restored]);
+    window.dispatchEvent(new CustomEvent("calendar:row-changed", { detail: { id: cal.id, patch: { visible: true } } }));
+    try {
+      const res = await fetch("/api/integrations/calendar/calendars", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: cal.id, removed: false }),
+      });
+      if (!res.ok) throw new Error("PATCH failed");
+      window.dispatchEvent(new Event("calendar:refresh-events"));
+    } catch {
+      setCalendars((cs) => cs.filter(c => c.id !== cal.id));
+      setRemovedCals((cs) => [...cs, cal]);
+    }
+  }
 
   async function setDefault(cal: UserCalendar) {
     const prev = defaultId;
@@ -98,19 +138,17 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
   }
 
   const groups = useMemo(() => {
-    const map = new Map<string, UserCalendar[]>();
-    for (const c of calendars) {
-      const k = groupKey(c);
-      const arr = map.get(k) ?? [];
-      arr.push(c);
-      map.set(k, arr);
-    }
-    return Array.from(map.entries()).map(([key, list]) => ({
+    const map = new Map<string, { active: UserCalendar[]; removed: UserCalendar[] }>();
+    const ensure = (k: string) => { let g = map.get(k); if (!g) { g = { active: [], removed: [] }; map.set(k, g); } return g; };
+    for (const c of calendars)   ensure(groupKey(c)).active.push(c);
+    for (const c of removedCals) ensure(groupKey(c)).removed.push(c);
+    return Array.from(map.entries()).map(([key, g]) => ({
       key,
-      label: groupLabel(list[0]),
-      calendars: list,
+      label: groupLabel(g.active[0] ?? g.removed[0]),
+      calendars: g.active,
+      removed: g.removed,
     }));
-  }, [calendars]);
+  }, [calendars, removedCals]);
 
   async function setVisible(cal: UserCalendar, nextVisible: boolean) {
     setCalendars((prev) => prev.map((c) => (c.id === cal.id ? { ...c, visible: nextVisible } : c)));
@@ -194,7 +232,7 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
       {groups.length > 0 && (
         <div style={{
           padding: "0 14px 6px",
-          display: "flex", alignItems: "center",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
         }}>
           <span
             className="text-[10px] font-semibold uppercase tracking-widest"
@@ -202,6 +240,15 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
           >
             Calendars
           </span>
+          <button
+            onClick={resync}
+            disabled={syncing}
+            title="Re-sync calendars from your accounts"
+            style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "transparent", border: "none", cursor: syncing ? "default" : "pointer", fontFamily: "inherit", fontSize: 10, color: "var(--color-grey)", padding: 0 }}
+          >
+            <RefreshCw size={11} strokeWidth={2} className={syncing ? "animate-spin" : undefined} />
+            {syncing ? "Syncing…" : "Resync"}
+          </button>
         </div>
       )}
 
@@ -255,6 +302,36 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
                 />
               );
             })}
+
+            {/* Re-add previously-removed calendars from this account. */}
+            {!isCollapsed && g.removed.length > 0 && (
+              <div>
+                <button
+                  onClick={() => setExpandedRemoved(prev => { const n = new Set(prev); if (n.has(g.key)) n.delete(g.key); else n.add(g.key); return n; })}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "4px 10px 4px 22px", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left", fontSize: 11, color: "var(--color-text-tertiary)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  {expandedRemoved.has(g.key) ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                  {g.removed.length} removed calendar{g.removed.length === 1 ? "" : "s"}
+                </button>
+                {expandedRemoved.has(g.key) && g.removed.map((c) => {
+                  const color = c.color ?? PROVIDER_DEFAULT_COLOR[c.provider] ?? "#888";
+                  return (
+                    <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 10px 4px 30px" }}>
+                      <span style={{ width: 10, height: 10, borderRadius: 9999, border: `1.5px solid ${color}`, flexShrink: 0 }} />
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: "var(--color-text-tertiary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={c.name}>
+                        {c.name}
+                      </span>
+                      <button onClick={() => reAdd(c)} title="Add back to calendar"
+                        style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 999, fontSize: 10.5, fontWeight: 500, border: "0.5px solid var(--color-border)", background: "transparent", color: "var(--color-sage)", cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>
+                        <Plus size={10} strokeWidth={2.5} /> Add
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
       })}
