@@ -18,7 +18,7 @@ function authed(req: Request): boolean {
 const UPSERT_FIELDS = [
   "category", "event_type", "start_date", "end_date", "application_deadline",
   "submissions_open", "location", "about", "notes", "website_url",
-  "registration_url", "frequency", "cost", "eligibility", "contact_email", "status",
+  "registration_url", "frequency", "cost", "eligibility", "contact_email", "status", "tags",
 ];
 
 export async function GET(req: Request) {
