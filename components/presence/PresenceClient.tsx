@@ -292,7 +292,7 @@ function HelpTip({ text }: { text: string }) {
       onMouseEnter={() => setShow(true)}
       onMouseLeave={() => setShow(false)}>
       <span className="flex items-center justify-center rounded-full shrink-0"
-        style={{ width: 14, height: 14, background: "var(--color-cream)", border: "0.5px solid rgba(31,33,26,0.13)", color: "var(--color-grey)", fontSize: 9, fontWeight: 700, cursor: "help" }}>?</span>
+        style={{ width: 14, height: 14, background: "var(--color-cream)", border: "0.5px solid rgba(31,33,26,0.13)", color: "var(--color-grey)", fontSize: 9, fontWeight: 700, cursor: "default" }}>?</span>
       {show && (
         <span role="tooltip"
           style={{
@@ -435,66 +435,6 @@ function OverviewTab({ onTabChange, opps, instagram, plausible, newsletter, onCo
 
   return (
     <div className="flex-1 overflow-y-auto" style={{ padding:"22px 24px", display:"flex", flexDirection:"column", gap:18 }}>
-      {/* Connected accounts strip — real integrations only. Empty hint when none. */}
-      <div className={card()} style={cardStyle}>
-        <div style={{ display:"flex", gap:8, padding:"12px 15px", flexWrap:"wrap", alignItems:"center" }}>
-          {plausible && (
-            <div className="flex items-center gap-2 rounded-full" style={{ padding:"5px 10px", border:"0.5px solid rgba(31,33,26,0.13)", background:"var(--color-cream)", cursor:"pointer" }}
-              onClick={() => onTabChange("website")}
-            >
-              <div style={{ width:6, height:6, borderRadius:"50%", background:C.accent, flexShrink:0 }} />
-              <span style={{ color:C.blue, display:"flex" }}><IcGlobe /></span>
-              <span style={{ fontSize:11, fontWeight:500 }}>{(plausible.metadata.property_name as string) ?? plausible.account_name ?? "Google Analytics"}</span>
-              <span style={{ fontSize:10, color:"var(--color-grey)" }}>GA4</span>
-            </div>
-          )}
-          {instagram && (
-            <div className="flex items-center gap-2 rounded-full" style={{ padding:"5px 10px", border:"0.5px solid rgba(31,33,26,0.13)", background:"var(--color-cream)", cursor:"pointer" }}
-              onClick={() => onTabChange("socials")}
-            >
-              <div style={{ width:6, height:6, borderRadius:"50%", background:C.accent, flexShrink:0 }} />
-              <span style={{ color:C.purple, display:"flex" }}><IcIG /></span>
-              <span style={{ fontSize:11, fontWeight:500 }}>{instagram.account_name ?? "Instagram"}</span>
-              <span style={{ fontSize:10, color:"var(--color-grey)" }}>
-                {instagram.metadata.followers_count ? `${(instagram.metadata.followers_count as number).toLocaleString()} followers` : "Instagram"}
-              </span>
-            </div>
-          )}
-          {newsletter && (
-            <div className="flex items-center gap-2 rounded-full" style={{ padding:"5px 10px", border:"0.5px solid rgba(31,33,26,0.13)", background:"var(--color-cream)", cursor:"pointer" }}
-              onClick={() => onTabChange("newsletter")}
-            >
-              <div style={{ width:6, height:6, borderRadius:"50%", background:C.accent, flexShrink:0 }} />
-              <span style={{ color:C.amber, display:"flex" }}><IcMail /></span>
-              <span style={{ fontSize:11, fontWeight:500 }}>{newsletter.account_name ?? PROVIDER_META[newsletter.provider as ConnectProvider]?.label ?? "Newsletter"}</span>
-              <span style={{ fontSize:10, color:"var(--color-grey)" }}>
-                {(newsletter.metadata.subscriber_count ?? newsletter.metadata.total_subscribers ?? newsletter.metadata.subscribers)
-                  ? `${(newsletter.metadata.subscriber_count ?? newsletter.metadata.total_subscribers ?? newsletter.metadata.subscribers) as number} subscribers`
-                  : (PROVIDER_META[newsletter.provider as ConnectProvider]?.label ?? newsletter.provider)}
-              </span>
-            </div>
-          )}
-          {!plausible && !instagram && !newsletter && (
-            <span style={{ fontSize:11, color:"var(--color-grey)", padding:"3px 0" }}>
-              No accounts connected yet — connect Google Analytics, Instagram, or your newsletter below to start tracking your audience.
-            </span>
-          )}
-          {(!plausible || !instagram || !newsletter) && (
-            <button
-              onClick={() => {
-                if (!plausible)        onTabChange("website");
-                else if (!instagram)   onTabChange("socials");
-                else if (!newsletter)  onTabChange("newsletter");
-              }}
-              className="flex items-center gap-2 rounded-full"
-              style={{ padding:"5px 10px", border:"0.5px dashed rgba(37,99,171,0.4)", background:"transparent", cursor:"pointer", color:C.blue, fontFamily:"inherit" }}
-            >
-              <IcPlus /><span style={{ fontSize:11 }}>Connect account</span>
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* Stat cards */}
       <div style={{ display:"flex", gap:12 }}>
         {/* Website stat — real data if Plausible connected */}
