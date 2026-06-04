@@ -208,7 +208,7 @@ export default function BookingClient({ slug, link, organizer }: Props) {
   // ── Main booking UI ─────────────────────────────────────────────────────────
   return (
     <Shell accent={accent}>
-      <div className="grid md:grid-cols-[260px_1fr] lg:grid-cols-[260px_1fr_240px]">
+      <div className="grid md:grid-cols-[280px_1fr] lg:grid-cols-[300px_1fr_300px]">
         {/* Meeting details */}
         <aside className="border-b border-[#eceae3] p-7 md:border-b-0 md:border-r">
           <div className="flex items-center gap-2.5">
@@ -343,8 +343,8 @@ function addMinutes(iso: string, mins: number): string {
 
 function Shell({ accent, children }: { accent: string; children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[#f5f4f1] px-4 py-10" style={{ ["--accent" as string]: accent }}>
-      <div className="mx-auto max-w-4xl overflow-hidden rounded-2xl border border-[#eceae3] bg-white shadow-sm">
+    <div className="flex min-h-screen items-center justify-center bg-[#f5f4f1] px-4 py-10" style={{ ["--accent" as string]: accent }}>
+      <div className="mx-auto w-full max-w-5xl overflow-hidden rounded-2xl border border-[#eceae3] bg-white shadow-md">
         {children}
       </div>
       <style>{`
