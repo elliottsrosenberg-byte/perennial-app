@@ -1868,6 +1868,104 @@ function OppCard({
   );
 }
 
+// Suggest-a-listing modal — submits to opportunity_suggestions (a review
+// queue), so designers can flag opportunities without writing to the feed.
+function SuggestListingModal({ onClose }: { onClose: () => void }) {
+  const [title, setTitle]       = useState("");
+  const [category, setCategory] = useState("fair");
+  const [location, setLocation] = useState("");
+  const [startDate, setStart]   = useState("");
+  const [url, setUrl]           = useState("");
+  const [notes, setNotes]       = useState("");
+  const [saving, setSaving]     = useState(false);
+  const [done, setDone]         = useState(false);
+  const [error, setError]       = useState<string | null>(null);
+
+  const inputCls = "w-full px-3 py-2 text-[13px] rounded-lg focus:outline-none";
+  const inputStyle = { background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" } as const;
+  const CATS = [
+    { value: "fair", label: "Fair / Tradeshow" }, { value: "openCall", label: "Open call" },
+    { value: "award", label: "Award" }, { value: "grant", label: "Grant" },
+    { value: "residency", label: "Residency" }, { value: "festival", label: "Festival" },
+  ];
+
+  async function submit() {
+    if (!title.trim()) { setError("Add a name."); return; }
+    setSaving(true); setError(null);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setError("Not authenticated."); setSaving(false); return; }
+    const { error: err } = await supabase.from("opportunity_suggestions").insert({
+      user_id: user.id, title: title.trim(), category, event_type: category,
+      location: location.trim() || null, start_date: startDate || null,
+      website_url: url.trim() || null, notes: notes.trim() || null,
+    });
+    if (err) { setError(err.message); setSaving(false); return; }
+    setDone(true);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(31,33,26,0.5)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-sm rounded-2xl shadow-2xl" style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}>
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
+          <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>Suggest a listing</h2>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg" style={{ color: "var(--color-grey)" }}><IcX /></button>
+        </div>
+        {done ? (
+          <div className="px-5 py-8" style={{ textAlign: "center" }}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 6 }}>Thanks — sent to the team</p>
+            <p style={{ fontSize: 12, color: "var(--color-grey)", lineHeight: 1.6, marginBottom: 16 }}>
+              We&apos;ll review your suggestion and add it to the Perennial feed if it&apos;s a fit.
+            </p>
+            <button onClick={onClose} className="px-4 py-2 text-[13px] font-medium rounded-lg text-white" style={{ background: "var(--color-sage)" }}>Done</button>
+          </div>
+        ) : (
+          <>
+            <div className="px-5 py-4 space-y-4">
+              <div>
+                <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Name *</label>
+                <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Salone del Mobile" className={inputCls} style={inputStyle} autoFocus />
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Type</label>
+                  <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls} style={{ ...inputStyle, appearance: "auto" }}>
+                    {CATS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Date</label>
+                  <input type="date" value={startDate} onChange={(e) => setStart(e.target.value)} className={inputCls} style={{ ...inputStyle, appearance: "auto" }} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Location</label>
+                <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="City, Country" className={inputCls} style={inputStyle} />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Link</label>
+                <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" className={inputCls} style={inputStyle} />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Why it&apos;s worth listing</label>
+                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="A line on deadlines, who it's for, etc." className={`${inputCls} resize-none`} style={inputStyle} />
+              </div>
+              {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-4" style={{ borderTop: "0.5px solid var(--color-border)" }}>
+              <button onClick={onClose} className="px-4 py-2 text-[13px] rounded-lg" style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}>Cancel</button>
+              <button onClick={submit} disabled={saving || !title.trim()} className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50" style={{ background: "var(--color-sage)" }}>
+                {saving ? "Sending…" : "Send suggestion"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportunity[]; deepLinkOppId?: string | null }) {
   const [filter, setFilter]       = useState<string>("all");
   const [view, setView]           = useState<OppView>("list");
@@ -1875,6 +1973,7 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportun
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [localOpps, setLocalOpps] = useState<Opportunity[]>(initialOpps);
+  const [suggesting, setSuggesting] = useState(false);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Honor `?opportunityId=` deep-link on mount (Calendar bars link this way).
@@ -1969,6 +2068,14 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportun
             {deadlineSoonCount > 0 ? ` · ${deadlineSoonCount} with deadline${deadlineSoonCount === 1 ? "" : "s"} this week` : ""}
           </p>
         </div>
+        {/* Suggest a listing — designers can flag an opportunity for the
+            curators (goes to a review queue, not straight into the feed). */}
+        <button onClick={() => setSuggesting(true)} className="flex items-center gap-1.5 shrink-0"
+          style={{ padding:"6px 12px", fontSize:11.5, fontWeight:500, borderRadius:999, border:"0.5px solid var(--color-border)", background:"transparent", color:"var(--color-grey)", cursor:"pointer", fontFamily:"inherit" }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--color-sage)"; e.currentTarget.style.color = "var(--color-sage)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; e.currentTarget.style.color = "var(--color-grey)"; }}>
+          <IcPlus /> Suggest a listing
+        </button>
         {/* View toggle preserved — calendar view is still a useful secondary view */}
         <div className="flex shrink-0" style={{ background:"var(--color-cream)", border:"0.5px solid var(--color-border)", borderRadius:6 }}>
           {(["list","calendar"] as OppView[]).map((v,i) => (
@@ -1978,6 +2085,7 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportun
           ))}
         </div>
       </div>
+      {suggesting && <SuggestListingModal onClose={() => setSuggesting(false)} />}
 
       {/* Filter pills — mirrors the InvoicesTab pattern: filled charcoal
           when active, soft ghost when inactive. Derived from categories
