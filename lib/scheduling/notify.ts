@@ -90,7 +90,11 @@ export async function sendBookingEmails(bookingId: string): Promise<void> {
     const { data: userRes } = await supabase.auth.admin.getUserById(booking.user_id);
     const ownerEmail = userRes.user?.email ?? null;
 
-    const from = process.env.RESEND_FROM ?? "onboarding@resend.dev";
+    // Booking emails come from bookings@<domain> (separate from invoices@),
+    // derived from the verified RESEND_FROM domain. Display name = studio.
+    const baseFrom = process.env.RESEND_FROM ?? "invoices@perennial.design";
+    const addr = process.env.RESEND_BOOKINGS_FROM ?? baseFrom.replace(/^[^@]+@/, "bookings@");
+    const from = `${studio.replace(/["<>]/g, "")} <${addr}>`;
     const { Resend } = await import("resend");
     const resend = new Resend(apiKey);
 
