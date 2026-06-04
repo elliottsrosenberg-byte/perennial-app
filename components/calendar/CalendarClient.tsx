@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Task, Contact, UserCalendar } from "@/types/database";
-import { ChevronLeft, ChevronRight, Plus, CheckSquare, MoreHorizontal, CalendarClock, Eye, EyeOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, CheckSquare, MoreHorizontal, CalendarClock } from "lucide-react";
+import { tagsForPractices } from "@/lib/opportunities/disciplines";
 import DatePicker from "@/components/ui/DatePicker";
 import EmptyState from "@/components/ui/EmptyState";
 import CalendarOptionsMenu from "./CalendarOptionsMenu";
@@ -952,6 +953,7 @@ export interface CalendarOpportunity {
   end_date:    string | null;
   location:    string | null;
   user_status: string | null;
+  tags:        string[] | null;
 }
 
 interface Props {
@@ -959,6 +961,7 @@ interface Props {
   initialProjects: { id: string; title: string; due_date: string | null; status: string }[];
   initialContacts: Pick<Contact, "id" | "first_name" | "last_name">[];
   initialOpportunities?: CalendarOpportunity[];
+  practiceTypes?:      string[];
   googleConnected?:    boolean;
   googleAccountName?:  string | null;
   outlookConnected?:   boolean;
@@ -1008,9 +1011,11 @@ const HIDDEN_FEED_CATEGORIES = new Set<string>(["award"]);
 export default function CalendarClient({
   initialTasks, initialProjects, initialContacts,
   initialOpportunities: initialOpportunitiesRaw = [],
+  practiceTypes = [],
   googleConnected = false,
   outlookConnected = false,
 }: Props) {
+  const recommendedTags = useMemo(() => tagsForPractices(practiceTypes), [practiceTypes]);
   // Drop the categories we don't surface in this pass before they reach
   // the feed list, the all-day row, or any cross-derived state.
   const initialOpportunities = useMemo(
@@ -1062,26 +1067,24 @@ export default function CalendarClient({
     dayLabel: string;
   } | null>(null);
 
-  // Per-category visibility for the Perennial Feed opportunities ribbon.
-  // We store hidden categories (not visible ones) so a fresh user who's
-  // never touched the toggles sees everything. localStorage round-trips
-  // on every change, gated on window so SSR doesn't choke.
-  const [hiddenOppCats, setHiddenOppCats] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
-    try {
-      const raw = window.localStorage.getItem(OPP_VIS_STORAGE_KEY);
-      if (!raw) return new Set();
-      const arr = JSON.parse(raw) as unknown;
-      if (!Array.isArray(arr)) return new Set();
-      return new Set(arr.filter((x): x is string => typeof x === "string"));
-    } catch { return new Set(); }
+  // Which opportunities show on the calendar: all, only saved, or only
+  // recommended (matching the user's disciplines). Persisted to localStorage.
+  type OppMode = "all" | "saved" | "recommended";
+  const [oppMode, setOppMode] = useState<OppMode>(() => {
+    if (typeof window === "undefined") return "all";
+    const raw = window.localStorage.getItem(OPP_VIS_STORAGE_KEY);
+    return raw === "saved" || raw === "recommended" ? raw : "all";
   });
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(OPP_VIS_STORAGE_KEY, JSON.stringify(Array.from(hiddenOppCats)));
-    } catch { /* quota / safari private mode — ignore */ }
-  }, [hiddenOppCats]);
+    try { window.localStorage.setItem(OPP_VIS_STORAGE_KEY, oppMode); } catch { /* ignore */ }
+  }, [oppMode]);
+  const ENGAGED_STATUSES = ["saved", "applied", "attending", "exhibiting"];
+  const oppVisible = (o: CalendarOpportunity) => {
+    if (oppMode === "saved") return !!o.user_status && ENGAGED_STATUSES.includes(o.user_status);
+    if (oppMode === "recommended") return recommendedTags.length > 0 && (o.tags ?? []).some(t => recommendedTags.includes(t));
+    return true;
+  };
 
   // Drag-to-reschedule task pills. Tracks the in-flight drag so we can
   // hide the source pill slightly while it follows the cursor.
@@ -2096,86 +2099,41 @@ export default function CalendarClient({
             <CalendarSourcesPanel refreshNonce={refreshNonce} />
           )}
 
-          {/* Perennial Feed — per-category toggles for the opportunity
-              bars that float in from Presence. Categories with no rows
-              are hidden so the list stays honest. */}
+          {/* Opportunities — controls which opportunity bars show on the
+              calendar (all / saved / recommended), with a link to the full
+              Opportunities tab in Presence. */}
           {(() => {
-            const counts: Record<string, number> = {};
-            for (const o of initialOpportunities) {
-              counts[o.category] = (counts[o.category] ?? 0) + 1;
-            }
-            const cats = Object.keys(counts).sort((a, b) =>
-              oppCategoryLabel(a).localeCompare(oppCategoryLabel(b)),
-            );
-            if (cats.length === 0) return null;
-            const allHidden = cats.every(c => hiddenOppCats.has(c));
+            if (initialOpportunities.length === 0) return null;
+            const savedCount = initialOpportunities.filter(o => !!o.user_status && ENGAGED_STATUSES.includes(o.user_status)).length;
+            const recCount = recommendedTags.length > 0
+              ? initialOpportunities.filter(o => (o.tags ?? []).some(t => recommendedTags.includes(t))).length : 0;
+            const modes: { key: OppMode; label: string; count: number }[] = [
+              { key: "all", label: "All", count: initialOpportunities.length },
+              { key: "saved", label: "Saved", count: savedCount },
+              ...(recommendedTags.length > 0 ? [{ key: "recommended" as OppMode, label: "Recommended", count: recCount }] : []),
+            ];
             return (
               <div data-tour-target="calendar.opportunities" style={{ padding: "10px 0 4px" }}>
-                <div style={{
-                  padding: "0 14px 6px",
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                }}>
+                <div style={{ padding: "0 14px 6px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--color-grey)" }}>
-                    Perennial Feed
+                    Opportunities
                   </span>
-                  <button
-                    onClick={() => {
-                      setHiddenOppCats(() => allHidden ? new Set() : new Set(cats));
-                    }}
-                    style={{
-                      background: "transparent", border: "none",
-                      fontSize: 10, color: "var(--color-grey)",
-                      cursor: "pointer", fontFamily: "inherit", padding: 0,
-                    }}
-                  >
-                    {allHidden ? "Show all" : "Hide all"}
-                  </button>
+                  <a href="/presence?tab=opportunities" style={{ fontSize: 10, color: "var(--color-sage)", textDecoration: "none", fontWeight: 500 }}>
+                    Open →
+                  </a>
                 </div>
-                {cats.map(cat => {
-                  const visible = !hiddenOppCats.has(cat);
-                  const pal     = oppPalette(cat);
+                {modes.map(m => {
+                  const active = oppMode === m.key;
                   return (
-                    <div
-                      key={cat}
-                      onClick={() => {
-                        setHiddenOppCats(prev => {
-                          const next = new Set(prev);
-                          if (next.has(cat)) next.delete(cat); else next.add(cat);
-                          return next;
-                        });
-                      }}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 8,
-                        padding: "4px 14px 4px 14px",
-                        cursor: "pointer",
-                      }}
+                    <div key={m.key} onClick={() => setOppMode(m.key)}
+                      style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 14px", cursor: "pointer" }}
                       onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
-                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                    >
-                      <span style={{
-                        width: 10, height: 10, borderRadius: 9999,
-                        background: visible ? pal.fg : "transparent",
-                        border: visible ? "none" : `1.5px solid ${pal.fg}`,
-                        flexShrink: 0,
-                      }} />
-                      <span style={{
-                        flex: 1, minWidth: 0,
-                        fontSize: 11.5,
-                        color: visible ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
-                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                      }}>
-                        {oppCategoryLabel(cat)}
+                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                      <span style={{ width: 10, height: 10, borderRadius: 9999, background: active ? "var(--color-sage)" : "transparent", border: active ? "none" : "1.5px solid var(--color-border-strong)", flexShrink: 0 }} />
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: active ? 600 : 400, color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)" }}>
+                        {m.label}
                       </span>
-                      <span style={{
-                        fontSize: 10, color: "var(--color-text-tertiary)",
-                        flexShrink: 0,
-                      }}>
-                        {counts[cat]}
-                      </span>
-                      {visible
-                        ? <Eye    size={12} strokeWidth={1.75} style={{ color: "var(--color-text-secondary)", flexShrink: 0 }} />
-                        : <EyeOff size={12} strokeWidth={1.75} style={{ color: "var(--color-text-tertiary)", flexShrink: 0 }} />
-                      }
+                      <span style={{ fontSize: 10, color: "var(--color-text-tertiary)", flexShrink: 0 }}>{m.count}</span>
                     </div>
                   );
                 })}
@@ -2798,7 +2756,7 @@ export default function CalendarClient({
 
             // Compute opportunity spans the same way as before.
             const rawOppSpans = initialOpportunities
-              .filter(o => !hiddenOppCats.has(o.category))
+              .filter(oppVisible)
               .map(o => {
                 const s = parseOppDate(o.start_date);
                 if (!s) return null;

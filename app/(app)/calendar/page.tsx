@@ -38,9 +38,19 @@ export default async function CalendarPage() {
     // page doesn't ship every opportunity in the world.
     supabase
       .from("opportunities")
-      .select("id, title, event_type, category, start_date, end_date, location, user_status")
+      .select("id, title, event_type, category, start_date, end_date, location, user_status, tags")
       .not("start_date", "is", null),
   ]);
+
+  // The user's practice types → discipline tags, so the calendar can filter
+  // opportunities to "Recommended".
+  const { data: { user } } = await supabase.auth.getUser();
+  let practiceTypes: string[] = [];
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles").select("practice_types").eq("id", user.id).maybeSingle();
+    practiceTypes = (profile?.practice_types as string[] | null) ?? [];
+  }
 
   // Collapse the per-row integrations into per-provider connection
   // summaries the CalendarClient uses to render its status panel and
@@ -79,7 +89,8 @@ export default async function CalendarPage() {
         }[]
       }
       initialContacts={(contacts ?? []) as Pick<Contact, "id" | "first_name" | "last_name">[]}
-      initialOpportunities={(opportunities ?? []) as Pick<Opportunity, "id" | "title" | "event_type" | "category" | "start_date" | "end_date" | "location" | "user_status">[]}
+      initialOpportunities={(opportunities ?? []) as Pick<Opportunity, "id" | "title" | "event_type" | "category" | "start_date" | "end_date" | "location" | "user_status" | "tags">[]}
+      practiceTypes={practiceTypes}
       googleConnected={!!googleConn}
       googleAccountName={googleConn?.accountName ?? null}
       outlookConnected={!!outlookConn}

@@ -7,6 +7,7 @@ import PresenceIntroModal from "@/components/tour/presence/PresenceIntroModal";
 import PresenceTooltipTour from "@/components/tour/presence/PresenceTooltipTour";
 import PresenceCharts from "./PresenceCharts";
 import PressTab from "./PressTab";
+import { tagsForPractices, disciplineLabel } from "@/lib/opportunities/disciplines";
 import { MoreHorizontal, Plus, ChevronDown } from "lucide-react";
 import { detectHostingPlatform, guideFor } from "@/lib/presence/detectHostingPlatform";
 
@@ -236,21 +237,6 @@ function oppSection(o: Opportunity): "ongoing" | "actSoon" | "upcoming" | "later
 // ─── Lifecycle status (computed from the dates) ───────────────────────────────
 interface Lifecycle { label: string; color: string; bg: string; open: boolean; rank: number; }
 function fmtShort(d: Date) { return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
-function disciplineLabel(t: string) { return t === "fine-art" ? "Fine art" : t.charAt(0).toUpperCase() + t.slice(1); }
-// Maps onboarding practice types → discipline tags for recommendations.
-const PRACTICE_TAG_MAP: Record<string, string[]> = {
-  "Furniture": ["furniture"], "Objects & lighting": ["lighting", "product"],
-  "Ceramics & glass": ["ceramics", "glass"], "Textiles": ["textiles"],
-  "Jewelry": ["jewelry"], "Painting": ["painting", "fine-art"],
-  "Illustration": ["illustration"], "Sculpture": ["sculpture", "fine-art"],
-  "Printmaking": ["printmaking", "fine-art"], "Video": ["video", "fine-art"],
-  "Client-based work": ["interiors", "hospitality"],
-};
-function tagsForPractices(practices: string[]): string[] {
-  const s = new Set<string>();
-  for (const p of practices) for (const t of (PRACTICE_TAG_MAP[p] ?? [])) s.add(t);
-  return [...s];
-}
 function fmtDateRange(sdRaw: string | null, edRaw: string | null): string | null {
   const sd = parseDate(sdRaw), ed = parseDate(edRaw);
   if (!sd) return null;
@@ -2149,6 +2135,7 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId, recommendedTags = 
   const [sort, setSort]           = useState<"status" | "deadline" | "date" | "az">("status");
   const [search, setSearch]       = useState<string>("");
   const [disciplines, setDisciplines] = useState<string[]>([]);
+  const [savedOnly, setSavedOnly] = useState(false);
   const [view, setView]           = useState<OppView>("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -2209,8 +2196,12 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId, recommendedTags = 
     return [...known, ...extra];
   }, [visible]);
 
+  const ENGAGED = ["saved", "applied", "attending", "exhibiting"];
+  const isSaved = (o: Opportunity) => !!o.user_status && ENGAGED.includes(o.user_status);
+  const savedCount = useMemo(() => visible.filter(isSaved).length, [visible]);
   const q = search.trim().toLowerCase();
   const filteredRaw = visible.filter(o =>
+    (!savedOnly || isSaved(o)) &&
     (filter === "all" || o.category === filter) &&
     (disciplines.length === 0 || (o.tags ?? []).some(t => disciplines.includes(t))) &&
     (q === "" || [o.title, o.location, o.about, o.event_type, ...(o.tags ?? [])]
@@ -2273,15 +2264,7 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId, recommendedTags = 
             {deadlineSoonCount > 0 ? ` · ${deadlineSoonCount} with deadline${deadlineSoonCount === 1 ? "" : "s"} this week` : ""}
           </p>
         </div>
-        {/* Suggest a listing — designers can flag an opportunity for the
-            curators (goes to a review queue, not straight into the feed). */}
-        <button onClick={() => setSuggesting(true)} className="flex items-center gap-1.5 shrink-0"
-          style={{ padding:"6px 12px", fontSize:11.5, fontWeight:500, borderRadius:999, border:"0.5px solid var(--color-border)", background:"transparent", color:"var(--color-grey)", cursor:"pointer", fontFamily:"inherit" }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--color-sage)"; e.currentTarget.style.color = "var(--color-sage)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; e.currentTarget.style.color = "var(--color-grey)"; }}>
-          <IcPlus /> Suggest a listing
-        </button>
-        {/* View toggle preserved — calendar view is still a useful secondary view */}
+        {/* View toggle — list vs calendar. */}
         <div className="flex shrink-0" style={{ background:"var(--color-cream)", border:"0.5px solid var(--color-border)", borderRadius:6 }}>
           {(["list","calendar"] as OppView[]).map((v,i) => (
             <button key={v} onClick={() => setView(v)} title={v === "list" ? "Card view" : "Calendar view"} style={{ padding:"4px 10px", background:view===v?"var(--color-off-white)":"transparent", border:view===v?"0.5px solid rgba(31,33,26,0.13)":"none", borderRadius:5, color:view===v?"var(--color-charcoal)":"var(--color-grey)", cursor:"pointer", display:"flex", alignItems:"center", boxShadow:view===v?"0 1px 3px rgba(0,0,0,0.06)":"none", borderRight:i===0?"0.5px solid var(--color-border)":undefined }}>
@@ -2289,6 +2272,14 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId, recommendedTags = 
             </button>
           ))}
         </div>
+        {/* Suggest a listing — green primary; flags an opportunity for the
+            curators (review queue, not straight into the feed). */}
+        <button onClick={() => setSuggesting(true)} className="flex items-center gap-1.5 shrink-0"
+          style={{ padding:"6px 13px", fontSize:11.5, fontWeight:500, borderRadius:999, border:"none", background:"var(--color-sage)", color:"white", cursor:"pointer", fontFamily:"inherit" }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-sage-hover)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-sage)")}>
+          <IcPlus /> Suggest a listing
+        </button>
       </div>
       {suggesting && <SuggestListingModal onClose={() => setSuggesting(false)} />}
 
@@ -2305,6 +2296,16 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId, recommendedTags = 
             placeholder="Search opportunities…"
             style={{ width:190, padding:"5px 11px", fontSize:11.5, borderRadius:999, border:"0.5px solid var(--color-border)", background:"var(--color-warm-white)", color:"var(--color-charcoal)", outline:"none", fontFamily:"inherit" }}
           />
+          <button type="button" onClick={() => setSavedOnly(s => !s)}
+            style={{
+              display:"inline-flex", alignItems:"center", gap:4, padding:"4px 11px", borderRadius:20, fontSize:11, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap",
+              fontWeight: savedOnly ? 600 : 500,
+              background: savedOnly ? "var(--color-sage)" : "rgba(155,163,122,0.12)",
+              color: savedOnly ? "white" : "#5a7040", border:"none",
+            }}>
+            ★ Saved{savedCount > 0 ? ` ${savedCount}` : ""}
+          </button>
+          <div style={{ width:1, height:18, background:"var(--color-border)", margin:"0 2px" }} />
           {(["all", ...presentCategories]).map(key => {
             const active = filter === key;
             const label = key === "all" ? "All" : (CATEGORY_LABELS[key] ?? key);
