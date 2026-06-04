@@ -2027,6 +2027,7 @@ function SuggestListingModal({ onClose }: { onClose: () => void }) {
 function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportunity[]; deepLinkOppId?: string | null }) {
   const [filter, setFilter]       = useState<string>("all");
   const [sort, setSort]           = useState<"status" | "deadline" | "date" | "az">("status");
+  const [search, setSearch]       = useState<string>("");
   const [view, setView]           = useState<OppView>("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -2087,7 +2088,12 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportun
     return [...known, ...extra];
   }, [visible]);
 
-  const filteredRaw = visible.filter(o => filter === "all" || o.category === filter);
+  const q = search.trim().toLowerCase();
+  const filteredRaw = visible.filter(o =>
+    (filter === "all" || o.category === filter) &&
+    (q === "" || [o.title, o.location, o.about, o.event_type, ...(o.tags ?? [])]
+      .filter(Boolean).some(s => String(s).toLowerCase().includes(q)))
+  );
   const filtered = useMemo(() => {
     const arr = [...filteredRaw];
     const ts = (d: string | null) => { const p = parseDate(d); return p ? p.getTime() : Infinity; };
@@ -2164,6 +2170,13 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId }: { opps: Opportun
           bucket. */}
       {view === "list" && presentCategories.length > 0 && (
         <div style={{ display:"flex", alignItems:"center", gap:6, padding:"10px 24px", background:"var(--color-off-white)", borderBottom:"0.5px solid var(--color-border)", flexShrink:0, flexWrap:"wrap" }}>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search opportunities…"
+            style={{ width:190, padding:"5px 11px", fontSize:11.5, borderRadius:999, border:"0.5px solid var(--color-border)", background:"var(--color-warm-white)", color:"var(--color-charcoal)", outline:"none", fontFamily:"inherit" }}
+          />
           {(["all", ...presentCategories]).map(key => {
             const active = filter === key;
             const label = key === "all" ? "All" : (CATEGORY_LABELS[key] ?? key);
