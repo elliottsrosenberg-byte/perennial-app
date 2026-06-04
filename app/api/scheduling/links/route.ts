@@ -53,6 +53,7 @@ interface CreateBody {
   booking_window_days?:    number;
   target_calendar_id?:     string | null;
   conflict_calendar_ids?:  string[] | null;
+  avoid_conflicts?:        boolean;
   expires_at?:             string | null;
   single_use?:             boolean;
   max_bookings?:           number | null;
@@ -105,6 +106,7 @@ export async function POST(req: Request) {
     booking_window_days:    body.booking_window_days ?? 30,
     target_calendar_id:     targetCal,
     conflict_calendar_ids:  body.conflict_calendar_ids ?? null,
+    avoid_conflicts:        body.avoid_conflicts ?? true,
     expires_at:             body.expires_at ?? null,
     single_use:             body.single_use ?? false,
     max_bookings:           body.max_bookings ?? null,

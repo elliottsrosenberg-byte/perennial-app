@@ -567,7 +567,7 @@ export interface UserCalendar {
 
 // ── Scheduling (Calendly-style booking links) ──────────────────────────────────
 export type SchedulingLinkKind = "recurring" | "one_off";
-export type SchedulingLocationType = "google_meet" | "teams" | "phone" | "in_person" | "custom";
+export type SchedulingLocationType = "google_meet" | "teams" | "zoom" | "phone" | "in_person" | "custom";
 
 /** A single contiguous availability window in a day, local wall-clock time. */
 export interface DayWindow {
@@ -604,6 +604,7 @@ export interface SchedulingLink {
   booking_window_days:    number;
   target_calendar_id:     string | null;
   conflict_calendar_ids:  string[] | null;
+  avoid_conflicts:        boolean;
   expires_at:             string | null;
   single_use:             boolean;
   max_bookings:           number | null;

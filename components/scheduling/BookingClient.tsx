@@ -31,6 +31,7 @@ const MONTHS = ["January","February","March","April","May","June","July","August
 const LOCATION_LABEL: Record<SchedulingLocationType, string> = {
   google_meet: "Google Meet",
   teams:       "Microsoft Teams",
+  zoom:        "Zoom",
   phone:       "Phone call",
   in_person:   "In person",
   custom:      "Details provided upon confirmation",
