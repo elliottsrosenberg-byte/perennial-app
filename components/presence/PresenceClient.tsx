@@ -295,7 +295,8 @@ function HelpTip({ text }: { text: string }) {
       {show && (
         <span role="tooltip"
           style={{
-            position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 60,
+            // Opens ABOVE the "?" so it never covers the value/stat below it.
+            position: "absolute", bottom: "calc(100% + 7px)", right: -2, zIndex: 60,
             width: 200, padding: "8px 10px", borderRadius: 8,
             background: "var(--color-charcoal)", color: "white",
             fontSize: 11, lineHeight: 1.5, fontWeight: 400,
@@ -303,9 +304,34 @@ function HelpTip({ text }: { text: string }) {
             boxShadow: "0 8px 24px rgba(31,33,26,0.25)", pointerEvents: "none",
           }}>
           {text}
+          {/* little pointer toward the "?" */}
+          <span style={{
+            position: "absolute", top: "100%", right: 6,
+            width: 0, height: 0,
+            borderLeft: "5px solid transparent", borderRight: "5px solid transparent",
+            borderTop: "5px solid var(--color-charcoal)",
+          }} />
         </span>
       )}
     </span>
+  );
+}
+
+// Shared connection header used across every Presence sub-tab so the
+// connected-account row reads identically: green dot · account · provider ·
+// Connected · Disconnect.
+function ConnectionBar({ name, providerLabel, onDisconnect }: {
+  name: string; providerLabel?: string; onDisconnect: () => void;
+}) {
+  return (
+    <div style={{ background:"var(--color-off-white)", borderBottom:"0.5px solid var(--color-border)", padding:"10px 24px", display:"flex", alignItems:"center", gap:8, fontSize:12 }}>
+      <div style={{ width:6, height:6, borderRadius:"50%", background:"var(--color-sage)", flexShrink:0 }} />
+      <span style={{ fontWeight:600, color:"var(--color-charcoal)" }}>{name}</span>
+      {providerLabel && <span style={{ color:"var(--color-grey)" }}>{providerLabel}</span>}
+      <div style={{ flex:1 }} />
+      <span style={{ color:"var(--color-sage)", fontSize:11 }}>Connected</span>
+      <button onClick={onDisconnect} style={{ fontSize:11, color:"var(--color-grey)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit" }}>Disconnect</button>
+    </div>
   );
 }
 
@@ -799,15 +825,11 @@ function WebsiteTab({ integration, onConnect, onDisconnect }: {
       {/* ── Connected: real stats ── */}
       {step === "connected" && (
       <>
-      <div style={{ background:"var(--color-off-white)", borderBottom:"0.5px solid var(--color-border)", padding:"10px 24px", display:"flex", alignItems:"center", gap:8, fontSize:12 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8, flex:1 }}>
-          <div style={{ width:6, height:6, borderRadius:"50%", background:"var(--color-sage)" }} />
-          <span style={{ fontWeight:600 }}>{(integration?.metadata?.property_name as string) ?? integration?.account_name ?? "Google Analytics"}</span>
-          <span style={{ color:"var(--color-grey)" }}>GA4</span>
-        </div>
-        <span style={{ color:"var(--color-sage)", fontSize:11 }}>Connected</span>
-        <button onClick={onDisconnect} style={{ fontSize:11, color:"var(--color-grey)", background:"none", border:"none", cursor:"pointer" }}>Disconnect</button>
-      </div>
+      <ConnectionBar
+        name={(integration?.metadata?.property_name as string) ?? integration?.account_name ?? "Google Analytics"}
+        providerLabel="GA4"
+        onDisconnect={onDisconnect}
+      />
       <div style={{ padding:"22px 24px", display:"flex", flexDirection:"column", gap:18, flex:1 }}>
         {noData ? (
           // Centered empty state, mirroring the brand EmptyState
@@ -1140,14 +1162,11 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
           not-connected case is handled inside the Instagram subtab body
           (which already has a richer connect CTA). */}
       {instagram && (
-        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 24px", borderBottom:"0.5px solid var(--color-border)", background:"var(--color-off-white)" }}>
-          <div style={{ width:6, height:6, borderRadius:"50%", background:"var(--color-sage)", flexShrink:0 }} />
-          <span style={{ fontSize:12, fontWeight:600, color:"var(--color-charcoal)" }}>{instagram.account_name ?? "@instagram"}</span>
-          {instagram.metadata.followers_count ? (
-            <span style={{ fontSize:11, color:"var(--color-grey)" }}>· {(instagram.metadata.followers_count as number).toLocaleString()} followers</span>
-          ) : null}
-          <button onClick={onDisconnect} className="ml-auto" style={{ padding:"4px 10px", border:"0.5px solid var(--color-border)", borderRadius:6, color:"var(--color-grey)", cursor:"pointer", fontSize:10, background:"transparent", fontFamily:"inherit" }}>Disconnect</button>
-        </div>
+        <ConnectionBar
+          name={instagram.account_name ?? "@instagram"}
+          providerLabel="Instagram"
+          onDisconnect={onDisconnect}
+        />
       )}
 
       {/* Subtabs — mirrors the parent module's tab vocabulary
@@ -1417,16 +1436,11 @@ function NewsletterTab({ integration, onConnect, onDisconnect, onRefreshed }: {
       ) : (
         /* ── Newsletter connected ── */
         <>
-        <div style={{ background:"var(--color-off-white)", borderBottom:"0.5px solid var(--color-border)", padding:"10px 24px", display:"flex", alignItems:"center", gap:8, fontSize:12 }}>
-          <div className="flex items-center justify-center rounded-md" style={{ width:18, height:18, background:C.amberL, color:C.amber }}><IcMail /></div>
-          <span style={{ fontWeight:600 }}>{integration.account_name ?? "Newsletter"}</span>
-          <span style={{ color:"var(--color-grey)", textTransform:"capitalize" }}>{integration.provider}</span>
-          <div className="flex items-center gap-2" style={{ marginLeft:"auto", color:"var(--color-sage)", fontSize:11 }}>
-            <div style={{ width:6, height:6, borderRadius:"50%", background:"var(--color-sage)" }} />
-            <span>Connected</span>
-          </div>
-          <button onClick={() => onDisconnect(integration.provider)} style={{ fontSize:11, color:"var(--color-grey)", background:"none", border:"none", cursor:"pointer" }}>Disconnect</button>
-        </div>
+        <ConnectionBar
+          name={integration.account_name ?? "Newsletter"}
+          providerLabel={PROVIDER_META[integration.provider as ConnectProvider]?.label ?? integration.provider}
+          onDisconnect={() => onDisconnect(integration.provider)}
+        />
         <div style={{ padding:"22px 24px", display:"flex", flexDirection:"column", gap:18, flex:1 }}>
         <div style={{ display:"flex", gap:12 }}>
           <StatCard label="Subscribers"
