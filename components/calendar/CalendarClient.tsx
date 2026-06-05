@@ -1152,7 +1152,7 @@ export default function CalendarClient({
     window.addEventListener("scheduling:refresh", loadLinks);
     return () => window.removeEventListener("scheduling:refresh", loadLinks);
   }, []);
-  const SCHED_PALETTE = ["#5f7d3f", "#039BE5", "#c93a6a", "#e8850d", "#6d4fa3"];
+  const SCHED_PALETTE = ["var(--color-sage)", "#039BE5", "#c93a6a", "#e8850d", "#6d4fa3"];
 
   const startCompose = useCallback((kind: SchedulingLinkKind) => {
     const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return "America/New_York"; } })();
@@ -3212,8 +3212,8 @@ export default function CalendarClient({
                   browsing (distinct from a plain grey dim). */}
               {compose && (
                 <div style={{
-                  position: "absolute", inset: 0, pointerEvents: "none", zIndex: 6,
-                  backgroundImage: "repeating-linear-gradient(45deg, rgba(95,125,63,0.05) 0 10px, rgba(95,125,63,0.11) 10px 20px)",
+                  position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0,
+                  backgroundImage: "repeating-linear-gradient(45deg, rgba(95,125,63,0.03) 0 10px, rgba(95,125,63,0.07) 10px 20px)",
                 }} />
               )}
               {visiblePanDays.map((day, colIdx) => {
@@ -3366,12 +3366,15 @@ export default function CalendarClient({
                           }
                         }
                         if (ranges.length === 0) return;
-                        const color = SCHED_PALETTE[li % SCHED_PALETTE.length];
+                        // Match the calendar the link sends invites from, so the
+                        // availability bar reads as "this calendar's open time".
+                        const color = (lk.target_calendar_id && calendarsById[lk.target_calendar_id]?.color)
+                          || SCHED_PALETTE[li % SCHED_PALETTE.length];
                         const myLane = lane++;
                         for (const [a, b] of ranges) {
                           const top = timeToY(Math.floor(a / 60), a % 60);
                           const bottom = timeToY(Math.floor(b / 60), b % 60);
-                          bars.push({ top, height: Math.max(8, bottom - top), color, lane: myLane, link: lk });
+                          bars.push({ top, height: Math.max(6, bottom - top), color, lane: myLane, link: lk });
                         }
                       });
                       return bars.map((bar, i) => (
@@ -3382,9 +3385,10 @@ export default function CalendarClient({
                           onClick={(e) => { e.stopPropagation(); startEditCompose(bar.link); }}
                           style={{
                             position: "absolute", top: `${bar.top}px`, height: `${bar.height}px`,
-                            left: `${3 + bar.lane * 7}px`, width: 6, borderRadius: 2,
-                            backgroundImage: `repeating-linear-gradient(45deg, ${bar.color} 0 3px, ${bar.color}40 3px 6px)`,
-                            cursor: "pointer", zIndex: 3,
+                            left: `${2 + bar.lane * 5}px`, width: 3.5, borderRadius: 2,
+                            backgroundImage: `repeating-linear-gradient(45deg, ${bar.color} 0 2px, transparent 2px 4px)`,
+                            backgroundColor: `color-mix(in srgb, ${bar.color} 14%, transparent)`,
+                            opacity: 0.85, cursor: "pointer", zIndex: 3,
                           }}
                         />
                       ));
