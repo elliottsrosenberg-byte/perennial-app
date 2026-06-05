@@ -631,7 +631,19 @@ export interface SchedulingBooking {
 }
 
 // ── Press ─────────────────────────────────────────────────────────────────────
-export type PressType = "feature" | "interview" | "mention" | "award" | "roundup" | "other";
+export type PressType = "feature" | "interview" | "mention" | "social" | "award" | "roundup" | "other";
+
+/** Flexible engagement metrics — applies to both editorial coverage and
+ *  social posts. All optional; only populated fields are shown. */
+export interface PressStats {
+  views?:       number;
+  reach?:       number;
+  impressions?: number;
+  clicks?:      number;
+  likes?:       number;
+  shares?:      number;
+  comments?:    number;
+}
 
 export interface PressMention {
   id: string;
@@ -642,5 +654,8 @@ export interface PressMention {
   type: PressType;
   published_at: string | null; // YYYY-MM-DD
   notes: string | null;
+  project_id: string | null;
+  contact_id: string | null;
+  stats: PressStats;
   created_at: string;
 }
