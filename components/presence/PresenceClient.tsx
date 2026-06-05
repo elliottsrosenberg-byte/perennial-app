@@ -339,18 +339,30 @@ function card(cn = "") { return `rounded-xl overflow-hidden ${cn}`; }
 // the explanation reads in the brand vocabulary across every Presence tab.
 function HelpTip({ text }: { text: string }) {
   const [show, setShow] = useState(false);
+  // Open above by default (so it doesn't cover the stat below), but flip to
+  // below when the chip is near the top of the viewport — otherwise the popup
+  // hides behind the sticky tab/header bar.
+  const [below, setBelow] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  function onEnter() {
+    const r = ref.current?.getBoundingClientRect();
+    setBelow(!!r && r.top < 150); // ~header height + popup height
+    setShow(true);
+  }
+
   return (
-    <span
+    <span ref={ref}
       style={{ position: "relative", display: "inline-flex" }}
-      onMouseEnter={() => setShow(true)}
+      onMouseEnter={onEnter}
       onMouseLeave={() => setShow(false)}>
       <span className="flex items-center justify-center rounded-full shrink-0"
         style={{ width: 14, height: 14, background: "var(--color-cream)", border: "0.5px solid rgba(31,33,26,0.13)", color: "var(--color-grey)", fontSize: 9, fontWeight: 700, cursor: "default" }}>?</span>
       {show && (
         <span role="tooltip"
           style={{
-            // Opens ABOVE the "?" so it never covers the value/stat below it.
-            position: "absolute", bottom: "calc(100% + 7px)", right: -2, zIndex: 60,
+            position: "absolute", right: -2, zIndex: 200,
+            ...(below ? { top: "calc(100% + 7px)" } : { bottom: "calc(100% + 7px)" }),
             width: 200, padding: "8px 10px", borderRadius: 8,
             background: "var(--color-charcoal)", color: "white",
             fontSize: 11, lineHeight: 1.5, fontWeight: 400,
@@ -358,12 +370,14 @@ function HelpTip({ text }: { text: string }) {
             boxShadow: "0 8px 24px rgba(31,33,26,0.25)", pointerEvents: "none",
           }}>
           {text}
-          {/* little pointer toward the "?" */}
+          {/* pointer toward the "?" — flips with the popup */}
           <span style={{
-            position: "absolute", top: "100%", right: 6,
+            position: "absolute", right: 6,
             width: 0, height: 0,
             borderLeft: "5px solid transparent", borderRight: "5px solid transparent",
-            borderTop: "5px solid var(--color-charcoal)",
+            ...(below
+              ? { bottom: "100%", borderBottom: "5px solid var(--color-charcoal)" }
+              : { top: "100%", borderTop: "5px solid var(--color-charcoal)" }),
           }} />
         </span>
       )}
@@ -2272,14 +2286,6 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId, recommendedTags = 
             </button>
           ))}
         </div>
-        {/* Suggest a listing — green primary; flags an opportunity for the
-            curators (review queue, not straight into the feed). */}
-        <button onClick={() => setSuggesting(true)} className="flex items-center gap-1.5 shrink-0"
-          style={{ padding:"6px 13px", fontSize:11.5, fontWeight:500, borderRadius:999, border:"none", background:"var(--color-sage)", color:"white", cursor:"pointer", fontFamily:"inherit" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-sage-hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-sage)")}>
-          <IcPlus /> Suggest a listing
-        </button>
       </div>
       {suggesting && <SuggestListingModal onClose={() => setSuggesting(false)} />}
 
