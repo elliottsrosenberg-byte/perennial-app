@@ -2,18 +2,37 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { PressMention, PressType } from "@/types/database";
-import { Plus, X, ExternalLink, Trash2, ChevronDown, Newspaper } from "lucide-react";
+import type { PressMention, PressType, PressStats } from "@/types/database";
+import { Plus, X, ExternalLink, Trash2, ChevronDown, Newspaper, ArrowRight } from "lucide-react";
+import Select from "@/components/ui/Select";
+import DatePicker from "@/components/ui/DatePicker";
 
 const TYPE_META: Record<PressType, { label: string; color: string; bg: string }> = {
   feature:   { label: "Feature",   color: "var(--color-sage)", bg: "rgba(155,163,122,0.14)" },
   interview: { label: "Interview", color: "#7f6f9c",           bg: "rgba(173,163,192,0.20)" },
+  social:    { label: "Social",    color: "#c13584",           bg: "rgba(193,53,132,0.12)" },
   award:     { label: "Award",     color: "#a37f12",           bg: "rgba(232,197,71,0.18)" },
   roundup:   { label: "Round-up",  color: "#2563ab",           bg: "rgba(37,99,171,0.12)" },
   mention:   { label: "Mention",   color: "var(--color-grey)", bg: "rgba(31,33,26,0.06)" },
   other:     { label: "Other",     color: "var(--color-grey)", bg: "rgba(31,33,26,0.06)" },
 };
-const TYPE_ORDER: PressType[] = ["feature", "interview", "award", "roundup", "mention", "other"];
+const TYPE_ORDER: PressType[] = ["feature", "interview", "social", "award", "roundup", "mention", "other"];
+
+const STAT_FIELDS: { key: keyof PressStats; label: string }[] = [
+  { key: "views",       label: "Views" },
+  { key: "reach",       label: "Reach" },
+  { key: "impressions", label: "Impressions" },
+  { key: "clicks",      label: "Clicks" },
+  { key: "likes",       label: "Likes" },
+  { key: "shares",      label: "Shares" },
+  { key: "comments",    label: "Comments" },
+];
+
+function fmtStat(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1) + "M";
+  if (n >= 1_000)     return (n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1) + "k";
+  return String(n);
+}
 
 const cardStyle: React.CSSProperties = {
   background: "var(--color-off-white)", border: "0.5px solid var(--color-border)",
@@ -111,6 +130,15 @@ export default function PressTab() {
                     {m.publication}
                   </div>
                   {m.title && <div style={{ fontSize: 11, color: "var(--color-grey)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.title}</div>}
+                  {m.stats && Object.values(m.stats).some((v) => v) && (
+                    <div style={{ display: "flex", gap: 8, marginTop: 3, flexWrap: "wrap" }}>
+                      {STAT_FIELDS.filter((f) => m.stats[f.key]).map((f) => (
+                        <span key={f.key} style={{ fontSize: 10, color: "var(--color-grey)" }}>
+                          <span style={{ fontWeight: 700, color: "var(--color-charcoal)" }}>{fmtStat(m.stats[f.key]!)}</span> {f.label.toLowerCase()}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {m.published_at && <span style={{ fontSize: 11, color: "var(--color-grey)", flexShrink: 0 }}>{fmtDate(m.published_at)}</span>}
                 {m.url && (
@@ -158,7 +186,7 @@ function SummaryChip({ label, value, color }: { label: string; value: number; co
 }
 
 // ── PR Playbook content ───────────────────────────────────────────────────────
-interface Play { title: string; summary: string; points: string[]; }
+interface Play { title: string; summary: string; points: string[]; link?: { href: string; label: string }; }
 const PLAYBOOK: Play[] = [
   {
     title: "Build a press kit that gets opened",
@@ -170,6 +198,7 @@ const PLAYBOOK: Play[] = [
       "A high-res logo and a headshot.",
       "One easy contact line and a single Drive/Dropbox link to everything.",
     ],
+    link: { href: "/resources", label: "Assemble your kit in Resources" },
   },
   {
     title: "Pitch like a human",
@@ -217,35 +246,66 @@ function PlaybookCard({ item }: { item: Play }) {
         <ChevronDown size={15} style={{ color: "var(--color-grey)", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s ease", flexShrink: 0 }} />
       </button>
       {open && (
-        <ul style={{ listStyle: "none", margin: 0, padding: "0 16px 14px 16px", display: "flex", flexDirection: "column", gap: 7 }}>
-          {item.points.map((pt, i) => (
-            <li key={i} style={{ display: "flex", gap: 9, fontSize: 12, color: "var(--color-charcoal)", lineHeight: 1.5 }}>
-              <span style={{ width: 5, height: 5, borderRadius: 99, background: "var(--color-sage)", marginTop: 6, flexShrink: 0 }} />
-              <span>{pt}</span>
-            </li>
-          ))}
-        </ul>
+        <div style={{ padding: "0 16px 14px 16px" }}>
+          <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 7 }}>
+            {item.points.map((pt, i) => (
+              <li key={i} style={{ display: "flex", gap: 9, fontSize: 12, color: "var(--color-charcoal)", lineHeight: 1.5 }}>
+                <span style={{ width: 5, height: 5, borderRadius: 99, background: "var(--color-sage)", marginTop: 6, flexShrink: 0 }} />
+                <span>{pt}</span>
+              </li>
+            ))}
+          </ul>
+          {item.link && (
+            <a href={item.link.href}
+              className="inline-flex items-center gap-1.5 mt-3"
+              style={{ fontSize: 11.5, fontWeight: 600, color: "var(--color-sage)", textDecoration: "none" }}>
+              {item.link.label} <ArrowRight size={13} />
+            </a>
+          )}
+        </div>
       )}
     </div>
   );
 }
 
 // ── Log coverage modal ────────────────────────────────────────────────────────
+interface ProjectOpt { id: string; title: string }
+interface ContactOpt { id: string; first_name: string | null; last_name: string | null }
+
 function LogCoverageModal({ onClose, onCreated }: { onClose: () => void; onCreated: (row: PressMention) => void }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date();
   const [publication, setPublication] = useState("");
   const [title, setTitle]             = useState("");
   const [url, setUrl]                 = useState("");
   const [type, setType]               = useState<PressType>("feature");
-  const [date, setDate]               = useState(today);
+  const [date, setDate]               = useState<Date | null>(today);
+  const [notes, setNotes]             = useState("");
+  const [projectId, setProjectId]     = useState("");
+  const [contactId, setContactId]     = useState("");
+  const [stats, setStats]             = useState<PressStats>({});
+  const [projects, setProjects]       = useState<ProjectOpt[]>([]);
+  const [contacts, setContacts]       = useState<ContactOpt[]>([]);
+  const [showStats, setShowStats]     = useState(false);
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState<string | null>(null);
 
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.from("projects").select("id, title").order("title").then(({ data }) => setProjects((data as ProjectOpt[]) ?? []));
+    supabase.from("contacts").select("id, first_name, last_name").eq("archived", false).order("first_name").then(({ data }) => setContacts((data as ContactOpt[]) ?? []));
+  }, []);
+
   const inputCls = "w-full px-3 py-2 text-[13px] rounded-lg focus:outline-none";
   const inputStyle = { background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" } as const;
+  const isSocial = type === "social";
+
+  function setStat(key: keyof PressStats, raw: string) {
+    const n = raw.replace(/[^0-9]/g, "");
+    setStats((s) => { const next = { ...s }; if (n === "") delete next[key]; else next[key] = Number(n); return next; });
+  }
 
   async function save() {
-    if (!publication.trim()) { setError("Add the publication name."); return; }
+    if (!publication.trim()) { setError(isSocial ? "Add the account or platform." : "Add the publication name."); return; }
     setSaving(true); setError(null);
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -256,45 +316,88 @@ function LogCoverageModal({ onClose, onCreated }: { onClose: () => void; onCreat
       title: title.trim() || null,
       url: url.trim() || null,
       type,
-      published_at: date || null,
+      published_at: date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}` : null,
+      notes: notes.trim() || null,
+      project_id: projectId || null,
+      contact_id: contactId || null,
+      stats,
     }).select("*").single();
     if (err || !data) { setError(err?.message ?? "Couldn't save."); setSaving(false); return; }
     onCreated(data as PressMention);
   }
 
+  const projectOpts = [{ value: "", label: "No project" }, ...projects.map((p) => ({ value: p.id, label: p.title }))];
+  const contactOpts = [{ value: "", label: "No contact" }, ...contacts.map((c) => ({ value: c.id, label: `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "Unnamed" }))];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(31,33,26,0.5)" }}
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 py-10" style={{ background: "rgba(31,33,26,0.5)" }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-sm rounded-2xl shadow-2xl" style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}>
+      <div className="w-full max-w-md rounded-2xl shadow-2xl" style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}>
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
           <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>Log coverage</h2>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg" style={{ color: "var(--color-grey)" }}><X size={14} /></button>
         </div>
-        <div className="px-5 py-4 space-y-4">
-          <div>
-            <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Publication *</label>
-            <input value={publication} onChange={(e) => setPublication(e.target.value)} placeholder="e.g. Dezeen" className={inputCls} style={inputStyle} autoFocus />
-          </div>
-          <div>
-            <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Headline</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title of the piece" className={inputCls} style={inputStyle} />
-          </div>
+        <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Type</label>
-              <select value={type} onChange={(e) => setType(e.target.value as PressType)} className={inputCls} style={{ ...inputStyle, appearance: "auto" }}>
-                {TYPE_ORDER.map((t) => <option key={t} value={t}>{TYPE_META[t].label}</option>)}
-              </select>
+              <Select value={type} onChange={(v) => setType(v as PressType)} options={TYPE_ORDER.map((t) => ({ value: t, label: TYPE_META[t].label }))} />
             </div>
             <div className="flex-1">
               <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Date</label>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} style={{ ...inputStyle, appearance: "auto" }} />
+              <DatePicker value={date} onChange={setDate} />
             </div>
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>{isSocial ? "Account / platform *" : "Publication *"}</label>
+            <input value={publication} onChange={(e) => setPublication(e.target.value)} placeholder={isSocial ? "e.g. @sightunseen on Instagram" : "e.g. Dezeen"} className={inputCls} style={inputStyle} autoFocus />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>{isSocial ? "Caption / post" : "Headline"}</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={isSocial ? "What the post said" : "Title of the piece"} className={inputCls} style={inputStyle} />
           </div>
           <div>
             <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Link</label>
             <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" className={inputCls} style={inputStyle} />
           </div>
+          <div>
+            <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Description</label>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Context, why it matters, what was covered…" className={`${inputCls} resize-none`} style={inputStyle} />
+          </div>
+          <div className="flex gap-3">
+            <div className="flex-1 min-w-0">
+              <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Project</label>
+              <Select value={projectId} onChange={setProjectId} options={projectOpts} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Contact</label>
+              <Select value={contactId} onChange={setContactId} options={contactOpts} />
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div>
+            <button onClick={() => setShowStats((s) => !s)} className="flex items-center gap-1 text-[11px] font-medium" style={{ color: "var(--color-sage)" }}>
+              <ChevronDown size={12} style={{ transform: showStats ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+              {showStats ? "Hide" : "Add"} statistics
+            </button>
+            {showStats && (
+              <>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  {STAT_FIELDS.map((f) => (
+                    <div key={f.key}>
+                      <label className="block text-[10px] mb-0.5" style={{ color: "var(--color-grey)" }}>{f.label}</label>
+                      <input inputMode="numeric" value={stats[f.key] ?? ""} onChange={(e) => setStat(f.key, e.target.value)} placeholder="0" className={inputCls} style={inputStyle} />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] mt-2" style={{ color: "var(--color-grey)" }}>
+                  Enter what you have. Auto-pulling reach from connected platforms is coming.
+                </p>
+              </>
+            )}
+          </div>
+
           {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
         </div>
         <div className="flex items-center justify-end gap-2 px-5 py-4" style={{ borderTop: "0.5px solid var(--color-border)" }}>
