@@ -2103,21 +2103,10 @@ export default function CalendarClient({
 
           {upcomingTasks.length === 0 && unscheduledTasks.length === 0 && (
             <div style={{ padding: "12px 14px 16px" }}>
-              <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 5 }}>No upcoming tasks</p>
-              <p style={{ fontSize: 11, lineHeight: 1.6, color: "var(--color-text-tertiary)", marginBottom: 12 }}>
-                Tasks with a due date show up here and on the calendar grid below. Add one for any follow-up, deadline, or thing you don&apos;t want to forget.
+              <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 4 }}>No upcoming tasks</p>
+              <p style={{ fontSize: 11, lineHeight: 1.6, color: "var(--color-text-tertiary)" }}>
+                Add a task for any follow-up or deadline you don&apos;t want to forget.
               </p>
-              <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-grey)", marginBottom: 6 }}>Tips</p>
-              {[
-                "Tasks linked to a project or contact carry that context everywhere.",
-                "Ash can create tasks for you — try \"remind me to follow up with X next Thursday\".",
-                "Open tasks roll up to the contact's Tasks tab and the project's Tasks tab too.",
-              ].map((tip, i) => (
-                <div key={i} style={{ display: "flex", gap: 7, marginBottom: 6, alignItems: "flex-start" }}>
-                  <span style={{ fontSize: 9, fontWeight: 700, color: "var(--color-sage)", flexShrink: 0, marginTop: 2 }}>{i + 1}</span>
-                  <p style={{ fontSize: 10, lineHeight: 1.55, color: "#6b6860" }}>{tip}</p>
-                </div>
-              ))}
             </div>
           )}
 
@@ -2663,7 +2652,7 @@ export default function CalendarClient({
                   style={{
                     width: dayPx > 0 ? `${dayPx}px` : undefined,
                     flex: dayPx > 0 ? "0 0 auto" : 1,
-                    borderLeft: "0.5px solid var(--color-border)",
+                    borderLeft: "0.5px solid var(--color-border-strong)",
                     background: restBg,
                   }}
                   onClick={() => setViewDate(day)}
@@ -2753,7 +2742,7 @@ export default function CalendarClient({
                   style={{
                     width: dayPx > 0 ? `${dayPx}px` : undefined,
                     flex: dayPx > 0 ? "0 0 auto" : 1,
-                    borderLeft: "0.5px solid var(--color-border)",
+                    borderLeft: "0.5px solid var(--color-border-strong)",
                     padding: "3px 3px", display: "flex", flexDirection: "column", gap: 2,
                     background: taskDrag
                       ? "rgba(155,163,122,0.04)"
@@ -2991,7 +2980,7 @@ export default function CalendarClient({
                       }}
                       style={{
                         gridColumn: i + 2, gridRow: 1,
-                        borderLeft: "0.5px solid var(--color-border)",
+                        borderLeft: "0.5px solid var(--color-border-strong)",
                         padding: "3px 3px",
                         display: "flex", flexDirection: "column", gap: 2,
                         minHeight: 28,
