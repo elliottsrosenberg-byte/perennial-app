@@ -1152,7 +1152,7 @@ export default function CalendarClient({
     window.addEventListener("scheduling:refresh", loadLinks);
     return () => window.removeEventListener("scheduling:refresh", loadLinks);
   }, []);
-  const SCHED_PALETTE = ["var(--color-sage)", "#039BE5", "#c93a6a", "#e8850d", "#6d4fa3"];
+  const SCHED_PALETTE = ["#5f7d3f", "#039BE5", "#c93a6a", "#e8850d", "#6d4fa3"];
 
   const startCompose = useCallback((kind: SchedulingLinkKind) => {
     const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return "America/New_York"; } })();
@@ -3207,10 +3207,14 @@ export default function CalendarClient({
 
             {/* Day columns */}
             <div style={{ flex: 1, display: "flex", position: "relative" }}>
-              {/* Compose-mode wash — a faint tint over the whole grid signals
-                  the user is painting availability, not browsing. */}
+              {/* Compose-mode wash — a faint green diagonal hatch over the
+                  whole grid signals the user is painting availability, not
+                  browsing (distinct from a plain grey dim). */}
               {compose && (
-                <div style={{ position: "absolute", inset: 0, background: "var(--color-sage)", opacity: 0.05, pointerEvents: "none", zIndex: 6 }} />
+                <div style={{
+                  position: "absolute", inset: 0, pointerEvents: "none", zIndex: 6,
+                  backgroundImage: "repeating-linear-gradient(45deg, rgba(95,125,63,0.05) 0 10px, rgba(95,125,63,0.11) 10px 20px)",
+                }} />
               )}
               {visiblePanDays.map((day, colIdx) => {
                 const today = isToday(day);
@@ -3344,7 +3348,7 @@ export default function CalendarClient({
                         cover events. Hidden while composing (the compose
                         windows show instead). */}
                     {!compose && (() => {
-                      const bars: { top: number; height: number; color: string; lane: number }[] = [];
+                      const bars: { top: number; height: number; color: string; lane: number; link: SchedulingLink }[] = [];
                       let lane = 0;
                       schedLinks.forEach((lk, li) => {
                         if (!lk.active) return;
@@ -3367,17 +3371,22 @@ export default function CalendarClient({
                         for (const [a, b] of ranges) {
                           const top = timeToY(Math.floor(a / 60), a % 60);
                           const bottom = timeToY(Math.floor(b / 60), b % 60);
-                          bars.push({ top, height: Math.max(6, bottom - top), color, lane: myLane });
+                          bars.push({ top, height: Math.max(8, bottom - top), color, lane: myLane, link: lk });
                         }
                       });
                       return bars.map((bar, i) => (
-                        <div key={`av${i}`} title="Available for booking" style={{
-                          position: "absolute", top: `${bar.top}px`, height: `${bar.height}px`,
-                          left: `${2 + bar.lane * 5}px`, width: 3.5, borderRadius: 2,
-                          backgroundImage: `repeating-linear-gradient(45deg, ${bar.color} 0 2px, transparent 2px 4px)`,
-                          backgroundColor: `color-mix(in srgb, ${bar.color} 14%, transparent)`,
-                          opacity: 0.8, pointerEvents: "none", zIndex: 3,
-                        }} />
+                        <div
+                          key={`av${i}`}
+                          title={`${bar.link.title} — click to edit`}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => { e.stopPropagation(); startEditCompose(bar.link); }}
+                          style={{
+                            position: "absolute", top: `${bar.top}px`, height: `${bar.height}px`,
+                            left: `${3 + bar.lane * 7}px`, width: 6, borderRadius: 2,
+                            backgroundImage: `repeating-linear-gradient(45deg, ${bar.color} 0 3px, ${bar.color}40 3px 6px)`,
+                            cursor: "pointer", zIndex: 3,
+                          }}
+                        />
                       ));
                     })()}
 

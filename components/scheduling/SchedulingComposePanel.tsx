@@ -173,8 +173,24 @@ export default function SchedulingComposePanel({ compose, setCompose, onSaved, o
   const isEdit = !!compose.id;
   const tzOptions = [...new Set([compose.timezone, ...COMMON_TZS])].map((z) => ({ value: z, label: z.replace(/_/g, " ") }));
   const targetOptions = writableCals.length
-    ? writableCals.map((c) => ({ value: c.id, label: c.account_email ? `${c.name} · ${c.account_email}` : c.name }))
+    ? writableCals.map((c) => ({
+        value: c.id,
+        // The primary calendar is usually named after the account email — don't
+        // repeat it. Only append the account when it adds information.
+        label: c.account_email && c.account_email !== c.name ? `${c.name} · ${c.account_email}` : c.name,
+      }))
     : [{ value: "", label: "No writable calendar" }];
+
+  // Conflict calendars grouped by account, so each account's calendars nest
+  // under it.
+  const calsByAccount = (() => {
+    const groups = new Map<string, CalOpt[]>();
+    for (const c of allCals) {
+      const key = c.account_email ?? "Calendars";
+      (groups.get(key) ?? groups.set(key, []).get(key)!).push(c);
+    }
+    return [...groups.entries()];
+  })();
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -216,7 +232,7 @@ export default function SchedulingComposePanel({ compose, setCompose, onSaved, o
                 {d}m
               </button>
             ))}
-            <button onClick={() => setCustomDur(true)}
+            <button onClick={() => setCustomDur((v) => !v)}
               className="rounded-md px-2 py-1 text-[12px] transition-colors"
               style={customDur
                 ? { background: "var(--color-sage)", color: "#fff" }
@@ -252,12 +268,19 @@ export default function SchedulingComposePanel({ compose, setCompose, onSaved, o
             <Toggle checked={compose.avoid_conflicts} onChange={() => set("avoid_conflicts", !compose.avoid_conflicts)} />
           </div>
           {compose.avoid_conflicts && allCals.length > 0 && (
-            <div className="mt-2 space-y-1.5 rounded-lg p-2.5" style={{ background: "var(--color-cream)" }}>
+            <div className="mt-2 space-y-2 rounded-lg p-2.5" style={{ background: "var(--color-cream)" }}>
               <p className="text-[10px]" style={{ color: "var(--color-text-tertiary)" }}>Hide times that conflict with:</p>
-              {allCals.map((c) => (
-                <div key={c.id} className="flex items-center gap-2">
-                  <Checkbox checked={isChecked(c.id)} onChange={() => toggleConflictCal(c.id)} />
-                  <span className="truncate text-[12px]" style={{ color: "var(--color-text-secondary)" }}>{c.name}</span>
+              {calsByAccount.map(([account, cals]) => (
+                <div key={account}>
+                  <p className="mb-0.5 truncate text-[10px] font-semibold" style={{ color: "var(--color-text-tertiary)" }}>{account}</p>
+                  <div className="space-y-1 pl-1">
+                    {cals.map((c) => (
+                      <div key={c.id} className="flex items-center gap-2">
+                        <Checkbox checked={isChecked(c.id)} onChange={() => toggleConflictCal(c.id)} />
+                        <span className="truncate text-[12px]" style={{ color: "var(--color-text-secondary)" }}>{c.name}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
