@@ -190,8 +190,6 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
               border: "0.5px solid var(--color-border)",
               boxShadow: "0 2px 8px rgba(31,33,26,0.04)",
             }}>
-            {/* Module-keyed accent stripe along the top edge */}
-            <div style={{ height: 3, background: s.accent, opacity: 0.85 }} />
             <div className="p-4 flex flex-col gap-1.5">
               <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>{s.label}</p>
               <p className="text-[28px] font-bold leading-none tracking-tight tabular-nums"
@@ -213,7 +211,6 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
       <div className="flex gap-4 flex-1">
         {/* Time card */}
         <div className={`${card} flex-1`} style={cardStyle}>
-          <div style={{ height: 3, background: "var(--color-sage)", opacity: 0.85 }} />
           <div className={cardHead} style={cardHeadStyle}>
             <span className="flex-1" style={cardTitleStyle}>
               Time · {now.toLocaleString("en-US", { month: "long" })}
@@ -263,7 +260,6 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
         <div className="flex flex-col gap-4" style={{ width: 272 }}>
           {/* Invoices card */}
           <div className={card} style={cardStyle}>
-            <div style={{ height: 3, background: overdueCount > 0 ? "var(--color-red-orange)" : "#2563ab", opacity: 0.85 }} />
             <div className={cardHead} style={cardHeadStyle}>
               <span className="flex-1" style={cardTitleStyle}>Invoices</span>
               <button onClick={() => onSwitchTab("invoices")} className="text-[11px]" style={{ color: "var(--color-sage)" }}>See all →</button>
@@ -300,7 +296,6 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
 
           {/* Expenses card */}
           <div className={card} style={cardStyle}>
-            <div style={{ height: 3, background: "var(--color-yellow)", opacity: 0.85 }} />
             <div className={cardHead} style={cardHeadStyle}>
               <span className="flex-1" style={cardTitleStyle}>Recent expenses</span>
               {/* Expenses no longer has its own tab; Banking is the home for
