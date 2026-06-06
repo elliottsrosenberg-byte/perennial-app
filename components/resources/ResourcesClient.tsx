@@ -1099,40 +1099,79 @@ const SOURCE_LABEL: Record<LinkedFileSource, string> = {
   invoice: "Invoice", receipt: "Finance", studio: "Settings",
 };
 
+function isImageFile(url: string, type: string | null): boolean {
+  if ((type ?? "").toLowerCase().startsWith("image/")) return true;
+  const path = url.split("?")[0].toLowerCase();
+  return /\.(png|jpe?g|gif|webp|svg|avif|heic)$/.test(path);
+}
+
+// Tinted icon block for non-image files, color-keyed by kind.
+function FileTypeThumb({ kind }: { kind: FileKind }) {
+  const map: Record<FileKind, { bg: string; fg: string; label: string }> = {
+    image: { bg: C.darkAccentL, fg: C.darkAccent, label: "IMG" },
+    pdf:   { bg: "rgba(220,62,13,0.10)", fg: "#c0420d", label: "PDF" },
+    doc:   { bg: C.accentL, fg: C.darkAccent, label: "DOC" },
+    other: { bg: "var(--color-cream)", fg: "var(--color-grey)", label: "FILE" },
+  };
+  const m = map[kind];
+  return (
+    <div style={{ width:"100%", height:"100%", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:6, background:m.bg, color:m.fg }}>
+      <IcDocSm />
+      <span style={{ fontSize:9, fontWeight:700, letterSpacing:"0.06em" }}>{m.label}</span>
+    </div>
+  );
+}
+
+// A previewable file card — image thumbnail when possible, typed block
+// otherwise. Used by the linked-file (invoices/receipts/…) grids.
+function FilePreviewCard({ name, url, fileType, caption, deepLink, deepLabel }: {
+  name: string; url: string; fileType: string | null; caption: string;
+  deepLink?: string; deepLabel?: string;
+}) {
+  const img = isImageFile(url, fileType);
+  return (
+    <div style={{ display:"flex", flexDirection:"column", background:"var(--color-off-white)", borderRadius:10, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)" }}>
+      <a href={url} target="_blank" rel="noreferrer" style={{ display:"block", height:124, background:"var(--color-cream)", textDecoration:"none" }}>
+        {img
+          ? <img src={url} alt={name} loading="lazy" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
+          : <FileTypeThumb kind={fileKind(name, fileType)} />}
+      </a>
+      <div style={{ padding:"9px 11px" }}>
+        <div style={{ fontSize:12, fontWeight:600, color:"var(--color-charcoal)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</div>
+        <div style={{ fontSize:10, color:"var(--color-grey)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", marginTop:1 }}>{caption}</div>
+        {deepLink && (
+          <a href={deepLink} style={{ display:"inline-block", marginTop:7, fontSize:10, color:"var(--color-grey)", textDecoration:"none", padding:"3px 8px", border:"0.5px solid var(--color-border)", borderRadius:6 }}>
+            {deepLabel ?? "View in source"} →
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function LinkedFilesView({ source, files }: { source: LinkedFileSource; files: LinkedFile[] }) {
   const sourceLabel = SOURCE_LABEL[source] ?? "Source";
   if (files.length === 0) {
     return (
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:200, gap:8, color:"var(--color-grey)" }}>
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" opacity="0.4"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
-        <p style={{ fontSize:12 }}>No files attached to {sourceLabel.toLowerCase()}s yet</p>
-        <p style={{ fontSize:11 }}>Files you attach to a {sourceLabel.toLowerCase()} will appear here automatically.</p>
+        <p style={{ fontSize:12 }}>Nothing here yet</p>
+        <p style={{ fontSize:11 }}>Files from this source will appear here automatically.</p>
       </div>
     );
   }
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(180px, 1fr))", gap:12 }}>
       {files.map(f => (
-        <div key={f.id} className="flex items-center gap-3"
-          style={{ padding:"11px 15px", background:"var(--color-off-white)", borderRadius:10, boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)" }}>
-          <a href={f.file_url} target="_blank" rel="noreferrer"
-            className="flex items-center gap-3"
-            style={{ flex:1, minWidth:0, textDecoration:"none", color:"inherit" }}>
-            <div style={{ width:28, height:28, borderRadius:7, background:C.darkAccentL, color:C.darkAccent, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-              <IcFileSm />
-            </div>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:12, fontWeight:600, color:"var(--color-charcoal)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.file_name}</div>
-              <div style={{ fontSize:10, color:"var(--color-grey)" }}>
-                {sourceLabel}: {f.source_name} · {new Date(f.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
-              </div>
-            </div>
-          </a>
-          <a href={deepLinkForLinkedFile(f)}
-            style={{ fontSize:10, color:"var(--color-grey)", textDecoration:"none", padding:"4px 9px", border:"0.5px solid var(--color-border)", borderRadius:6, whiteSpace:"nowrap" }}>
-            View in {sourceLabel} →
-          </a>
-        </div>
+        <FilePreviewCard
+          key={f.id}
+          name={f.file_name}
+          url={f.file_url}
+          fileType={f.file_type}
+          caption={`${f.source_name} · ${new Date(f.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}`}
+          deepLink={deepLinkForLinkedFile(f)}
+          deepLabel={`View in ${sourceLabel}`}
+        />
       ))}
     </div>
   );
