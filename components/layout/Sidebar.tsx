@@ -14,6 +14,7 @@ import {
   CheckSquare, ClipboardList,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { type BaseTheme, resolvedTheme, isAutoTheme, paintCurrentTheme, setBaseTheme } from "@/lib/theme";
 import Menu, { type MenuContent } from "@/components/ui/Menu";
 
 // ─── Nav groups ───────────────────────────────────────────────────────────────
@@ -104,7 +105,7 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   const [expanded,    setExpanded]    = useState(true);
-  const [theme,       setTheme]       = useState<"light" | "dark">("light");
+  const [theme,       setTheme]       = useState<BaseTheme>("light"); // the resolved (painted) theme
   const [userEmail,    setUserEmail]    = useState<string | null>(null);
   const [profileName,  setProfileName]  = useState<string | null>(null);
   const [studioName,   setStudioName]   = useState<string | null>(null);
@@ -116,9 +117,19 @@ export default function Sidebar() {
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const saved = (localStorage.getItem("perennial-theme") ?? "light") as "light" | "dark";
-    setTheme(saved);
-    document.documentElement.dataset.theme = saved;
+    setTheme(paintCurrentTheme());
+    // Re-sync when the preference changes elsewhere (Settings auto toggle).
+    function onChange() { setTheme(paintCurrentTheme()); }
+    window.addEventListener("perennial-theme-changed", onChange);
+    // In auto mode, re-evaluate on a timer / focus so the app flips at the
+    // night boundary without a reload.
+    const id = setInterval(() => { if (isAutoTheme()) setTheme(paintCurrentTheme()); }, 60_000);
+    window.addEventListener("focus", onChange);
+    return () => {
+      window.removeEventListener("perennial-theme-changed", onChange);
+      window.removeEventListener("focus", onChange);
+      clearInterval(id);
+    };
   }, []);
 
   // Expose the current sidebar width as a CSS variable so fixed-position
@@ -175,10 +186,8 @@ export default function Sidebar() {
   // Close tooltip when expanding
   useEffect(() => { if (expanded) setTooltip(null); }, [expanded]);
 
-  function setThemeMode(next: "light" | "dark") {
-    setTheme(next);
-    document.documentElement.dataset.theme = next;
-    localStorage.setItem("perennial-theme", next);
+  function setThemeMode(next: BaseTheme) {
+    setBaseTheme(next); // also turns auto off; broadcast updates `theme`
   }
 
   async function handleLogout() {
