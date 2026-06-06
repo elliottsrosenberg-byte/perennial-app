@@ -12,6 +12,8 @@ import {
   isUploadableLogoType,
 } from "@/lib/uploads/studio-logo";
 import { COUNTRIES, BUSINESS_TYPES, composeStudioAddress } from "@/lib/profile/business";
+import { isAutoTheme, setAutoTheme } from "@/lib/theme";
+import Toggle from "@/components/ui/Toggle";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -264,6 +266,31 @@ function GroupTitle({ children }: { children: React.ReactNode }) {
     >
       {children}
     </p>
+  );
+}
+
+// Auto dark-mode toggle — client-only (stored in localStorage, not the
+// profile). When on, the app follows the time of day, switching to dark at
+// night. Manually picking light/dark in the sidebar turns this off.
+function AutoThemeToggle() {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    setOn(isAutoTheme());
+    const h = (e: Event) => setOn(!!(e as CustomEvent<{ auto: boolean }>).detail.auto);
+    window.addEventListener("perennial-theme-changed", h);
+    return () => window.removeEventListener("perennial-theme-changed", h);
+  }, []);
+  return (
+    <div className="flex items-center justify-between rounded-xl px-4 py-3.5"
+      style={{ border: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
+      <div>
+        <p className="text-[13px] font-medium" style={{ color: "var(--color-charcoal)" }}>Automatic dark mode</p>
+        <p className="text-[11px] mt-0.5" style={{ color: "var(--color-grey)" }}>
+          Switch to dark after 7pm and back to light in the morning, on your device&apos;s clock.
+        </p>
+      </div>
+      <Toggle checked={on} onChange={() => { const next = !on; setOn(next); setAutoTheme(next); }} />
+    </div>
   );
 }
 
@@ -975,9 +1002,18 @@ export default function SettingsPage() {
               <>
                 <h2 className="text-[15px] font-semibold mb-1" style={{ color: "var(--color-charcoal)" }}>Preferences</h2>
                 <p className="text-[12px] mb-7" style={{ color: "var(--color-grey)" }}>
-                  Localization and defaults for finance, dates, and time.
+                  Appearance, localization, and defaults for finance, dates, and time.
                 </p>
 
+                <GroupTitle>Appearance</GroupTitle>
+                <div className="mb-1">
+                  <AutoThemeToggle />
+                  <p className="text-[11px] mt-2" style={{ color: "var(--color-grey)" }}>
+                    Light and dark are switched from the bottom-left of the sidebar.
+                  </p>
+                </div>
+
+                <Divider />
                 <GroupTitle>Localization</GroupTitle>
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
