@@ -521,6 +521,18 @@ export interface Resource {
    *  bank_transactions row, so a re-upload or delete from Banking can
    *  find + replace/remove the same row. */
   bank_transaction_id: string | null;
+  /** When set, this resource lives inside a user-created folder rather than
+   *  loose in its category. */
+  folder_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResourceFolder {
+  id: string;
+  user_id: string;
+  name: string;
+  position: number;
   created_at: string;
   updated_at: string;
 }
