@@ -1164,17 +1164,20 @@ function FileTypeThumb({ kind }: { kind: FileKind }) {
 
 // A previewable file card — image thumbnail when possible, typed block
 // otherwise. Used by the linked-file (invoices/receipts/…) grids.
-function FilePreviewCard({ name, url, fileType, caption, deepLink, deepLabel }: {
+function FilePreviewCard({ name, url, fileType, caption, deepLink, deepLabel, kind }: {
   name: string; url: string; fileType: string | null; caption: string;
   deepLink?: string; deepLabel?: string;
+  /** Override the derived kind (used by the unified All-files list). */
+  kind?: FileKind;
 }) {
-  const img = isImageFile(url, fileType);
+  const resolvedKind = kind ?? fileKind(name, fileType);
+  const img = kind ? kind === "image" : isImageFile(url, fileType);
   return (
     <div style={{ display:"flex", flexDirection:"column", background:"var(--color-off-white)", borderRadius:10, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)" }}>
       <a href={url} target="_blank" rel="noreferrer" style={{ display:"block", height:124, background:"var(--color-cream)", textDecoration:"none" }}>
         {img
           ? <img src={url} alt={name} loading="lazy" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
-          : <FileTypeThumb kind={fileKind(name, fileType)} />}
+          : <FileTypeThumb kind={resolvedKind} />}
       </a>
       <div style={{ padding:"9px 11px" }}>
         <div style={{ fontSize:12, fontWeight:600, color:"var(--color-charcoal)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</div>
@@ -1218,9 +1221,10 @@ function LinkedFilesView({ source, files }: { source: LinkedFileSource; files: L
 }
 
 // ─── All files — unified, searchable, type-filterable index ───────────────────
-function AllFilesView({ files, search, filter, onFilter }: {
+function AllFilesView({ files, search, filter, onFilter, view }: {
   files: UnifiedFile[]; search: string;
   filter: "all" | FileKind; onFilter: (f: "all" | FileKind) => void;
+  view: "grid" | "list";
 }) {
   const q = search.trim().toLowerCase();
   const searched = q
@@ -1253,6 +1257,12 @@ function AllFilesView({ files, search, filter, onFilter }: {
         <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:200, gap:8, color:"var(--color-grey)" }}>
           <IcFileSm />
           <p style={{ fontSize:12 }}>{q ? "No files match your search" : "No files yet — upload one in any category"}</p>
+        </div>
+      ) : view === "grid" ? (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(180px, 1fr))", gap:12 }}>
+          {shown.map(f => (
+            <FilePreviewCard key={f.id} name={f.name} url={f.url} fileType={null} kind={f.kind} caption={f.sourceLabel} />
+          ))}
         </div>
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
@@ -1534,7 +1544,7 @@ export default function ResourcesClient({
                 : sectionMeta[cat].sub}
             </div>
           </div>
-          {catKey && (
+          {(catKey || cat === "all-files") && (
             <div style={{ display:"flex", border:"0.5px solid var(--color-border)", borderRadius:6, overflow:"hidden" }}>
               {(["grid","list"] as const).map(v => (
                 <button key={v} onClick={() => setView(v)} style={{ padding:"4px 9px", fontSize:11, color:view===v?"var(--color-charcoal)":"var(--color-grey)", cursor:"pointer", background:view===v?"var(--color-cream)":"transparent", border:"none", display:"flex", alignItems:"center" }}>
@@ -1563,7 +1573,7 @@ export default function ResourcesClient({
           )}
 
           {cat === "all-files" && (
-            <AllFilesView files={allFiles} search={search} filter={fileFilter} onFilter={setFileFilter} />
+            <AllFilesView files={allFiles} search={search} filter={fileFilter} onFilter={setFileFilter} view={view} />
           )}
 
           {isLinks && (
