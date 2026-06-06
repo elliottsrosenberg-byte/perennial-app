@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import ResourcesClient from "@/components/resources/ResourcesClient";
 import ResourcesIntroModal from "@/components/tour/resources/ResourcesIntroModal";
 import ResourcesTooltipTour from "@/components/tour/resources/ResourcesTooltipTour";
-import type { Resource, ResourceLink, ResourceFolder } from "@/types/database";
+import type { Resource, ResourceLink, ResourceFolder, ResourceFolderItem } from "@/types/database";
 import {
   hydrateResourcesFromProfile,
   type HydrationProfile,
@@ -26,6 +26,7 @@ export default async function ResourcesPage(
     { data: resources },
     { data: links },
     { data: folders },
+    { data: folderItems },
     { data: profile },
     { data: contactFiles },
     { data: orgFiles },
@@ -38,6 +39,7 @@ export default async function ResourcesPage(
     supabase.from("resources").select("*").order("position", { ascending: true }),
     supabase.from("resource_links").select("*").order("created_at", { ascending: true }),
     supabase.from("resource_folders").select("*").order("position", { ascending: true }).order("created_at", { ascending: true }),
+    supabase.from("resource_folder_items").select("*"),
     user
       ? supabase.from("profiles").select(
           "studio_name, display_name, tagline, bio, location, practice_types, selling_channels, work_types, perennial_goals, logo_url",
@@ -215,6 +217,7 @@ export default async function ResourcesPage(
         initialResources={hydratedResources}
         initialLinks={(links ?? []) as ResourceLink[]}
         initialFolders={(folders ?? []) as ResourceFolder[]}
+        initialFolderItems={(folderItems ?? []) as ResourceFolderItem[]}
         initialLinkedFiles={linkedFiles}
         showOnboardingBanner={showOnboardingBanner}
         studioName={(profile as HydrationProfile | null)?.studio_name ?? null}
