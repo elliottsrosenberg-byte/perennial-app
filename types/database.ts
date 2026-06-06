@@ -80,6 +80,23 @@ export interface Note {
   opportunity?: { id: string; title: string; category: string } | null;
 }
 
+export interface NoteFolder {
+  id: string;
+  user_id: string;
+  name: string;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NoteFolderItem {
+  id: string;
+  folder_id: string;
+  note_id: string;
+  user_id: string;
+  created_at: string;
+}
+
 // `Reminder` was merged into `Task`. The `reminders` table still exists in
 // Postgres with historical rows but nothing in the app reads from it; the
 // table can be dropped in a follow-up migration once we're sure nothing
