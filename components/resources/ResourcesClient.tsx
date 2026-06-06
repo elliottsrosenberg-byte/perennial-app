@@ -445,11 +445,13 @@ function CardPreview({ type, data }: { type: string; data?: Record<string, any> 
 }
 
 // ─── Resource card ────────────────────────────────────────────────────────────
-function ResourceCardItem({ card, onOpenModal, onUploadFile, tourTarget }: {
+function ResourceCardItem({ card, onOpenModal, onUploadFile, tourTarget, centered }: {
   card: ResourceCard;
   onOpenModal: (k: string) => void;
   onUploadFile: (cardId: string, file: File) => Promise<void>;
   tourTarget?: string;
+  /** Center the card's text content (used in the Pillars grid). */
+  centered?: boolean;
 }) {
   const isEmpty = card.status === "empty";
 
@@ -479,7 +481,7 @@ function ResourceCardItem({ card, onOpenModal, onUploadFile, tourTarget }: {
       }}
     >
       <CardPreview type={card.previewType} data={card.previewData} />
-      <div style={{ padding:"13px 15px", display:"flex", flexDirection:"column", gap:4, flex:1 }}>
+      <div style={{ padding:"13px 15px", display:"flex", flexDirection:"column", gap:4, flex:1, alignItems: centered ? "center" : undefined, textAlign: centered ? "center" : undefined }}>
         <div style={{ fontSize:13, fontWeight:600, color: isEmpty ? "var(--color-grey)" : "var(--color-charcoal)" }}>{card.name}</div>
         {card.meta
           ? <div style={{ fontSize:10.5, color:"var(--color-grey)" }}>{card.meta}</div>
@@ -791,6 +793,106 @@ function LinksView({ links, onAddLink }: { links: ResourceLink[]; onAddLink: () 
   );
 }
 
+// A simple rail nav row (used by the Linked section: Links / Receipts / Invoices).
+function LinkedNavRow({ icon, label, count, active, onClick, tourTarget }: {
+  icon: React.ReactNode; label: string; count: number; active: boolean; onClick: () => void; tourTarget?: string;
+}) {
+  return (
+    <div onClick={onClick} data-tour-target={tourTarget} className="flex items-center gap-2"
+      style={{ padding:"8px 14px", cursor:"pointer", borderLeft:`2.5px solid ${active?"var(--color-sage)":"transparent"}`, background:active?"var(--color-cream)":undefined }}
+      onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "var(--color-cream)"; }}
+      onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+      <div style={{ width:22, height:22, borderRadius:5, background:"var(--color-cream)", color:"var(--color-grey)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{icon}</div>
+      <span style={{ fontSize:12, flex:1, fontWeight:active?600:400, color:active?"var(--color-charcoal)":"var(--color-grey)" }}>{label}</span>
+      <span style={{ fontSize:9, color:"var(--color-grey)" }}>{count}</span>
+    </div>
+  );
+}
+
+// Compact picker for browsing files by their parent entity (a project, a
+// contact, an organization, …). One dropdown instead of expandable groups —
+// "compressed but considered".
+const ENTITY_PICK_SOURCES: { source: LinkedFileSource; label: string }[] = [
+  { source: "project",      label: "Projects" },
+  { source: "contact",      label: "Contacts" },
+  { source: "organization", label: "Organizations" },
+];
+function EntityPicker({ linkedFiles, activeEntity, onSelectEntity }: {
+  linkedFiles: LinkedFile[]; activeEntity: string | null;
+  onSelectEntity: (source: LinkedFileSource, id: string, name: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function h(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    if (open) document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+
+  const groups = ENTITY_PICK_SOURCES.map(({ source, label }) => {
+    const m = new Map<string, { id: string; name: string; count: number }>();
+    for (const f of linkedFiles) {
+      if (f.source !== source) continue;
+      const e = m.get(f.source_id) ?? { id: f.source_id, name: f.source_name, count: 0 };
+      e.count++; m.set(f.source_id, e);
+    }
+    return { source, label, entities: [...m.values()].sort((a, b) => a.name.localeCompare(b.name)) };
+  }).filter(g => g.entities.length > 0);
+
+  const total = groups.reduce((n, g) => n + g.entities.length, 0);
+  const current = (() => {
+    if (!activeEntity) return null;
+    for (const g of groups) for (const e of g.entities) if (`${g.source}:${e.id}` === activeEntity) return e.name;
+    return null;
+  })();
+
+  if (total === 0) return <div style={{ padding:"2px 14px 8px", fontSize:11, color:"var(--color-text-tertiary)" }}>No entity files yet.</div>;
+
+  return (
+    <div ref={ref} style={{ padding:"2px 12px 8px", position:"relative" }}>
+      <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2"
+        style={{ width:"100%", padding:"7px 10px", borderRadius:8, border:"0.5px solid var(--color-border)", background:"var(--color-cream)", cursor:"pointer", fontFamily:"inherit", fontSize:11.5, color: current ? "var(--color-charcoal)" : "var(--color-grey)" }}>
+        <IcFolderSm />
+        <span style={{ flex:1, textAlign:"left", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{current ?? "Choose a project, contact…"}</span>
+        <span style={{ color:"var(--color-grey)", fontSize:10 }}>▾</span>
+      </button>
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 2px)", left:12, right:12, zIndex:30, background:"var(--color-off-white)", border:"0.5px solid var(--color-border)", borderRadius:8, boxShadow:"0 8px 28px rgba(0,0,0,0.16)", overflow:"hidden", maxHeight:320, display:"flex", flexDirection:"column" }}>
+          <div style={{ padding:7, borderBottom:"0.5px solid var(--color-border)" }}>
+            <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
+              style={{ width:"100%", fontSize:11.5, padding:"5px 8px", borderRadius:6, border:"0.5px solid var(--color-border)", background:"var(--color-warm-white)", color:"var(--color-charcoal)", outline:"none", fontFamily:"inherit" }} />
+          </div>
+          <div style={{ overflowY:"auto" }}>
+            {groups.map(g => {
+              const ents = g.entities.filter(e => e.name.toLowerCase().includes(q.toLowerCase()));
+              if (!ents.length) return null;
+              return (
+                <div key={g.source}>
+                  <div style={{ padding:"6px 11px 2px", fontSize:9, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.05em", color:"var(--color-grey)" }}>{g.label}</div>
+                  {ents.map(e => {
+                    const sel = activeEntity === `${g.source}:${e.id}`;
+                    return (
+                      <button key={e.id} onClick={() => { onSelectEntity(g.source, e.id, e.name); setOpen(false); }}
+                        className="flex items-center gap-2"
+                        style={{ width:"100%", textAlign:"left", padding:"7px 11px", fontSize:11.5, background: sel ? "var(--color-cream)" : "none", border:"none", cursor:"pointer", color:"var(--color-charcoal)", fontFamily:"inherit" }}
+                        onMouseEnter={ev => { if (!sel) ev.currentTarget.style.background = "var(--color-cream)"; }}
+                        onMouseLeave={ev => { if (!sel) ev.currentTarget.style.background = "none"; }}>
+                        <span style={{ flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{e.name}</span>
+                        <span style={{ fontSize:9, color:"var(--color-grey)" }}>{e.count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Category nav ─────────────────────────────────────────────────────────────
 function CategoryNav({
   active, resources, links, linkedFiles,
@@ -818,7 +920,6 @@ function CategoryNav({
   /** `${source}:${id}` of the entity currently being browsed, if any. */
   activeEntity: string | null;
 }) {
-  const [expanded, setExpanded] = useState<Set<LinkedFileSource>>(new Set());
   const [newFolder, setNewFolder] = useState<string | null>(null); // null = not creating
   // Count by source so the rail can hide groups with zero files (unless the
   // user has explicitly pinned the group visible).
@@ -878,20 +979,6 @@ function CategoryNav({
           );
         })}
 
-        <div style={{ height:"0.5px", background:"var(--color-border)", margin:"6px 12px" }} />
-        <div style={{ fontSize:9, fontWeight:600, color:"var(--color-grey)", textTransform:"uppercase", letterSpacing:"0.07em", padding:"8px 14px 3px" }}>Linked</div>
-
-        <div data-tour-target="resources.links-nav" onClick={() => onSelect("links")} className="flex items-center gap-2"
-          style={{ padding:"8px 14px", cursor:"pointer", borderLeft:`2.5px solid ${active==="links"?"var(--color-sage)":"transparent"}`, background:active==="links"?"var(--color-cream)":undefined }}
-          onMouseEnter={e => { if (active !== "links") (e.currentTarget as HTMLElement).style.background = "var(--color-cream)"; }}
-          onMouseLeave={e => { if (active !== "links") (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
-          <div style={{ width:22, height:22, borderRadius:5, background:"var(--color-cream)", color:"var(--color-grey)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-            <IcLink />
-          </div>
-          <span style={{ fontSize:12, flex:1, fontWeight:active==="links"?600:400, color:active==="links"?"var(--color-charcoal)":"var(--color-grey)" }}>Links</span>
-          <span style={{ fontSize:9, color:"var(--color-grey)" }}>{links.length}</span>
-        </div>
-
         {/* Folders — user-created containers. */}
         <div style={{ height:"0.5px", background:"var(--color-border)", margin:"6px 12px" }} />
         <div className="flex items-center" style={{ padding:"8px 14px 3px", gap:6 }}>
@@ -933,83 +1020,20 @@ function CategoryNav({
           </div>
         )}
 
-        {/* Linked from elsewhere — cross-module file index.
-            Sub-groups are hidden when their count is 0 unless the user has
-            pinned them visible (eye-toggle). Pattern mirrors how Tasks groups
-            collapse empty buckets. */}
-        {(anyLinked || Object.values(linkedVisible).some(Boolean)) && (
-          <>
-            <div style={{ height:"0.5px", background:"var(--color-border)", margin:"6px 12px" }} />
-            <div className="flex items-center" style={{ padding:"8px 14px 3px", gap:6 }}>
-              <div style={{ fontSize:9, fontWeight:600, color:"var(--color-grey)", textTransform:"uppercase", letterSpacing:"0.07em", flex:1 }}>
-                Linked from elsewhere
-              </div>
-            </div>
-            {LINKED_FILE_GROUPS.map(g => {
-              const count = countBySource[g.source];
-              const visiblePref = linkedVisible[g.source];
-              // Hide groups with zero files unless the user has toggled them on.
-              if (count === 0 && !visiblePref) return null;
-              const id = linkedCatId(g.source);
-              // Distinct parent entities within this source (one project, one
-              // contact, …) so the user can browse files by entity.
-              const entMap = new Map<string, { id: string; name: string; count: number }>();
-              for (const f of linkedFiles) {
-                if (f.source !== g.source) continue;
-                const e = entMap.get(f.source_id) ?? { id: f.source_id, name: f.source_name, count: 0 };
-                e.count++; entMap.set(f.source_id, e);
-              }
-              const entities = [...entMap.values()].sort((a, b) => a.name.localeCompare(b.name));
-              const canExpand = entities.length > 1;
-              const isOpen = expanded.has(g.source);
-              const groupActive = active === id && !activeEntity;
-              return (
-                <div key={g.source}>
-                  <div onClick={() => onSelect(id)} className="flex items-center gap-2"
-                    style={{ padding:"7px 14px", cursor:"pointer", borderLeft:`2.5px solid ${groupActive?"var(--color-sage)":"transparent"}`, background:groupActive?"var(--color-cream)":undefined }}
-                    onMouseEnter={e => { if (!groupActive) (e.currentTarget as HTMLElement).style.background = "var(--color-cream)"; }}
-                    onMouseLeave={e => { if (!groupActive) (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
-                    {canExpand ? (
-                      <button onClick={e => { e.stopPropagation(); setExpanded(prev => { const n = new Set(prev); n.has(g.source) ? n.delete(g.source) : n.add(g.source); return n; }); }}
-                        style={{ background:"none", border:"none", cursor:"pointer", color:"var(--color-grey)", padding:0, width:18, height:18, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                        <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isOpen ? "rotate(90deg)" : "none", transition:"transform .12s" }}><path d="M5 3l6 5-6 5"/></svg>
-                      </button>
-                    ) : (
-                      <div style={{ width:18, height:18, borderRadius:5, background:"var(--color-cream)", color:"var(--color-grey)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                        <IcFolderSm />
-                      </div>
-                    )}
-                    <span style={{ fontSize:11, flex:1, fontWeight:groupActive?600:400, color:groupActive?"var(--color-charcoal)":"var(--color-grey)" }}>{g.label}</span>
-                    <span style={{ fontSize:9, color:"var(--color-grey)" }}>{count}</span>
-                    <button
-                      onClick={e => { e.stopPropagation(); onToggleLinked(g.source); }}
-                      title={visiblePref ? "Hide when empty" : "Always show"}
-                      style={{ background:"none", border:"none", color: visiblePref ? "var(--color-sage)" : "var(--color-grey)", cursor:"pointer", opacity: visiblePref ? 1 : 0.5, padding:2 }}
-                    >
-                      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
-                        <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5S1 8 1 8z"/>
-                        <circle cx="8" cy="8" r="2"/>
-                      </svg>
-                    </button>
-                  </div>
-                  {canExpand && isOpen && entities.map(ent => {
-                    const entKey = `${g.source}:${ent.id}`;
-                    const entActive = activeEntity === entKey;
-                    return (
-                      <div key={entKey} onClick={() => onSelectEntity(g.source, ent.id, ent.name)} className="flex items-center gap-2"
-                        style={{ padding:"5px 14px 5px 34px", cursor:"pointer", borderLeft:`2.5px solid ${entActive?"var(--color-sage)":"transparent"}`, background:entActive?"var(--color-cream)":undefined }}
-                        onMouseEnter={e => { if (!entActive) (e.currentTarget as HTMLElement).style.background = "var(--color-cream)"; }}
-                        onMouseLeave={e => { if (!entActive) (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
-                        <span style={{ fontSize:11, flex:1, fontWeight:entActive?600:400, color:entActive?"var(--color-charcoal)":"var(--color-grey)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{ent.name}</span>
-                        <span style={{ fontSize:9, color:"var(--color-grey)" }}>{ent.count}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </>
-        )}
+        {/* Linked — saved links + the finance-owned files (receipts, invoices). */}
+        <div style={{ height:"0.5px", background:"var(--color-border)", margin:"6px 12px" }} />
+        <div style={{ fontSize:9, fontWeight:600, color:"var(--color-grey)", textTransform:"uppercase", letterSpacing:"0.07em", padding:"8px 14px 3px" }}>Linked</div>
+        <LinkedNavRow icon={<IcLink />} label="Links" count={links.length} active={active === "links" && !activeEntity} onClick={() => onSelect("links")} tourTarget="resources.links-nav" />
+        {(["receipt", "invoice"] as LinkedFileSource[]).map(src => (
+          <LinkedNavRow key={src} icon={<IcFileSm />} label={src === "receipt" ? "Receipts" : "Invoices"}
+            count={countBySource[src] ?? 0} active={active === linkedCatId(src) && !activeEntity} onClick={() => onSelect(linkedCatId(src))} />
+        ))}
+
+        {/* From an entity — pick a project / contact / organization to see all
+            of its files on the right. Compressed into one considered picker. */}
+        <div style={{ height:"0.5px", background:"var(--color-border)", margin:"6px 12px" }} />
+        <div style={{ fontSize:9, fontWeight:600, color:"var(--color-grey)", textTransform:"uppercase", letterSpacing:"0.07em", padding:"8px 14px 3px" }}>From an entity</div>
+        <EntityPicker linkedFiles={linkedFiles} activeEntity={activeEntity} onSelectEntity={onSelectEntity} />
       </div>
     </div>
   );
@@ -1966,6 +1990,7 @@ export default function ResourcesClient({
                       onOpenModal={openModalByKey}
                       onUploadFile={uploadFileToResource}
                       tourTarget={i === 0 ? "resources.first-card" : undefined}
+                      centered
                     />
                   ))}
                 </div>
