@@ -1096,6 +1096,10 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
         onMouseLeave={() => setHovered(false)}
         style={{
           position: "relative",
+          // Lift the whole note above its siblings while its folder dropdown is
+          // open, so the dropdown (trapped in the actions' transform context)
+          // paints over the notes below.
+          zIndex: folderMenuOpen ? 50 : undefined,
           width: "100%", textAlign: "left", padding: "10px 14px",
           borderBottom: "0.5px solid var(--color-border)",
           borderLeft: `3px solid ${active ? "var(--color-sage)" : "transparent"}`,
@@ -1587,7 +1591,7 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
           </div>
 
           {/* Folders — bottom half of the rail, as 2-wide cards. */}
-          <div style={{ flexShrink: 0, maxHeight: "46%", display: "flex", flexDirection: "column", borderTop: "0.5px solid var(--color-border)", background: "var(--color-surface-sunken)" }}>
+          <div style={{ flexShrink: 0, maxHeight: "46%", display: "flex", flexDirection: "column", borderTop: "0.5px solid var(--color-border)" }}>
             <div style={{ display: "flex", alignItems: "center", padding: "8px 12px 4px", flexShrink: 0 }}>
               <span style={{ flex: 1, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-tertiary)" }}>Folders</span>
             </div>
@@ -1611,21 +1615,15 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
             </div>
           </div>
 
-          {/* Footer */}
-          <div style={{ flexShrink: 0, padding: "8px 10px", borderTop: "0.5px solid var(--color-border)", display: "flex", gap: 6 }}>
-            <button
-              onClick={createNote}
-              style={{ flex: 1, fontSize: 11, padding: "6px", borderRadius: 6, border: "0.5px solid var(--color-border)", background: "transparent", color: "var(--color-text-tertiary)", cursor: "pointer", fontFamily: "inherit" }}
-              onMouseEnter={e => { e.currentTarget.style.background = "var(--color-off-white)"; e.currentTarget.style.color = "var(--color-text-secondary)"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}
-            >+ New note</button>
+          {/* New folder — bottom of the folders panel. */}
+          <div style={{ flexShrink: 0, padding: "0 10px 10px" }}>
             <button
               onClick={() => setNewFolder("")}
               title="New folder"
-              style={{ flex: 1, fontSize: 11, padding: "6px", borderRadius: 6, border: "0.5px solid var(--color-border)", background: "transparent", color: "var(--color-text-tertiary)", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}
-              onMouseEnter={e => { e.currentTarget.style.background = "var(--color-off-white)"; e.currentTarget.style.color = "var(--color-text-secondary)"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}
-            ><FolderPlus size={11} strokeWidth={1.75} /> New folder</button>
+              style={{ width: "100%", fontSize: 11, padding: "7px", borderRadius: 7, border: "0.5px solid var(--color-border)", background: "var(--color-off-white)", color: "var(--color-text-secondary)", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}
+              onMouseEnter={e => { e.currentTarget.style.background = "var(--color-cream)"; e.currentTarget.style.color = "var(--color-text-primary)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "var(--color-off-white)"; e.currentTarget.style.color = "var(--color-text-secondary)"; }}
+            ><FolderPlus size={12} strokeWidth={1.75} /> New folder</button>
           </div>
         </div>
 
