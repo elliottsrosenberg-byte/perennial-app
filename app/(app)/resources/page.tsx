@@ -9,7 +9,10 @@ import {
 } from "@/lib/resources/onboarding-hydrate";
 import type { LinkedFile } from "@/lib/resources/linked-files";
 
-export default async function ResourcesPage() {
+export default async function ResourcesPage(
+  { searchParams }: { searchParams: Promise<{ cat?: string }> },
+) {
+  const { cat: initialCat } = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -212,6 +215,7 @@ export default async function ResourcesPage() {
         initialLinkedFiles={linkedFiles}
         showOnboardingBanner={showOnboardingBanner}
         studioName={(profile as HydrationProfile | null)?.studio_name ?? null}
+        initialCat={initialCat ?? null}
       />
       <ResourcesIntroModal />
       <ResourcesTooltipTour />
