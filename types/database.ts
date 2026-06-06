@@ -537,11 +537,13 @@ export interface ResourceFolder {
   updated_at: string;
 }
 
-/** Many-to-many membership: a resource file grouped into a folder. */
+/** Many-to-many membership: any file grouped into a folder, identified by a
+ *  stable key ('res:<id>' for a Resources row, or a linked-file id). */
 export interface ResourceFolderItem {
   id: string;
   folder_id: string;
-  resource_id: string;
+  resource_id: string | null;
+  item_key: string;
   user_id: string;
   created_at: string;
 }

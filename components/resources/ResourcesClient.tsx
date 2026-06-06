@@ -55,8 +55,8 @@ interface UnifiedFile {
   sourceLabel: string;
   href:        string;
   created_at:  string;
-  /** Set for files that are Resources rows (so they get the ⋯ menu). */
-  resourceId?: string;
+  /** Folder-membership key ('res:<id>' or a linked-file id). */
+  key:         string;
 }
 
 const LINKED_GROUP_LABEL: Record<LinkedFileSource, string> = Object.fromEntries(
@@ -1211,15 +1211,25 @@ const SOURCE_LABEL: Record<LinkedFileSource, string> = {
 
 // ⋯ actions menu for a resource file: add/remove from folders (groups),
 // create a new folder with the file in it, and delete the file.
-function FileActionsMenu({ resourceId, folders, memberOf, onAddToFolder, onRemoveFromFolder, onAddToNewFolder, onDelete }: {
-  resourceId: string;
+function FileActionsMenu({ fileKey, isResource, folders, memberOf, currentFolderId, sourceLabel, onAddToFolder, onRemoveFromFolder, onAddToNewFolder, onDelete, onShowInSource }: {
+  fileKey: string;
+  isResource: boolean;
   folders: ResourceFolder[];
   memberOf: Set<string>;
+  /** When set, the file is being viewed inside this folder. */
+  currentFolderId?: string | null;
+  /** Where the file actually lives (e.g. "Project", "Finance") for the
+   *  "Show in …" label. */
+  sourceLabel?: string;
   onAddToFolder: (folderId: string) => void;
   onRemoveFromFolder: (folderId: string) => void;
   onAddToNewFolder: (name: string) => void;
-  onDelete: () => void;
+  /** Only present for deletable (Resources-owned) files. */
+  onDelete?: () => void;
+  /** Jump to where the file is attached / managed. */
+  onShowInSource?: () => void;
 }) {
+  void fileKey;
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -1270,17 +1280,36 @@ function FileActionsMenu({ resourceId, folders, memberOf, onAddToFolder, onRemov
             </button>
           )}
           <div style={{ height:"0.5px", background:"var(--color-border)", margin:"3px 0" }} />
-          <button onClick={() => { setConfirm(true); setOpen(false); }} style={{ ...item, color:"var(--color-red-orange)" }}
-            onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
-            onMouseLeave={e => e.currentTarget.style.background = "none"}>
-            <Trash size={13} /> Delete file
-          </button>
+          {/* In a folder: the destructive action just removes the grouping. */}
+          {currentFolderId && (
+            <button onClick={() => { onRemoveFromFolder(currentFolderId); setOpen(false); }} style={item}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+              onMouseLeave={e => e.currentTarget.style.background = "none"}>
+              <IcFolderSm /> Remove from this folder
+            </button>
+          )}
+          {onShowInSource && (
+            <button onClick={() => { onShowInSource(); setOpen(false); }} style={item}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+              onMouseLeave={e => e.currentTarget.style.background = "none"}>
+              <IcLink /> Show in {sourceLabel ?? "source"}
+            </button>
+          )}
+          {onDelete && (
+            <button onClick={() => { setConfirm(true); setOpen(false); }} style={{ ...item, color:"var(--color-red-orange)" }}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+              onMouseLeave={e => e.currentTarget.style.background = "none"}>
+              <Trash size={13} /> Delete file
+            </button>
+          )}
         </div>
       )}
-      <ConfirmDialog open={confirm} title="Delete this file?"
-        body="The file is permanently removed from Resources and any folders it's in."
-        confirmLabel="Delete file" tone="danger"
-        onConfirm={() => { setConfirm(false); onDelete(); }} onCancel={() => setConfirm(false)} />
+      {onDelete && (
+        <ConfirmDialog open={confirm} title="Delete this file?"
+          body="The file is permanently removed from Resources and any folders it's in."
+          confirmLabel="Delete file" tone="danger"
+          onConfirm={() => { setConfirm(false); onDelete(); }} onCancel={() => setConfirm(false)} />
+      )}
     </div>
   );
 }
@@ -1349,7 +1378,7 @@ function FilePreviewCard({ name, url, fileType, caption, deepLink, deepLabel, ki
   );
 }
 
-function LinkedFilesView({ source, files }: { source: LinkedFileSource; files: LinkedFile[] }) {
+function LinkedFilesView({ source, files, renderMenu }: { source: LinkedFileSource; files: LinkedFile[]; renderMenu?: (key: string) => React.ReactNode }) {
   const sourceLabel = SOURCE_LABEL[source] ?? "Source";
   if (files.length === 0) {
     return (
@@ -1371,6 +1400,7 @@ function LinkedFilesView({ source, files }: { source: LinkedFileSource; files: L
           caption={`${f.source_name} · ${new Date(f.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}`}
           deepLink={deepLinkForLinkedFile(f)}
           deepLabel={`View in ${sourceLabel}`}
+          menu={renderMenu ? renderMenu(f.id) : undefined}
         />
       ))}
     </div>
@@ -1421,7 +1451,7 @@ function AllFilesView({ files, search, filter, onFilter, view, renderMenu }: {
   files: UnifiedFile[]; search: string;
   filter: "all" | FileKind; onFilter: (f: "all" | FileKind) => void;
   view: "grid" | "list";
-  renderMenu?: (resourceId: string) => React.ReactNode;
+  renderMenu?: (key: string) => React.ReactNode;
 }) {
   const q = search.trim().toLowerCase();
   const searched = q
@@ -1459,7 +1489,7 @@ function AllFilesView({ files, search, filter, onFilter, view, renderMenu }: {
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(180px, 1fr))", gap:12 }}>
           {shown.map(f => (
             <FilePreviewCard key={f.id} name={f.name} url={f.url} fileType={null} kind={f.kind} caption={f.sourceLabel}
-              menu={f.resourceId && renderMenu ? renderMenu(f.resourceId) : undefined} />
+              menu={renderMenu ? renderMenu(f.key) : undefined} />
           ))}
         </div>
       ) : (
@@ -1586,48 +1616,91 @@ export default function ResourcesClient({
     await createClient().from("resource_folders").delete().eq("id", id); // join rows cascade
   }
 
-  // ── Folder membership (folders are groups: a file can be in many) ──────────────
-  async function addToFolder(resourceId: string, fid: string) {
-    if (folderItems.some(it => it.folder_id === fid && it.resource_id === resourceId)) return;
+  // ── Folder membership (folders group ANY file, keyed by item_key) ─────────────
+  // Key scheme: 'res:<id>' for a Resources row; the linked-file id otherwise
+  // ('invoice-att:<id>', 'receipt-exp:<id>', 'contact:<id>', …).
+  async function addToFolder(key: string, fid: string) {
+    if (folderItems.some(it => it.folder_id === fid && it.item_key === key)) return;
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     const { data } = await supabase.from("resource_folder_items")
-      .insert({ folder_id: fid, resource_id: resourceId, user_id: user.id }).select().single();
+      .insert({ folder_id: fid, item_key: key, resource_id: key.startsWith("res:") ? key.slice(4) : null, user_id: user.id })
+      .select().single();
     if (data) setFolderItems(prev => [...prev, data as ResourceFolderItem]);
   }
-  async function removeFromFolder(resourceId: string, fid: string) {
-    setFolderItems(prev => prev.filter(it => !(it.folder_id === fid && it.resource_id === resourceId)));
-    await createClient().from("resource_folder_items").delete().eq("folder_id", fid).eq("resource_id", resourceId);
+  async function removeFromFolder(key: string, fid: string) {
+    setFolderItems(prev => prev.filter(it => !(it.folder_id === fid && it.item_key === key)));
+    await createClient().from("resource_folder_items").delete().eq("folder_id", fid).eq("item_key", key);
   }
-  async function addToNewFolder(resourceId: string, name: string) {
+  async function addToNewFolder(key: string, name: string) {
     const fid = await createFolder(name);
-    if (fid) await addToFolder(resourceId, fid);
+    if (fid) await addToFolder(key, fid);
   }
-  async function deleteResource(resourceId: string) {
-    setResources(prev => prev.filter(r => r.id !== resourceId));
-    setFolderItems(prev => prev.filter(it => it.resource_id !== resourceId));
-    await createClient().from("resources").delete().eq("id", resourceId);
+  async function deleteResource(key: string) {
+    if (!key.startsWith("res:")) return; // only Resources rows are deletable here
+    const id = key.slice(4);
+    setResources(prev => prev.filter(r => r.id !== id));
+    setFolderItems(prev => prev.filter(it => it.item_key !== key));
+    await createClient().from("resources").delete().eq("id", id);
   }
-  /** Folder ids a given resource belongs to. */
-  const foldersForResource = (resourceId: string) =>
-    new Set(folderItems.filter(it => it.resource_id === resourceId).map(it => it.folder_id));
+  /** Folder ids a given file (by key) belongs to. */
+  const foldersForKey = (key: string) =>
+    new Set(folderItems.filter(it => it.item_key === key).map(it => it.folder_id));
   const folderCounts = useMemo(() => {
     const m: Record<string, number> = {};
     for (const it of folderItems) m[it.folder_id] = (m[it.folder_id] ?? 0) + 1;
     return m;
   }, [folderItems]);
 
-  // Menu for a resource file (used in All files + folder views).
-  const fileMenu = (resourceId: string) => (
-    <FileActionsMenu
-      resourceId={resourceId} folders={folders} memberOf={foldersForResource(resourceId)}
-      onAddToFolder={fid => addToFolder(resourceId, fid)}
-      onRemoveFromFolder={fid => removeFromFolder(resourceId, fid)}
-      onAddToNewFolder={name => addToNewFolder(resourceId, name)}
-      onDelete={() => deleteResource(resourceId)}
-    />
-  );
+  // Resolve any item_key → a renderable file descriptor. Resources rows and the
+  // cross-module linked files share one map so folders can hold either.
+  const fileByKey = useMemo(() => {
+    const m = new Map<string, { key: string; name: string; url: string; kind: FileKind; isResource: boolean; deepLink?: string; sourceLabel: string }>();
+    for (const r of resources) {
+      const url = r.file_urls?.[0] ?? "";
+      m.set(`res:${r.id}`, {
+        key: `res:${r.id}`, name: r.name, url, kind: fileKind(url || r.name, null),
+        isResource: true, sourceLabel: CAT_META[r.category as SeedCatId]?.label ?? "Resources",
+      });
+    }
+    for (const f of initialLinkedFiles) {
+      m.set(f.id, {
+        key: f.id, name: f.file_name, url: f.file_url, kind: fileKind(f.file_name, f.file_type),
+        isResource: false, deepLink: deepLinkForLinkedFile(f), sourceLabel: SOURCE_LABEL[f.source] ?? "source",
+      });
+    }
+    return m;
+  }, [resources, initialLinkedFiles]);
+
+  function showInSource(key: string, deepLink?: string) {
+    if (deepLink) { window.location.href = deepLink; return; }
+    // A Resources file's "original" home is its pillar (where it's deletable);
+    // fall back to All files.
+    setFolderId(null); setEntityFilter(null);
+    const r = key.startsWith("res:") ? resources.find(x => x.id === key.slice(4)) : null;
+    setCat(r && (["operations", "brand", "press", "design"] as string[]).includes(r.category) ? (r.category as CatId) : "all-files");
+  }
+
+  // Build the ⋯ menu for any file. `currentFolderId` set → folder context
+  // (destructive action is "Remove from folder"); otherwise home context
+  // (Resources files get Delete; linked files get "Show in <source>").
+  const fileMenu = (key: string, opts?: { currentFolderId?: string | null }) => {
+    const info = fileByKey.get(key);
+    const isResource = info?.isResource ?? key.startsWith("res:");
+    return (
+      <FileActionsMenu
+        fileKey={key} isResource={isResource} folders={folders} memberOf={foldersForKey(key)}
+        currentFolderId={opts?.currentFolderId ?? null}
+        sourceLabel={info?.sourceLabel}
+        onAddToFolder={fid => addToFolder(key, fid)}
+        onRemoveFromFolder={fid => removeFromFolder(key, fid)}
+        onAddToNewFolder={name => addToNewFolder(key, name)}
+        onDelete={isResource ? () => deleteResource(key) : undefined}
+        onShowInSource={!isResource || opts?.currentFolderId ? () => showInSource(key, info?.deepLink) : undefined}
+      />
+    );
+  };
 
   // Per-source visibility for the "Linked from elsewhere" rail. Persisted in
   // localStorage. Defaults to all-false: groups only appear when they have
@@ -1672,14 +1745,18 @@ export default function ResourcesClient({
 
   // Resources grouped into the selected folder (via the join).
   const activeFolder = folderId ? folders.find(f => f.id === folderId) ?? null : null;
-  const folderCards = useMemo(() => {
+  // Folder members are resolved by item_key, so a folder can hold Resources
+  // files AND linked files (receipts, invoices, contact files, …).
+  const folderMembers = useMemo(() => {
     if (!folderId) return [];
-    const ids = new Set(folderItems.filter(it => it.folder_id === folderId).map(it => it.resource_id));
-    const list = resources.filter(r => ids.has(r.id)).map(resourceToCard);
-    if (!search.trim()) return list;
-    const q = search.toLowerCase();
-    return list.filter(c => c.name.toLowerCase().includes(q) || c.meta.toLowerCase().includes(q));
-  }, [resources, folderId, folderItems, search]);
+    const keys = folderItems.filter(it => it.folder_id === folderId).map(it => it.item_key);
+    let list = keys.map(k => fileByKey.get(k)).filter(Boolean) as NonNullable<ReturnType<typeof fileByKey.get>>[];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(f => f.name.toLowerCase().includes(q) || f.sourceLabel.toLowerCase().includes(q));
+    }
+    return list;
+  }, [folderId, folderItems, fileByKey, search]);
 
   // Cross-module files for the currently selected linked sub-group.
   const linkedSourceForCat = linkedCatToSource(cat);
@@ -1726,7 +1803,7 @@ export default function ResourcesClient({
           sourceLabel: `Resources · ${label}`,
           href: url,
           created_at: r.updated_at ?? r.created_at,
-          resourceId: r.id,
+          key: `res:${r.id}`,
         });
       });
     }
@@ -1739,6 +1816,7 @@ export default function ResourcesClient({
         sourceLabel: LINKED_GROUP_LABEL[f.source] ?? "Linked",
         href: f.file_url,
         created_at: f.created_at,
+        key: f.id,
       });
     }
     return out.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
@@ -1912,23 +1990,20 @@ export default function ResourcesClient({
               from any file's ⋯ menu (Add to folder), not uploaded here. */}
           {activeFolder && (
             <>
-              {folderCards.length === 0 ? (
+              {folderMembers.length === 0 ? (
                 <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:220, gap:8, color:"var(--color-grey)" }}>
                   <div style={{ width:40, height:40, borderRadius:9, background:"var(--color-cream)", display:"flex", alignItems:"center", justifyContent:"center", color:"var(--color-sage)" }}><IcFolderSm /></div>
                   <p style={{ fontSize:13, fontWeight:600, color:"var(--color-charcoal)" }}>{search ? "No matches" : "This folder is empty"}</p>
-                  <p style={{ fontSize:11.5, maxWidth:340, textAlign:"center", lineHeight:1.5 }}>Open the <strong>⋯</strong> menu on any file and choose <strong>Add to folder</strong> to group it here.</p>
+                  <p style={{ fontSize:11.5, maxWidth:340, textAlign:"center", lineHeight:1.5 }}>Open the <strong>⋯</strong> menu on any file — a receipt, invoice, photo, anything — and choose <strong>Add to folder</strong> to group it here.</p>
                 </div>
               ) : (
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(180px, 1fr))", gap:12 }}>
-                  {folderCards.map(card => {
-                    const url = card.fileUrls[0] ?? card.externalUrl ?? "";
-                    return (
-                      <FilePreviewCard key={card.id} name={card.name} url={url} fileType={null}
-                        caption={(card.name.split(".").pop() ?? "file").toUpperCase()}
-                        menu={fileMenu(card.id)}
-                      />
-                    );
-                  })}
+                  {folderMembers.map(m => (
+                    <FilePreviewCard key={m.key} name={m.name} url={m.url} fileType={null} kind={m.kind}
+                      caption={m.sourceLabel}
+                      menu={fileMenu(m.key, { currentFolderId: activeFolder.id })}
+                    />
+                  ))}
                 </div>
               )}
             </>
@@ -1944,7 +2019,7 @@ export default function ResourcesClient({
           )}
 
           {!activeFolder && cat === "all-files" && (
-            <AllFilesView files={allFiles} search={search} filter={fileFilter} onFilter={setFileFilter} view={view} renderMenu={fileMenu} />
+            <AllFilesView files={allFiles} search={search} filter={fileFilter} onFilter={setFileFilter} view={view} renderMenu={(key) => fileMenu(key)} />
           )}
 
           {!activeFolder && isLinks && (
@@ -1955,7 +2030,7 @@ export default function ResourcesClient({
           )}
 
           {!activeFolder && isLinkedView && linkedSourceForCat && (
-            <LinkedFilesView source={linkedSourceForCat} files={visibleLinkedFiles} />
+            <LinkedFilesView source={linkedSourceForCat} files={visibleLinkedFiles} renderMenu={(key) => fileMenu(key)} />
           )}
 
           {!activeFolder && catKey && catMeta && (
@@ -2000,7 +2075,7 @@ export default function ResourcesClient({
                       onUploadFile={uploadFileToResource}
                       tourTarget={i === 0 ? "resources.first-card" : undefined}
                       centered
-                      menu={fileMenu(card.id)}
+                      menu={fileMenu(`res:${card.id}`)}
                     />
                   ))}
                 </div>
@@ -2040,7 +2115,7 @@ export default function ResourcesClient({
                               openUrl={url ?? undefined}
                             />
                           )}
-                          {fileMenu(card.id)}
+                          {fileMenu(`res:${card.id}`)}
                         </div>
                       </div>
                     );
