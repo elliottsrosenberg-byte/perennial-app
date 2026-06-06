@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import AshInlineChat from "@/components/resources/AshInlineChat";
 import type { Resource, ResourceLink, ResourceItemStatus, ResourceFolder } from "@/types/database";
 import {
   LINKED_FILE_GROUPS,
@@ -562,7 +563,6 @@ function SetupModal({ resource, onClose, onSaved }: {
 }) {
   const modalKey = resource.modal_key ?? "";
   const cfg = MODALS[modalKey];
-  const [showManual, setShowManual] = useState(false);
   // Snapshot field values keyed by prompt label. We store as a flat
   // Record<string, string> in `resources.fields` to keep the schema simple.
   const initialFields = useMemo(() => {
@@ -576,21 +576,7 @@ function SetupModal({ resource, onClose, onSaved }: {
   const [uploading, setUploading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
 
-  // Auto-open the manual editor whenever the resource already has some data —
-  // re-opening a partial card should let the user pick up where they left off
-  // without an extra click.
-  useEffect(() => {
-    if (Object.values(initialFields).some(v => v.trim().length > 0)) setShowManual(true);
-  }, [initialFields]);
-
   if (!cfg) return null;
-
-  function openAsh() {
-    window.dispatchEvent(new CustomEvent("open-ash", {
-      detail: { message: `Help me draft a ${cfg.title} for my design studio. Walk me through it with questions, then write a polished first draft.` }
-    }));
-    onClose();
-  }
 
   async function handleUpload(file: File) {
     setUploading(true); setError(null);
@@ -652,7 +638,7 @@ function SetupModal({ resource, onClose, onSaved }: {
   return (
     <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position:"fixed", inset:0, background:"rgba(20,18,16,0.52)", backdropFilter:"blur(5px)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
-      <div style={{ background:"var(--color-off-white)", borderRadius:12, boxShadow:"0 8px 40px rgba(0,0,0,0.16), 0 0 0 0.5px rgba(0,0,0,0.07)", width:"100%", maxWidth:540, maxHeight:"82vh", display:"flex", flexDirection:"column", overflow:"hidden" }}>
+      <div style={{ background:"var(--color-off-white)", borderRadius:12, boxShadow:"0 8px 40px rgba(0,0,0,0.16), 0 0 0 0.5px rgba(0,0,0,0.07)", width:"100%", maxWidth:780, maxHeight:"88vh", display:"flex", flexDirection:"column", overflow:"hidden" }}>
         {/* Header */}
         <div style={{ display:"flex", alignItems:"flex-start", gap:12, padding:"18px 20px 14px", borderBottom:"0.5px solid var(--color-border)" }}>
           <div style={{ width:36, height:36, borderRadius:9, background:cfg.iconBg, display:"flex", alignItems:"center", justifyContent:"center", color:cfg.iconColor, flexShrink:0 }}>
@@ -667,36 +653,20 @@ function SetupModal({ resource, onClose, onSaved }: {
 
         <div style={{ flex:1, overflowY:"auto", padding:20 }}>
           {/* Why card */}
-          <div style={{ background:C.darkAccentL, border:"0.5px solid rgba(61,107,79,0.18)", borderRadius:8, padding:"12px 14px", fontSize:11, color:"var(--color-grey)", lineHeight:1.55, marginBottom:18 }}>
+          <div style={{ background:C.darkAccentL, border:"0.5px solid rgba(61,107,79,0.18)", borderRadius:8, padding:"12px 14px", fontSize:11, color:"var(--color-grey)", lineHeight:1.55, marginBottom:16 }}>
             {cfg.why}
           </div>
 
-          {/* Ash CTA */}
-          <button onClick={openAsh} style={{ display:"flex", alignItems:"center", gap:14, padding:"16px 18px", background:"linear-gradient(135deg, #7a9a55 0%, #5a7a38 45%, #3a5228 100%)", borderRadius:12, cursor:"pointer", marginBottom:10, width:"100%", border:"none", fontFamily:"inherit", textAlign:"left" }}>
-            <img src="/Ash-Logomak.svg" alt="" style={{ width:28, height:28, filter:"brightness(0) invert(1)", opacity:0.9, flexShrink:0 }} />
-            <div style={{ flex:1 }}>
-              <div style={{ fontSize:13, fontWeight:700, color:"white" }}>Draft this with Ash</div>
-              <div style={{ fontSize:11, color:"rgba(255,255,255,0.65)", marginTop:2 }}>Answer a few quick questions and Ash writes a first draft — takes about 2 minutes</div>
-            </div>
-            <div style={{ color:"rgba(255,255,255,0.5)", fontSize:18 }}>→</div>
-          </button>
+          {/* In-modal Ash conversation — work on responses here, then drop them
+              into the fields below. */}
+          <AshInlineChat
+            title={cfg.title}
+            fieldLabels={cfg.prompts.map(p => p.label)}
+            onInsert={(label, text) => setFields(f => ({ ...f, [label]: f[label]?.trim() ? `${f[label]}\n\n${text}` : text }))}
+          />
 
-          {/* Or divider */}
-          <div style={{ display:"flex", alignItems:"center", gap:10, margin:"12px 0" }}>
-            <div style={{ flex:1, height:"0.5px", background:"var(--color-border)" }} />
-            <span style={{ fontSize:10, color:"var(--color-grey)" }}>or fill in manually</span>
-            <div style={{ flex:1, height:"0.5px", background:"var(--color-border)" }} />
-          </div>
-
-          <button onClick={() => setShowManual(v => !v)} style={{ display:"block", width:"100%", textAlign:"center", fontSize:11, color:"var(--color-grey)", cursor:"pointer", padding:6, borderRadius:6, background:"none", border:"0.5px solid var(--color-border)", fontFamily:"inherit" }}
-            onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
-            onMouseLeave={e => e.currentTarget.style.background = "none"}>
-            {showManual ? "Hide prompts ↑" : "Fill in manually →"}
-          </button>
-
-          {/* Manual prompts */}
-          {showManual && (
-            <div style={{ marginTop:16, paddingTop:16, borderTop:"0.5px solid var(--color-border)" }}>
+          {/* Prompts — always visible below the conversation. */}
+          <div style={{ marginTop:18, paddingTop:16, borderTop:"0.5px solid var(--color-border)" }}>
               {cfg.prompts.map((p, i) => (
                 <div key={i} style={{ marginBottom:12 }}>
                   <div style={{ fontSize:11, fontWeight:600, color:"var(--color-charcoal)", marginBottom:4 }}>{p.label}</div>
@@ -744,8 +714,7 @@ function SetupModal({ resource, onClose, onSaved }: {
                 <div style={{ fontSize:11, color:"var(--color-grey)" }}>{uploading ? "Uploading…" : "Click to upload"}</div>
                 <div style={{ fontSize:10, color:"var(--color-grey)", marginTop:2 }}>PDF, Word, Pages, plain text, or images</div>
               </label>
-            </div>
-          )}
+          </div>
 
           {error && <p style={{ fontSize:11, color:"var(--color-red-orange)", marginTop:10 }}>{error}</p>}
         </div>
