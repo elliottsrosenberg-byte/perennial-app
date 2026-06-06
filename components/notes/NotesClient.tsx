@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Note, NoteFolder, NoteFolderItem } from "@/types/database";
 import { useEditor, EditorContent } from "@tiptap/react";
-import { Pin, Search, Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, MoreHorizontal, Upload, NotebookPen, Image as ImageIcon, FolderPlus, Folder, Plus, Trash2, Check } from "lucide-react";
+import { Pin, Search, Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, MoreHorizontal, Upload, NotebookPen, Image as ImageIcon, FolderPlus, Folder, Plus, Trash2, Check, ChevronLeft } from "lucide-react";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
@@ -1060,6 +1060,7 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
   function filterLabel() {
     if (filter === "all")    return "All Notes";
     if (filter === "pinned") return "Pinned";
+    if (filter.startsWith("folder:"))      return folders.find(f => f.id === filter.slice(7))?.name ?? "Folder";
     if (filter.startsWith("project:"))     return projects.find(p => p.id === filter.slice(8))?.title ?? "Project";
     if (filter.startsWith("contact:"))     return contactCounts[filter.slice(8)]?.name ?? "Contact";
     if (filter.startsWith("opportunity:")) return oppCounts[filter.slice(12)]?.title ?? "Opportunity";
@@ -1072,6 +1073,7 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
     const active = note.id === selectedNoteId;
     const [hovered,    setHovered]    = useState(false);
     const [confirming, setConfirming] = useState(false);
+    const [folderMenuOpen, setFolderMenuOpen] = useState(false);
     const itemRef = useRef<HTMLDivElement>(null);
 
     // Dismiss confirm when clicking outside this item
@@ -1084,7 +1086,7 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
       return () => document.removeEventListener("mousedown", handler);
     }, [confirming]);
 
-    const showActions = hovered || confirming;
+    const showActions = hovered || confirming || folderMenuOpen;
 
     return (
       <div
@@ -1160,7 +1162,7 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
               </>
             ) : (
               <>
-                <NoteFolderMenu noteId={note.id} />
+                <NoteFolderMenu noteId={note.id} onOpenChange={setFolderMenuOpen} />
                 <button
                   onClick={e => { e.stopPropagation(); setConfirming(true); }}
                   title="Delete"
@@ -1239,12 +1241,15 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
   }
 
   // Per-note "add to folder" mini menu (in the note's hover actions).
-  function NoteFolderMenu({ noteId }: { noteId: string }) {
+  function NoteFolderMenu({ noteId, onOpenChange }: { noteId: string; onOpenChange?: (open: boolean) => void }) {
     const [open, setOpen] = useState(false);
     const [creating, setCreating] = useState(false);
     const [name, setName] = useState("");
     const ref = useRef<HTMLDivElement>(null);
     const memberOf = foldersForNote(noteId);
+    // Tell the parent NoteItem so it keeps its hover actions mounted while the
+    // dropdown is open (otherwise leaving the note unmounts the dropdown).
+    useEffect(() => { onOpenChange?.(open); }, [open, onOpenChange]);
     useEffect(() => {
       if (!open) return;
       function h(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as globalThis.Node)) { setOpen(false); setCreating(false); } }
@@ -1498,6 +1503,20 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
             </div>
           </div>
 
+          {/* Current view title — "All Notes" or the active folder/filter, with
+              a back arrow to return to all notes. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 12px", borderBottom: "0.5px solid var(--color-border)", flexShrink: 0 }}>
+            {filter !== "all" && (
+              <button onClick={() => setFilter("all")} title="Back to all notes"
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-tertiary)", padding: 0, display: "flex", flexShrink: 0 }}
+                onMouseEnter={e => e.currentTarget.style.color = "var(--color-text-secondary)"}
+                onMouseLeave={e => e.currentTarget.style.color = "var(--color-text-tertiary)"}>
+                <ChevronLeft size={14} strokeWidth={2} />
+              </button>
+            )}
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{filterLabel()}</span>
+          </div>
+
           {/* Filters: projects / contacts / opps */}
           {hasFilters && (
             <div style={{ padding: "6px 8px 4px", borderBottom: "0.5px solid var(--color-border)", flexShrink: 0 }}>
@@ -1571,10 +1590,6 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
           <div style={{ flexShrink: 0, maxHeight: "46%", display: "flex", flexDirection: "column", borderTop: "0.5px solid var(--color-border)", background: "var(--color-surface-sunken)" }}>
             <div style={{ display: "flex", alignItems: "center", padding: "8px 12px 4px", flexShrink: 0 }}>
               <span style={{ flex: 1, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-tertiary)" }}>Folders</span>
-              <button onClick={() => setNewFolder("")} title="New folder"
-                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-tertiary)", padding: 0, display: "flex" }}>
-                <Plus size={13} />
-              </button>
             </div>
             <div style={{ overflowY: "auto", padding: "0 8px 8px" }}>
               {newFolder !== null && (
@@ -1586,7 +1601,7 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
               )}
               {folders.length === 0 && newFolder === null ? (
                 <p style={{ padding: "2px 4px", fontSize: 10.5, color: "var(--color-text-tertiary)", lineHeight: 1.5 }}>
-                  Group notes into folders — add one with +, or from a note&apos;s menu.
+                  Group notes into folders — use New folder below, or a note&apos;s menu.
                 </p>
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
@@ -1597,13 +1612,20 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
           </div>
 
           {/* Footer */}
-          <div style={{ flexShrink: 0, padding: "8px 10px", borderTop: "0.5px solid var(--color-border)" }}>
+          <div style={{ flexShrink: 0, padding: "8px 10px", borderTop: "0.5px solid var(--color-border)", display: "flex", gap: 6 }}>
             <button
               onClick={createNote}
-              style={{ width: "100%", fontSize: 11, padding: "6px", borderRadius: 6, border: "0.5px solid var(--color-border)", background: "transparent", color: "var(--color-text-tertiary)", cursor: "pointer", fontFamily: "inherit" }}
+              style={{ flex: 1, fontSize: 11, padding: "6px", borderRadius: 6, border: "0.5px solid var(--color-border)", background: "transparent", color: "var(--color-text-tertiary)", cursor: "pointer", fontFamily: "inherit" }}
               onMouseEnter={e => { e.currentTarget.style.background = "var(--color-off-white)"; e.currentTarget.style.color = "var(--color-text-secondary)"; }}
               onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}
             >+ New note</button>
+            <button
+              onClick={() => setNewFolder("")}
+              title="New folder"
+              style={{ flex: 1, fontSize: 11, padding: "6px", borderRadius: 6, border: "0.5px solid var(--color-border)", background: "transparent", color: "var(--color-text-tertiary)", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}
+              onMouseEnter={e => { e.currentTarget.style.background = "var(--color-off-white)"; e.currentTarget.style.color = "var(--color-text-secondary)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}
+            ><FolderPlus size={11} strokeWidth={1.75} /> New folder</button>
           </div>
         </div>
 
