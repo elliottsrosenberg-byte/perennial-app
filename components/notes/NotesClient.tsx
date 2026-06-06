@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { Note } from "@/types/database";
+import type { Note, NoteFolder, NoteFolderItem } from "@/types/database";
 import { useEditor, EditorContent } from "@tiptap/react";
-import { Pin, Search, Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, MoreHorizontal, Upload, NotebookPen, Image as ImageIcon } from "lucide-react";
+import { Pin, Search, Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, MoreHorizontal, Upload, NotebookPen, Image as ImageIcon, FolderPlus, Folder, Plus, Trash2, Check } from "lucide-react";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
 import {
@@ -103,7 +104,8 @@ type FilterId =
   | "pinned"
   | `project:${string}`
   | `contact:${string}`
-  | `opportunity:${string}`;
+  | `opportunity:${string}`
+  | `folder:${string}`;
 
 type ContactOpt     = { id: string; first_name: string; last_name: string };
 type OpportunityOpt = { id: string; title: string; category: string };
@@ -765,11 +767,17 @@ function FilterItem({
 interface Props {
   initialNotes:      Note[];
   projects:          { id: string; title: string }[];
+  initialFolders?:   NoteFolder[];
+  initialFolderItems?: NoteFolderItem[];
   initialSelectedId?: string;
 }
 
-export default function NotesClient({ initialNotes, projects, initialSelectedId }: Props) {
+export default function NotesClient({ initialNotes, projects, initialFolders = [], initialFolderItems = [], initialSelectedId }: Props) {
   const [notes,          setNotes]          = useState<Note[]>(initialNotes);
+  const [folders,        setFolders]        = useState<NoteFolder[]>(initialFolders);
+  const [folderItems,    setFolderItems]    = useState<NoteFolderItem[]>(initialFolderItems);
+  const [newFolder,      setNewFolder]      = useState<string | null>(null); // null = not creating
+  const [folderToDelete, setFolderToDelete] = useState<NoteFolder | null>(null);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(
     initialSelectedId ?? initialNotes[0]?.id ?? null
   );
@@ -834,6 +842,55 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
 
   const sidebarProjects = useMemo(() => projects.filter(p => projectCounts[p.id] > 0), [projects, projectCounts]);
 
+  // ── Folders ──────────────────────────────────────────────────────────────────
+  const folderCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const it of folderItems) m[it.folder_id] = (m[it.folder_id] ?? 0) + 1;
+    return m;
+  }, [folderItems]);
+  const foldersForNote = useCallback(
+    (noteId: string) => new Set(folderItems.filter(it => it.note_id === noteId).map(it => it.folder_id)),
+    [folderItems],
+  );
+
+  async function createFolder(name: string): Promise<string | null> {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    const { data } = await supabase.from("note_folders")
+      .insert({ user_id: user.id, name: name.trim() || "New folder", position: folders.length })
+      .select().single();
+    if (data) { setFolders(prev => [...prev, data as NoteFolder]); return (data as NoteFolder).id; }
+    return null;
+  }
+  async function renameFolder(id: string, name: string) {
+    setFolders(prev => prev.map(f => f.id === id ? { ...f, name } : f));
+    await createClient().from("note_folders").update({ name, updated_at: new Date().toISOString() }).eq("id", id);
+  }
+  async function deleteFolder(id: string) {
+    setFolders(prev => prev.filter(f => f.id !== id));
+    setFolderItems(prev => prev.filter(it => it.folder_id !== id));
+    setFilter(prev => prev === `folder:${id}` ? "all" : prev);
+    await createClient().from("note_folders").delete().eq("id", id);
+  }
+  async function addNoteToFolder(noteId: string, fid: string) {
+    if (folderItems.some(it => it.folder_id === fid && it.note_id === noteId)) return;
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase.from("note_folder_items")
+      .insert({ folder_id: fid, note_id: noteId, user_id: user.id }).select().single();
+    if (data) setFolderItems(prev => [...prev, data as NoteFolderItem]);
+  }
+  async function removeNoteFromFolder(noteId: string, fid: string) {
+    setFolderItems(prev => prev.filter(it => !(it.folder_id === fid && it.note_id === noteId)));
+    await createClient().from("note_folder_items").delete().eq("folder_id", fid).eq("note_id", noteId);
+  }
+  async function addNoteToNewFolder(noteId: string, name: string) {
+    const fid = await createFolder(name);
+    if (fid) await addNoteToFolder(noteId, fid);
+  }
+
   // ── Filtered list ──────────────────────────────────────────────────────────
 
   const filteredNotes = useMemo(() => {
@@ -842,6 +899,11 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
     else if (filter.startsWith("project:"))     list = notes.filter(n => n.project_id     === filter.slice(8));
     else if (filter.startsWith("contact:"))     list = notes.filter(n => n.contact_id     === filter.slice(8));
     else if (filter.startsWith("opportunity:")) list = notes.filter(n => n.opportunity_id === filter.slice(12));
+    else if (filter.startsWith("folder:")) {
+      const fid = filter.slice(7);
+      const ids = new Set(folderItems.filter(it => it.folder_id === fid).map(it => it.note_id));
+      list = notes.filter(n => ids.has(n.id));
+    }
 
     if (showPinnedOnly) list = list.filter(n => n.pinned);
 
@@ -851,7 +913,7 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
     }
 
     return [...list].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-  }, [notes, filter, search, showPinnedOnly]);
+  }, [notes, filter, search, showPinnedOnly, folderItems]);
 
   const pinnedNotes  = useMemo(() => filteredNotes.filter(n => n.pinned),  [filteredNotes]);
   const regularNotes = useMemo(() => filteredNotes.filter(n => !n.pinned), [filteredNotes]);
@@ -875,6 +937,8 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
       const created = data as Note;
       setNotes(prev => [created, ...prev]);
       setSelectedNoteId(created.id);
+      // If a folder is the active filter, drop the new note straight into it.
+      if (filter.startsWith("folder:")) await addNoteToFolder(created.id, filter.slice(7));
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("notes:created", {
           detail: { id: created.id, title: created.title ?? "" },
@@ -1096,6 +1160,7 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
               </>
             ) : (
               <>
+                <NoteFolderMenu noteId={note.id} />
                 <button
                   onClick={e => { e.stopPropagation(); setConfirming(true); }}
                   title="Delete"
@@ -1112,6 +1177,106 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
                   </svg>
                 </button>
               </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // A folder row in the rail: selects to filter, with a hover ⋯ for rename /
+  // delete. Kept deliberately small so the module stays simple.
+  function FolderRow({ folder }: { folder: NoteFolder }) {
+    const active = filter === `folder:${folder.id}`;
+    const [hovered, setHovered] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [renaming, setRenaming] = useState<string | null>(null);
+    const ref = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+      if (!menuOpen) return;
+      function h(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as globalThis.Node)) setMenuOpen(false); }
+      document.addEventListener("mousedown", h);
+      return () => document.removeEventListener("mousedown", h);
+    }, [menuOpen]);
+
+    if (renaming !== null) {
+      return (
+        <input autoFocus value={renaming} onChange={e => setRenaming(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter" && renaming.trim()) { renameFolder(folder.id, renaming.trim()); setRenaming(null); } if (e.key === "Escape") setRenaming(null); }}
+          onBlur={() => { if (renaming.trim()) renameFolder(folder.id, renaming.trim()); setRenaming(null); }}
+          style={{ width: "100%", fontSize: 12, padding: "5px 8px", borderRadius: 6, border: "0.5px solid var(--color-sage)", background: "var(--color-off-white)", color: "var(--color-text-primary)", outline: "none", fontFamily: "inherit" }} />
+      );
+    }
+    return (
+      <div ref={ref} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} style={{ position: "relative" }}>
+        <button onClick={() => toggleFilter(`folder:${folder.id}`)}
+          style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 7, padding: "5px 10px", borderRadius: 6, border: "none", background: active ? "var(--color-surface-raised)" : "transparent", cursor: "pointer", fontFamily: "inherit" }}
+          onMouseEnter={e => { if (!active) e.currentTarget.style.background = "rgba(0,0,0,0.04)"; }}
+          onMouseLeave={e => { if (!active) e.currentTarget.style.background = "transparent"; }}>
+          <Folder size={11} strokeWidth={1.75} style={{ flexShrink: 0, color: active ? "var(--color-sage)" : "var(--color-text-tertiary)" }} />
+          <span style={{ flex: 1, fontSize: 12, color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)", fontWeight: active ? 500 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{folder.name}</span>
+          {(hovered || menuOpen)
+            ? <span onClick={e => { e.stopPropagation(); setMenuOpen(o => !o); }} style={{ color: "var(--color-text-tertiary)", fontSize: 13, lineHeight: 1, padding: "0 2px" }}>⋯</span>
+            : (folderCounts[folder.id] ? <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>{folderCounts[folder.id]}</span> : null)}
+        </button>
+        {menuOpen && (
+          <div style={{ position: "absolute", top: "calc(100% - 2px)", right: 6, zIndex: 30, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 8, boxShadow: "0 6px 24px rgba(0,0,0,0.14)", overflow: "hidden", minWidth: 120 }}>
+            <button onClick={() => { setRenaming(folder.name); setMenuOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 11px", fontSize: 11.5, background: "none", border: "none", cursor: "pointer", color: "var(--color-text-primary)", fontFamily: "inherit" }}>Rename</button>
+            <button onClick={() => { setFolderToDelete(folder); setMenuOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 11px", fontSize: 11.5, background: "none", border: "none", cursor: "pointer", color: "var(--color-red-orange)", fontFamily: "inherit" }}>Delete folder</button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Per-note "add to folder" mini menu (in the note's hover actions).
+  function NoteFolderMenu({ noteId }: { noteId: string }) {
+    const [open, setOpen] = useState(false);
+    const [creating, setCreating] = useState(false);
+    const [name, setName] = useState("");
+    const ref = useRef<HTMLDivElement>(null);
+    const memberOf = foldersForNote(noteId);
+    useEffect(() => {
+      if (!open) return;
+      function h(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as globalThis.Node)) { setOpen(false); setCreating(false); } }
+      document.addEventListener("mousedown", h);
+      return () => document.removeEventListener("mousedown", h);
+    }, [open]);
+    const item: React.CSSProperties = { display: "flex", alignItems: "center", gap: 7, width: "100%", textAlign: "left", padding: "7px 11px", fontSize: 11.5, background: "none", border: "none", cursor: "pointer", color: "var(--color-text-primary)", fontFamily: "inherit" };
+    return (
+      <div ref={ref} style={{ position: "relative" }}>
+        <button onClick={e => { e.stopPropagation(); setOpen(o => !o); }} title="Add to folder"
+          style={{ width: 22, height: 22, borderRadius: 5, border: "none", background: "var(--color-surface-sunken)", color: "var(--color-text-tertiary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+          onMouseEnter={e => { e.currentTarget.style.background = "rgba(155,163,122,0.15)"; e.currentTarget.style.color = "#4a6232"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "var(--color-surface-sunken)"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}>
+          <FolderPlus size={11} strokeWidth={1.75} />
+        </button>
+        {open && (
+          <div style={{ position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 40, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 8, boxShadow: "0 8px 28px rgba(0,0,0,0.16)", overflow: "hidden", minWidth: 170, maxHeight: 260, overflowY: "auto" }}>
+            <div style={{ padding: "6px 11px 3px", fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-tertiary)" }}>Add to folder</div>
+            {folders.length === 0 && !creating && <div style={{ padding: "3px 11px 7px", fontSize: 11, color: "var(--color-text-tertiary)" }}>No folders yet</div>}
+            {folders.map(f => {
+              const inIt = memberOf.has(f.id);
+              return (
+                <button key={f.id} onClick={() => { inIt ? removeNoteFromFolder(noteId, f.id) : addNoteToFolder(noteId, f.id); }} style={item}
+                  onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"} onMouseLeave={e => e.currentTarget.style.background = "none"}>
+                  <span style={{ width: 12, color: "var(--color-sage)" }}>{inIt ? <Check size={11} /> : null}</span>
+                  <Folder size={11} strokeWidth={1.75} />
+                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                </button>
+              );
+            })}
+            {creating ? (
+              <div style={{ padding: "4px 9px 8px" }}>
+                <input autoFocus value={name} onChange={e => setName(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && name.trim()) { addNoteToNewFolder(noteId, name.trim()); setName(""); setCreating(false); setOpen(false); } if (e.key === "Escape") setCreating(false); }}
+                  placeholder="New folder name…" style={{ width: "100%", fontSize: 11, padding: "5px 8px", borderRadius: 6, border: "0.5px solid var(--color-sage)", background: "var(--color-warm-white)", color: "var(--color-text-primary)", outline: "none", fontFamily: "inherit" }} />
+              </div>
+            ) : (
+              <button onClick={() => setCreating(true)} style={{ ...item, color: "var(--color-sage)", fontWeight: 600 }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"} onMouseLeave={e => e.currentTarget.style.background = "none"}>
+                <Plus size={12} /> New folder…
+              </button>
             )}
           </div>
         )}
@@ -1354,6 +1519,30 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
             </div>
           )}
 
+          {/* Folders — optional grouping, kept lightweight. */}
+          <div style={{ padding: "6px 8px 6px", borderBottom: "0.5px solid var(--color-border)", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", padding: "2px 6px 2px" }}>
+              <span style={{ flex: 1, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-tertiary)" }}>Folders</span>
+              <button onClick={() => setNewFolder("")} title="New folder"
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-tertiary)", padding: 0, display: "flex" }}>
+                <Plus size={12} />
+              </button>
+            </div>
+            {folders.map(f => <FolderRow key={f.id} folder={f} />)}
+            {newFolder !== null && (
+              <input autoFocus value={newFolder} onChange={e => setNewFolder(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && newFolder.trim()) { createFolder(newFolder.trim()); setNewFolder(null); } if (e.key === "Escape") setNewFolder(null); }}
+                onBlur={() => { if (newFolder.trim()) createFolder(newFolder.trim()); setNewFolder(null); }}
+                placeholder="Folder name…"
+                style={{ width: "100%", fontSize: 11.5, padding: "5px 8px", borderRadius: 6, border: "0.5px solid var(--color-sage)", background: "var(--color-off-white)", color: "var(--color-text-primary)", outline: "none", fontFamily: "inherit", marginTop: 2 }} />
+            )}
+            {folders.length === 0 && newFolder === null && (
+              <p style={{ padding: "2px 6px", fontSize: 10.5, color: "var(--color-text-tertiary)", lineHeight: 1.5 }}>
+                Group notes into folders — add one with +, or from a note&apos;s menu.
+              </p>
+            )}
+          </div>
+
           {/* Note list */}
           <div style={{ flex: 1, overflowY: "auto" }}>
             {filteredNotes.length === 0 && (
@@ -1474,6 +1663,16 @@ export default function NotesClient({ initialNotes, projects, initialSelectedId 
           onImported={handleImported}
         />
       )}
+
+      <ConfirmDialog
+        open={!!folderToDelete}
+        title="Delete this folder?"
+        body="The folder is removed. Your notes are not deleted — they just leave the folder."
+        confirmLabel="Delete folder"
+        tone="danger"
+        onConfirm={() => { if (folderToDelete) deleteFolder(folderToDelete.id); setFolderToDelete(null); }}
+        onCancel={() => setFolderToDelete(null)}
+      />
 
       <NotesIntroModal />
       <NotesTooltipTour />
