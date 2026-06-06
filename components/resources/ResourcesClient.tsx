@@ -131,6 +131,16 @@ function resourceToCard(r: Resource): ResourceCard {
   };
 }
 
+/** A short, readable preview of a structured card's filled-in fields, so a
+ *  completed pillar entry shows its substance without opening it. */
+function fieldsPreview(fields?: Record<string, unknown>): string {
+  if (!fields) return "";
+  const vals = Object.values(fields)
+    .filter(v => typeof v === "string" && (v as string).trim().length > 0)
+    .map(v => (v as string).trim());
+  return vals.join("  ·  ");
+}
+
 function catHealth(resources: Resource[], catId: string): [number, number] {
   const items = resources.filter(r => r.category === catId);
   return [items.filter(r => r.status === "complete").length, items.length];
@@ -469,12 +479,19 @@ function ResourceCardItem({ card, onOpenModal, onUploadFile, tourTarget }: {
       }}
     >
       <CardPreview type={card.previewType} data={card.previewData} />
-      <div style={{ padding:"11px 13px", display:"flex", flexDirection:"column", gap:3, flex:1 }}>
-        <div style={{ fontSize:12, fontWeight:600, color: isEmpty ? "var(--color-grey)" : "var(--color-charcoal)" }}>{card.name}</div>
+      <div style={{ padding:"13px 15px", display:"flex", flexDirection:"column", gap:4, flex:1 }}>
+        <div style={{ fontSize:13, fontWeight:600, color: isEmpty ? "var(--color-grey)" : "var(--color-charcoal)" }}>{card.name}</div>
         {card.meta
-          ? <div style={{ fontSize:10, color:"var(--color-grey)" }}>{card.meta}</div>
-          : card.emptyWhy && <div style={{ fontSize:10, color:"var(--color-grey)", lineHeight:1.45 }}>{card.emptyWhy}</div>
+          ? <div style={{ fontSize:10.5, color:"var(--color-grey)" }}>{card.meta}</div>
+          : card.emptyWhy && <div style={{ fontSize:10.5, color:"var(--color-grey)", lineHeight:1.45 }}>{card.emptyWhy}</div>
         }
+        {/* Filled structured entries show their content inline so a completed
+            pillar reads at a glance, no click required. */}
+        {card.itemType === "structured" && fieldsPreview(card.fields) && (
+          <div style={{ fontSize:11.5, color:"var(--color-charcoal)", lineHeight:1.55, marginTop:3, display:"-webkit-box", WebkitLineClamp:4, WebkitBoxOrient:"vertical" as const, overflow:"hidden" }}>
+            {fieldsPreview(card.fields)}
+          </div>
+        )}
         {card.actions.length > 0 && (
           <div className="flex flex-wrap gap-1" style={{ marginTop:6 }}>
             {card.actions.map((a, i) => (
@@ -841,7 +858,7 @@ function CategoryNav({
         </div>
 
         <div style={{ height:"0.5px", background:"var(--color-border)", margin:"6px 12px" }} />
-        <div style={{ fontSize:9, fontWeight:600, color:"var(--color-grey)", textTransform:"uppercase", letterSpacing:"0.07em", padding:"8px 14px 3px" }}>Categories</div>
+        <div style={{ fontSize:9, fontWeight:600, color:"var(--color-grey)", textTransform:"uppercase", letterSpacing:"0.07em", padding:"8px 14px 3px" }}>Pillars</div>
 
         {CAT_IDS.map(id => {
           const m = CAT_META[id];
@@ -1941,7 +1958,7 @@ export default function ResourcesClient({
               )}
 
               {view === "grid" && (
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(220px, 1fr))", gap:12 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(330px, 1fr))", gap:14 }}>
                   {catCards.map((card, i) => (
                     <ResourceCardItem
                       key={card.id}
