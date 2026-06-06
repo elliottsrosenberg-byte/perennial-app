@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import AshInlineChat from "@/components/resources/AshInlineChat";
-import type { Resource, ResourceLink, ResourceItemStatus, ResourceFolder } from "@/types/database";
+import type { Resource, ResourceLink, ResourceItemStatus, ResourceFolder, ResourceFolderItem } from "@/types/database";
 import {
   LINKED_FILE_GROUPS,
   deepLinkForLinkedFile,
@@ -55,6 +55,8 @@ interface UnifiedFile {
   sourceLabel: string;
   href:        string;
   created_at:  string;
+  /** Set for files that are Resources rows (so they get the ⋯ menu). */
+  resourceId?: string;
 }
 
 const LINKED_GROUP_LABEL: Record<LinkedFileSource, string> = Object.fromEntries(
@@ -777,13 +779,14 @@ function CategoryNav({
   active, resources, links, linkedFiles,
   linkedVisible, onToggleLinked, onSelect, search, onSearchChange,
   onSelectEntity, activeEntity,
-  folders, activeFolderId, onSelectFolder, onCreateFolder,
+  folders, folderCounts, activeFolderId, onSelectFolder, onCreateFolder,
 }: {
   active: CatId;
   resources: Resource[];
   links: ResourceLink[];
   linkedFiles: LinkedFile[];
   folders: ResourceFolder[];
+  folderCounts: Record<string, number>;
   activeFolderId: string | null;
   onSelectFolder: (id: string) => void;
   onCreateFolder: (name: string) => void;
@@ -882,7 +885,7 @@ function CategoryNav({
           </button>
         </div>
         {folders.map(f => {
-          const count = resources.filter(r => r.folder_id === f.id).length;
+          const count = folderCounts[f.id] ?? 0;
           const fActive = activeFolderId === f.id;
           return (
             <div key={f.id} onClick={() => onSelectFolder(f.id)} className="flex items-center gap-2"
@@ -1160,6 +1163,86 @@ const SOURCE_LABEL: Record<LinkedFileSource, string> = {
   invoice: "Invoice", receipt: "Finance", studio: "Settings",
 };
 
+// ⋯ actions menu for a resource file: add/remove from folders (groups),
+// create a new folder with the file in it, and delete the file.
+function FileActionsMenu({ resourceId, folders, memberOf, onAddToFolder, onRemoveFromFolder, onAddToNewFolder, onDelete }: {
+  resourceId: string;
+  folders: ResourceFolder[];
+  memberOf: Set<string>;
+  onAddToFolder: (folderId: string) => void;
+  onRemoveFromFolder: (folderId: string) => void;
+  onAddToNewFolder: (name: string) => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [confirm, setConfirm] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function h(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setCreating(false); } }
+    if (open) document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+
+  const item: React.CSSProperties = { display:"flex", alignItems:"center", gap:8, width:"100%", textAlign:"left", padding:"7px 11px", fontSize:11.5, background:"none", border:"none", cursor:"pointer", color:"var(--color-charcoal)", fontFamily:"inherit" };
+
+  return (
+    <div ref={ref} style={{ position:"relative" }} onClick={e => e.stopPropagation()}>
+      <button onClick={() => setOpen(o => !o)} title="File options"
+        style={{ width:24, height:24, borderRadius:6, border:"none", background:"rgba(255,255,255,0.92)", boxShadow:"0 1px 3px rgba(0,0,0,0.18)", cursor:"pointer", color:"var(--color-charcoal)", fontSize:14, lineHeight:1, display:"flex", alignItems:"center", justifyContent:"center" }}>⋯</button>
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 4px)", right:0, zIndex:30, background:"var(--color-off-white)", border:"0.5px solid var(--color-border)", borderRadius:8, boxShadow:"0 8px 28px rgba(0,0,0,0.16)", overflow:"hidden", minWidth:190, maxHeight:300, overflowY:"auto" }}>
+          <div style={{ padding:"6px 11px 3px", fontSize:9.5, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.06em", color:"var(--color-grey)" }}>Add to folder</div>
+          {folders.length === 0 && !creating && (
+            <div style={{ padding:"3px 11px 7px", fontSize:11, color:"var(--color-grey)" }}>No folders yet</div>
+          )}
+          {folders.map(f => {
+            const inIt = memberOf.has(f.id);
+            return (
+              <button key={f.id} onClick={() => { inIt ? onRemoveFromFolder(f.id) : onAddToFolder(f.id); }} style={item}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+                onMouseLeave={e => e.currentTarget.style.background = "none"}>
+                <span style={{ width:13, color:"var(--color-sage)" }}>{inIt ? "✓" : ""}</span>
+                <IcFolderSm />
+                <span style={{ flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</span>
+              </button>
+            );
+          })}
+          {creating ? (
+            <div style={{ padding:"4px 9px 8px" }}>
+              <input autoFocus value={newName} onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && newName.trim()) { onAddToNewFolder(newName.trim()); setNewName(""); setCreating(false); setOpen(false); } if (e.key === "Escape") setCreating(false); }}
+                placeholder="New folder name…"
+                style={{ width:"100%", fontSize:11, padding:"5px 8px", borderRadius:6, border:"0.5px solid var(--color-sage)", background:"var(--color-warm-white)", color:"var(--color-charcoal)", outline:"none", fontFamily:"inherit" }} />
+            </div>
+          ) : (
+            <button onClick={() => setCreating(true)} style={{ ...item, color:"var(--color-sage)", fontWeight:600 }}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+              onMouseLeave={e => e.currentTarget.style.background = "none"}>
+              <IcPlus /> New folder…
+            </button>
+          )}
+          <div style={{ height:"0.5px", background:"var(--color-border)", margin:"3px 0" }} />
+          <button onClick={() => { setConfirm(true); setOpen(false); }} style={{ ...item, color:"var(--color-red-orange)" }}
+            onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+            onMouseLeave={e => e.currentTarget.style.background = "none"}>
+            <Trash size={13} /> Delete file
+          </button>
+        </div>
+      )}
+      <ConfirmDialog open={confirm} title="Delete this file?"
+        body="The file is permanently removed from Resources and any folders it's in."
+        confirmLabel="Delete file" tone="danger"
+        onConfirm={() => { setConfirm(false); onDelete(); }} onCancel={() => setConfirm(false)} />
+    </div>
+  );
+}
+
+function Trash({ size = 13 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><path d="M2 4h12M5 4V2.5a1 1 0 011-1h4a1 1 0 011 1V4M6.5 7v4M9.5 7v4M3.5 4l.5 9a1 1 0 001 1h6a1 1 0 001-1l.5-9"/></svg>;
+}
+
 function isImageFile(url: string, type: string | null): boolean {
   if ((type ?? "").toLowerCase().startsWith("image/")) return true;
   const path = url.split("?")[0].toLowerCase();
@@ -1185,16 +1268,19 @@ function FileTypeThumb({ kind }: { kind: FileKind }) {
 
 // A previewable file card — image thumbnail when possible, typed block
 // otherwise. Used by the linked-file (invoices/receipts/…) grids.
-function FilePreviewCard({ name, url, fileType, caption, deepLink, deepLabel, kind }: {
+function FilePreviewCard({ name, url, fileType, caption, deepLink, deepLabel, kind, menu }: {
   name: string; url: string; fileType: string | null; caption: string;
   deepLink?: string; deepLabel?: string;
   /** Override the derived kind (used by the unified All-files list). */
   kind?: FileKind;
+  /** Optional ⋯ actions menu rendered in the top-right corner. */
+  menu?: React.ReactNode;
 }) {
   const resolvedKind = kind ?? fileKind(name, fileType);
   const img = kind ? kind === "image" : isImageFile(url, fileType);
   return (
-    <div style={{ display:"flex", flexDirection:"column", background:"var(--color-off-white)", borderRadius:10, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)" }}>
+    <div style={{ display:"flex", flexDirection:"column", background:"var(--color-off-white)", borderRadius:10, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)", position:"relative" }}>
+      {menu && <div style={{ position:"absolute", top:6, right:6, zIndex:5 }}>{menu}</div>}
       <a href={url} target="_blank" rel="noreferrer" style={{ display:"block", height:124, background:"var(--color-cream)", textDecoration:"none" }}>
         {img
           ? <img src={url} alt={name} loading="lazy" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
@@ -1281,10 +1367,11 @@ function FolderMenu({ folder, onRename, onDelete }: { folder: ResourceFolder; on
 }
 
 // ─── All files — unified, searchable, type-filterable index ───────────────────
-function AllFilesView({ files, search, filter, onFilter, view }: {
+function AllFilesView({ files, search, filter, onFilter, view, renderMenu }: {
   files: UnifiedFile[]; search: string;
   filter: "all" | FileKind; onFilter: (f: "all" | FileKind) => void;
   view: "grid" | "list";
+  renderMenu?: (resourceId: string) => React.ReactNode;
 }) {
   const q = search.trim().toLowerCase();
   const searched = q
@@ -1321,7 +1408,8 @@ function AllFilesView({ files, search, filter, onFilter, view }: {
       ) : view === "grid" ? (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(180px, 1fr))", gap:12 }}>
           {shown.map(f => (
-            <FilePreviewCard key={f.id} name={f.name} url={f.url} fileType={null} kind={f.kind} caption={f.sourceLabel} />
+            <FilePreviewCard key={f.id} name={f.name} url={f.url} fileType={null} kind={f.kind} caption={f.sourceLabel}
+              menu={f.resourceId && renderMenu ? renderMenu(f.resourceId) : undefined} />
           ))}
         </div>
       ) : (
@@ -1390,13 +1478,14 @@ function OnboardingBanner({ studioName, onDismiss, onJumpToBrand }: {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function ResourcesClient({
-  initialResources, initialLinks, initialFolders = [],
+  initialResources, initialLinks, initialFolders = [], initialFolderItems = [],
   initialLinkedFiles = [], showOnboardingBanner = false, studioName = null,
   initialCat = null,
 }: {
   initialResources: Resource[];
   initialLinks: ResourceLink[];
   initialFolders?: ResourceFolder[];
+  initialFolderItems?: ResourceFolderItem[];
   /** Cross-module file index, server-aggregated from contact/org/project files. */
   initialLinkedFiles?: LinkedFile[];
   /** Optional `?cat=` deep link target (e.g. the Press playbook → press). */
@@ -1423,16 +1512,18 @@ export default function ResourcesClient({
   const [fileFilter, setFileFilter] = useState<"all" | FileKind>("all");
   const [entityFilter, setEntityFilter] = useState<{ source: LinkedFileSource; id: string; name: string } | null>(null);
   const [folders, setFolders]   = useState<ResourceFolder[]>(initialFolders);
+  const [folderItems, setFolderItems] = useState<ResourceFolderItem[]>(initialFolderItems);
   const [folderId, setFolderId] = useState<string | null>(null);
 
-  async function createFolder(name: string) {
+  async function createFolder(name: string): Promise<string | null> {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) return null;
     const { data } = await supabase.from("resource_folders")
       .insert({ user_id: user.id, name: name.trim() || "New folder", position: folders.length })
       .select().single();
-    if (data) { setFolders(prev => [...prev, data as ResourceFolder]); setFolderId((data as ResourceFolder).id); }
+    if (data) { setFolders(prev => [...prev, data as ResourceFolder]); return (data as ResourceFolder).id; }
+    return null;
   }
   async function renameFolder(id: string, name: string) {
     setFolders(prev => prev.map(f => f.id === id ? { ...f, name } : f));
@@ -1440,11 +1531,53 @@ export default function ResourcesClient({
   }
   async function deleteFolder(id: string) {
     setFolders(prev => prev.filter(f => f.id !== id));
-    // Files in the folder fall back to loose-in-category (folder_id → null).
-    setResources(prev => prev.map(r => r.folder_id === id ? { ...r, folder_id: null } : r));
+    setFolderItems(prev => prev.filter(it => it.folder_id !== id));
     if (folderId === id) setFolderId(null);
-    await createClient().from("resource_folders").delete().eq("id", id);
+    await createClient().from("resource_folders").delete().eq("id", id); // join rows cascade
   }
+
+  // ── Folder membership (folders are groups: a file can be in many) ──────────────
+  async function addToFolder(resourceId: string, fid: string) {
+    if (folderItems.some(it => it.folder_id === fid && it.resource_id === resourceId)) return;
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase.from("resource_folder_items")
+      .insert({ folder_id: fid, resource_id: resourceId, user_id: user.id }).select().single();
+    if (data) setFolderItems(prev => [...prev, data as ResourceFolderItem]);
+  }
+  async function removeFromFolder(resourceId: string, fid: string) {
+    setFolderItems(prev => prev.filter(it => !(it.folder_id === fid && it.resource_id === resourceId)));
+    await createClient().from("resource_folder_items").delete().eq("folder_id", fid).eq("resource_id", resourceId);
+  }
+  async function addToNewFolder(resourceId: string, name: string) {
+    const fid = await createFolder(name);
+    if (fid) await addToFolder(resourceId, fid);
+  }
+  async function deleteResource(resourceId: string) {
+    setResources(prev => prev.filter(r => r.id !== resourceId));
+    setFolderItems(prev => prev.filter(it => it.resource_id !== resourceId));
+    await createClient().from("resources").delete().eq("id", resourceId);
+  }
+  /** Folder ids a given resource belongs to. */
+  const foldersForResource = (resourceId: string) =>
+    new Set(folderItems.filter(it => it.resource_id === resourceId).map(it => it.folder_id));
+  const folderCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const it of folderItems) m[it.folder_id] = (m[it.folder_id] ?? 0) + 1;
+    return m;
+  }, [folderItems]);
+
+  // Menu for a resource file (used in All files + folder views).
+  const fileMenu = (resourceId: string) => (
+    <FileActionsMenu
+      resourceId={resourceId} folders={folders} memberOf={foldersForResource(resourceId)}
+      onAddToFolder={fid => addToFolder(resourceId, fid)}
+      onRemoveFromFolder={fid => removeFromFolder(resourceId, fid)}
+      onAddToNewFolder={name => addToNewFolder(resourceId, name)}
+      onDelete={() => deleteResource(resourceId)}
+    />
+  );
 
   // Per-source visibility for the "Linked from elsewhere" rail. Persisted in
   // localStorage. Defaults to all-false: groups only appear when they have
@@ -1485,39 +1618,18 @@ export default function ResourcesClient({
   const catKey       = !isLinks && !isLinkedView ? (cat as SeedCatId) : null;
   const catMeta      = catKey ? CAT_META[catKey] : null;
 
-  const allCatCards = catKey ? resources.filter(r => r.category === catKey && !r.folder_id).map(resourceToCard) : [];
+  const allCatCards = catKey ? resources.filter(r => r.category === catKey).map(resourceToCard) : [];
 
-  // Resources inside the selected folder.
+  // Resources grouped into the selected folder (via the join).
   const activeFolder = folderId ? folders.find(f => f.id === folderId) ?? null : null;
   const folderCards = useMemo(() => {
     if (!folderId) return [];
-    const list = resources.filter(r => r.folder_id === folderId).map(resourceToCard);
+    const ids = new Set(folderItems.filter(it => it.folder_id === folderId).map(it => it.resource_id));
+    const list = resources.filter(r => ids.has(r.id)).map(resourceToCard);
     if (!search.trim()) return list;
     const q = search.toLowerCase();
     return list.filter(c => c.name.toLowerCase().includes(q) || c.meta.toLowerCase().includes(q));
-  }, [resources, folderId, search]);
-
-  // Upload a file straight into the active folder.
-  async function uploadFileToFolder(file: File) {
-    if (!folderId) return;
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const path = `${user.id}/folder-${folderId}-${Date.now()}-${safe}`;
-    const { error: upErr } = await supabase.storage.from("resources").upload(path, file, { contentType: file.type, upsert: false });
-    if (upErr) return;
-    const { data: urlData } = supabase.storage.from("resources").getPublicUrl(path);
-    const { data } = await supabase.from("resources").insert({
-      user_id: user.id, category: "folder", folder_id: folderId,
-      name: file.name, meta: "", item_type: "file", status: "complete",
-      preview_type: "file",
-      preview_data: { label: file.name.split(".").pop()?.toUpperCase() ?? "FILE", color: C.darkAccent, bg: C.darkAccentL },
-      fields: {}, file_urls: [urlData.publicUrl],
-      actions: [{ label: "Open", variant: "primary" }], position: 9999,
-    }).select().single();
-    if (data) setResources(prev => [...prev, data as Resource]);
-  }
+  }, [resources, folderId, folderItems, search]);
 
   // Cross-module files for the currently selected linked sub-group.
   const linkedSourceForCat = linkedCatToSource(cat);
@@ -1551,14 +1663,11 @@ export default function ResourcesClient({
   // files (contacts, projects, invoices, receipts, …). Links live in their
   // own category, so they're not folded in here.
   const allFiles = useMemo<UnifiedFile[]>(() => {
-    const folderName = new Map(folders.map(f => [f.id, f.name]));
     const out: UnifiedFile[] = [];
     for (const r of resources) {
       const urls = r.file_urls ?? [];
       urls.forEach((url, i) => {
-        const label = r.folder_id
-          ? (folderName.get(r.folder_id) ?? "Folder")
-          : (CAT_META[r.category as SeedCatId]?.label ?? r.category ?? "Resources");
+        const label = CAT_META[r.category as SeedCatId]?.label ?? r.category ?? "Resources";
         out.push({
           id: `res:${r.id}:${i}`,
           name: urls.length > 1 ? `${r.name} (${i + 1})` : r.name,
@@ -1567,6 +1676,7 @@ export default function ResourcesClient({
           sourceLabel: `Resources · ${label}`,
           href: url,
           created_at: r.updated_at ?? r.created_at,
+          resourceId: r.id,
         });
       });
     }
@@ -1582,7 +1692,7 @@ export default function ResourcesClient({
       });
     }
     return out.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-  }, [resources, initialLinkedFiles, folders]);
+  }, [resources, initialLinkedFiles]);
 
   const [healthFilled, healthTotal] = catKey ? catHealth(resources, catKey) : [0, 0];
 
@@ -1618,6 +1728,40 @@ export default function ResourcesClient({
     if (data) setResources(prev => prev.map(r => r.id === target.id ? data as Resource : r));
   }
 
+  // ── Drag-and-drop onto the main content area of any tab. The dropped file
+  //    is uploaded and homed in the current pillar (or a default), and added
+  //    to the folder when a folder is open.
+  const [dragActive, setDragActive] = useState(false);
+  const dragDepth = useRef(0);
+  async function uploadOneFile(file: File, category: string): Promise<Resource | null> {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${user.id}/drop-${Date.now()}-${safe}`;
+    const { error: upErr } = await supabase.storage.from("resources").upload(path, file, { contentType: file.type, upsert: false });
+    if (upErr) return null;
+    const { data: urlData } = supabase.storage.from("resources").getPublicUrl(path);
+    const { data } = await supabase.from("resources").insert({
+      user_id: user.id, category,
+      name: file.name, meta: "", item_type: "file", status: "complete",
+      preview_type: "file",
+      preview_data: { label: file.name.split(".").pop()?.toUpperCase() ?? "FILE", color: C.darkAccent, bg: C.darkAccentL },
+      fields: {}, file_urls: [urlData.publicUrl],
+      actions: [{ label: "Open", variant: "primary" }], position: 9999,
+    }).select().single();
+    if (!data) return null;
+    setResources(prev => [...prev, data as Resource]);
+    return data as Resource;
+  }
+  async function handleDroppedFiles(fileList: FileList) {
+    const home = catKey ?? "design"; // pillar in view, else a sensible default
+    for (const file of Array.from(fileList)) {
+      const r = await uploadOneFile(file, home);
+      if (r && folderId) await addToFolder(r.id, folderId);
+    }
+  }
+
   const sectionMeta: Record<CatId, { title: string; sub: string }> = {
     "all-files": { title:"All files", sub:"Every file across your workspace, in one place" },
     operations: { title:"Operations", sub:"Legal, financial, and logistics documents" },
@@ -1649,9 +1793,10 @@ export default function ResourcesClient({
         onSelectEntity={(source, id, name) => { setCat(linkedCatId(source)); setEntityFilter({ source, id, name }); setSearch(""); setFolderId(null); }}
         activeEntity={entityFilter ? `${entityFilter.source}:${entityFilter.id}` : null}
         folders={folders}
+        folderCounts={folderCounts}
         activeFolderId={folderId}
         onSelectFolder={id => { setFolderId(id); setSearch(""); }}
-        onCreateFolder={createFolder}
+        onCreateFolder={(name) => { void createFolder(name).then(id => { if (id) setFolderId(id); }); }}
       />
 
       <div className="flex flex-col flex-1 overflow-hidden">
@@ -1694,28 +1839,48 @@ export default function ResourcesClient({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto" style={{ padding:20 }}>
-          {/* Folder view — upload bar + the folder's file cards. */}
+        <div className="flex-1 overflow-y-auto" style={{ padding:20, position:"relative" }}
+          onDragEnter={e => { if (e.dataTransfer.types?.includes("Files")) { e.preventDefault(); dragDepth.current++; setDragActive(true); } }}
+          onDragOver={e => { if (e.dataTransfer.types?.includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }}
+          onDragLeave={() => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (dragDepth.current === 0) setDragActive(false); }}
+          onDrop={e => {
+            if (!e.dataTransfer.files?.length) return;
+            e.preventDefault();
+            dragDepth.current = 0; setDragActive(false);
+            void handleDroppedFiles(e.dataTransfer.files);
+          }}>
+          {dragActive && (
+            <div style={{ position:"absolute", inset:12, zIndex:40, borderRadius:14, border:"1.5px dashed var(--color-sage)", background:"rgba(155,163,122,0.10)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8, pointerEvents:"none", backdropFilter:"blur(1px)" }}>
+              <div style={{ width:44, height:44, borderRadius:11, background:"var(--color-sage)", color:"white", display:"flex", alignItems:"center", justifyContent:"center" }}><IcPlus /></div>
+              <div style={{ fontSize:14, fontWeight:700, color:"var(--color-charcoal)" }}>Drop to upload</div>
+              <div style={{ fontSize:11.5, color:"var(--color-grey)" }}>
+                {activeFolder ? `Adds to "${activeFolder.name}"` : catKey ? `Adds to ${sectionMeta[cat].title}` : "Adds to your files"}
+              </div>
+            </div>
+          )}
+          {/* Folder view — the files grouped into this folder. Files are added
+              from any file's ⋯ menu (Add to folder), not uploaded here. */}
           {activeFolder && (
             <>
-              <CategoryUploadBar
-                category=""
-                folderId={activeFolder.id}
-                empty={folderCards.length === 0 && !search}
-                onAddLink={() => setShowAddLink(true)}
-                onUploaded={r => setResources(prev => [...prev, r])}
-              />
-              {search && (
-                <p style={{ fontSize:11, color:"var(--color-grey)", marginBottom:12 }}>
-                  {folderCards.length === 0 ? "No matches" : `${folderCards.length} result${folderCards.length !== 1 ? "s" : ""} for "${search}"`}
-                </p>
+              {folderCards.length === 0 ? (
+                <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:220, gap:8, color:"var(--color-grey)" }}>
+                  <div style={{ width:40, height:40, borderRadius:9, background:"var(--color-cream)", display:"flex", alignItems:"center", justifyContent:"center", color:"var(--color-sage)" }}><IcFolderSm /></div>
+                  <p style={{ fontSize:13, fontWeight:600, color:"var(--color-charcoal)" }}>{search ? "No matches" : "This folder is empty"}</p>
+                  <p style={{ fontSize:11.5, maxWidth:340, textAlign:"center", lineHeight:1.5 }}>Open the <strong>⋯</strong> menu on any file and choose <strong>Add to folder</strong> to group it here.</p>
+                </div>
+              ) : (
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(180px, 1fr))", gap:12 }}>
+                  {folderCards.map(card => {
+                    const url = card.fileUrls[0] ?? card.externalUrl ?? "";
+                    return (
+                      <FilePreviewCard key={card.id} name={card.name} url={url} fileType={null}
+                        caption={(card.name.split(".").pop() ?? "file").toUpperCase()}
+                        menu={fileMenu(card.id)}
+                      />
+                    );
+                  })}
+                </div>
               )}
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(180px, 1fr))", gap:12 }}>
-                {folderCards.map(card => {
-                  const url = card.fileUrls[0] ?? card.externalUrl ?? "";
-                  return <FilePreviewCard key={card.id} name={card.name} url={url} fileType={null} caption={(card.name.split(".").pop() ?? "file").toUpperCase()} />;
-                })}
-              </div>
             </>
           )}
 
@@ -1729,7 +1894,7 @@ export default function ResourcesClient({
           )}
 
           {!activeFolder && cat === "all-files" && (
-            <AllFilesView files={allFiles} search={search} filter={fileFilter} onFilter={setFileFilter} view={view} />
+            <AllFilesView files={allFiles} search={search} filter={fileFilter} onFilter={setFileFilter} view={view} renderMenu={fileMenu} />
           )}
 
           {!activeFolder && isLinks && (

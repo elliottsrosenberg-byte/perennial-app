@@ -537,6 +537,15 @@ export interface ResourceFolder {
   updated_at: string;
 }
 
+/** Many-to-many membership: a resource file grouped into a folder. */
+export interface ResourceFolderItem {
+  id: string;
+  folder_id: string;
+  resource_id: string;
+  user_id: string;
+  created_at: string;
+}
+
 export interface ResourceLink {
   id: string;
   user_id: string;
