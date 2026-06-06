@@ -445,13 +445,15 @@ function CardPreview({ type, data }: { type: string; data?: Record<string, any> 
 }
 
 // ─── Resource card ────────────────────────────────────────────────────────────
-function ResourceCardItem({ card, onOpenModal, onUploadFile, tourTarget, centered }: {
+function ResourceCardItem({ card, onOpenModal, onUploadFile, tourTarget, centered, menu }: {
   card: ResourceCard;
   onOpenModal: (k: string) => void;
   onUploadFile: (cardId: string, file: File) => Promise<void>;
   tourTarget?: string;
   /** Center the card's text content (used in the Pillars grid). */
   centered?: boolean;
+  /** ⋯ actions menu (add-to-folder / delete) rendered top-right. */
+  menu?: React.ReactNode;
 }) {
   const isEmpty = card.status === "empty";
 
@@ -467,19 +469,21 @@ function ResourceCardItem({ card, onOpenModal, onUploadFile, tourTarget, centere
   const clickable = Boolean(card.modalKey || card.fileUrls[0] || card.externalUrl);
 
   return (
-    <div
-      onClick={handleClick}
-      data-tour-target={tourTarget}
-      className="flex flex-col overflow-hidden"
-      style={{
-        background: isEmpty ? "transparent" : "var(--color-off-white)",
-        border: isEmpty ? "0.5px dashed var(--color-border)" : "none",
-        borderRadius:12,
-        boxShadow: isEmpty ? "none" : "0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)",
-        cursor: clickable ? "pointer" : "default",
-        transition:"box-shadow 0.12s",
-      }}
-    >
+    <div style={{ position:"relative" }}>
+      {menu && <div style={{ position:"absolute", top:7, right:7, zIndex:10 }}>{menu}</div>}
+      <div
+        onClick={handleClick}
+        data-tour-target={tourTarget}
+        className="flex flex-col overflow-hidden"
+        style={{
+          background: isEmpty ? "transparent" : "var(--color-off-white)",
+          border: isEmpty ? "0.5px dashed var(--color-border)" : "none",
+          borderRadius:12,
+          boxShadow: isEmpty ? "none" : "0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)",
+          cursor: clickable ? "pointer" : "default",
+          transition:"box-shadow 0.12s",
+        }}
+      >
       <CardPreview type={card.previewType} data={card.previewData} />
       <div style={{ padding:"13px 15px", display:"flex", flexDirection:"column", gap:4, flex:1, alignItems: centered ? "center" : undefined, textAlign: centered ? "center" : undefined }}>
         <div style={{ fontSize:13, fontWeight:600, color: isEmpty ? "var(--color-grey)" : "var(--color-charcoal)" }}>{card.name}</div>
@@ -507,6 +511,7 @@ function ResourceCardItem({ card, onOpenModal, onUploadFile, tourTarget, centere
             ))}
           </div>
         )}
+      </div>
       </div>
     </div>
   );
@@ -1320,21 +1325,25 @@ function FilePreviewCard({ name, url, fileType, caption, deepLink, deepLabel, ki
   const resolvedKind = kind ?? fileKind(name, fileType);
   const img = kind ? kind === "image" : isImageFile(url, fileType);
   return (
-    <div style={{ display:"flex", flexDirection:"column", background:"var(--color-off-white)", borderRadius:10, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)", position:"relative" }}>
-      {menu && <div style={{ position:"absolute", top:6, right:6, zIndex:5 }}>{menu}</div>}
-      <a href={url} target="_blank" rel="noreferrer" style={{ display:"block", height:124, background:"var(--color-cream)", textDecoration:"none" }}>
-        {img
-          ? <img src={url} alt={name} loading="lazy" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
-          : <FileTypeThumb kind={resolvedKind} />}
-      </a>
-      <div style={{ padding:"9px 11px" }}>
-        <div style={{ fontSize:12, fontWeight:600, color:"var(--color-charcoal)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</div>
-        <div style={{ fontSize:10, color:"var(--color-grey)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", marginTop:1 }}>{caption}</div>
-        {deepLink && (
-          <a href={deepLink} style={{ display:"inline-block", marginTop:7, fontSize:10, color:"var(--color-grey)", textDecoration:"none", padding:"3px 8px", border:"0.5px solid var(--color-border)", borderRadius:6 }}>
-            {deepLabel ?? "View in source"} →
-          </a>
-        )}
+    // Outer wrapper is NOT clipped, so the ⋯ menu's dropdown can overflow the
+    // card; the inner card keeps overflow:hidden for the rounded image.
+    <div style={{ position:"relative" }}>
+      {menu && <div style={{ position:"absolute", top:6, right:6, zIndex:10 }}>{menu}</div>}
+      <div style={{ display:"flex", flexDirection:"column", background:"var(--color-off-white)", borderRadius:10, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)" }}>
+        <a href={url} target="_blank" rel="noreferrer" style={{ display:"block", height:124, background:"var(--color-cream)", textDecoration:"none" }}>
+          {img
+            ? <img src={url} alt={name} loading="lazy" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
+            : <FileTypeThumb kind={resolvedKind} />}
+        </a>
+        <div style={{ padding:"9px 11px" }}>
+          <div style={{ fontSize:12, fontWeight:600, color:"var(--color-charcoal)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</div>
+          <div style={{ fontSize:10, color:"var(--color-grey)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", marginTop:1 }}>{caption}</div>
+          {deepLink && (
+            <a href={deepLink} style={{ display:"inline-block", marginTop:7, fontSize:10, color:"var(--color-grey)", textDecoration:"none", padding:"3px 8px", border:"0.5px solid var(--color-border)", borderRadius:6 }}>
+              {deepLabel ?? "View in source"} →
+            </a>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1991,6 +2000,7 @@ export default function ResourcesClient({
                       onUploadFile={uploadFileToResource}
                       tourTarget={i === 0 ? "resources.first-card" : undefined}
                       centered
+                      menu={fileMenu(card.id)}
                     />
                   ))}
                 </div>
@@ -2030,6 +2040,7 @@ export default function ResourcesClient({
                               openUrl={url ?? undefined}
                             />
                           )}
+                          {fileMenu(card.id)}
                         </div>
                       </div>
                     );
