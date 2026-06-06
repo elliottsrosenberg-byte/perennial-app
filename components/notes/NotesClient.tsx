@@ -1186,12 +1186,13 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
 
   // A folder row in the rail: selects to filter, with a hover ⋯ for rename /
   // delete. Kept deliberately small so the module stays simple.
-  function FolderRow({ folder }: { folder: NoteFolder }) {
+  function FolderCard({ folder }: { folder: NoteFolder }) {
     const active = filter === `folder:${folder.id}`;
     const [hovered, setHovered] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [renaming, setRenaming] = useState<string | null>(null);
     const ref = useRef<HTMLDivElement>(null);
+    const count = folderCounts[folder.id] ?? 0;
     useEffect(() => {
       if (!menuOpen) return;
       function h(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as globalThis.Node)) setMenuOpen(false); }
@@ -1204,23 +1205,31 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
         <input autoFocus value={renaming} onChange={e => setRenaming(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter" && renaming.trim()) { renameFolder(folder.id, renaming.trim()); setRenaming(null); } if (e.key === "Escape") setRenaming(null); }}
           onBlur={() => { if (renaming.trim()) renameFolder(folder.id, renaming.trim()); setRenaming(null); }}
-          style={{ width: "100%", fontSize: 12, padding: "5px 8px", borderRadius: 6, border: "0.5px solid var(--color-sage)", background: "var(--color-off-white)", color: "var(--color-text-primary)", outline: "none", fontFamily: "inherit" }} />
+          style={{ minHeight: 56, fontSize: 11.5, padding: "6px 8px", borderRadius: 9, border: "0.5px solid var(--color-sage)", background: "var(--color-off-white)", color: "var(--color-text-primary)", outline: "none", fontFamily: "inherit" }} />
       );
     }
     return (
       <div ref={ref} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} style={{ position: "relative" }}>
         <button onClick={() => toggleFilter(`folder:${folder.id}`)}
-          style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 7, padding: "5px 10px", borderRadius: 6, border: "none", background: active ? "var(--color-surface-raised)" : "transparent", cursor: "pointer", fontFamily: "inherit" }}
-          onMouseEnter={e => { if (!active) e.currentTarget.style.background = "rgba(0,0,0,0.04)"; }}
-          onMouseLeave={e => { if (!active) e.currentTarget.style.background = "transparent"; }}>
-          <Folder size={11} strokeWidth={1.75} style={{ flexShrink: 0, color: active ? "var(--color-sage)" : "var(--color-text-tertiary)" }} />
-          <span style={{ flex: 1, fontSize: 12, color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)", fontWeight: active ? 500 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{folder.name}</span>
-          {(hovered || menuOpen)
-            ? <span onClick={e => { e.stopPropagation(); setMenuOpen(o => !o); }} style={{ color: "var(--color-text-tertiary)", fontSize: 13, lineHeight: 1, padding: "0 2px" }}>⋯</span>
-            : (folderCounts[folder.id] ? <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>{folderCounts[folder.id]}</span> : null)}
+          style={{
+            width: "100%", textAlign: "left", display: "flex", flexDirection: "column", gap: 4, minHeight: 56,
+            padding: "9px 10px", borderRadius: 9, cursor: "pointer", fontFamily: "inherit",
+            border: active ? "1px solid var(--color-sage)" : "0.5px solid var(--color-border)",
+            background: active ? "rgba(155,163,122,0.12)" : "var(--color-off-white)",
+            boxShadow: active ? "0 0 0 2px var(--color-focus-ring)" : "none",
+          }}
+          onMouseEnter={e => { if (!active) e.currentTarget.style.background = "var(--color-cream)"; }}
+          onMouseLeave={e => { if (!active) e.currentTarget.style.background = "var(--color-off-white)"; }}>
+          <Folder size={13} strokeWidth={1.75} style={{ flexShrink: 0, color: active ? "var(--color-sage)" : "var(--color-text-tertiary)" }} />
+          <span style={{ fontSize: 11.5, fontWeight: active ? 600 : 500, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{folder.name}</span>
+          <span style={{ fontSize: 9.5, color: "var(--color-text-tertiary)" }}>{count} note{count === 1 ? "" : "s"}</span>
         </button>
+        {(hovered || menuOpen) && (
+          <button onClick={e => { e.stopPropagation(); setMenuOpen(o => !o); }} title="Folder options"
+            style={{ position: "absolute", top: 5, right: 5, width: 20, height: 20, borderRadius: 5, border: "none", background: "rgba(255,255,255,0.9)", boxShadow: "0 1px 3px rgba(0,0,0,0.15)", cursor: "pointer", color: "var(--color-text-secondary)", fontSize: 13, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>⋯</button>
+        )}
         {menuOpen && (
-          <div style={{ position: "absolute", top: "calc(100% - 2px)", right: 6, zIndex: 30, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 8, boxShadow: "0 6px 24px rgba(0,0,0,0.14)", overflow: "hidden", minWidth: 120 }}>
+          <div style={{ position: "absolute", top: 26, right: 5, zIndex: 30, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 8, boxShadow: "0 6px 24px rgba(0,0,0,0.14)", overflow: "hidden", minWidth: 120 }}>
             <button onClick={() => { setRenaming(folder.name); setMenuOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 11px", fontSize: 11.5, background: "none", border: "none", cursor: "pointer", color: "var(--color-text-primary)", fontFamily: "inherit" }}>Rename</button>
             <button onClick={() => { setFolderToDelete(folder); setMenuOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 11px", fontSize: 11.5, background: "none", border: "none", cursor: "pointer", color: "var(--color-red-orange)", fontFamily: "inherit" }}>Delete folder</button>
           </div>
@@ -1519,30 +1528,6 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
             </div>
           )}
 
-          {/* Folders — optional grouping, kept lightweight. */}
-          <div style={{ padding: "6px 8px 6px", borderBottom: "0.5px solid var(--color-border)", flexShrink: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", padding: "2px 6px 2px" }}>
-              <span style={{ flex: 1, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-tertiary)" }}>Folders</span>
-              <button onClick={() => setNewFolder("")} title="New folder"
-                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-tertiary)", padding: 0, display: "flex" }}>
-                <Plus size={12} />
-              </button>
-            </div>
-            {folders.map(f => <FolderRow key={f.id} folder={f} />)}
-            {newFolder !== null && (
-              <input autoFocus value={newFolder} onChange={e => setNewFolder(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && newFolder.trim()) { createFolder(newFolder.trim()); setNewFolder(null); } if (e.key === "Escape") setNewFolder(null); }}
-                onBlur={() => { if (newFolder.trim()) createFolder(newFolder.trim()); setNewFolder(null); }}
-                placeholder="Folder name…"
-                style={{ width: "100%", fontSize: 11.5, padding: "5px 8px", borderRadius: 6, border: "0.5px solid var(--color-sage)", background: "var(--color-off-white)", color: "var(--color-text-primary)", outline: "none", fontFamily: "inherit", marginTop: 2 }} />
-            )}
-            {folders.length === 0 && newFolder === null && (
-              <p style={{ padding: "2px 6px", fontSize: 10.5, color: "var(--color-text-tertiary)", lineHeight: 1.5 }}>
-                Group notes into folders — add one with +, or from a note&apos;s menu.
-              </p>
-            )}
-          </div>
-
           {/* Note list */}
           <div style={{ flex: 1, overflowY: "auto" }}>
             {filteredNotes.length === 0 && (
@@ -1580,6 +1565,35 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
                 {regularNotes.map(n => <NoteItem key={n.id} note={n} />)}
               </>
             )}
+          </div>
+
+          {/* Folders — bottom half of the rail, as 2-wide cards. */}
+          <div style={{ flexShrink: 0, maxHeight: "46%", display: "flex", flexDirection: "column", borderTop: "0.5px solid var(--color-border)", background: "var(--color-surface-sunken)" }}>
+            <div style={{ display: "flex", alignItems: "center", padding: "8px 12px 4px", flexShrink: 0 }}>
+              <span style={{ flex: 1, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-tertiary)" }}>Folders</span>
+              <button onClick={() => setNewFolder("")} title="New folder"
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-tertiary)", padding: 0, display: "flex" }}>
+                <Plus size={13} />
+              </button>
+            </div>
+            <div style={{ overflowY: "auto", padding: "0 8px 8px" }}>
+              {newFolder !== null && (
+                <input autoFocus value={newFolder} onChange={e => setNewFolder(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && newFolder.trim()) { createFolder(newFolder.trim()); setNewFolder(null); } if (e.key === "Escape") setNewFolder(null); }}
+                  onBlur={() => { if (newFolder.trim()) createFolder(newFolder.trim()); setNewFolder(null); }}
+                  placeholder="Folder name…"
+                  style={{ width: "100%", fontSize: 11.5, padding: "6px 8px", borderRadius: 7, border: "0.5px solid var(--color-sage)", background: "var(--color-off-white)", color: "var(--color-text-primary)", outline: "none", fontFamily: "inherit", marginBottom: 6 }} />
+              )}
+              {folders.length === 0 && newFolder === null ? (
+                <p style={{ padding: "2px 4px", fontSize: 10.5, color: "var(--color-text-tertiary)", lineHeight: 1.5 }}>
+                  Group notes into folders — add one with +, or from a note&apos;s menu.
+                </p>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                  {folders.map(f => <FolderCard key={f.id} folder={f} />)}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Footer */}
