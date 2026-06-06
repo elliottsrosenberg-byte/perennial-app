@@ -198,7 +198,7 @@ const PLAYBOOK: Play[] = [
       "A high-res logo and a headshot.",
       "One easy contact line and a single Drive/Dropbox link to everything.",
     ],
-    link: { href: "/resources", label: "Assemble your kit in Resources" },
+    link: { href: "/resources?cat=press", label: "Assemble your kit in Resources" },
   },
   {
     title: "Pitch like a human",

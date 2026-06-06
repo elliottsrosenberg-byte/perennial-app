@@ -25,10 +25,39 @@ const C = {
 // ("linked-contact" / "linked-organization" / "linked-project"). The
 // "linked-*" surfaces are read-only views of files owned by another module.
 type CatId =
+  | "all-files"
   | "operations" | "brand" | "press" | "design"
   | "links"
   | "linked-contact" | "linked-organization" | "linked-project"
   | "linked-invoice" | "linked-receipt" | "linked-studio";
+
+// Coarse file kind for the unified "All files" filter, derived from MIME type
+// or extension.
+type FileKind = "image" | "pdf" | "doc" | "other";
+function fileKind(name: string, type: string | null): FileKind {
+  const t = (type ?? "").toLowerCase();
+  const ext = (name.split(".").pop() ?? "").toLowerCase();
+  if (t.startsWith("image/") || ["png","jpg","jpeg","gif","webp","svg","heic","avif"].includes(ext)) return "image";
+  if (t.includes("pdf") || ext === "pdf") return "pdf";
+  if (t === "invoice" || t.includes("word") || t.includes("document") || t.includes("sheet") ||
+      ["doc","docx","txt","rtf","md","pages","xls","xlsx","csv","numbers","ppt","pptx","key"].includes(ext)) return "doc";
+  return "other";
+}
+
+/** A file from anywhere, normalized for the "All files" list. */
+interface UnifiedFile {
+  id:          string;
+  name:        string;
+  url:         string;
+  kind:        FileKind;
+  sourceLabel: string;
+  href:        string;
+  created_at:  string;
+}
+
+const LINKED_GROUP_LABEL: Record<LinkedFileSource, string> = Object.fromEntries(
+  LINKED_FILE_GROUPS.map(g => [g.source, g.label]),
+) as Record<LinkedFileSource, string>;
 
 // Visibility key per rail group / sub-group. Persisted in localStorage so the
 // user's left-rail config follows them across sessions.
@@ -795,6 +824,7 @@ function CategoryNav({
     LINKED_FILE_GROUPS.map(g => [g.source, linkedFiles.filter(f => f.source === g.source).length]),
   ) as Record<LinkedFileSource, number>;
   const anyLinked = linkedFiles.length > 0;
+  const allFilesCount = resources.reduce((n, r) => n + (r.file_urls?.length ?? 0), 0) + linkedFiles.length;
   return (
     <div style={{ width:204, flexShrink:0, background:"var(--color-off-white)", borderRight:"0.5px solid var(--color-border)", display:"flex", flexDirection:"column", overflow:"hidden" }}>
       {/* Header */}
@@ -813,6 +843,19 @@ function CategoryNav({
       </div>
 
       <div style={{ flex:1, overflowY:"auto", padding:"8px 0" }} data-tour-target="resources.categories">
+        {/* All files — unified index across the whole workspace. */}
+        <div onClick={() => onSelect("all-files")} className="flex items-center gap-2"
+          style={{ padding:"8px 14px", cursor:"pointer", borderLeft:`2.5px solid ${active==="all-files"?"var(--color-sage)":"transparent"}`, background:active==="all-files"?"var(--color-cream)":undefined }}
+          onMouseEnter={e => { if (active !== "all-files") (e.currentTarget as HTMLElement).style.background = "var(--color-cream)"; }}
+          onMouseLeave={e => { if (active !== "all-files") (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+          <div style={{ width:22, height:22, borderRadius:5, background:"var(--color-cream)", color:"var(--color-grey)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <IcFileSm />
+          </div>
+          <span style={{ fontSize:12, flex:1, fontWeight:active==="all-files"?600:400, color:active==="all-files"?"var(--color-charcoal)":"var(--color-grey)" }}>All files</span>
+          <span style={{ fontSize:9, color:"var(--color-grey)" }}>{allFilesCount}</span>
+        </div>
+
+        <div style={{ height:"0.5px", background:"var(--color-border)", margin:"6px 12px" }} />
         <div style={{ fontSize:9, fontWeight:600, color:"var(--color-grey)", textTransform:"uppercase", letterSpacing:"0.07em", padding:"8px 14px 3px" }}>Categories</div>
 
         {CAT_IDS.map(id => {
@@ -1095,6 +1138,66 @@ function LinkedFilesView({ source, files }: { source: LinkedFileSource; files: L
   );
 }
 
+// ─── All files — unified, searchable, type-filterable index ───────────────────
+function AllFilesView({ files, search, filter, onFilter }: {
+  files: UnifiedFile[]; search: string;
+  filter: "all" | FileKind; onFilter: (f: "all" | FileKind) => void;
+}) {
+  const q = search.trim().toLowerCase();
+  const searched = q
+    ? files.filter(f => f.name.toLowerCase().includes(q) || f.sourceLabel.toLowerCase().includes(q))
+    : files;
+  const counts: Record<string, number> = { all: searched.length, image: 0, pdf: 0, doc: 0, other: 0 };
+  for (const f of searched) counts[f.kind]++;
+  const shown = filter === "all" ? searched : searched.filter(f => f.kind === filter);
+  const PILLS: { key: "all" | FileKind; label: string }[] = [
+    { key: "all", label: "All" }, { key: "image", label: "Images" },
+    { key: "pdf", label: "PDFs" }, { key: "doc", label: "Documents" }, { key: "other", label: "Other" },
+  ];
+  return (
+    <div>
+      <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap" }}>
+        {PILLS.map(p => {
+          const active = filter === p.key;
+          return (
+            <button key={p.key} onClick={() => onFilter(p.key)}
+              style={{ padding:"5px 11px", fontSize:11, borderRadius:999, cursor:"pointer", fontFamily:"inherit",
+                border: active ? "none" : "0.5px solid var(--color-border)",
+                background: active ? "var(--color-charcoal)" : "var(--color-off-white)",
+                color: active ? "white" : "var(--color-grey)" }}>
+              {p.label} <span style={{ opacity:0.65 }}>{counts[p.key] ?? 0}</span>
+            </button>
+          );
+        })}
+      </div>
+      {shown.length === 0 ? (
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:200, gap:8, color:"var(--color-grey)" }}>
+          <IcFileSm />
+          <p style={{ fontSize:12 }}>{q ? "No files match your search" : "No files yet — upload one in any category"}</p>
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+          {shown.map(f => (
+            <a key={f.id} href={f.href} target="_blank" rel="noreferrer" className="flex items-center gap-3"
+              style={{ padding:"11px 15px", background:"var(--color-off-white)", borderRadius:10, boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)", textDecoration:"none", color:"inherit" }}>
+              <div style={{ width:28, height:28, borderRadius:7, background:C.darkAccentL, color:C.darkAccent, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                <IcFileSm />
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:12, fontWeight:600, color:"var(--color-charcoal)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</div>
+                <div style={{ fontSize:10, color:"var(--color-grey)" }}>{f.sourceLabel}</div>
+              </div>
+              <span style={{ fontSize:9, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.04em", color:"var(--color-grey)", flexShrink:0 }}>
+                {f.kind === "other" ? "file" : f.kind}
+              </span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Onboarding hand-off banner ───────────────────────────────────────────────
 // Surfaces at the top of any category view when the user has onboarding data
 // we can hydrate from. Reminds them where they left off and offers a one-click
@@ -1140,18 +1243,24 @@ function OnboardingBanner({ studioName, onDismiss, onJumpToBrand }: {
 export default function ResourcesClient({
   initialResources, initialLinks,
   initialLinkedFiles = [], showOnboardingBanner = false, studioName = null,
+  initialCat = null,
 }: {
   initialResources: Resource[];
   initialLinks: ResourceLink[];
   /** Cross-module file index, server-aggregated from contact/org/project files. */
   initialLinkedFiles?: LinkedFile[];
+  /** Optional `?cat=` deep link target (e.g. the Press playbook → press). */
+  initialCat?: string | null;
   /** True if the user has onboarding data we can surface as a "continue your
    *  brand setup" prompt. The client decides whether to actually show the
    *  banner based on a localStorage dismissal flag. */
   showOnboardingBanner?: boolean;
   studioName?: string | null;
 }) {
-  const [cat, setCat]           = useState<CatId>("operations");
+  const DEEP_LINK_CATS: CatId[] = ["all-files", "operations", "brand", "press", "design", "links"];
+  const [cat, setCat]           = useState<CatId>(
+    initialCat && (DEEP_LINK_CATS as string[]).includes(initialCat) ? (initialCat as CatId) : "operations",
+  );
   const [view, setView]         = useState<"grid" | "list">("grid");
   // Track the active resource row so SetupModal can read its fields and
   // write back to the right id. We resolve the row from modal_key when a
@@ -1161,6 +1270,7 @@ export default function ResourcesClient({
   const [resources, setResources] = useState<Resource[]>(initialResources);
   const [links, setLinks]       = useState<ResourceLink[]>(initialLinks);
   const [search, setSearch]     = useState("");
+  const [fileFilter, setFileFilter] = useState<"all" | FileKind>("all");
 
   // Per-source visibility for the "Linked from elsewhere" rail. Persisted in
   // localStorage. Defaults to all-false: groups only appear when they have
@@ -1226,6 +1336,41 @@ export default function ResourcesClient({
     return links.filter(l => l.name.toLowerCase().includes(q) || l.url.toLowerCase().includes(q));
   }, [links, search]);
 
+  // Unified file index for the "All files" view — every actual file in the
+  // workspace: the Resources module's own uploads + the cross-module linked
+  // files (contacts, projects, invoices, receipts, …). Links live in their
+  // own category, so they're not folded in here.
+  const allFiles = useMemo<UnifiedFile[]>(() => {
+    const out: UnifiedFile[] = [];
+    for (const r of resources) {
+      const urls = r.file_urls ?? [];
+      urls.forEach((url, i) => {
+        const label = CAT_META[r.category as SeedCatId]?.label ?? r.category;
+        out.push({
+          id: `res:${r.id}:${i}`,
+          name: urls.length > 1 ? `${r.name} (${i + 1})` : r.name,
+          url,
+          kind: fileKind(url, null),
+          sourceLabel: `Resources · ${label}`,
+          href: url,
+          created_at: r.updated_at ?? r.created_at,
+        });
+      });
+    }
+    for (const f of initialLinkedFiles) {
+      out.push({
+        id: f.id,
+        name: f.file_name,
+        url: f.file_url,
+        kind: fileKind(f.file_name, f.file_type),
+        sourceLabel: LINKED_GROUP_LABEL[f.source] ?? "Linked",
+        href: f.file_url,
+        created_at: f.created_at,
+      });
+    }
+    return out.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  }, [resources, initialLinkedFiles]);
+
   const [healthFilled, healthTotal] = catKey ? catHealth(resources, catKey) : [0, 0];
 
   const activeResource = activeResourceId ? resources.find(r => r.id === activeResourceId) ?? null : null;
@@ -1261,6 +1406,7 @@ export default function ResourcesClient({
   }
 
   const sectionMeta: Record<CatId, { title: string; sub: string }> = {
+    "all-files": { title:"All files", sub:"Every file across your workspace, in one place" },
     operations: { title:"Operations", sub:"Legal, financial, and logistics documents" },
     brand:      { title:"Brand",      sub:"Identity assets, positioning, and templates" },
     press:      { title:"Press",      sub:"Media kit, pitch decks, and press coverage" },
@@ -1322,6 +1468,10 @@ export default function ResourcesClient({
               onDismiss={dismissBanner}
               onJumpToBrand={() => setCat("brand")}
             />
+          )}
+
+          {cat === "all-files" && (
+            <AllFilesView files={allFiles} search={search} filter={fileFilter} onFilter={setFileFilter} />
           )}
 
           {isLinks && (
