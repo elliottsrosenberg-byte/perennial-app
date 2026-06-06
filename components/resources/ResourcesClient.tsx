@@ -27,24 +27,26 @@ const C = {
 type CatId =
   | "operations" | "brand" | "press" | "design"
   | "links"
-  | "linked-contact" | "linked-organization" | "linked-project";
+  | "linked-contact" | "linked-organization" | "linked-project"
+  | "linked-invoice" | "linked-receipt" | "linked-studio";
 
 // Visibility key per rail group / sub-group. Persisted in localStorage so the
 // user's left-rail config follows them across sessions.
 const LINKED_VIS_KEY = "perennial:resources-linked-visibility";
 const ONBOARD_BANNER_KEY = "perennial:resources-onboarding-banner-dismissed";
 
+const LINKED_SOURCES: LinkedFileSource[] = ["contact", "organization", "project", "invoice", "receipt", "studio"];
+
 function linkedCatId(s: LinkedFileSource): CatId {
   return `linked-${s}` as CatId;
 }
 function isLinkedCat(c: CatId): boolean {
-  return c === "linked-contact" || c === "linked-organization" || c === "linked-project";
+  return typeof c === "string" && c.startsWith("linked-");
 }
 function linkedCatToSource(c: CatId): LinkedFileSource | null {
-  if (c === "linked-contact")      return "contact";
-  if (c === "linked-organization") return "organization";
-  if (c === "linked-project")      return "project";
-  return null;
+  if (!isLinkedCat(c)) return null;
+  const s = c.slice("linked-".length) as LinkedFileSource;
+  return LINKED_SOURCES.includes(s) ? s : null;
 }
 
 interface CardAction {
@@ -789,11 +791,9 @@ function CategoryNav({
 }) {
   // Count by source so the rail can hide groups with zero files (unless the
   // user has explicitly pinned the group visible).
-  const countBySource: Record<LinkedFileSource, number> = {
-    contact:      linkedFiles.filter(f => f.source === "contact").length,
-    organization: linkedFiles.filter(f => f.source === "organization").length,
-    project:      linkedFiles.filter(f => f.source === "project").length,
-  };
+  const countBySource = Object.fromEntries(
+    LINKED_FILE_GROUPS.map(g => [g.source, linkedFiles.filter(f => f.source === g.source).length]),
+  ) as Record<LinkedFileSource, number>;
   const anyLinked = linkedFiles.length > 0;
   return (
     <div style={{ width:204, flexShrink:0, background:"var(--color-off-white)", borderRight:"0.5px solid var(--color-border)", display:"flex", flexDirection:"column", overflow:"hidden" }}>
@@ -851,7 +851,7 @@ function CategoryNav({
             Sub-groups are hidden when their count is 0 unless the user has
             pinned them visible (eye-toggle). Pattern mirrors how Tasks groups
             collapse empty buckets. */}
-        {(anyLinked || linkedVisible.contact || linkedVisible.organization || linkedVisible.project) && (
+        {(anyLinked || Object.values(linkedVisible).some(Boolean)) && (
           <>
             <div style={{ height:"0.5px", background:"var(--color-border)", margin:"6px 12px" }} />
             <div className="flex items-center" style={{ padding:"8px 14px 3px", gap:6 }}>
@@ -1051,8 +1051,13 @@ function CategoryUploadBar({
 // Read-only list of files owned by other modules. Click filename → open. The
 // "View in <Source>" link jumps to the parent entity's panel so the user can
 // edit / delete the file at its source of truth.
+const SOURCE_LABEL: Record<LinkedFileSource, string> = {
+  contact: "Contact", organization: "Organization", project: "Project",
+  invoice: "Invoice", receipt: "Finance", studio: "Settings",
+};
+
 function LinkedFilesView({ source, files }: { source: LinkedFileSource; files: LinkedFile[] }) {
-  const sourceLabel = source === "contact" ? "Contact" : source === "organization" ? "Organization" : "Project";
+  const sourceLabel = SOURCE_LABEL[source] ?? "Source";
   if (files.length === 0) {
     return (
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:200, gap:8, color:"var(--color-grey)" }}>
@@ -1162,6 +1167,7 @@ export default function ResourcesClient({
   // files OR when the user has explicitly pinned them visible.
   const [linkedVisible, setLinkedVisible] = useState<Record<LinkedFileSource, boolean>>({
     contact: false, organization: false, project: false,
+    invoice: false, receipt: false, studio: false,
   });
   // Onboarding banner dismissal flag (localStorage).
   const [bannerDismissed, setBannerDismissed] = useState(false);
@@ -1263,6 +1269,9 @@ export default function ResourcesClient({
     "linked-contact":      { title:"From contacts",      sub:"Files attached to a contact in your network — view in Contacts to edit" },
     "linked-organization": { title:"From organizations", sub:"Files attached to an organization — view in Organizations to edit" },
     "linked-project":      { title:"From projects",      sub:"Files attached to a project — view in Projects to edit" },
+    "linked-invoice":      { title:"From invoices",      sub:"Invoices and their attachments — manage in Finance" },
+    "linked-receipt":      { title:"Receipts",           sub:"Receipts on expenses and bank transactions — manage in Finance" },
+    "linked-studio":       { title:"Studio brand",       sub:"Your logo and brand assets — manage in Settings" },
   };
 
   function handleResourceSaved(updated: Resource) {
