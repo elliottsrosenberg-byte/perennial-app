@@ -7,6 +7,7 @@ import { Layers, Users, Receipt, Send, Clock, Globe, BookOpen, UploadCloud, X as
 import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import AshMark from "@/components/ui/AshMark";
+import Select from "@/components/ui/Select";
 import { COUNTRIES, BUSINESS_TYPES, composeStudioAddress } from "@/lib/profile/business";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -350,30 +351,7 @@ function TextInput({
 function SelectInput({
   value, onChange, options,
 }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
-  return (
-    <div style={{ position: "relative" }}>
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        style={{
-          width: "100%", padding: "9px 30px 9px 13px", fontSize: 13,
-          background: "var(--color-off-white)",
-          border: "0.5px solid var(--color-border)", borderRadius: 9,
-          color: value ? "var(--color-charcoal)" : "var(--color-grey)",
-          fontFamily: "inherit", outline: "none", boxSizing: "border-box" as const,
-          appearance: "none" as const, cursor: "pointer",
-        }}
-        onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
-        onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
-      >
-        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="var(--color-grey)" strokeWidth="2"
-        style={{ position: "absolute", right: 11, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
-        <path d="M4 6l4 4 4-4" />
-      </svg>
-    </div>
-  );
+  return <Select value={value} onChange={onChange} options={options} />;
 }
 
 // ─── Main page component ──────────────────────────────────────────────────────

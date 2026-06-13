@@ -15,6 +15,8 @@ import { COUNTRIES, BUSINESS_TYPES, composeStudioAddress } from "@/lib/profile/b
 import { isAutoTheme, setAutoTheme } from "@/lib/theme";
 import { timeAgoNumericFallback as formatRelative } from "@/lib/format/date";
 import Toggle from "@/components/ui/Toggle";
+import Select from "@/components/ui/Select";
+import Checkbox from "@/components/ui/Checkbox";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -172,33 +174,7 @@ function SelectInput({
 }: {
   value: string; onChange: (v: string) => void; options: { value: string; label: string }[];
 }) {
-  return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-[7px] text-[12px] rounded-lg appearance-none cursor-pointer pr-8"
-        style={{
-          background: "var(--color-warm-white)",
-          border:     "0.5px solid var(--color-border)",
-          color:      "var(--color-charcoal)",
-          fontFamily: "inherit",
-          outline:    "none",
-        }}
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-      <svg
-        className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
-        width="10" height="10" viewBox="0 0 16 16" fill="none"
-        stroke="var(--color-grey)" strokeWidth="2"
-      >
-        <path d="M4 6l4 4 4-4"/>
-      </svg>
-    </div>
-  );
+  return <Select value={value} onChange={onChange} options={options} />;
 }
 
 function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: () => void }) {
@@ -2337,12 +2313,7 @@ function DrivePickerModal({ onClose }: { onClose: () => void }) {
                 onMouseEnter={(e) => { if (!isSel) e.currentTarget.style.background = "var(--color-cream)"; }}
                 onMouseLeave={(e) => { if (!isSel) e.currentTarget.style.background = "transparent"; }}
               >
-                <input
-                  type="checkbox"
-                  checked={isSel}
-                  onChange={() => toggle(f.id)}
-                  style={{ width: 13, height: 13, flexShrink: 0, accentColor: "var(--color-sage)" }}
-                />
+                <Checkbox checked={isSel} onChange={() => toggle(f.id)} />
                 {f.iconLink && (
                   <img src={f.iconLink} alt="" style={{ width: 14, height: 14, flexShrink: 0 }} />
                 )}

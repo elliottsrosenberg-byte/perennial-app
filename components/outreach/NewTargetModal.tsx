@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { OutreachPipeline, OutreachTarget, Contact, Organization } from "@/types/database";
 import { X, User, Building2, UserPlus, Plus } from "lucide-react";
+import Select from "@/components/ui/Select";
+import DatePicker from "@/components/ui/DatePicker";
 
 interface Props {
   pipelines: OutreachPipeline[];
@@ -295,9 +297,11 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
           {!defaultPipelineId && (
             <div>
               <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Pipeline *</label>
-              <select value={pipelineId} onChange={(e) => setPipelineId(e.target.value)} className={inputCls} style={inputStyle}>
-                {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              <Select
+                value={pipelineId}
+                onChange={setPipelineId}
+                options={pipelines.map((p) => ({ value: p.id, label: p.name }))}
+              />
             </div>
           )}
 
@@ -470,8 +474,13 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
             <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>
               Results deadline <span className="font-normal" style={{ color: "var(--color-grey)" }}>(when you expect to hear back)</span>
             </label>
-            <input type="date" value={resultsDeadline} onChange={(e) => setResultsDeadline(e.target.value)}
-              className={inputCls} style={inputStyle} />
+            <DatePicker
+              value={resultsDeadline ? new Date(resultsDeadline + "T12:00:00") : null}
+              onChange={(d) => {
+                const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const day = String(d.getDate()).padStart(2, "0");
+                setResultsDeadline(`${y}-${m}-${day}`);
+              }}
+            />
           </div>
           <div>
             <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Notes</label>
