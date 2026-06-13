@@ -11,6 +11,7 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import AshPromptsModule, { type AshPrompt } from "@/components/ui/AshPromptsModule";
 import { fmtDayRelative as fmtDate, fmtTime } from "@/lib/format/date";
 import { hexToRgba, paletteColorForKey } from "@/lib/ui/palette";
+import SharedEditableField from "@/components/ui/EditableField";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -55,79 +56,18 @@ function groupByDate(activities: OrganizationActivity[]) {
   return result;
 }
 
-// ── Editable field (single-line) ──────────────────────────────────────────────
+// ── Editable fields (shared primitive, Network presets) ──────────────────────
+//
+// Both Network detail panels open blank fields directly into the input
+// ("Add <label>…"), so preset `openWhenEmpty` here and keep the call sites
+// unchanged. Bio / Description use the multiline textarea variant.
 
-function EditableField({ label, value, placeholder = "—", onSave }: {
-  label: string; value: string | null; placeholder?: string; onSave: (v: string | null) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft,   setDraft]   = useState(value ?? "");
-  useEffect(() => { setDraft(value ?? ""); }, [value]);
-
-  function commit() {
-    setEditing(false);
-    const v = draft.trim() || null;
-    if (v !== (value || null)) onSave(v);
-  }
-
-  // Empty fields render as an open input directly (no click-on-the-dash
-  // detour) — matching ContactDetailPanel so every Network scrim edits the
-  // same way. A field with a value stays click-to-edit text until tapped.
-  const showInput = editing || !value;
-
-  return (
-    <div style={{ display: "flex", alignItems: "center", padding: "4px 0", borderBottom: "0.5px solid var(--color-border)", minWidth: 0 }}>
-      <span style={{ fontSize: 11, color: "var(--color-grey)", width: 68, flexShrink: 0 }}>{label}</span>
-      {showInput
-        ? <input value={draft} onChange={e => setDraft(e.target.value)}
-            onFocus={() => setEditing(true)} onBlur={commit}
-            placeholder={placeholder === "—" ? `Add ${(label || "value").toLowerCase()}…` : placeholder}
-            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); commit(); } if (e.key === "Escape") { setDraft(value ?? ""); setEditing(false); } }}
-            autoFocus={editing}
-            style={{ flex: 1, minWidth: 0, width: 0, fontSize: 12, background: "transparent", border: "none", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit", borderBottom: editing ? "1px solid var(--color-sage)" : "1px solid transparent" }} />
-        : <span onClick={() => setEditing(true)} style={{ flex: 1, minWidth: 0, fontSize: 12, color: "#6b6860", cursor: "text", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title="Click to edit">
-            {value}
-          </span>
-      }
-    </div>
-  );
+function EditableField(props: { label: string; value: string | null; placeholder?: string; onSave: (v: string | null) => void }) {
+  return <SharedEditableField {...props} openWhenEmpty />;
 }
 
-// ── Editable multi-line field (bio / description) ────────────────────────────
-
-function EditableTextarea({ label, value, placeholder = "—", onSave }: {
-  label: string; value: string | null; placeholder?: string; onSave: (v: string | null) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft,   setDraft]   = useState(value ?? "");
-  useEffect(() => { setDraft(value ?? ""); }, [value]);
-
-  function commit() {
-    setEditing(false);
-    const v = draft.trim() || null;
-    if (v !== (value || null)) onSave(v);
-  }
-
-  // Empty fields open directly into the textarea (no click-the-dash), to
-  // match the single-line EditableField and the contact scrim.
-  const showInput = editing || !value;
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", padding: "6px 0", borderBottom: "0.5px solid var(--color-border)", minWidth: 0 }}>
-      <span style={{ fontSize: 11, color: "var(--color-grey)", marginBottom: 3 }}>{label}</span>
-      {showInput
-        ? <textarea value={draft} onChange={e => setDraft(e.target.value)}
-            onFocus={() => setEditing(true)} onBlur={commit}
-            placeholder={placeholder === "—" ? `Add ${(label || "value").toLowerCase()}…` : placeholder}
-            onKeyDown={e => { if (e.key === "Escape") { setDraft(value ?? ""); setEditing(false); } if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commit(); } }}
-            autoFocus={editing} rows={editing ? 3 : 2}
-            style={{ width: "100%", minWidth: 0, resize: "vertical", fontSize: 12, lineHeight: 1.55, background: "transparent", border: editing ? "0.5px solid var(--color-sage)" : "0.5px solid transparent", borderRadius: 6, padding: editing ? "5px 7px" : "5px 0", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit" }} />
-        : <span onClick={() => setEditing(true)} style={{ fontSize: 12, lineHeight: 1.55, color: "#6b6860", cursor: "text", whiteSpace: "pre-wrap", wordBreak: "break-word" }} title="Click to edit">
-            {value}
-          </span>
-      }
-    </div>
-  );
+function EditableTextarea(props: { label: string; value: string | null; placeholder?: string; onSave: (v: string | null) => void }) {
+  return <SharedEditableField {...props} openWhenEmpty multiline />;
 }
 
 // ── Canvas editor for organizations ───────────────────────────────────────────

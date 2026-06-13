@@ -5,11 +5,12 @@ import { createClient } from "@/lib/supabase/client";
 import type { OutreachTarget, OutreachPipeline, PipelineStage, Project, Contact } from "@/types/database";
 import {
   X, Maximize2, Minimize2, FileText, Trash2, Settings,
-  CheckSquare, Users, FolderOpen, ExternalLink, Plus, Link2,
+  CheckSquare, Users, FolderOpen, Plus, Link2,
   UserCheck, FolderPlus,
 } from "lucide-react";
 import { useProjectOptions } from "@/lib/projects/options";
 import Select from "@/components/ui/Select";
+import SharedEditableField from "@/components/ui/EditableField";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { getRichExtensions, RichToolbar, InlineAshPopover, submitInlineAsh } from "@/components/ui/RichEditor";
 import type { AshPromptState } from "@/components/ui/RichEditor";
@@ -256,52 +257,13 @@ function OrphanTargetPrompt({
 }
 
 // ── Editable plain text field ─────────────────────────────────────────────────
+//
+// Shared inline-edit primitive with the Target presets: an 80px label column
+// and click-to-edit blanks (no open-when-empty). The Link row passes `isLink`
+// to render the value as an external anchor with an inline Edit affordance.
 
-function EditableField({ label, value, placeholder = "—", onSave, isLink }: {
-  label: string; value: string | null; placeholder?: string; onSave: (v: string | null) => void;
-  /** Show the value as a clickable URL when set and not editing. */
-  isLink?: boolean;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft,   setDraft]   = useState(value ?? "");
-  useEffect(() => { setDraft(value ?? ""); }, [value]);
-
-  function commit() {
-    setEditing(false);
-    const v = draft.trim() || null;
-    if (v !== (value || null)) onSave(v);
-  }
-
-  return (
-    <div style={{ display: "flex", alignItems: "center", padding: "4px 0", borderBottom: "0.5px solid var(--color-border)" }}>
-      <span style={{ fontSize: 11, color: "var(--color-grey)", width: 80, flexShrink: 0 }}>{label}</span>
-      {editing
-        ? <input value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit}
-            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); commit(); } if (e.key === "Escape") { setDraft(value ?? ""); setEditing(false); } }}
-            autoFocus style={{ flex: 1, fontSize: 12, background: "transparent", border: "none", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit", borderBottom: "1px solid var(--color-sage)" }} />
-        : isLink && value
-          ? <span style={{ flex: 1, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4, minWidth: 0 }}>
-              <a href={value} target="_blank" rel="noreferrer"
-                style={{ color: "var(--color-sage)", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}
-                onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
-                onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
-              >
-                {value.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-              </a>
-              <ExternalLink size={10} strokeWidth={1.75} style={{ color: "var(--color-grey)", flexShrink: 0 }} />
-              <button onClick={() => setEditing(true)}
-                style={{ background: "none", border: "none", color: "var(--color-grey)", fontSize: 10, cursor: "pointer", padding: "0 4px", marginLeft: "auto", fontFamily: "inherit" }}
-                title="Edit link"
-              >
-                Edit
-              </button>
-            </span>
-          : <span onClick={() => setEditing(true)} style={{ flex: 1, fontSize: 12, color: value ? "#6b6860" : "var(--color-grey)", cursor: "text" }}>
-              {value || placeholder}
-            </span>
-      }
-    </div>
-  );
+function EditableField(props: { label: string; value: string | null; placeholder?: string; onSave: (v: string | null) => void; isLink?: boolean }) {
+  return <SharedEditableField {...props} labelWidth={80} />;
 }
 
 // ── Date field ────────────────────────────────────────────────────────────────
