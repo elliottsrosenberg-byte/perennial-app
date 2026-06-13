@@ -876,6 +876,9 @@ interface CalEvent {
   location: string | null;
   htmlLink: string | null;
   colorId: string | null;
+  // Parent calendar's colour, resolved server-side. Lets chips paint with
+  // the right tint immediately instead of waiting on the /calendars fetch.
+  color?: string | null;
   source?: "google" | "microsoft";
   accountName?: string | null;
   calendarId?: string | null;
@@ -1779,8 +1782,12 @@ export default function CalendarClient({
   // the left rail; fall back to the per-event Google colorId; final
   // fallback is the provider's default tint.
   function eventColor(e: CalEvent): string {
+    // Prefer the live calendarsById colour (reflects an in-session recolour
+    // before events refetch); then the colour the server stamped on the
+    // event; then the per-event Google colorId; finally the provider tint.
     const cal = e.calendarId ? calendarsById[e.calendarId] : null;
     if (cal?.color) return cal.color;
+    if (e.color)    return e.color;
     if (e.colorId)  return GCAL_COLORS[e.colorId] ?? (e.source === "microsoft" ? "#0078d4" : "#039BE5");
     return e.source === "microsoft" ? "#0078d4" : "#039BE5";
   }
