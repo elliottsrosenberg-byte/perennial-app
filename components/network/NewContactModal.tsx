@@ -4,6 +4,7 @@ import { useState, useRef, KeyboardEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Contact, ContactStatus, LeadStage } from "@/types/database";
 import { X } from "lucide-react";
+import Select from "@/components/ui/Select";
 
 interface Props {
   onClose:   () => void;
@@ -234,18 +235,20 @@ export default function NewContactModal({ onClose, onCreated, isLead = false }: 
               {type === "contact" ? (
                 <>
                   <label className={labelCls} style={{ color: "var(--color-charcoal)" }}>Status</label>
-                  <select value={status} onChange={(e) => setStatus(e.target.value as ContactStatus)}
-                    className={inputCls} style={inputStyle}>
-                    {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
+                  <Select
+                    value={status}
+                    onChange={(v) => setStatus(v as ContactStatus)}
+                    options={STATUS_OPTIONS}
+                  />
                 </>
               ) : (
                 <>
                   <label className={labelCls} style={{ color: "var(--color-charcoal)" }}>Lead stage</label>
-                  <select value={leadStage} onChange={(e) => setLeadStage(e.target.value as LeadStage)}
-                    className={inputCls} style={inputStyle}>
-                    {LEAD_STAGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
+                  <Select
+                    value={leadStage}
+                    onChange={(v) => setLeadStage(v as LeadStage)}
+                    options={LEAD_STAGE_OPTIONS}
+                  />
                 </>
               )}
             </div>

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Expense, ExpenseCategory, Project } from "@/types/database";
 import { X, Paperclip } from "lucide-react";
 import Select from "@/components/ui/Select";
+import Checkbox from "@/components/ui/Checkbox";
 import DatePicker from "@/components/ui/DatePicker";
 
 interface ExpensePrefill {
@@ -215,12 +216,7 @@ export default function AddExpenseModal({ projects, onClose, onCreated, expense,
           {/* Billable — gates whether this expense can be pulled into an
               invoice (mirrors billable time entries). On by default. */}
           <label className="flex items-center gap-2.5 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={billable}
-              onChange={(e) => setBillable(e.target.checked)}
-              style={{ cursor: "pointer", accentColor: "var(--color-sage)", width: 15, height: 15 }}
-            />
+            <Checkbox checked={billable} onChange={() => setBillable((v) => !v)} />
             <span className="text-[12px]" style={{ color: "var(--color-charcoal)" }}>
               Billable to client
               <span className="ml-1.5 text-[11px]" style={{ color: "var(--color-grey)" }}>

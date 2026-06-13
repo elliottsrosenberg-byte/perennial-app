@@ -26,6 +26,7 @@ import {
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Menu from "@/components/ui/Menu";
 import Select from "@/components/ui/Select";
+import Checkbox from "@/components/ui/Checkbox";
 import AddExpenseModal from "./AddExpenseModal";
 import ManualTransactionModal from "./ManualTransactionModal";
 import CustomizeCategoriesModal from "./CustomizeCategoriesModal";
@@ -2477,12 +2478,7 @@ function ExpandedRow({
           <div className="grid gap-3 items-end" style={{ gridTemplateColumns: "auto 1fr" }}>
             <label className="flex items-center gap-2 text-[11.5px] select-none"
               style={{ color: "var(--color-charcoal)", cursor: "pointer", paddingBottom: 6 }}>
-              <input
-                type="checkbox"
-                checked={logBillable}
-                onChange={(e) => setLogBillable(e.target.checked)}
-                style={{ accentColor: "var(--color-sage)", cursor: "pointer" }}
-              />
+              <Checkbox checked={logBillable} onChange={() => setLogBillable((v) => !v)} />
               This is a billable client expense
             </label>
             <div>

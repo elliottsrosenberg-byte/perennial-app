@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import type { BankAccount, BankTransaction } from "@/types/database";
 import { X, Paperclip, Trash2 } from "lucide-react";
 import Select from "@/components/ui/Select";
+import Checkbox from "@/components/ui/Checkbox";
 import DatePicker from "@/components/ui/DatePicker";
 import { uploadReceipt } from "@/lib/uploads/receipt";
 import { CANONICAL_CATEGORIES } from "./plaidCategoryDisplay";
@@ -186,8 +187,7 @@ export default function ManualTransactionModal({ today, accounts, onClose, onCre
           {/* Billable — debits only. */}
           {isDebit && (
             <label className="flex items-center gap-2.5 cursor-pointer select-none">
-              <input type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)}
-                style={{ cursor: "pointer", accentColor: "var(--color-sage)", width: 15, height: 15 }} />
+              <Checkbox checked={billable} onChange={() => setBillable((v) => !v)} />
               <span className="text-[12px]" style={{ color: "var(--color-charcoal)" }}>
                 Billable to client
                 <span className="ml-1.5 text-[11px]" style={{ color: "var(--color-grey)" }}>— can be added to an invoice</span>

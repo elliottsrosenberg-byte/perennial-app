@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Opportunity } from "@/types/database";
 import { Plus, X, Pencil, Eye, EyeOff, Archive, Check, ExternalLink } from "lucide-react";
+import Select from "@/components/ui/Select";
+import DatePicker from "@/components/ui/DatePicker";
 
 interface Suggestion {
   id: string; title: string; category: string | null; event_type: string | null;
@@ -173,6 +175,10 @@ function EditModal({ opp, onClose, onSave }: { opp: Opportunity | null; onClose:
   });
   const [saving, setSaving] = useState(false);
   const set = (k: string, v: string) => setF((p) => ({ ...p, [k]: v }));
+  const fmtDate = (d: Date) => {
+    const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
   const inputCls = "w-full px-3 py-2 text-[13px] rounded-lg focus:outline-none";
   const inputStyle = { background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" } as const;
 
@@ -193,19 +199,19 @@ function EditModal({ opp, onClose, onSave }: { opp: Opportunity | null; onClose:
         <div className="px-5 py-4 space-y-3">
           <Field label="Title *"><input value={f.title} onChange={(e) => set("title", e.target.value)} className={inputCls} style={inputStyle} autoFocus /></Field>
           <div className="flex gap-3">
-            <Field label="Category" flex><select value={f.category} onChange={(e) => set("category", e.target.value)} className={inputCls} style={{ ...inputStyle, appearance: "auto" }}>{CATS.map((c) => <option key={c} value={c}>{c}</option>)}</select></Field>
+            <Field label="Category" flex><Select value={f.category} onChange={(v) => set("category", v)} options={CATS.map((c) => ({ value: c, label: c }))} /></Field>
             <Field label="Type" flex><input value={f.event_type} onChange={(e) => set("event_type", e.target.value)} className={inputCls} style={inputStyle} /></Field>
           </div>
           <div className="flex gap-3">
-            <Field label="Start" flex><input type="date" value={f.start_date ?? ""} onChange={(e) => set("start_date", e.target.value)} className={inputCls} style={{ ...inputStyle, appearance: "auto" }} /></Field>
-            <Field label="End" flex><input type="date" value={f.end_date ?? ""} onChange={(e) => set("end_date", e.target.value)} className={inputCls} style={{ ...inputStyle, appearance: "auto" }} /></Field>
+            <Field label="Start" flex><DatePicker value={f.start_date ? new Date(f.start_date + "T12:00:00") : null} onChange={(d) => set("start_date", fmtDate(d))} /></Field>
+            <Field label="End" flex><DatePicker value={f.end_date ? new Date(f.end_date + "T12:00:00") : null} onChange={(d) => set("end_date", fmtDate(d))} /></Field>
           </div>
-          <Field label="Application deadline"><input type="date" value={f.application_deadline ?? ""} onChange={(e) => set("application_deadline", e.target.value)} className={inputCls} style={{ ...inputStyle, appearance: "auto" }} /></Field>
+          <Field label="Application deadline"><DatePicker value={f.application_deadline ? new Date(f.application_deadline + "T12:00:00") : null} onChange={(d) => set("application_deadline", fmtDate(d))} /></Field>
           <Field label="Location"><input value={f.location ?? ""} onChange={(e) => set("location", e.target.value)} className={inputCls} style={inputStyle} /></Field>
           <Field label="Website"><input value={f.website_url ?? ""} onChange={(e) => set("website_url", e.target.value)} placeholder="https://…" className={inputCls} style={inputStyle} /></Field>
           <Field label="Registration / apply link"><input value={f.registration_url ?? ""} onChange={(e) => set("registration_url", e.target.value)} placeholder="https://…" className={inputCls} style={inputStyle} /></Field>
           <Field label="About"><textarea value={f.about ?? ""} onChange={(e) => set("about", e.target.value)} rows={3} className={`${inputCls} resize-none`} style={inputStyle} /></Field>
-          <Field label="Status"><select value={f.status} onChange={(e) => set("status", e.target.value)} className={inputCls} style={{ ...inputStyle, appearance: "auto" }}><option value="published">Published</option><option value="draft">Draft</option><option value="archived">Archived</option></select></Field>
+          <Field label="Status"><Select value={f.status} onChange={(v) => set("status", v)} options={[{ value: "published", label: "Published" }, { value: "draft", label: "Draft" }, { value: "archived", label: "Archived" }]} /></Field>
         </div>
         <div className="flex items-center justify-end gap-2 px-5 py-4" style={{ borderTop: "0.5px solid var(--color-border)" }}>
           <button onClick={onClose} className="px-4 py-2 text-[13px] rounded-lg" style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}>Cancel</button>

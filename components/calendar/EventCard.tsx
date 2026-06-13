@@ -19,6 +19,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { UserCalendar } from "@/types/database";
+import Checkbox from "@/components/ui/Checkbox";
 import {
   X, Users, Video, MapPin, FileText, Bell, ArrowRight, ChevronDown,
   ChevronUp, Repeat as RepeatIcon, Clock, Trash2,
@@ -624,12 +625,10 @@ export default function EventCard({
 
         <Section icon={<Video size={13} />} label="Conferencing">
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--color-text-secondary)", cursor: fieldsDisabled ? "default" : "pointer" }}>
-            <input
-              type="checkbox"
+            <Checkbox
               checked={addConference}
-              onChange={(e) => setAddConference(e.target.checked)}
+              onChange={() => setAddConference((v) => !v)}
               disabled={fieldsDisabled}
-              style={{ accentColor: "var(--color-sage)" }}
             />
             {isMicrosoft ? "Add Microsoft Teams meeting" : "Add Google Meet"}
           </label>

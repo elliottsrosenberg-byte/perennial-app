@@ -9,6 +9,7 @@ import {
   UserCheck, FolderPlus,
 } from "lucide-react";
 import { useProjectOptions } from "@/lib/projects/options";
+import Select from "@/components/ui/Select";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { getRichExtensions, RichToolbar, InlineAshPopover, submitInlineAsh } from "@/components/ui/RichEditor";
 import type { AshPromptState } from "@/components/ui/RichEditor";
@@ -982,13 +983,11 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
                     onChange={e => setPromoteTitle(e.target.value)}
                     placeholder="Project title"
                     style={{ width: "100%", padding: "5px 8px", fontSize: 11.5, borderRadius: 6, background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none", marginBottom: 6 }} />
-                  <select value={promoteType}
-                    onChange={e => setPromoteType(e.target.value)}
-                    style={{ width: "100%", padding: "5px 8px", fontSize: 11.5, borderRadius: 6, background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none" }}>
-                    {projectOptions.type.map(o => (
-                      <option key={o.key} value={o.key}>{o.label}</option>
-                    ))}
-                  </select>
+                  <Select
+                    value={promoteType}
+                    onChange={setPromoteType}
+                    options={projectOptions.type.map(o => ({ value: o.key, label: o.label }))}
+                  />
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 8 }}>
                     <button onClick={() => setPromoteOpen(false)}
                       style={{ padding: "4px 10px", fontSize: 11, background: "transparent", color: "#6b6860", border: "0.5px solid var(--color-border)", borderRadius: 6, cursor: "pointer", fontFamily: "inherit" }}>

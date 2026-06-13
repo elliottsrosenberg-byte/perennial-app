@@ -6,6 +6,7 @@ import type { OutreachPipeline, PipelineStage, OutreachTarget, MetaStage, Contac
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import { Plus, Send, Check, Clock, Search, Moon, MoreHorizontal } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
+import Select from "@/components/ui/Select";
 
 // The Ether — a per-pipeline "parking lot" for paused targets. Visually
 // distinct via a light-blue tint so cards inside it read as "set down, not
@@ -685,19 +686,13 @@ function StageColumnHeader({
               {targets.length} target{targets.length === 1 ? "" : "s"} in this stage. Pick where they should move:
             </p>
             {siblingStages.length > 0 ? (
-              <select
-                value={moveTo}
-                onChange={(e) => setMoveTo(e.target.value)}
-                style={{
-                  width: "100%", padding: "8px 10px", fontSize: 13, borderRadius: 8,
-                  background: "var(--color-warm-white)",
-                  border: "0.5px solid var(--color-border)",
-                  color: "var(--color-charcoal)", fontFamily: "inherit",
-                  marginBottom: 16,
-                }}
-              >
-                {siblingStages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              <div style={{ marginBottom: 16 }}>
+                <Select
+                  value={moveTo}
+                  onChange={setMoveTo}
+                  options={siblingStages.map(s => ({ value: s.id, label: s.name }))}
+                />
+              </div>
             ) : (
               <p style={{ fontSize: 12, color: "var(--color-red-orange)", marginBottom: 16 }}>
                 No other {isOutcome ? "outcome" : "active"} stage to move targets into. Add another stage first.

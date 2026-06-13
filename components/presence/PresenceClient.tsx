@@ -10,6 +10,8 @@ import PressTab from "./PressTab";
 import { tagsForPractices, disciplineLabel } from "@/lib/opportunities/disciplines";
 import { MoreHorizontal, Plus, ChevronDown } from "lucide-react";
 import { detectHostingPlatform, guideFor } from "@/lib/presence/detectHostingPlatform";
+import Select from "@/components/ui/Select";
+import DatePicker from "@/components/ui/DatePicker";
 
 function openAsh(message: string) {
   window.dispatchEvent(new CustomEvent("open-ash", { detail: { message } }));
@@ -831,12 +833,12 @@ function WebsiteTab({ integration, onConnect, onDisconnect }: {
             </div>
           ) : (
             <div style={{ width:"100%", maxWidth:400, display:"flex", flexDirection:"column", gap:10 }}>
-              <select value={selectedPropId} onChange={e => setSelectedPropId(e.target.value)}
-                style={{ width:"100%", padding:"10px 14px", fontSize:13, borderRadius:8, border:"0.5px solid var(--color-border)", background:"var(--color-off-white)", color:"var(--color-charcoal)", fontFamily:"inherit", outline:"none" }}>
-                {properties.map(p => (
-                  <option key={p.propertyId} value={p.propertyId}>{p.displayName} ({p.account})</option>
-                ))}
-              </select>
+              <Select
+                value={selectedPropId}
+                onChange={setSelectedPropId}
+                options={properties.map(p => ({ value: p.propertyId, label: `${p.displayName} (${p.account})` }))}
+                placeholder="Select a property…"
+              />
               <button onClick={saveProperty} disabled={savingProp || !selectedPropId}
                 style={{ padding:"10px 0", fontSize:13, fontWeight:500, borderRadius:8, border:"none", background:"var(--color-sage)", color:"white", cursor:"pointer", fontFamily:"inherit", opacity: savingProp ? 0.6 : 1 }}>
                 {savingProp ? "Connecting…" : "Connect this property"}
@@ -2139,13 +2141,17 @@ function SuggestListingModal({ onClose }: { onClose: () => void }) {
               <div className="flex gap-3">
                 <div className="flex-1">
                   <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Type</label>
-                  <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls} style={{ ...inputStyle, appearance: "auto" }}>
-                    {CATS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-                  </select>
+                  <Select value={category} onChange={setCategory} options={CATS} />
                 </div>
                 <div className="flex-1">
                   <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Date</label>
-                  <input type="date" value={startDate} onChange={(e) => setStart(e.target.value)} className={inputCls} style={{ ...inputStyle, appearance: "auto" }} />
+                  <DatePicker
+                    value={startDate ? new Date(startDate + "T12:00:00") : null}
+                    onChange={(d) => {
+                      const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const day = String(d.getDate()).padStart(2, "0");
+                      setStart(`${y}-${m}-${day}`);
+                    }}
+                  />
                 </div>
               </div>
               <div>
