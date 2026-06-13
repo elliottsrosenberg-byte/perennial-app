@@ -241,8 +241,9 @@ export async function GET(req: Request) {
   // - `hasAny` includes tombstoned rows: a removed calendar still counts as
   //   "the user has rows here", so we don't fall back to primary-only and
   //   trigger a sync that would re-create the tombstones' siblings.
-  // - `metas` only includes rows that are visible AND not removed. The
-  //   aggregator fans out to exactly these.
+  // - `metas` includes every row that isn't removed — hidden ones too. The
+  //   client filters by visibility, so returning hidden calendars' events
+  //   lets the eye-toggle hide/show instantly without a refetch round trip.
   const { data: userCalendars } = await supabase
     .from("user_calendars")
     .select("id, provider, account_email, external_id, visible, writable, removed, color")
@@ -260,7 +261,7 @@ export async function GET(req: Request) {
     const key = acctKey(c.provider, c.account_email);
     const entry = calendarsByAccount.get(key) ?? { metas: [], hasAny: false };
     entry.hasAny = true;
-    if (c.visible && !c.removed) entry.metas.push({ externalId: c.external_id, rowId: c.id, writable: !!c.writable, color: c.color ?? null });
+    if (!c.removed) entry.metas.push({ externalId: c.external_id, rowId: c.id, writable: !!c.writable, color: c.color ?? null });
     calendarsByAccount.set(key, entry);
   }
 
@@ -269,9 +270,10 @@ export async function GET(req: Request) {
   let needsBackfill = false;
 
   // Resolve `metas` per provider with this priority:
-  //   1) entry exists and has at least one visible-non-removed row → use it
-  //   2) entry exists but every row is hidden or tombstoned → empty metas
-  //      (user intentionally has nothing visible; do not fetch anything)
+  //   1) entry exists and has at least one non-removed row → use it (hidden
+  //      rows included; the client decides what to show)
+  //   2) entry exists but every row is tombstoned → empty metas (nothing
+  //      left to fetch)
   //   3) no entry at all → fall back to primary-only and trigger a sync
   //      so the next request sees the real list. This is the legacy /
   //      first-load path.

@@ -1792,6 +1792,20 @@ export default function CalendarClient({
     return e.source === "microsoft" ? "#0078d4" : "#039BE5";
   }
 
+  // The grid renders only events whose parent calendar is visible. The
+  // events route returns every non-removed calendar's events (hidden ones
+  // included), so toggling the eye icon is a pure client-side filter via
+  // calendarsById — no PATCH-then-refetch round trip. Events with no
+  // calendarId (legacy connections not yet resynced) always show.
+  const visibleGcalEvents = useMemo(
+    () => gcalEvents.filter((e) => {
+      if (!e.calendarId) return true;
+      const cal = calendarsById[e.calendarId];
+      return cal ? cal.visible !== false : true;
+    }),
+    [gcalEvents, calendarsById],
+  );
+
   // ── Deep link: ?eventId=<encoded provider:external_id> opens the
   // EventCard for that event once it lands in gcalEvents. Used
   // by Ash references and shareable calendar links. We strip the query
@@ -2588,7 +2602,7 @@ export default function CalendarClient({
             monthLabel={monthLabel}
             rowHeightPx={MONTH_WEEK_ROW_PX}
             scrollRef={monthWrapRef}
-            events={gcalEvents}
+            events={visibleGcalEvents}
             tasks={scheduledTasks}
             projects={initialProjects}
             showWeekends={showWeekends}
@@ -2849,7 +2863,7 @@ export default function CalendarClient({
             const seenIds = new Set<string>();
             const seenSig = new Set<string>();
             const dedupedAllDay: CalEvent[] = [];
-            for (const ev of gcalEvents) {
+            for (const ev of visibleGcalEvents) {
               if (!ev.allDay) continue;
               if (seenIds.has(ev.id)) continue;
               const sig = `${ev.title}|${ev.start}|${ev.end}`;
@@ -3404,7 +3418,7 @@ export default function CalendarClient({
                         groups; within a group every chip gets a column
                         index and groupSize to compute left/width. */}
                     {(() => {
-                      const dayEvents = gcalEvents.filter(e => {
+                      const dayEvents = visibleGcalEvents.filter(e => {
                         if (e.allDay) return false;
                         return isSameDay(new Date(e.start), day);
                       });
@@ -3586,7 +3600,7 @@ export default function CalendarClient({
       {/* Month "+N more" day overlay */}
       {monthDayOverlay && (() => {
         const date = monthDayOverlay.date;
-        const dayEvents   = gcalEvents.filter((e) => {
+        const dayEvents   = visibleGcalEvents.filter((e) => {
           if (e.allDay) {
             const s = new Date(e.start + (e.start.length === 10 ? "T00:00:00" : ""));
             return isSameDay(s, date);

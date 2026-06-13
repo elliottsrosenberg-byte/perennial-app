@@ -163,7 +163,9 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
         body:    JSON.stringify({ id: cal.id, visible: nextVisible }),
       });
       if (!res.ok) throw new Error("PATCH failed");
-      window.dispatchEvent(new Event("calendar:refresh-events"));
+      // No refetch: the grid already has every non-removed calendar's
+      // events and filters by the visible flag, which the optimistic
+      // row-changed above flipped. The PATCH just persists it for next load.
     } catch {
       setCalendars((prev) => prev.map((c) => (c.id === cal.id ? { ...c, visible: cal.visible } : c)));
       window.dispatchEvent(new CustomEvent("calendar:row-changed", { detail: { id: cal.id, patch: { visible: cal.visible } } }));
