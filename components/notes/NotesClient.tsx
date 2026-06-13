@@ -4,16 +4,16 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Note, NoteFolder, NoteFolderItem } from "@/types/database";
-import { useEditor, useEditorState, EditorContent } from "@tiptap/react";
-import { Pin, Search, Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, MoreHorizontal, Upload, NotebookPen, Image as ImageIcon, FolderPlus, Folder, Plus, Trash2, Check, ChevronLeft } from "lucide-react";
+import { useEditor, EditorContent } from "@tiptap/react";
+import { Pin, Search, MoreHorizontal, Upload, NotebookPen, FolderPlus, Folder, Plus, Trash2, Check, ChevronLeft } from "lucide-react";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
 import {
   getRichExtensions,
+  RichToolbar,
   InlineAshPopover,
   submitInlineAsh,
-  insertEditorImageFromFile,
 } from "@/components/ui/RichEditor";
 import NotesIntroModal from "@/components/tour/notes/NotesIntroModal";
 import NotesTooltipTour from "@/components/tour/notes/NotesTooltipTour";
@@ -271,159 +271,6 @@ function InlineLinkPicker({
   );
 }
 
-// ─── FormatToolbar ────────────────────────────────────────────────────────────
-
-function FormatToolbar({
-  editor, onGenerateTasks, suggesting,
-}: {
-  editor:            ReturnType<typeof useEditor> | null;
-  onGenerateTasks?:  () => void;
-  suggesting?:       boolean;
-}) {
-  const imageInputRef = useRef<HTMLInputElement>(null);
-
-  // Subscribe to every editor transaction (not just content changes) so the
-  // active-state highlights stay in sync when a mark is toggled with the
-  // cursor collapsed (a stored-mark transaction that doesn't change the doc)
-  // or when the selection moves.
-  const active = useEditorState({
-    editor,
-    selector: ({ editor: ed }) => ({
-      bold:        ed?.isActive("bold")                  ?? false,
-      italic:      ed?.isActive("italic")                ?? false,
-      underline:   ed?.isActive("underline")             ?? false,
-      strike:      ed?.isActive("strike")                ?? false,
-      h1:          ed?.isActive("heading", { level: 1 }) ?? false,
-      h2:          ed?.isActive("heading", { level: 2 }) ?? false,
-      bulletList:  ed?.isActive("bulletList")            ?? false,
-      orderedList: ed?.isActive("orderedList")           ?? false,
-    }),
-  });
-
-  if (!editor || !active) return null;
-
-  async function pickImages(files: FileList | null) {
-    if (!files || files.length === 0 || !editor) return;
-    for (const f of Array.from(files)) {
-      await insertEditorImageFromFile(editor, f);
-    }
-  }
-
-  function btn(label: React.ReactNode, action: () => void, active?: boolean, title?: string) {
-    return (
-      <button
-        type="button"
-        onMouseDown={e => { e.preventDefault(); action(); }}
-        title={title}
-        style={{
-          width: 26, height: 26, borderRadius: 5, border: "none",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          background: active ? "var(--color-surface-sunken)" : "transparent",
-          color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)",
-          cursor: "pointer", flexShrink: 0, transition: "all 0.08s ease",
-        }}
-        onMouseEnter={e => { e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
-        onMouseLeave={e => { e.currentTarget.style.background = active ? "var(--color-surface-sunken)" : "transparent"; }}
-      >{label}</button>
-    );
-  }
-
-  function sep() {
-    return <div style={{ width: "0.5px", height: 14, background: "var(--color-border)", margin: "0 2px", flexShrink: 0 }} />;
-  }
-
-  return (
-    <div data-tour-target="notes.format-toolbar" style={{
-      display: "flex", alignItems: "center", gap: 2, padding: "6px 20px", flexShrink: 0,
-      borderBottom: "0.5px solid var(--color-border)", background: "var(--color-surface-raised)",
-    }}>
-      {btn(<Bold size={12} />,          () => editor.chain().focus().toggleBold().run(),          active.bold,      "Bold")}
-      {btn(<Italic size={12} />,        () => editor.chain().focus().toggleItalic().run(),        active.italic,    "Italic")}
-      {btn(<UnderlineIcon size={12} />, () => editor.chain().focus().toggleUnderline().run(),     active.underline, "Underline")}
-      {btn(<Strikethrough size={12} />, () => editor.chain().focus().toggleStrike().run(),        active.strike,    "Strikethrough")}
-      {sep()}
-      {btn(<span style={{ fontSize: 11, fontWeight: 700 }}>H1</span>, () => editor.chain().focus().toggleHeading({ level: 1 }).run(), active.h1, "Heading 1")}
-      {btn(<span style={{ fontSize: 11, fontWeight: 700 }}>H2</span>, () => editor.chain().focus().toggleHeading({ level: 2 }).run(), active.h2, "Heading 2")}
-      {sep()}
-      {btn(<List size={12} />,        () => editor.chain().focus().toggleBulletList().run(),  active.bulletList,  "Bullet list")}
-      {btn(<ListOrdered size={12} />, () => editor.chain().focus().toggleOrderedList().run(), active.orderedList, "Numbered list")}
-      {sep()}
-      {btn(
-        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-          <path d="M5 4l4 4-4 4"/><path d="M9 8h5"/>
-        </svg>,
-        () => editor.chain().focus().insertContent({
-          type: "toggleBlock",
-          attrs: { summary: "", open: false },
-          content: [{ type: "paragraph" }],
-        }).run(),
-        false,
-        "Toggle block",
-      )}
-      {sep()}
-      <button
-        type="button"
-        title="Insert image"
-        onMouseDown={(e) => {
-          e.preventDefault();
-          const input = imageInputRef.current;
-          if (input) input.click();
-        }}
-        style={{
-          width: 26, height: 26, borderRadius: 5, border: "none",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          background: "transparent", color: "var(--color-text-secondary)",
-          cursor: "pointer", flexShrink: 0,
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-      >
-        <ImageIcon size={12} />
-      </button>
-      <input
-        ref={imageInputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
-        multiple
-        style={{ display: "none" }}
-        onChange={(e) => {
-          void pickImages(e.target.files);
-          e.target.value = "";
-        }}
-      />
-
-      {/* Spacer */}
-      <div style={{ flex: 1 }} />
-
-      {/* Generate tasks — Ash gradient border */}
-      {onGenerateTasks && (
-        <button
-          type="button"
-          data-tour-target="notes.generate-tasks"
-          onClick={onGenerateTasks}
-          disabled={suggesting}
-          title="Generate tasks from this note"
-          style={{
-            display: "flex", alignItems: "center", gap: 5,
-            padding: "3px 10px", fontSize: 11, fontWeight: 500, borderRadius: 6,
-            background: "linear-gradient(#fffefc, #fffefc) padding-box, linear-gradient(135deg, #a8b886 0%, #4a6232 100%) border-box",
-            border: "1px solid transparent",
-            color: "var(--color-sage-text)",
-            cursor: suggesting ? "not-allowed" : "pointer",
-            opacity: suggesting ? 0.5 : 1, fontFamily: "inherit", flexShrink: 0,
-            transition: "opacity 0.1s ease",
-          }}
-        >
-          <svg width="9" height="9" viewBox="0 0 16 16" fill="var(--color-sage-text)">
-            <path d="M8 1l1.2 4.2L14 7l-4.8 1.8L8 14l-1.2-5.2L2 7l4.8-1.8L8 1z"/>
-          </svg>
-          {suggesting ? "Thinking…" : "Generate tasks"}
-        </button>
-      )}
-    </div>
-  );
-}
-
 // ─── SuggestTasksModal ────────────────────────────────────────────────────────
 
 function SuggestTasksModal({
@@ -673,7 +520,7 @@ function NoteEditor({
 
   return (
     <div data-tour-target="notes.editor" style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
-      <FormatToolbar editor={editor ?? null} onGenerateTasks={onGenerateTasks} suggesting={suggesting} />
+      <RichToolbar editor={editor ?? null} onGenerateTasks={onGenerateTasks} suggesting={suggesting} tourTarget="notes.format-toolbar" generateTasksTourTarget="notes.generate-tasks" />
 
       <div style={{ flex: 1, overflowY: "auto", background: "var(--color-off-white)" }}>
         <div style={{ maxWidth: 720, padding: "40px 64px 80px", margin: "0 auto" }}>

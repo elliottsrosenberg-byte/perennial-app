@@ -437,7 +437,7 @@ export function getSelectionExtract(editor: Editor): { text: string; html: strin
 }
 
 export function RichToolbar({
-  editor, onGenerateTasks, suggesting, imageUploadHandler,
+  editor, onGenerateTasks, suggesting, imageUploadHandler, tourTarget, generateTasksTourTarget,
 }: {
   editor:              ReturnType<typeof useEditor> | null;
   onGenerateTasks?:    () => void;
@@ -446,6 +446,10 @@ export function RichToolbar({
    *  installs into the editor instance (Supabase upload). Lets tests + the
    *  Notes Import preview swap in a no-op or in-memory uploader. */
   imageUploadHandler?: EditorImageUploader;
+  /** `data-tour-target` for the toolbar container (Notes' tour points here). */
+  tourTarget?:              string;
+  /** `data-tour-target` for the Generate-tasks button (Notes' tour). */
+  generateTasksTourTarget?: string;
 }) {
   const imageInputRef = useRef<HTMLInputElement>(null);
 
@@ -485,7 +489,7 @@ export function RichToolbar({
         alignItems: "center", justifyContent: "center",
         background: active ? "var(--color-surface-sunken)" : "transparent",
         color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)",
-        cursor: "pointer", flexShrink: 0,
+        cursor: "pointer", flexShrink: 0, transition: "all 0.08s ease",
       }}
       onMouseEnter={e => { e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
       onMouseLeave={e => { e.currentTarget.style.background = active ? "var(--color-surface-sunken)" : "transparent"; }}
@@ -498,7 +502,7 @@ export function RichToolbar({
   }
 
   return (
-    <div style={{
+    <div data-tour-target={tourTarget} style={{
       display: "flex", alignItems: "center", gap: 2, padding: "6px 20px", flexShrink: 0,
       borderBottom: "0.5px solid var(--color-border)", background: "var(--color-surface-raised)",
     }}>
@@ -553,7 +557,7 @@ export function RichToolbar({
       />
       <div style={{ flex: 1 }} />
       {onGenerateTasks && (
-        <button type="button" onClick={onGenerateTasks} disabled={suggesting} title="Generate tasks from this note" style={{
+        <button type="button" data-tour-target={generateTasksTourTarget} onClick={onGenerateTasks} disabled={suggesting} title="Generate tasks from this note" style={{
           display: "flex", alignItems: "center", gap: 5, padding: "3px 10px",
           fontSize: 11, fontWeight: 500, borderRadius: 6,
           background: "linear-gradient(#fffefc, #fffefc) padding-box, linear-gradient(135deg, #a8b886 0%, #4a6232 100%) border-box",
