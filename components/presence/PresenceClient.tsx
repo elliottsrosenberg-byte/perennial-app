@@ -1331,6 +1331,16 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
                 recentPosts.map((post, i) => {
                   const ts = post.timestamp ? new Date(post.timestamp) : null;
                   const captionPreview = (post.caption ?? "").split("\n")[0].slice(0, 120);
+                  // Metrics shown on the right of the card. Reach/engagement lead
+                  // (the meaningful ones), then likes/comments, then saved/shares
+                  // when the per-post insights are available.
+                  const metrics: { value: string; label: string }[] = [];
+                  if (post.reach != null)           metrics.push({ value: post.reach.toLocaleString(),    label: "reach" });
+                  if (post.engagement_rate != null) metrics.push({ value: `${post.engagement_rate}%`,      label: "eng" });
+                  metrics.push({ value: post.likes.toLocaleString(),    label: "likes" });
+                  metrics.push({ value: post.comments.toLocaleString(), label: "comments" });
+                  if (post.saved != null)           metrics.push({ value: post.saved.toLocaleString(),    label: "saved" });
+                  if (post.shares != null)          metrics.push({ value: post.shares.toLocaleString(),   label: "shares" });
                   return (
                     <a
                       key={post.id ?? i}
@@ -1338,7 +1348,7 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
                       target={post.permalink ? "_blank" : undefined}
                       rel="noreferrer"
                       onClick={e => { if (!post.permalink) e.preventDefault(); }}
-                      className="flex items-start gap-3"
+                      className="flex items-center gap-3"
                       style={{ padding:"11px 15px", borderBottom: i === recentPosts.length - 1 ? "none" : "0.5px solid var(--color-border)", textDecoration:"none", color:"inherit", cursor: post.permalink ? "pointer" : "default" }}
                     >
                       {post.thumbnail_url ? (
@@ -1346,25 +1356,22 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
                       ) : (
                         <div className="flex items-center justify-center rounded-lg shrink-0" style={{ width:56, height:56, background:"var(--color-cream)", color:"var(--color-grey)" }}><IcImage /></div>
                       )}
+                      {/* Left: caption + date */}
                       <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:4 }}>
                         <div style={{ fontSize:12, color:"var(--color-charcoal)", lineHeight:1.4, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" as const, overflow:"hidden" }}>
                           {captionPreview || <span style={{ color:"var(--color-grey)", fontStyle:"italic" }}>No caption</span>}
                         </div>
-                        <div style={{ fontSize:10, color:"var(--color-grey)", display:"flex", gap:10 }}>
-                          <span>{post.likes.toLocaleString()} likes</span>
-                          <span>{post.comments.toLocaleString()} comments</span>
-                          {ts && <span>· {ts.toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>}
-                        </div>
-                        {(post.reach != null || post.engagement_rate != null || post.saved != null || post.shares != null) && (
-                          <div style={{ fontSize:10, color:"var(--color-grey)", display:"flex", flexWrap:"wrap", gap:10 }}>
-                            {post.reach != null && <span>{post.reach.toLocaleString()} reach</span>}
-                            {post.engagement_rate != null && <span>{post.engagement_rate}% eng</span>}
-                            {post.saved != null && <span>{post.saved.toLocaleString()} saved</span>}
-                            {post.shares != null && <span>{post.shares.toLocaleString()} shares</span>}
-                          </div>
-                        )}
+                        {ts && <span style={{ fontSize:10, color:"var(--color-grey)" }}>{ts.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</span>}
                       </div>
-                      {post.permalink && <span style={{ ...blueLink, alignSelf:"center", whiteSpace:"nowrap" }}>View →</span>}
+                      {/* Right: metrics */}
+                      <div style={{ flexShrink:0, display:"flex", flexWrap:"wrap", justifyContent:"flex-end", gap:"5px 14px", maxWidth:176 }}>
+                        {metrics.map(m => (
+                          <div key={m.label} style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", lineHeight:1.15 }}>
+                            <span style={{ fontSize:13, fontWeight:600, color:"var(--color-charcoal)" }}>{m.value}</span>
+                            <span style={{ fontSize:9, color:"var(--color-grey)", textTransform:"uppercase", letterSpacing:"0.04em" }}>{m.label}</span>
+                          </div>
+                        ))}
+                      </div>
                     </a>
                   );
                 })
