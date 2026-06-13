@@ -1740,6 +1740,11 @@ export default function ProjectDetailPanel({
   const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(initialHighlightTaskId ?? null);
   const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(initialHighlightNoteId ?? null);
 
+  // Always-fresh refs so the task-sync effect below can notify the parent
+  // without re-subscribing on every project-field edit.
+  const onUpdatedRef    = useRef(onUpdated);    onUpdatedRef.current    = onUpdated;
+  const localProjectRef = useRef(localProject); localProjectRef.current = localProject;
+
   useEffect(() => {
     if (!initialHighlightTaskId && !initialHighlightNoteId) return;
     const t = setTimeout(() => {
@@ -1812,6 +1817,16 @@ export default function ProjectDetailPanel({
       setCanvasHtml(p?.canvas_html ?? null);
     });
   }, [initialProject.id]);
+
+  // Keep the parent's project.tasks in sync whenever the local task list
+  // changes (toggle / add / edit / delete). Without this, the dashboard
+  // ProjectCard's "X/Y done" count is computed from the stale server
+  // snapshot and doesn't reflect a task checked/unchecked in this panel.
+  // Safe from loops: the open-reset effect above keys on initialProject.id,
+  // so the parent re-passing a same-id project doesn't reset `tasks`.
+  useEffect(() => {
+    onUpdatedRef.current?.({ ...localProjectRef.current, tasks });
+  }, [tasks]);
 
   // Refetch tasks + notes after each Ash turn — Ash may have created tasks
   // or notes via its tools, and those should appear without requiring the
