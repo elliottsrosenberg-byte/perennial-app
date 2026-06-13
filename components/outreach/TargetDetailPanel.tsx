@@ -13,6 +13,9 @@ import Select from "@/components/ui/Select";
 import DetailPanelShell from "@/components/ui/DetailPanelShell";
 import SharedEditableField from "@/components/ui/EditableField";
 import DatePillField from "@/components/ui/DatePillField";
+import EntityTasksTab from "@/components/detail/EntityTasksTab";
+import EntityNotesTab from "@/components/detail/EntityNotesTab";
+import EntityFilesTab from "@/components/detail/EntityFilesTab";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { getRichExtensions, RichToolbar, InlineAshPopover, submitInlineAsh } from "@/components/ui/RichEditor";
 import type { AshPromptState } from "@/components/ui/RichEditor";
@@ -1048,10 +1051,20 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
                 initialHtml={canvasHtml}
               />;
             })()}
-            {activeTab === "tasks"  && <StubPane heading="Tasks for this target" body="Track what you need to do next — research, draft a pitch, follow up. Coming soon as a fully-wired task list, mirroring the project tasks surface." />}
+            {activeTab === "tasks"  && <EntityTasksTab key={target.id} fkColumn="target_id" id={target.id} idPrefix="target" />}
             {activeTab === "people" && <StubPane heading="People at this target" body="Galleries, fairs, and publications usually involve more than one person. Link the directors, curators, and editors you're talking to here." />}
-            {activeTab === "notes"  && <StubPane heading="Notes" body="Quick observations and follow-up reminders. For longform thinking, use the Canvas tab." />}
-            {activeTab === "files"  && <StubPane heading="Files" body="Decks, attachments, references — anything you'd want at hand for this target." />}
+            {activeTab === "notes"  && <EntityNotesTab key={target.id} fkColumn="target_id" id={target.id} idPrefix="target" />}
+            {activeTab === "files"  && (
+              <EntityFilesTab
+                key={target.id}
+                filesTable="target_files"
+                fkColumn="target_id"
+                id={target.id}
+                bucket="contact-files"
+                buildStoragePath={({ userId, id, fileName }) => `${userId}/target-files/${id}/${Date.now()}_${fileName}`}
+                emptyHint="Decks, attachments, references — anything you'd want at hand for this target."
+              />
+            )}
           </div>
         </div>
 
