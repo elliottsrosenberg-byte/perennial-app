@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import {
-  useEditor, EditorContent,
+  useEditor, useEditorState, EditorContent,
   Extension, NodeViewWrapper, NodeViewContent, ReactNodeViewRenderer,
 } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
@@ -449,7 +449,27 @@ export function RichToolbar({
 }) {
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  if (!editor) return null;
+  // Subscribe to every editor transaction (not just content changes) so the
+  // active-state highlights stay in sync when a mark is toggled with the
+  // cursor collapsed (a stored-mark transaction that doesn't change the doc)
+  // or when the selection moves. Reading isActive(...) during render alone
+  // only re-runs when the parent re-renders (content updates), leaving the
+  // highlight stale until the next keystroke.
+  const active = useEditorState({
+    editor,
+    selector: ({ editor: ed }) => ({
+      bold:       ed?.isActive("bold")                     ?? false,
+      italic:     ed?.isActive("italic")                   ?? false,
+      underline:  ed?.isActive("underline")                ?? false,
+      strike:     ed?.isActive("strike")                   ?? false,
+      h1:         ed?.isActive("heading", { level: 1 })    ?? false,
+      h2:         ed?.isActive("heading", { level: 2 })    ?? false,
+      bulletList: ed?.isActive("bulletList")               ?? false,
+      orderedList:ed?.isActive("orderedList")              ?? false,
+    }),
+  });
+
+  if (!editor || !active) return null;
 
   async function pickImages(files: FileList | null) {
     if (!files || files.length === 0 || !editor) return;
@@ -482,16 +502,16 @@ export function RichToolbar({
       display: "flex", alignItems: "center", gap: 2, padding: "6px 20px", flexShrink: 0,
       borderBottom: "0.5px solid var(--color-border)", background: "var(--color-surface-raised)",
     }}>
-      {btn(<Bold size={12} />,          () => editor.chain().focus().toggleBold().run(),          editor.isActive("bold"),      "Bold")}
-      {btn(<Italic size={12} />,        () => editor.chain().focus().toggleItalic().run(),        editor.isActive("italic"),    "Italic")}
-      {btn(<UnderlineIcon size={12} />, () => editor.chain().focus().toggleUnderline().run(),     editor.isActive("underline"), "Underline")}
-      {btn(<Strikethrough size={12} />, () => editor.chain().focus().toggleStrike().run(),        editor.isActive("strike"),    "Strikethrough")}
+      {btn(<Bold size={12} />,          () => editor.chain().focus().toggleBold().run(),          active.bold,      "Bold")}
+      {btn(<Italic size={12} />,        () => editor.chain().focus().toggleItalic().run(),        active.italic,    "Italic")}
+      {btn(<UnderlineIcon size={12} />, () => editor.chain().focus().toggleUnderline().run(),     active.underline, "Underline")}
+      {btn(<Strikethrough size={12} />, () => editor.chain().focus().toggleStrike().run(),        active.strike,    "Strikethrough")}
       {sep()}
-      {btn(<span style={{ fontSize: 11, fontWeight: 700 }}>H1</span>, () => editor.chain().focus().toggleHeading({ level: 1 }).run(), editor.isActive("heading", { level: 1 }), "Heading 1")}
-      {btn(<span style={{ fontSize: 11, fontWeight: 700 }}>H2</span>, () => editor.chain().focus().toggleHeading({ level: 2 }).run(), editor.isActive("heading", { level: 2 }), "Heading 2")}
+      {btn(<span style={{ fontSize: 11, fontWeight: 700 }}>H1</span>, () => editor.chain().focus().toggleHeading({ level: 1 }).run(), active.h1, "Heading 1")}
+      {btn(<span style={{ fontSize: 11, fontWeight: 700 }}>H2</span>, () => editor.chain().focus().toggleHeading({ level: 2 }).run(), active.h2, "Heading 2")}
       {sep()}
-      {btn(<List size={12} />,        () => editor.chain().focus().toggleBulletList().run(),  editor.isActive("bulletList"),  "Bullet list")}
-      {btn(<ListOrdered size={12} />, () => editor.chain().focus().toggleOrderedList().run(), editor.isActive("orderedList"), "Numbered list")}
+      {btn(<List size={12} />,        () => editor.chain().focus().toggleBulletList().run(),  active.bulletList,  "Bullet list")}
+      {btn(<ListOrdered size={12} />, () => editor.chain().focus().toggleOrderedList().run(), active.orderedList, "Numbered list")}
       {sep()}
       {btn(
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
