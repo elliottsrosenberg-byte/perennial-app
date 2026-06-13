@@ -7,11 +7,19 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { UserCalendar } from "@/types/database";
-import { ChevronDown, ChevronRight, Eye, EyeOff, MoreHorizontal, Plus, ExternalLink, Trash2, Star, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, EyeOff, MoreHorizontal, Plus, ExternalLink, Trash2, Star, RefreshCw, Unplug } from "lucide-react";
 
 interface Props {
   /** Bumped by parent on connect/refresh so we re-fetch the list. */
   refreshNonce?: number;
+}
+
+interface AccountInfo {
+  key:            string;
+  integration_id: string;
+  provider:       string;
+  account_email:  string | null;
+  status:         string;
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -59,6 +67,12 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
   // Account group keys whose stored credential is dead — rendered with a
   // Reconnect prompt instead of silently showing an empty calendar.
   const [reauthKeys, setReauthKeys] = useState<Set<string>>(new Set());
+  // Per-account integration handles (keyed `${provider}::${account}`) so the
+  // account ⋯ menu can disconnect/reconnect/refresh like Settings does.
+  const [accounts, setAccounts] = useState<Record<string, AccountInfo>>({});
+  const [openAccountMenu, setOpenAccountMenu] = useState<string | null>(null);
+  const [accountMenuAnchor, setAccountMenuAnchor] = useState<{ top: number; left: number } | null>(null);
+  const [hoveredGroup, setHoveredGroup] = useState<string | null>(null);
   const [defaultId, setDefaultId] = useState<string | null>(null);
   const [loading,   setLoading]   = useState(true);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -76,12 +90,13 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
     // reconcile with the server in the background.
     fetch("/api/integrations/calendar/calendars")
       .then((r) => r.json())
-      .then((d: { calendars?: UserCalendar[]; removed_calendars?: UserCalendar[]; default_calendar_id?: string | null; reauth_group_keys?: string[] }) => {
+      .then((d: { calendars?: UserCalendar[]; removed_calendars?: UserCalendar[]; default_calendar_id?: string | null; reauth_group_keys?: string[]; accounts?: AccountInfo[] }) => {
         if (cancelled) return;
         setCalendars(d.calendars ?? []);
         setRemovedCals(d.removed_calendars ?? []);
         setDefaultId(d.default_calendar_id ?? null);
         setReauthKeys(new Set(d.reauth_group_keys ?? []));
+        setAccounts(Object.fromEntries((d.accounts ?? []).map((a) => [a.key, a])));
         setLoading(false);
       })
       .catch(() => { if (!cancelled) setLoading(false); });
@@ -103,6 +118,19 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
     } finally {
       setSyncing(false);
     }
+  }
+
+  // Disconnect a whole account (parity with Settings → Integrations). The
+  // account's calendars disappear on the next list read, so trigger a full
+  // refresh once the integration is gone.
+  async function disconnectAccount(integrationId: string) {
+    const res = await fetch(`/api/integrations/${integrationId}`, { method: "DELETE" });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      alert(`Couldn't disconnect: ${j.error ?? res.statusText}`);
+      return;
+    }
+    window.dispatchEvent(new Event("calendar:refresh-events"));
   }
 
   // Re-add a previously-removed calendar — flip removed=false and surface it.
@@ -261,37 +289,83 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
       {groups.map((g) => {
         const isCollapsed = collapsed.has(g.key);
         const needsReauth = reauthKeys.has(g.key);
+        const account = accounts[g.key];
+        const showAccountMenuBtn = !!account && (hoveredGroup === g.key || openAccountMenu === g.key);
         const groupProvider = g.calendars[0]?.provider ?? g.removed[0]?.provider ?? "";
         const reconnectHref = groupProvider.startsWith("google")
           ? "/api/auth/google"
           : groupProvider === "microsoft" ? "/api/auth/microsoft" : null;
         return (
           <div key={g.key} style={{ marginBottom: 6 }}>
-            <button
-              onClick={() => toggleGroup(g.key)}
+            <div
+              onMouseEnter={() => setHoveredGroup(g.key)}
+              onMouseLeave={() => setHoveredGroup((k) => (k === g.key ? null : k))}
               style={{
-                width: "100%", display: "flex", alignItems: "center", gap: 4,
-                padding: "4px 10px 4px 6px", background: "transparent", border: "none",
-                cursor: "pointer", fontFamily: "inherit", textAlign: "left",
+                display: "flex", alignItems: "center", gap: 2, paddingRight: 6,
+                borderRadius: 4,
+                background: openAccountMenu === g.key ? "var(--color-cream)" : "transparent",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
             >
-              {isCollapsed
-                ? <ChevronRight size={10} style={{ color: "var(--color-text-tertiary)", flexShrink: 0 }} />
-                : <ChevronDown  size={10} style={{ color: "var(--color-text-tertiary)", flexShrink: 0 }} />}
-              <span
+              <button
+                onClick={() => toggleGroup(g.key)}
                 style={{
-                  fontSize: 11, fontWeight: 500,
-                  color: "var(--color-text-secondary)",
-                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                  flex: 1, minWidth: 0,
+                  flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 4,
+                  padding: "4px 4px 4px 6px", background: "transparent", border: "none",
+                  cursor: "pointer", fontFamily: "inherit", textAlign: "left",
                 }}
-                title={g.label.account}
               >
-                {g.label.account}
-              </span>
-            </button>
+                {isCollapsed
+                  ? <ChevronRight size={10} style={{ color: "var(--color-text-tertiary)", flexShrink: 0 }} />
+                  : <ChevronDown  size={10} style={{ color: "var(--color-text-tertiary)", flexShrink: 0 }} />}
+                <span
+                  style={{
+                    fontSize: 11, fontWeight: 500,
+                    color: "var(--color-text-secondary)",
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    flex: 1, minWidth: 0,
+                  }}
+                  title={g.label.account}
+                >
+                  {g.label.account}
+                </span>
+              </button>
+              {showAccountMenuBtn && (
+                <button
+                  aria-label="Account options"
+                  onClick={(e) => {
+                    const r = e.currentTarget.getBoundingClientRect();
+                    const MENU_W = 230;
+                    setAccountMenuAnchor({ top: r.bottom + 4, left: Math.min(window.innerWidth - MENU_W - 8, Math.max(8, r.right - MENU_W)) });
+                    setOpenAccountMenu(g.key);
+                  }}
+                  style={{
+                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+                    background: "transparent", border: "none", cursor: "pointer",
+                    color: "var(--color-text-tertiary)",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-surface-sunken)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  <MoreHorizontal size={12} strokeWidth={2} />
+                </button>
+              )}
+            </div>
+
+            {openAccountMenu === g.key && account && accountMenuAnchor && (
+              <AccountMenu
+                account={account}
+                anchor={accountMenuAnchor}
+                needsReauth={needsReauth}
+                onClose={() => setOpenAccountMenu(null)}
+                onRefresh={() => { resync(); }}
+                onReconnect={() => {
+                  const p = account.provider.startsWith("google") ? "google" : account.provider === "microsoft" ? "microsoft" : null;
+                  if (p) window.location.href = `/api/auth/${p}?next=/calendar`;
+                }}
+                onDisconnect={() => disconnectAccount(account.integration_id)}
+              />
+            )}
 
             {needsReauth && reconnectHref && (
               <a
@@ -680,6 +754,80 @@ function RowMenu({
           danger
           onClick={() => { onRemove(); onClose(); }}
         />
+      </div>
+    </>
+  );
+}
+
+// Account-level ⋯ menu on the rail's account headers — mirrors the actions
+// available in Settings → Integrations so account management is doable from
+// inside the Calendar module (reconnect, refresh, disconnect).
+function AccountMenu({ account, anchor, needsReauth, onClose, onRefresh, onReconnect, onDisconnect }: {
+  account: AccountInfo;
+  anchor: { top: number; left: number };
+  needsReauth: boolean;
+  onClose: () => void;
+  onRefresh: () => void;
+  onReconnect: () => void;
+  onDisconnect: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const providerLabel = account.provider.startsWith("google") ? "Google" : account.provider === "microsoft" ? "Outlook" : account.provider;
+  const canOAuth = account.provider.startsWith("google") || account.provider === "microsoft";
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 80 }} />
+      <div style={{
+        position: "fixed", top: anchor.top, left: anchor.left,
+        zIndex: 81, minWidth: 230,
+        background: "var(--color-surface-raised)",
+        border: "0.5px solid var(--color-border)",
+        borderRadius: 10, boxShadow: "var(--shadow-overlay)",
+        overflow: "hidden", padding: 6,
+      }}>
+        <div style={{ padding: "4px 10px 6px" }}>
+          <p style={{ fontSize: 11.5, fontWeight: 600, color: "var(--color-text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={account.account_email ?? undefined}>
+            {account.account_email ?? "Account"}
+          </p>
+          <p style={{ fontSize: 10, color: needsReauth ? "var(--color-red-orange)" : "var(--color-text-tertiary)" }}>
+            {providerLabel}{needsReauth ? " — connection expired" : ""}
+          </p>
+        </div>
+        <div style={{ height: 1, background: "var(--color-border)", margin: "2px 0 4px" }} />
+        {canOAuth && (
+          <MenuRow
+            label={needsReauth ? "Reconnect account" : "Reconnect"}
+            icon={<RefreshCw size={12} />}
+            onClick={() => { onReconnect(); onClose(); }}
+          />
+        )}
+        <MenuRow label="Refresh calendars" icon={<RefreshCw size={12} />} onClick={() => { onRefresh(); onClose(); }} />
+        <MenuRow label="Manage in Settings" icon={<ExternalLink size={12} />} onClick={() => { window.location.href = "/settings?section=integrations"; onClose(); }} rightHint="↗" />
+        <div style={{ height: 1, background: "var(--color-border)", margin: "4px 0" }} />
+        {confirming ? (
+          <div style={{ padding: "4px 10px 6px" }}>
+            <p style={{ fontSize: 11, color: "var(--color-text-secondary)", marginBottom: 6 }}>
+              Disconnect this account? Its calendars and events will be removed from Perennial.
+            </p>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={() => setConfirming(false)} style={{ flex: 1, fontSize: 11, padding: "5px 8px", borderRadius: 6, border: "0.5px solid var(--color-border)", background: "transparent", color: "var(--color-text-secondary)", cursor: "pointer", fontFamily: "inherit" }}>
+                Cancel
+              </button>
+              <button onClick={() => { onDisconnect(); onClose(); }} style={{ flex: 1, fontSize: 11, fontWeight: 600, padding: "5px 8px", borderRadius: 6, border: "none", background: "var(--color-red-orange)", color: "white", cursor: "pointer", fontFamily: "inherit" }}>
+                Disconnect
+              </button>
+            </div>
+          </div>
+        ) : (
+          <MenuRow label="Disconnect account" icon={<Unplug size={12} />} danger onClick={() => setConfirming(true)} />
+        )}
       </div>
     </>
   );

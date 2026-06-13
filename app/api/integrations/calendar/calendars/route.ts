@@ -43,7 +43,7 @@ export async function GET() {
   // connect a new account, which is correct.
   const { data: integrations } = await supabase
     .from("integrations")
-    .select("provider, account_name, status, scopes")
+    .select("id, provider, account_name, status, scopes")
     .eq("user_id", user.id)
     .in("provider", ["google", "google_calendar", "microsoft"]);
 
@@ -119,11 +119,27 @@ export async function GET() {
       .map((c) => `${c.provider}::${c.account_email ?? "primary"}`),
   ));
 
+  // Per-account integration handles so the rail's account ⋯ menu can offer
+  // the same management actions as Settings → Integrations (disconnect by
+  // integration id, reconnect, refresh). Keyed `${provider}::${account}` to
+  // match the rail's grouping. Disconnected rows are excluded.
+  const accounts = (integrations ?? [])
+    .filter((intg) => intg.status !== "disconnected")
+    .filter((intg) => intg.provider === "google_calendar" || ((intg.scopes ?? {}) as Record<string, boolean>).calendar)
+    .map((intg) => ({
+      key:            `${intg.provider}::${intg.account_name ?? "primary"}`,
+      integration_id: intg.id,
+      provider:       intg.provider,
+      account_email:  intg.account_name ?? null,
+      status:         intg.status ?? "active",
+    }));
+
   return NextResponse.json({
     calendars: (cals ?? []).filter(isLive),
     removed_calendars: (removed ?? []).filter(isLive),
     default_calendar_id: defaultId,
     reauth_group_keys: reauthGroupKeys,
+    accounts,
   });
 }
 
