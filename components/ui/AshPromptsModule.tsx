@@ -81,7 +81,7 @@ export default function AshPromptsModule({
         </div>
         <span style={{
           fontSize: 10, fontWeight: 700, textTransform: "uppercase",
-          letterSpacing: "0.08em", color: "#4a5630",
+          letterSpacing: "0.08em", color: "var(--color-sage-text)",
         }}>
           Ash
         </span>
@@ -90,7 +90,7 @@ export default function AshPromptsModule({
       {/* Contextual headline — only when we have something specific to say */}
       {headline && (
         <p style={{
-          fontSize: 11, lineHeight: 1.55, color: "#3d4a26",
+          fontSize: 11, lineHeight: 1.55, color: "var(--color-sage-text)",
           fontStyle: "italic",
         }}>
           {headline}
@@ -129,7 +129,7 @@ export default function AshPromptsModule({
               style={{
                 width: "100%", textAlign: "left",
                 padding: "5px 8px", fontSize: 11,
-                background: "transparent", color: "#4a5630",
+                background: "transparent", color: "var(--color-sage-text)",
                 border: "none", borderRadius: 6,
                 cursor: "pointer", fontFamily: "inherit",
                 transition: "background 0.1s ease",
@@ -174,7 +174,7 @@ export default function AshPromptsModule({
               flexShrink: 0,
               padding: "3px 8px", fontSize: 10, fontWeight: 600,
               borderRadius: 6, border: "none",
-              background: "#4a6232", color: "white",
+              background: "var(--color-ash-dark)", color: "white",
               cursor: "pointer", fontFamily: "inherit", lineHeight: 1,
             }}
           >
@@ -191,7 +191,7 @@ export default function AshPromptsModule({
               width: 18, height: 18,
               padding: 0,
               borderRadius: 6, border: "none",
-              background: "transparent", color: "#7d9456",
+              background: "transparent", color: "var(--color-ash-mid)",
               cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
             }}
           >

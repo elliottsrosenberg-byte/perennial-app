@@ -557,11 +557,11 @@ export function RichToolbar({
           display: "flex", alignItems: "center", gap: 5, padding: "3px 10px",
           fontSize: 11, fontWeight: 500, borderRadius: 6,
           background: "linear-gradient(#fffefc, #fffefc) padding-box, linear-gradient(135deg, #a8b886 0%, #4a6232 100%) border-box",
-          border: "1px solid transparent", color: "#4a6232",
+          border: "1px solid transparent", color: "var(--color-sage-text)",
           cursor: suggesting ? "not-allowed" : "pointer",
           opacity: suggesting ? 0.5 : 1, fontFamily: "inherit", flexShrink: 0,
         }}>
-          <svg width="9" height="9" viewBox="0 0 16 16" fill="#4a6232"><path d="M8 1l1.2 4.2L14 7l-4.8 1.8L8 14l-1.2-5.2L2 7l4.8-1.8L8 1z"/></svg>
+          <svg width="9" height="9" viewBox="0 0 16 16" fill="var(--color-sage-text)"><path d="M8 1l1.2 4.2L14 7l-4.8 1.8L8 14l-1.2-5.2L2 7l4.8-1.8L8 1z"/></svg>
           {suggesting ? "Thinking…" : "Generate tasks"}
         </button>
       )}

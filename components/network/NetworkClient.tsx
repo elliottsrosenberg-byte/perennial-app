@@ -901,7 +901,7 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
                     className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
                     style={{
                       background: "rgba(155,163,122,0.16)",
-                      color: "#4a5630",
+                      color: "var(--color-sage-text)",
                       border: "0.5px solid rgba(155,163,122,0.36)",
                       cursor: "pointer", fontFamily: "inherit",
                     }}

@@ -555,7 +555,7 @@ function CanvasEditor({
       </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, padding: "5px 20px", borderTop: "0.5px solid var(--color-border)", background: "var(--color-off-white)", flexShrink: 0 }}>
-        {noteCreated && <span style={{ fontSize: 10, color: "#4a5630", fontWeight: 600 }}>✓ Note created</span>}
+        {noteCreated && <span style={{ fontSize: 10, color: "var(--color-sage-text)", fontWeight: 600 }}>✓ Note created</span>}
         {saving  && <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>Saving…</span>}
         {!saving && saved && <span style={{ fontSize: 10, color: "var(--color-sage)" }}>✓ Saved</span>}
       </div>
