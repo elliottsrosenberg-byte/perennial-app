@@ -3,11 +3,7 @@ import { notFound } from "next/navigation";
 import type { Invoice } from "@/types/database";
 import { formatInvoiceNumber } from "@/lib/invoices/format";
 import PrintTrigger from "./PrintTrigger";
-
-function fmtDate(ds: string | null) {
-  if (!ds) return "—";
-  return new Date(ds + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-}
+import { fmtDateLong as fmtDate } from "@/lib/format/date";
 
 function fmtCurrency(n: number) {
   return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });

@@ -9,6 +9,7 @@ import { getRichExtensions, RichToolbar, SelectionBubble } from "@/components/ui
 import CanvasAshHint from "@/components/ui/CanvasAshHint";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import AshPromptsModule, { type AshPrompt } from "@/components/ui/AshPromptsModule";
+import { fmtDayRelative as fmtDate, fmtTime } from "@/lib/format/date";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -42,13 +43,6 @@ function initials(org: Organization) {
   return n.slice(0, 2).toUpperCase();
 }
 
-function fmtDate(iso: string) {
-  const d = new Date(iso), today = new Date(), yest = new Date(today); yest.setDate(today.getDate() - 1);
-  if (d.toDateString() === today.toDateString()) return "Today";
-  if (d.toDateString() === yest.toDateString()) return "Yesterday";
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-function fmtTime(iso: string) { return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }); }
 function lastTouchedDisplay(date: string | null): { label: string; color: string } {
   if (!date) return { label: "Never", color: "var(--color-grey)" };
   const days = Math.floor((Date.now() - new Date(date).getTime()) / 86400000);

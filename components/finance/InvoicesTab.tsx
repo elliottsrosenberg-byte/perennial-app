@@ -12,6 +12,7 @@ import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
 import { formatInvoiceNumber, paymentMethodLabel } from "@/lib/invoices/format";
 import { buildInvoiceEmailHtml } from "@/lib/invoices/email-template";
+import { fmtDateShort as fmtDate } from "@/lib/format/date";
 import { X, Download, Send, FileText, MoreHorizontal, Plus, Clock, Receipt, CheckCircle2, Sparkles, ChevronDown, Link2, Check, Pencil, Search, ArrowUpDown, ArrowUp, ArrowDown, ListFilter, Paperclip } from "lucide-react";
 
 // Canonical join used whenever we re-fetch a single invoice after a write,
@@ -226,11 +227,6 @@ function clientName(inv: Invoice) {
 
 function fmtCurrency(n: number) {
   return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function fmtDate(ds: string | null) {
-  if (!ds) return "—";
-  return new Date(ds + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 function fmtHours(mins: number) { return `${(mins / 60).toFixed(1)}h`; }

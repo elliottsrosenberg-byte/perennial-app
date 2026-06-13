@@ -4,11 +4,7 @@ import type { Invoice } from "@/types/database";
 import { formatInvoiceNumber, paymentMethodLabel } from "@/lib/invoices/format";
 import PrintButton from "./PrintButton";
 import PaymentSectionMount from "./PaymentSectionMount";
-
-function fmtDate(ds: string | null) {
-  if (!ds) return "—";
-  return new Date(ds + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-}
+import { fmtDateLong as fmtDate } from "@/lib/format/date";
 
 function fmtCurrency(n: number) {
   return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });

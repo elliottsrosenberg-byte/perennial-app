@@ -13,6 +13,7 @@ import Toggle from "@/components/ui/Toggle";
 import Checkbox from "@/components/ui/Checkbox";
 import NumberStepper from "@/components/ui/NumberStepper";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { fmtTime } from "@/lib/format/date";
 import type {
   SchedulingLink, SchedulingLinkKind, SchedulingLocationType,
   SchedulingAvailability, DayWindow,
@@ -70,7 +71,6 @@ const COMMON_TZS = [
   "Europe/London","Europe/Paris","Europe/Berlin","Asia/Tokyo","Australia/Sydney",
 ];
 
-const fmtTime = (d: Date) => d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 const fmtDay  = (d: Date) => d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 
 export default function SchedulingComposePanel({ compose, setCompose, onSaved, onCancel, onDeleted }: Props) {

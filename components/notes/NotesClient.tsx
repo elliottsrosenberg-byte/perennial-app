@@ -19,24 +19,9 @@ import NotesIntroModal from "@/components/tour/notes/NotesIntroModal";
 import NotesTooltipTour from "@/components/tour/notes/NotesTooltipTour";
 import NotesOptionsMenu from "./NotesOptionsMenu";
 import ImportNoteModal from "./ImportNoteModal";
+import { timeAgo, fmtDatetime } from "@/lib/format/date";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
-
-function timeAgo(d: string): string {
-  const diff = Date.now() - new Date(d).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function fmtDatetime(d: string) {
-  return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
 
 function stripHtml(html: string) {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();

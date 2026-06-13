@@ -13,6 +13,7 @@ import {
 } from "@/lib/uploads/studio-logo";
 import { COUNTRIES, BUSINESS_TYPES, composeStudioAddress } from "@/lib/profile/business";
 import { isAutoTheme, setAutoTheme } from "@/lib/theme";
+import { timeAgoNumericFallback as formatRelative } from "@/lib/format/date";
 import Toggle from "@/components/ui/Toggle";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -104,19 +105,6 @@ const PRACTICE_OPTIONS = [
   "Furniture", "Objects & lighting", "Ceramics & glass", "Textiles",
   "Jewelry", "Painting", "Sculpture", "Printmaking", "Client-based work",
 ];
-
-/** Compact relative-time formatter for "Synced X" lines on integration
- *  rows. Falls back to a short M/D format for older entries so the row
- *  doesn't wrap into 3 lines on narrow viewports. */
-function formatRelative(iso: string): string {
-  const t = new Date(iso).getTime();
-  const diff = Date.now() - t;
-  if (diff < 60_000)          return "just now";
-  if (diff < 3_600_000)       return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 24 * 3_600_000)  return `${Math.floor(diff / 3_600_000)}h ago`;
-  if (diff < 7 * 24 * 3_600_000) return `${Math.floor(diff / (24 * 3_600_000))}d ago`;
-  return new Date(iso).toLocaleDateString("en-US", { month: "numeric", day: "numeric" });
-}
 
 // ─── Sub-components ─────────────────────────────────────────────────────────────
 
