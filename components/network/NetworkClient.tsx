@@ -88,6 +88,11 @@ const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
 };
 const LEAD_STAGE_ORDER: LeadStage[] = ["new", "reached_out", "in_conversation", "proposal_sent", "qualified", "nurturing", "lost"];
 
+// Preset organization tags — shown as filter pills always (like lead stages),
+// so the Organizations view has a visible, usable filter row before any org is
+// tagged. Keep in sync with PRESET_TAGS in OrganizationDetailPanel.
+const ORG_PRESET_TAGS = ["Gallery", "Brand", "Publication", "Press", "Fair"];
+
 const GRID = "32px 2.6fr 1.6fr 1.2fr 0.9fr 1.1fr 0.8fr";
 // Organization rows reuse the same 7-column grid so the header line stays
 // steady when the view switches — the columns just relabel.
@@ -201,12 +206,14 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
   }, [contacts]);
 
   // Organizations carry their own tags (galleries / press / brands / fairs…).
-  // Mirror the contacts tag-pill row so the Organizations view is filterable
-  // the same way the other two views are.
+  // Show the preset taxonomy as pills always (like the Leads stage row), then
+  // append any custom tags in use — so the filter row is visible and usable
+  // even before any org is tagged.
   const allOrgTags = useMemo(() => {
-    const set = new Set<string>();
-    organizations.filter(o => !o.archived).forEach(o => (o.tags ?? []).forEach(t => set.add(t)));
-    return Array.from(set).sort();
+    const extra = new Set<string>();
+    organizations.filter(o => !o.archived).forEach(o =>
+      (o.tags ?? []).forEach(t => { if (!ORG_PRESET_TAGS.includes(t)) extra.add(t); }));
+    return [...ORG_PRESET_TAGS, ...Array.from(extra).sort()];
   }, [organizations]);
 
   // Whether the active view has ANY rows ignoring search/tag/stage filters.
