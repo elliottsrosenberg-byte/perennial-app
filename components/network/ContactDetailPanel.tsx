@@ -13,6 +13,7 @@ import AshPromptsModule, { type AshPrompt } from "@/components/ui/AshPromptsModu
 import { fmtDayRelative as fmtDate, fmtTime } from "@/lib/format/date";
 import { hexToRgba, paletteColorForKey } from "@/lib/ui/palette";
 import SharedEditableField from "@/components/ui/EditableField";
+import DetailPanelShell from "@/components/ui/DetailPanelShell";
 
 // Network rows open blank fields directly into the input ("Add <label>…"),
 // so preset `openWhenEmpty` here and keep the existing call sites unchanged.
@@ -1158,27 +1159,7 @@ export default function ContactDetailPanel({
 
   return (
     <>
-      {/* Scrim */}
-      {!maximized && (
-        <div className="fixed inset-0 z-10 cursor-pointer"
-          style={{ background: "rgba(20,18,16,0.52)", backdropFilter: "blur(5px)", WebkitBackdropFilter: "blur(5px)" }}
-          onClick={onClose} />
-      )}
-
-      {/* Panel */}
-      <div className="fixed z-20 flex overflow-hidden" style={{
-        top:    maximized ? 0 : "52px",
-        bottom: maximized ? 0 : "32px",
-        // Maximized leaves the sidebar visible (flush to its right edge);
-        // scrim mode adds a 32px breathing-room gap on both sides.
-        left:   maximized ? "var(--sidebar-width, 52px)" : "calc(var(--sidebar-width, 52px) + 32px)",
-        right:  maximized ? 0 : "32px",
-        background:   "var(--color-off-white)",
-        borderRadius: maximized ? 0 : 12,
-        boxShadow:    "0 8px 40px rgba(0,0,0,0.22)",
-        border:       "0.5px solid var(--color-border)",
-        transition:   "top 0.2s ease, bottom 0.2s ease, left 0.2s ease, right 0.2s ease, border-radius 0.2s ease",
-      }}>
+      <DetailPanelShell maximized={maximized} onClose={onClose}>
 
         {/* ── Left sidebar (252px) ── */}
         <div style={{
@@ -1565,7 +1546,7 @@ export default function ContactDetailPanel({
             )}
           </div>
         </div>
-      </div>
+      </DetailPanelShell>
 
       <ConfirmDialog
         open={confirmArchive}

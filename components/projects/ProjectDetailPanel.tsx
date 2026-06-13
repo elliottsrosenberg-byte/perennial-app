@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Project, Task, Note, Contact } from "@/types/database";
 import { Maximize2, Minimize2, X, Settings, FileText, CheckSquare, FolderOpen, Trash2, Pencil, Plus, Link2, ExternalLink, Users, Mail, Phone } from "lucide-react";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import DetailPanelShell from "@/components/ui/DetailPanelShell";
 import AshPromptsModule, { type AshPrompt } from "@/components/ui/AshPromptsModule";
 import { useProjectOptions, type ProjectOption } from "@/lib/projects/options";
 import PriorityPicker from "@/components/tasks/PriorityPicker";
@@ -1783,32 +1784,7 @@ export default function ProjectDetailPanel({
 
   return (
     <>
-      {/* Scrim */}
-      {!maximized && (
-        <div
-          className="fixed inset-0 z-10 cursor-pointer"
-          style={{ background: "rgba(20,18,16,0.52)", backdropFilter: "blur(5px)", WebkitBackdropFilter: "blur(5px)" }}
-          onClick={onClose}
-        />
-      )}
-
-      {/* Panel */}
-      <div
-        className="fixed z-20 flex overflow-hidden"
-        style={{
-          top:    maximized ? 0 : "52px",
-          bottom: maximized ? 0 : "32px",
-          // Maximized leaves the sidebar visible (flush to its right edge);
-          // scrim mode adds a 32px breathing-room gap on both sides.
-          left:   maximized ? "var(--sidebar-width, 52px)" : "calc(var(--sidebar-width, 52px) + 32px)",
-          right:  maximized ? 0 : "32px",
-          background:   "var(--color-off-white)",
-          borderRadius: maximized ? 0 : 12,
-          boxShadow:    "0 8px 40px rgba(0,0,0,0.22)",
-          border:       "0.5px solid var(--color-border)",
-          transition:   "top 0.2s ease, bottom 0.2s ease, left 0.2s ease, right 0.2s ease, border-radius 0.2s ease",
-        }}
-      >
+      <DetailPanelShell maximized={maximized} onClose={onClose}>
         {/* ── Left sidebar ── */}
         <div style={{
           width: 252, flexShrink: 0, display: "flex", flexDirection: "column", overflow: "hidden",
@@ -2032,7 +2008,7 @@ export default function ProjectDetailPanel({
           </div>
 
         </div>
-      </div>
+      </DetailPanelShell>
 
       <ConfirmDialog
         open={confirmDelete}
