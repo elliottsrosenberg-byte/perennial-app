@@ -423,13 +423,13 @@ function FormatToolbar({
             padding: "3px 10px", fontSize: 11, fontWeight: 500, borderRadius: 6,
             background: "linear-gradient(#fffefc, #fffefc) padding-box, linear-gradient(135deg, #a8b886 0%, #4a6232 100%) border-box",
             border: "1px solid transparent",
-            color: "#4a6232",
+            color: "var(--color-sage-text)",
             cursor: suggesting ? "not-allowed" : "pointer",
             opacity: suggesting ? 0.5 : 1, fontFamily: "inherit", flexShrink: 0,
             transition: "opacity 0.1s ease",
           }}
         >
-          <svg width="9" height="9" viewBox="0 0 16 16" fill="#4a6232">
+          <svg width="9" height="9" viewBox="0 0 16 16" fill="var(--color-sage-text)">
             <path d="M8 1l1.2 4.2L14 7l-4.8 1.8L8 14l-1.2-5.2L2 7l4.8-1.8L8 1z"/>
           </svg>
           {suggesting ? "Thinking…" : "Generate tasks"}
@@ -1132,7 +1132,7 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
               <path d="M9.5 1.5L14.5 6.5L10 11L9 14L6 11L2 7L5 6L9.5 1.5Z"/>
             </svg>
           )}
-          <p style={{ fontSize: 12, fontWeight: 600, color: active ? "#4a6232" : "var(--color-text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: active ? "var(--color-sage-text)" : "var(--color-text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>
             {note.title || "Untitled"}
           </p>
         </div>
@@ -1159,7 +1159,7 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
                   title="Confirm delete"
                   style={{
                     width: 22, height: 22, borderRadius: 5, border: "none",
-                    background: "rgba(155,163,122,0.15)", color: "#4a6232",
+                    background: "rgba(155,163,122,0.15)", color: "var(--color-sage-text)",
                     cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: 13,
                   }}
@@ -1283,7 +1283,7 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
       <div ref={ref} style={{ position: "relative" }}>
         <button onClick={e => { e.stopPropagation(); setOpen(o => !o); }} title="Add to folder"
           style={{ width: 22, height: 22, borderRadius: 5, border: "none", background: "var(--color-surface-sunken)", color: "var(--color-text-tertiary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-          onMouseEnter={e => { e.currentTarget.style.background = "rgba(155,163,122,0.15)"; e.currentTarget.style.color = "#4a6232"; }}
+          onMouseEnter={e => { e.currentTarget.style.background = "rgba(155,163,122,0.15)"; e.currentTarget.style.color = "var(--color-sage-text)"; }}
           onMouseLeave={e => { e.currentTarget.style.background = "var(--color-surface-sunken)"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}>
           <FolderPlus size={11} strokeWidth={1.75} />
         </button>
@@ -1418,7 +1418,7 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
                 <div style={{ padding: "6px 4px" }}>
                   <div style={{ padding: "4px 10px 6px", fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-tertiary)", display: "flex", alignItems: "center", gap: 6 }}>
                     Share
-                    {selectedNote.share_token && <span style={{ color: "#4a6232", background: "rgba(155,163,122,0.15)", padding: "1px 5px", borderRadius: 3 }}>Active</span>}
+                    {selectedNote.share_token && <span style={{ color: "var(--color-sage-text)", background: "rgba(155,163,122,0.15)", padding: "1px 5px", borderRadius: 3 }}>Active</span>}
                   </div>
                   <button onClick={handleGetLink} style={{ width: "100%", textAlign: "left", padding: "7px 10px", borderRadius: 6, border: "none", background: "transparent", fontSize: 12, color: "var(--color-text-primary)", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 8 }}
                     onMouseEnter={e => e.currentTarget.style.background = "var(--color-surface-sunken)"}

@@ -249,7 +249,7 @@ function OrganizationCanvasEditor({
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, padding: "5px 20px", borderTop: "0.5px solid var(--color-border)", background: "var(--color-off-white)", flexShrink: 0, fontSize: 10, color: "var(--color-text-tertiary)" }}>
         {createdNote && (
           <>
-            <span style={{ color: "#4a5630", fontWeight: 600 }}>
+            <span style={{ color: "var(--color-sage-text)", fontWeight: 600 }}>
               ✓ Note created{createdNote.title ? ` — “${truncate(createdNote.title, 32)}”` : ""}
             </span>
             <button
@@ -258,7 +258,7 @@ function OrganizationCanvasEditor({
               style={{
                 fontSize: 10, fontWeight: 600,
                 padding: "2px 9px", borderRadius: 9999,
-                background: "rgba(155,163,122,0.16)", color: "#4a5630",
+                background: "rgba(155,163,122,0.16)", color: "var(--color-sage-text)",
                 border: "0.5px solid rgba(155,163,122,0.36)",
                 cursor: "pointer", fontFamily: "inherit",
               }}

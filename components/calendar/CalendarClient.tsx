@@ -64,7 +64,7 @@ const DOW_SHORT   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const PRIORITY_PALETTE: Record<string, { bg: string; fg: string; border: string }> = {
   high:     { bg: "rgba(220,62,13,0.10)",  fg: "var(--color-red-orange)", border: "rgba(220,62,13,0.28)" },
   medium:   { bg: "rgba(160,120,0,0.12)",  fg: "#7a5a00",                border: "rgba(160,120,0,0.28)" },
-  low:      { bg: "rgba(155,163,122,0.14)",fg: "#4a5630",                border: "rgba(155,163,122,0.28)" },
+  low:      { bg: "rgba(155,163,122,0.14)",fg: "var(--color-sage-text)",                border: "rgba(155,163,122,0.28)" },
   _default: { bg: "rgba(120,120,120,0.10)",fg: "#5a564f",                border: "rgba(120,120,120,0.22)" },
 };
 
@@ -2573,7 +2573,7 @@ export default function CalendarClient({
                     style={{
                       background: overdue ? "rgba(220,62,13,0.10)" : "rgba(155,163,122,0.14)",
                       border: `0.5px solid ${overdue ? "rgba(220,62,13,0.28)" : "rgba(155,163,122,0.28)"}`,
-                      color: overdue ? "var(--color-red-orange)" : "#4a5630",
+                      color: overdue ? "var(--color-red-orange)" : "var(--color-sage-text)",
                       cursor: "pointer", fontFamily: "inherit",
                       opacity: t.completed ? 0.45 : 1,
                     }}

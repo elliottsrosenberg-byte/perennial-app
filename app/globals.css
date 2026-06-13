@@ -50,6 +50,9 @@
   /* ── Interactive ── */
   --color-sage-hover:  #adb886;
   --color-focus-ring:  rgba(155,163,122,0.35);
+  /* Deep-sage foreground for text/labels/icons on sage tints (Ash module,
+     VisitButton). Flips light in dark mode so it stays readable. */
+  --color-sage-text:   #4a5630;
 
   /* ── Radius Scale ── */
   --radius-sm:   6px;
@@ -119,6 +122,7 @@
     --color-text-primary:    #e8eae2;
     --color-text-secondary:  #9a9690;
     --color-text-tertiary:   #6b6860;
+    --color-sage-text:       #b4c08f;
 
     --color-surface-app:     #14160f;
     --color-surface-raised:  #1b1e16;
@@ -161,6 +165,7 @@
   --color-text-primary:    #e8eae2;
   --color-text-secondary:  #9a9690;
   --color-text-tertiary:   #6b6860;
+  --color-sage-text:       #b4c08f;
 
   --color-surface-app:     #14160f;
   --color-surface-raised:  #1b1e16;
@@ -202,6 +207,7 @@
   --color-text-primary:    #1f211a;
   --color-text-secondary:  #6b6860;
   --color-text-tertiary:   #9a9690;
+  --color-sage-text:       #4a5630;
 
   --color-surface-app:     #f9faf4;
   --color-surface-raised:  #fffefc;
