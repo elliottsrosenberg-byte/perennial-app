@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback, KeyboardEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Contact, ContactActivity, ContactActivityType, ContactStatus, LeadStage, Project, Task, Note } from "@/types/database";
+import type { Contact, ContactActivity, ContactActivityType, ContactStatus, LeadStage, Organization, Project, Task, Note } from "@/types/database";
 import { X, Maximize2, Minimize2, FileText, CheckSquare, FolderOpen, Calendar, Clock, Settings, Trash2, Users, Link2 } from "lucide-react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { getRichExtensions, RichToolbar, InlineAshPopover, SelectionBubble, submitInlineAsh } from "@/components/ui/RichEditor";
@@ -101,19 +101,27 @@ function EditableField({ label, value, placeholder = "—", onSave }: {
     if (v !== (value || null)) onSave(v);
   }
 
+  // Empty fields render as an open input directly (no click-on-the-dash
+  // detour) — matching how the rest of the app surfaces blanks for entry.
+  // A field with a value stays as click-to-edit text until tapped.
+  const showInput = editing || !value;
+
   return (
     <div style={{ display: "flex", alignItems: "center", padding: "4px 0", borderBottom: "0.5px solid var(--color-border)", minWidth: 0 }}>
       <span style={{ fontSize: 11, color: "var(--color-grey)", width: 68, flexShrink: 0 }}>{label}</span>
-      {editing
+      {showInput
         ? // minWidth: 0 + width: 0 lets the input shrink to fit the available
           // flex space. Without it, the browser's intrinsic input width
           // (defaults to size=20 chars) pushes the row wider than its parent
           // and triggers horizontal scroll on long names.
-          <input value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit}
+          <input value={draft} onChange={e => setDraft(e.target.value)}
+            onFocus={() => setEditing(true)} onBlur={commit}
+            placeholder={placeholder === "—" ? `Add ${(label || "value").toLowerCase()}…` : placeholder}
             onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); commit(); } if (e.key === "Escape") { setDraft(value ?? ""); setEditing(false); } }}
-            autoFocus style={{ flex: 1, minWidth: 0, width: 0, fontSize: 12, background: "transparent", border: "none", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit", borderBottom: "1px solid var(--color-sage)" }} />
-        : <span onClick={() => setEditing(true)} style={{ flex: 1, minWidth: 0, fontSize: 12, color: value ? "#6b6860" : "var(--color-grey)", cursor: "text", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title="Click to edit">
-            {value || placeholder}
+            autoFocus={editing}
+            style={{ flex: 1, minWidth: 0, width: 0, fontSize: 12, background: "transparent", border: "none", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit", borderBottom: editing ? "1px solid var(--color-sage)" : "1px solid transparent" }} />
+        : <span onClick={() => setEditing(true)} style={{ flex: 1, minWidth: 0, fontSize: 12, color: "#6b6860", cursor: "text", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title="Click to edit">
+            {value}
           </span>
       }
     </div>
@@ -951,6 +959,14 @@ export default function ContactDetailPanel({
   const [projectSearch,     setProjectSearch]      = useState("");
   const pickerRef = useRef<HTMLDivElement>(null);
 
+  // Organization picker — the contact↔org link is a real relationship, so
+  // surface the user's existing orgs as a searchable dropdown (with a "create"
+  // affordance) rather than a blind free-text field.
+  const [allOrgs,       setAllOrgs]       = useState<Organization[]>([]);
+  const [showOrgPicker, setShowOrgPicker] = useState(false);
+  const [orgSearch,     setOrgSearch]     = useState("");
+  const orgPickerRef = useRef<HTMLDivElement>(null);
+
   // ── Load data ───────────────────────────────────────────────────────────────
 
   // Hide the floating Ash button in scrim mode; broadcast contact context for Ash
@@ -972,6 +988,16 @@ export default function ContactDetailPanel({
   // Clear contact context when panel unmounts
   useEffect(() => {
     return () => { window.dispatchEvent(new CustomEvent("clear-contact-context")); };
+  }, []);
+
+  // Load the user's organizations once — feeds the org-link picker.
+  useEffect(() => {
+    createClient()
+      .from("organizations")
+      .select("*")
+      .eq("archived", false)
+      .order("name")
+      .then(({ data }) => { if (data) setAllOrgs(data as Organization[]); });
   }, []);
 
   // Skip the per-contact-change tab reset on the very first mount, so a
@@ -1014,6 +1040,7 @@ export default function ContactDetailPanel({
   useEffect(() => {
     function onKey(e: globalThis.KeyboardEvent) {
       if (e.key === "Escape") {
+        if (showOrgPicker)     { setShowOrgPicker(false); return; }
         if (showProjectPicker) { setShowProjectPicker(false); return; }
         if (statusOpen)        { setStatusOpen(false); return; }
         if (stageOpen)         { setStageOpen(false); return; }
@@ -1022,13 +1049,19 @@ export default function ContactDetailPanel({
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, showProjectPicker, statusOpen, stageOpen]);
+  }, [onClose, showProjectPicker, showOrgPicker, statusOpen, stageOpen]);
 
   useEffect(() => {
     if (!showProjectPicker) return;
     function h(e: MouseEvent) { if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setShowProjectPicker(false); }
     document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
   }, [showProjectPicker]);
+
+  useEffect(() => {
+    if (!showOrgPicker) return;
+    function h(e: MouseEvent) { if (orgPickerRef.current && !orgPickerRef.current.contains(e.target as Node)) setShowOrgPicker(false); }
+    document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
+  }, [showOrgPicker]);
 
   useEffect(() => {
     if (!statusOpen) return;
@@ -1049,16 +1082,30 @@ export default function ContactDetailPanel({
     if (data) { const c = data as Contact; setContact(c); onUpdated(c); }
   }
 
-  async function saveOrganization(name: string | null) {
-    const { data: { user } } = await supabase.auth.getUser(); if (!user) return;
-    let organization_id = contact.organization_id;
-    if (!name?.trim()) { organization_id = null; }
-    else if (name.trim() !== (contact.organization?.name ?? "")) {
-      const { data: ex } = await supabase.from("organizations").select("id").eq("user_id", user.id).ilike("name", name.trim()).maybeSingle();
-      organization_id = ex?.id ?? (await supabase.from("organizations").insert({ user_id: user.id, name: name.trim() }).select("id").single()).data?.id ?? null;
-    }
+  // Persist an org link by id (null clears it). Used by the picker.
+  async function linkOrganizationId(organization_id: string | null) {
     const { data } = await supabase.from("contacts").update({ organization_id }).eq("id", contact.id).select("*, organization:organizations(*)").single();
     if (data) { setContact(data as Contact); onUpdated(data as Contact); }
+    setShowOrgPicker(false);
+    setOrgSearch("");
+  }
+
+  // Create a brand-new org from typed text, link the contact to it, and seed
+  // it into the picker list so it's selectable straight away.
+  async function createAndLinkOrganization(name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const { data: { user } } = await supabase.auth.getUser(); if (!user) return;
+    // Reuse an existing org with the same name (case-insensitive) if present.
+    const { data: ex } = await supabase.from("organizations").select("*").eq("user_id", user.id).ilike("name", trimmed).maybeSingle();
+    let org = ex as Organization | null;
+    if (!org) {
+      const { data: created } = await supabase.from("organizations").insert({ user_id: user.id, name: trimmed }).select("*").single();
+      org = (created as Organization) ?? null;
+    }
+    if (!org) return;
+    setAllOrgs(prev => prev.some(o => o.id === org!.id) ? prev : [...prev, org!].sort((a, b) => a.name.localeCompare(b.name)));
+    await linkOrganizationId(org.id);
   }
 
   async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1145,6 +1192,11 @@ export default function ContactDetailPanel({
     ? { dot: LEAD_STAGE_CONFIG[contact.lead_stage ?? "new"]?.color ?? "#9a9690", label: LEAD_STAGE_CONFIG[contact.lead_stage ?? "new"]?.label ?? "New" }
     : STATUS_CONFIG[contact.status];
   const pickerFiltered = availableProjects.filter(p => p.title.toLowerCase().includes(projectSearch.toLowerCase()));
+
+  const orgQuery = orgSearch.trim().toLowerCase();
+  const orgFiltered = allOrgs.filter(o => o.name.toLowerCase().includes(orgQuery));
+  // Offer "Create" when the typed name doesn't exactly match an existing org.
+  const orgExactMatch = allOrgs.some(o => o.name.toLowerCase() === orgQuery);
 
   // ── Ash prompts (left-rail module — replaces the bottom strip) ──────────────
   // The "primary" prompt is the one most worth doing right now given who
@@ -1260,7 +1312,68 @@ export default function ContactDetailPanel({
               <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Details</p>
               <EditableField label="Email"    value={contact.email}   placeholder="—" onSave={v => saveField({ email: v })} />
               <EditableField label="Phone"    value={contact.phone}   placeholder="—" onSave={v => saveField({ phone: v })} />
-              <EditableField label="Organization"  value={contact.organization?.name ?? null} placeholder="—" onSave={saveOrganization} />
+
+              {/* Organization — searchable picker over the user's orgs, with a
+                  create-on-the-fly affordance. An empty link reads as an open
+                  "Link an organization…" field that opens the list on focus. */}
+              <div style={{ display: "flex", alignItems: "center", padding: "4px 0", borderBottom: "0.5px solid var(--color-border)", minWidth: 0 }}>
+                <span style={{ fontSize: 11, color: "var(--color-grey)", width: 68, flexShrink: 0 }}>Organization</span>
+                <div ref={orgPickerRef} style={{ position: "relative", flex: 1, minWidth: 0 }}>
+                  {contact.organization ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                      <button onClick={() => { setShowOrgPicker(true); setOrgSearch(""); }}
+                        style={{ flex: 1, minWidth: 0, textAlign: "left", fontSize: 12, color: "#2563ab", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding: 0 }}
+                        title="Change organization">
+                        {contact.organization.name}
+                      </button>
+                      <button onClick={() => linkOrganizationId(null)} title="Unlink organization"
+                        style={{ color: "var(--color-grey)", border: "none", background: "transparent", cursor: "pointer", flexShrink: 0, display: "flex", padding: 0 }}>
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ) : (
+                    <input
+                      value={orgSearch}
+                      onChange={e => { setOrgSearch(e.target.value); setShowOrgPicker(true); }}
+                      onFocus={() => setShowOrgPicker(true)}
+                      placeholder="Link an organization…"
+                      style={{ width: "100%", minWidth: 0, fontSize: 12, background: "transparent", border: "none", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit" }}
+                    />
+                  )}
+                  {showOrgPicker && (
+                    <div style={{ position: "absolute", left: 0, top: "calc(100% + 4px)", zIndex: 10, width: 220, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 10, boxShadow: "0 4px 20px rgba(0,0,0,0.12)", overflow: "hidden" }}>
+                      <div style={{ padding: "6px 10px", borderBottom: "0.5px solid var(--color-border)" }}>
+                        <input type="text" value={orgSearch} onChange={e => setOrgSearch(e.target.value)} placeholder="Search organizations…" autoFocus
+                          onKeyDown={e => { if (e.key === "Enter" && orgQuery && !orgExactMatch) { e.preventDefault(); createAndLinkOrganization(orgSearch); } }}
+                          style={{ width: "100%", fontSize: 12, background: "transparent", border: "none", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit" }} />
+                      </div>
+                      <div style={{ maxHeight: 200, overflowY: "auto" }}>
+                        {orgFiltered.map(o => (
+                          <button key={o.id} onClick={() => linkOrganizationId(o.id)}
+                            style={{ width: "100%", textAlign: "left", padding: "8px 12px", fontSize: 12, color: "var(--color-charcoal)", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", borderBottom: "0.5px solid var(--color-border)", display: "flex", alignItems: "center", gap: 6 }}
+                            onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+                            onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                            <Link2 size={11} style={{ color: "#2563ab", flexShrink: 0 }} />
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.name}</span>
+                          </button>
+                        ))}
+                        {orgQuery && !orgExactMatch && (
+                          <button onClick={() => createAndLinkOrganization(orgSearch)}
+                            style={{ width: "100%", textAlign: "left", padding: "8px 12px", fontSize: 12, color: "#2563ab", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}
+                            onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+                            onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                            + Create “{orgSearch.trim()}”
+                          </button>
+                        )}
+                        {orgFiltered.length === 0 && !orgQuery && (
+                          <p style={{ fontSize: 12, textAlign: "center", padding: "12px", color: "var(--color-grey)" }}>No organizations yet</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <EditableField label="Title"    value={contact.title}   placeholder="—" onSave={v => saveField({ title: v })} />
               <EditableField label="Website"  value={contact.website} placeholder="—" onSave={v => saveField({ website: v })} />
               <EditableField label="Location" value={contact.location} placeholder="—" onSave={v => saveField({ location: v })} />
