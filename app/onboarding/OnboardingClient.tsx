@@ -162,6 +162,8 @@ interface OnboardingData {
   addressCity:     string;
   addressState:    string;
   addressZip:      string;
+  phone:           string;
+  ein:             string;
   practiceTypes:   string[];
   workTypes:       string[];
   sellingChannels: string[];
@@ -401,6 +403,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
     studioName: "", city: "", website: "", tagline: "", bio: "",
     businessType: "", country: "", addressLine1: "", addressLine2: "",
     addressCity: "", addressState: "", addressZip: "",
+    phone: "", ein: "",
     practiceTypes: [], workTypes: [], sellingChannels: [],
     priceRange: "", yearsInPractice: "", challenges: [],
     businessIssues: "", urgentNeeds: "",
@@ -505,6 +508,8 @@ export default function OnboardingClient({ userId }: { userId: string }) {
       bio:                 data.bio || null,
       location:            data.city || null,
       website:             data.website || null,
+      phone:               data.phone || null,
+      ein:                 data.ein || null,
       ...billingPatch(data),
       practice_types:      data.practiceTypes,
       work_types:          data.workTypes,
@@ -538,6 +543,8 @@ export default function OnboardingClient({ userId }: { userId: string }) {
       studio_name:         data.studioName || null,
       tagline:             data.tagline || null,
       bio:                 data.bio || null,
+      phone:               data.phone || null,
+      ein:                 data.ein || null,
       ...billingPatch(data),
       onboarding_complete: true,
       tour_visited:        {},
@@ -800,6 +807,10 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                       <TextInput value={data.addressCity} onChange={v => set("addressCity", v)} placeholder="City" />
                       <TextInput value={data.addressState} onChange={v => set("addressState", v)} placeholder="State" />
                       <TextInput value={data.addressZip} onChange={v => set("addressZip", v)} placeholder="ZIP" />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                      <TextInput value={data.phone} onChange={v => set("phone", v)} placeholder="Phone — +1 (555) 123-4567" type="tel" />
+                      <TextInput value={data.ein} onChange={v => set("ein", v)} placeholder="EIN / tax ID — XX-XXXXXXX" />
                     </div>
                   </div>
                 </div>
