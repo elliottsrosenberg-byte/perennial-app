@@ -1551,7 +1551,7 @@ function ProviderCard({ provider, integrations, onReload }: {
               className="w-1.5 h-1.5 rounded-full shrink-0"
               style={{
                 background:
-                  intg.status === "error"        ? "var(--color-red-orange)"
+                  intg.status === "error" || intg.status === "needs_reauth" ? "var(--color-red-orange)"
                   : intg.status === "disconnected" ? "var(--color-grey)"
                   : "var(--color-sage)",
               }}
@@ -1564,22 +1564,32 @@ function ProviderCard({ provider, integrations, onReload }: {
               >
                 {intg.account_name ?? "Connected"}
               </p>
-              {(intg.last_synced_at || intg.status === "error") && (
+              {(intg.last_synced_at || intg.status === "error" || intg.status === "needs_reauth") && (
                 <p
                   className="text-[10.5px] mt-0.5 truncate"
-                  style={{ color: intg.status === "error" ? "var(--color-red-orange)" : "var(--color-text-tertiary)" }}
-                  title={intg.status === "error" ? (intg.last_error ?? undefined) : undefined}
+                  style={{ color: intg.status === "error" || intg.status === "needs_reauth" ? "var(--color-red-orange)" : "var(--color-text-tertiary)" }}
+                  title={intg.status === "error" || intg.status === "needs_reauth" ? (intg.last_error ?? undefined) : undefined}
                 >
-                  {intg.status === "error"
-                    ? "Sync error — see logs"
-                    : intg.last_synced_at
-                      ? `Synced ${formatRelative(intg.last_synced_at)}`
-                      : ""}
+                  {intg.status === "needs_reauth"
+                    ? "Connection expired — reconnect to resume"
+                    : intg.status === "error"
+                      ? "Sync error — see logs"
+                      : intg.last_synced_at
+                        ? `Synced ${formatRelative(intg.last_synced_at)}`
+                        : ""}
                 </p>
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              {intg.status === "error" ? (
+              {intg.status === "needs_reauth" ? (
+                <a
+                  href={intg.provider?.startsWith("google") ? "/api/auth/google" : intg.provider === "microsoft" ? "/api/auth/microsoft" : "#"}
+                  className="text-[10px] font-semibold px-2.5 py-[3px] rounded-full"
+                  style={{ background: "rgba(220,62,13,0.12)", color: "var(--color-red-orange)", textDecoration: "none" }}
+                >
+                  Reconnect
+                </a>
+              ) : intg.status === "error" ? (
                 <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(220,62,13,0.12)", color: "var(--color-red-orange)" }}>
                   Error
                 </span>
