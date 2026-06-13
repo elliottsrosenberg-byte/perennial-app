@@ -67,6 +67,7 @@ export interface Note {
   contact_id: string | null;
   organization_id: string | null;
   opportunity_id: string | null;
+  target_id: string | null;
   title: string | null;
   content: string | null;
   pinned: boolean;
@@ -153,6 +154,17 @@ export interface OrganizationActivity {
 export interface ContactFile {
   id:         string;
   contact_id: string;
+  user_id:    string;
+  name:       string;
+  url:        string;
+  file_type:  string | null;
+  size_bytes: number | null;
+  created_at: string;
+}
+
+export interface TargetFile {
+  id:         string;
+  target_id:  string;
   user_id:    string;
   name:       string;
   url:        string;
