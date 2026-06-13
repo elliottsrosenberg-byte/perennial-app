@@ -10,6 +10,8 @@ import EmptyState from "@/components/ui/EmptyState";
 import TasksIntroModal from "@/components/tour/tasks/TasksIntroModal";
 import TasksTooltipTour from "@/components/tour/tasks/TasksTooltipTour";
 import TasksOptionsMenu from "./TasksOptionsMenu";
+import PriorityPicker, { PRIORITY_DOT } from "./PriorityPicker";
+import { dueChipLabel, dueChipColor } from "@/lib/tasks/due";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,12 +23,6 @@ type SortDir = "asc" | "desc";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
-const PRIORITY_DOT: Record<string, string> = {
-  high:   "var(--color-red-orange)",
-  medium: "#b8860b",
-  low:    "var(--color-text-tertiary)",
-};
-const PRIORITY_LABELS: Record<string, string> = { high: "High", medium: "Medium", low: "Low" };
 
 function todayMidnight(): Date {
   const d = new Date();
@@ -53,24 +49,6 @@ function isUpcoming(due: string | null): boolean {
 function isLater(due: string | null): boolean {
   if (!due) return false;
   return (parseDate(due).getTime() - todayMidnight().getTime()) / 86400000 > 14;
-}
-
-function getDueLabelText(due: string | null): string | null {
-  if (!due) return null;
-  const days = Math.round((parseDate(due).getTime() - todayMidnight().getTime()) / 86400000);
-  if (days < 0)   return "Overdue";
-  if (days === 0) return "Today";
-  if (days === 1) return "Tomorrow";
-  if (days <= 14) return `${days} days`;
-  return parseDate(due).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-function getDueLabelColor(due: string | null): string {
-  if (!due) return "var(--color-text-tertiary)";
-  const days = (parseDate(due).getTime() - todayMidnight().getTime()) / 86400000;
-  if (days < 0)  return "var(--color-red-orange)";
-  if (days <= 1) return "#a07800";
-  if (days <= 7) return "var(--color-text-secondary)";
-  return "var(--color-text-tertiary)";
 }
 
 function sortTasks(list: Task[], sort: SortKey, dir: SortDir): Task[] {
@@ -134,8 +112,8 @@ function InlineDatePicker({
     setOpen(false);
   }
 
-  const labelText  = getDueLabelText(value);
-  const labelColor = value ? getDueLabelColor(value) : "var(--color-text-tertiary)";
+  const labelText  = dueChipLabel(value);
+  const labelColor = value ? dueChipColor(value) : "var(--color-text-tertiary)";
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
@@ -456,86 +434,6 @@ function InlineLinkPicker({
   );
 }
 
-// ─── PriorityPicker ───────────────────────────────────────────────────────────
-
-function PriorityPicker({
-  value, onChange, align = "left",
-}: {
-  value:    "high" | "medium" | "low" | null;
-  onChange: (v: "high" | "medium" | "low" | null) => void;
-  align?:   "left" | "right";
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    if (open) document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  const dotColor = value ? PRIORITY_DOT[value] : "var(--color-border-strong)";
-
-  return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        style={{
-          display: "flex", alignItems: "center", gap: 5,
-          fontSize: 11, padding: "3px 8px", borderRadius: 9999,
-          border: `0.5px solid ${open ? "var(--color-border-strong)" : "var(--color-border)"}`,
-          background: value ? "var(--color-surface-sunken)" : "transparent",
-          color: value ? PRIORITY_DOT[value] : "var(--color-text-tertiary)",
-          cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
-          transition: "all 0.1s ease",
-        }}
-        onMouseEnter={e => { if (!value) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
-        onMouseLeave={e => { if (!value) e.currentTarget.style.background = "transparent"; }}
-      >
-        <div style={{ width: 6, height: 6, borderRadius: "50%", background: dotColor, flexShrink: 0 }} />
-        {value ? PRIORITY_LABELS[value] : "Priority"}
-      </button>
-
-      {open && (
-        <div style={{
-          position: "absolute", [align === "right" ? "right" : "left"]: 0,
-          top: "calc(100% + 5px)", zIndex: 200, minWidth: 130,
-          background: "var(--color-surface-raised)", border: "0.5px solid var(--color-border)",
-          borderRadius: 10, boxShadow: "0 4px 20px rgba(0,0,0,0.12)", overflow: "hidden",
-        }}>
-          {value && (
-            <button type="button" onClick={() => { onChange(null); setOpen(false); }} style={{ width: "100%", textAlign: "left", padding: "7px 12px", fontSize: 11, background: "transparent", border: "none", cursor: "pointer", color: "var(--color-text-tertiary)", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 8 }}
-              onMouseEnter={e => e.currentTarget.style.background = "var(--color-surface-sunken)"}
-              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-            >
-              <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-border-strong)" }} />
-              None
-            </button>
-          )}
-          {(["high", "medium", "low"] as const).map(p => (
-            <button type="button" key={p} onClick={() => { onChange(p); setOpen(false); }} style={{
-              width: "100%", textAlign: "left", padding: "7px 12px", fontSize: 11,
-              background: p === value ? "var(--color-surface-sunken)" : "transparent",
-              border: "none", cursor: "pointer", fontFamily: "inherit",
-              color: PRIORITY_DOT[p], fontWeight: p === value ? 600 : 400,
-              display: "flex", alignItems: "center", gap: 8,
-            }}
-            onMouseEnter={e => { if (p !== value) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
-            onMouseLeave={e => { if (p !== value) e.currentTarget.style.background = "transparent"; }}
-            >
-              <div style={{ width: 6, height: 6, borderRadius: "50%", background: PRIORITY_DOT[p] }} />
-              {PRIORITY_LABELS[p]}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── QuickAdd ─────────────────────────────────────────────────────────────────
 
 function QuickAdd({
@@ -810,9 +708,9 @@ function TaskRow({
             align="right"
           />
         )}
-        {task.due_date && task.completed && getDueLabelText(task.due_date) && (
+        {task.due_date && task.completed && dueChipLabel(task.due_date) && (
           <span style={{ fontSize: 11, fontWeight: 500, color: "var(--color-text-tertiary)", whiteSpace: "nowrap" }}>
-            {getDueLabelText(task.due_date)}
+            {dueChipLabel(task.due_date)}
           </span>
         )}
 

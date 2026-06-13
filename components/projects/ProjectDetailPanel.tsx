@@ -7,6 +7,8 @@ import { Maximize2, Minimize2, X, Settings, FileText, CheckSquare, FolderOpen, T
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import AshPromptsModule, { type AshPrompt } from "@/components/ui/AshPromptsModule";
 import { useProjectOptions, type ProjectOption } from "@/lib/projects/options";
+import PriorityPicker from "@/components/tasks/PriorityPicker";
+import { dueChipLabel, dueChipColor } from "@/lib/tasks/due";
 
 // ── Convert a stored colour into a soft chip background ─────────────────────
 function chipBg(color: string): string {
@@ -554,11 +556,6 @@ function CanvasEditor({
 
 // ── Task inline pickers (mirrors TasksClient style) ───────────────────────────
 
-const PRIORITY_DOT: Record<string, string> = {
-  high: "var(--color-red-orange)", medium: "#b8860b", low: "var(--color-text-tertiary)",
-};
-const PRIORITY_LABELS: Record<string, string> = { high: "High", medium: "Medium", low: "Low" };
-
 function toISODateTask(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -566,25 +563,6 @@ function toISODateTask(d: Date): string {
 function taskTodayMidnight(): Date {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-}
-
-function getDueChipLabel(due: string | null): string | null {
-  if (!due) return null;
-  const days = Math.round((new Date(due + "T00:00:00").getTime() - taskTodayMidnight().getTime()) / 86400000);
-  if (days < 0)   return "Overdue";
-  if (days === 0) return "Today";
-  if (days === 1) return "Tomorrow";
-  if (days <= 14) return `${days} days`;
-  return new Date(due + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function getDueChipColor(due: string | null): string {
-  if (!due) return "var(--color-text-tertiary)";
-  const days = Math.round((new Date(due + "T00:00:00").getTime() - taskTodayMidnight().getTime()) / 86400000);
-  if (days < 0)  return "var(--color-red-orange)";
-  if (days <= 1) return "#a07800";
-  if (days <= 7) return "var(--color-text-secondary)";
-  return "var(--color-text-tertiary)";
 }
 
 function TaskDatePicker({ value, onChange, onClear }: {
@@ -612,8 +590,8 @@ function TaskDatePicker({ value, onChange, onClear }: {
   const isSel = (d: number) => !!value && new Date(value + "T12:00:00").getDate() === d && new Date(value + "T12:00:00").getMonth() === mo && new Date(value + "T12:00:00").getFullYear() === yr;
   const isTod = (d: number) => { const t = taskTodayMidnight(); return t.getDate() === d && t.getMonth() === mo && t.getFullYear() === yr; };
 
-  const label = getDueChipLabel(value);
-  const labelColor = value ? getDueChipColor(value) : "var(--color-text-tertiary)";
+  const label = dueChipLabel(value);
+  const labelColor = value ? dueChipColor(value) : "var(--color-text-tertiary)";
 
   function handleOpen() {
     if (triggerRef.current) {
@@ -684,63 +662,6 @@ function TaskDatePicker({ value, onChange, onClear }: {
   );
 }
 
-function TaskPriorityPicker({ value, onChange, align = "right" }: {
-  value: "high" | "medium" | "low" | null; onChange: (v: "high" | "medium" | "low" | null) => void; align?: "left" | "right";
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function h(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
-    if (open) document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [open]);
-
-  const dotColor = value ? PRIORITY_DOT[value] : "var(--color-border-strong)";
-
-  return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <button type="button" onClick={() => setOpen(v => !v)} style={{
-        display: "flex", alignItems: "center", gap: 5, fontSize: 11, padding: "3px 8px", borderRadius: 9999,
-        border: `0.5px solid ${open ? "var(--color-border-strong)" : "var(--color-border)"}`,
-        background: value ? "var(--color-surface-sunken)" : "transparent",
-        color: value ? PRIORITY_DOT[value] : "var(--color-text-tertiary)",
-        cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", transition: "all 0.1s ease",
-      }}
-      onMouseEnter={e => { if (!value) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
-      onMouseLeave={e => { if (!value) e.currentTarget.style.background = "transparent"; }}
-      >
-        <div style={{ width: 6, height: 6, borderRadius: "50%", background: dotColor, flexShrink: 0 }} />
-        {value ? PRIORITY_LABELS[value] : "Priority"}
-      </button>
-      {open && (
-        <div style={{
-          position: "absolute", [align === "right" ? "right" : "left"]: 0, top: "calc(100% + 5px)", zIndex: 200, minWidth: 130,
-          background: "var(--color-surface-raised)", border: "0.5px solid var(--color-border)",
-          borderRadius: 10, boxShadow: "0 4px 20px rgba(0,0,0,0.12)", overflow: "hidden",
-        }}>
-          {value && <button type="button" onClick={() => { onChange(null); setOpen(false); }} style={{ width: "100%", textAlign: "left", padding: "7px 12px", fontSize: 11, background: "transparent", border: "none", cursor: "pointer", color: "var(--color-text-tertiary)", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 8 }}
-            onMouseEnter={e => e.currentTarget.style.background = "var(--color-surface-sunken)"}
-            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-          ><div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-border-strong)" }} />None</button>}
-          {(["high", "medium", "low"] as const).map(p => (
-            <button type="button" key={p} onClick={() => { onChange(p); setOpen(false); }} style={{
-              width: "100%", textAlign: "left", padding: "7px 12px", fontSize: 11,
-              background: p === value ? "var(--color-surface-sunken)" : "transparent",
-              border: "none", cursor: "pointer", fontFamily: "inherit",
-              color: PRIORITY_DOT[p], fontWeight: p === value ? 600 : 400,
-              display: "flex", alignItems: "center", gap: 8,
-            }}
-            onMouseEnter={e => { if (p !== value) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
-            onMouseLeave={e => { if (p !== value) e.currentTarget.style.background = "transparent"; }}
-            ><div style={{ width: 6, height: 6, borderRadius: "50%", background: PRIORITY_DOT[p] }} />{PRIORITY_LABELS[p]}</button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── ProjectTaskRow ────────────────────────────────────────────────────────────
 
 function ProjectTaskRow({
@@ -764,19 +685,6 @@ function ProjectTaskRow({
     if (t && t !== task.title) onUpdate(task.id, { title: t });
     else setDraft(task.title);
   }
-
-  function getDueDays(due: string | null) {
-    if (!due) return null;
-    const d = new Date(); d.setHours(0,0,0,0);
-    const diff = Math.round((new Date(due + "T00:00:00").getTime() - d.getTime()) / 86400000);
-    if (diff < 0)  return { label: "Overdue",  color: "var(--color-red-orange)" };
-    if (diff === 0) return { label: "Today",   color: "#a07800" };
-    if (diff === 1) return { label: "Tomorrow", color: "#a07800" };
-    if (diff <= 14) return { label: `${diff}d`, color: "var(--color-text-tertiary)" };
-    return { label: new Date(due + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }), color: "var(--color-text-tertiary)" };
-  }
-
-  const due = getDueDays(task.due_date);
 
   return (
     <div
@@ -831,9 +739,10 @@ function ProjectTaskRow({
       {!task.completed && (
         <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
           {(task.priority || hovered) && (
-            <TaskPriorityPicker
+            <PriorityPicker
               value={task.priority}
               onChange={p => onUpdate(task.id, { priority: p })}
+              align="right"
             />
           )}
           {(task.due_date || hovered) && (
@@ -846,8 +755,8 @@ function ProjectTaskRow({
         </div>
       )}
       {task.completed && task.due_date && (
-        <span style={{ fontSize: 10, fontWeight: 500, color: getDueChipColor(task.due_date), flexShrink: 0, whiteSpace: "nowrap" }}>
-          {getDueChipLabel(task.due_date)}
+        <span style={{ fontSize: 10, fontWeight: 500, color: dueChipColor(task.due_date), flexShrink: 0, whiteSpace: "nowrap" }}>
+          {dueChipLabel(task.due_date)}
         </span>
       )}
     </div>
@@ -925,7 +834,7 @@ function ProjectTasksTab({
             placeholder="New task…"
             style={{ flex: 1, fontSize: 12, border: "none", outline: "none", background: "transparent", color: "var(--color-charcoal)", fontFamily: "inherit", minWidth: 0 }}
           />
-          <TaskPriorityPicker value={newPriority} onChange={setNewPriority} />
+          <PriorityPicker value={newPriority} onChange={setNewPriority} align="right" />
           <TaskDatePicker value={newDueDate} onChange={setNewDueDate} onClear={() => setNewDueDate(null)} />
           {newTitle.trim() && (
             <button onClick={addTask} disabled={loading} style={{ fontSize: 11, fontWeight: 500, padding: "3px 9px", borderRadius: 5, background: "var(--color-sage)", color: "white", border: "none", cursor: "pointer", flexShrink: 0 }}>
