@@ -197,6 +197,17 @@ const catColor = (cat: string) => ({
 type Tab = "overview" | "website" | "socials" | "newsletter" | "press" | "opportunities";
 type OppView = "list" | "calendar";
 
+// Persist the user's status on a curated opportunity. Curated rows are
+// service_role-only for writes, so this goes through the server route — a
+// direct browser-client UPDATE matches zero rows and silently no-ops.
+async function postOppStatus(id: string, status: string | null): Promise<void> {
+  await fetch("/api/opportunities/status", {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ id, status }),
+  });
+}
+
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 const today = (): Date => { const d = new Date(); d.setHours(0,0,0,0); return d; };
 const parseDate = (s: string | null): Date | null => s ? new Date(s + "T00:00:00") : null;
@@ -1695,11 +1706,11 @@ function OppDetail({ opp, onClose, onDismiss, onStatusChange }: {
   async function setStatus(s: string) {
     const newStatus = opp.user_status === s ? null : s;
     onStatusChange(opp.id, newStatus);
-    await createClient().from("opportunities").update({ user_status: newStatus }).eq("id", opp.id);
+    await postOppStatus(opp.id, newStatus);
   }
 
   async function handleDismiss() {
-    await createClient().from("opportunities").update({ user_status: "hidden" }).eq("id", opp.id);
+    await postOppStatus(opp.id, "hidden");
     onDismiss(opp.id);
     onClose();
   }
@@ -1850,10 +1861,10 @@ function OppCard({
   async function setStatus(s: string) {
     const next = status === s ? null : s;
     onStatusChange(opp.id, next);
-    await createClient().from("opportunities").update({ user_status: next }).eq("id", opp.id);
+    await postOppStatus(opp.id, next);
   }
   async function hide() {
-    await createClient().from("opportunities").update({ user_status: "hidden" }).eq("id", opp.id);
+    await postOppStatus(opp.id, "hidden");
     onDismiss(opp.id);
   }
 
