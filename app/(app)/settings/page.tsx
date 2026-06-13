@@ -2389,21 +2389,18 @@ function DrivePickerModal({ onClose }: { onClose: () => void }) {
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
             <span style={{ fontSize: 11, color: "var(--color-grey)" }}>Save to:</span>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as typeof category)}
-              style={{
-                fontSize: 11, padding: "4px 6px", borderRadius: 6,
-                background: "var(--color-off-white)",
-                border: "0.5px solid var(--color-border)",
-                color: "var(--color-charcoal)", fontFamily: "inherit",
-              }}
-            >
-              <option value="brand">Brand</option>
-              <option value="operations">Operations</option>
-              <option value="press">Press</option>
-              <option value="design">Design</option>
-            </select>
+            <div style={{ width: 150 }}>
+              <SelectInput
+                value={category}
+                onChange={(v) => setCategory(v as typeof category)}
+                options={[
+                  { value: "brand",      label: "Brand" },
+                  { value: "operations", label: "Operations" },
+                  { value: "press",      label: "Press" },
+                  { value: "design",     label: "Design" },
+                ]}
+              />
+            </div>
             {linkResult && (
               <span style={{ fontSize: 11, color: "var(--color-text-secondary)", marginLeft: 6 }}>
                 {linkResult}
@@ -2653,17 +2650,17 @@ function AddWebsiteModal({ onClose, onCreated }: {
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <span style={{ fontSize: 11, fontWeight: 500, color: "var(--color-charcoal)" }}>Platform</span>
-            <select
+            <SelectInput
               value={platform}
-              onChange={(e) => setPlatform(e.target.value as WebsiteSite["platform"])}
-              style={{ padding: "8px 10px", fontSize: 13, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 7, color: "var(--color-charcoal)", fontFamily: "inherit" }}
-            >
-              <option value="manual">Manual / other</option>
-              <option value="webflow">Webflow</option>
-              <option value="wix">Wix</option>
-              <option value="squarespace">Squarespace</option>
-              <option value="wordpress">WordPress</option>
-            </select>
+              onChange={(v) => setPlatform(v as WebsiteSite["platform"])}
+              options={[
+                { value: "manual",      label: "Manual / other" },
+                { value: "webflow",     label: "Webflow" },
+                { value: "wix",         label: "Wix" },
+                { value: "squarespace", label: "Squarespace" },
+                { value: "wordpress",   label: "WordPress" },
+              ]}
+            />
           </label>
           {error && <p style={{ fontSize: 11, color: "var(--color-red-orange)" }}>{error}</p>}
         </div>
