@@ -7,6 +7,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { UserCalendar } from "@/types/database";
+import { PALETTE_SWATCHES } from "@/lib/ui/palette";
 import { ChevronDown, ChevronRight, Eye, EyeOff, MoreHorizontal, Plus, ExternalLink, Trash2, Star, RefreshCw, Unplug } from "lucide-react";
 
 interface Props {
@@ -36,19 +37,9 @@ const PROVIDER_DEFAULT_COLOR: Record<string, string> = {
   apple_icloud:    "#34c759",
 };
 
-// Notion-ish swatches. Keep these tightly curated — too many feels noisy
-// and Google's own colour palette is similarly small.
-const COLOR_SWATCHES: { name: string; value: string }[] = [
-  { name: "Blue",    value: "#039BE5" },
-  { name: "Green",   value: "#34c759" },
-  { name: "Yellow",  value: "#e8c547" },
-  { name: "Orange",  value: "#e8850d" },
-  { name: "Red",     value: "#dc3e0d" },
-  { name: "Pink",    value: "#c93a6a" },
-  { name: "Purple",  value: "#6d4fa3" },
-  { name: "Teal",    value: "#2a8a8a" },
-  { name: "Grey",    value: "#9a9690" },
-];
+// Calendar colors draw from the canonical 10-color palette (lib/ui/palette.ts),
+// the single source for all user-customizable colors across the app.
+const COLOR_SWATCHES = PALETTE_SWATCHES;
 
 function groupKey(c: UserCalendar): string {
   return `${c.provider}::${c.account_email ?? "primary"}`;
