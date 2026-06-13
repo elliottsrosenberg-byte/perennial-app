@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useProjectOptions } from "@/lib/projects/options";
 import Select from "@/components/ui/Select";
+import DetailPanelShell from "@/components/ui/DetailPanelShell";
 import SharedEditableField from "@/components/ui/EditableField";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { getRichExtensions, RichToolbar, InlineAshPopover, submitInlineAsh } from "@/components/ui/RichEditor";
@@ -812,26 +813,7 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
   }, [target.name, stale, currentStage, pipeline.name]);
 
   return (
-    <>
-      {/* Scrim */}
-      {!maximized && (
-        <div className="fixed inset-0 z-10 cursor-pointer"
-          style={{ background: "rgba(20,18,16,0.52)", backdropFilter: "blur(5px)", WebkitBackdropFilter: "blur(5px)" }}
-          onClick={onClose} />
-      )}
-
-      {/* Panel */}
-      <div className="fixed z-20 flex overflow-hidden" style={{
-        top:    maximized ? 0 : "52px",
-        bottom: maximized ? 0 : "32px",
-        left:   maximized ? 0 : "calc(56px + 32px)",
-        right:  maximized ? 0 : "32px",
-        background:   "var(--color-off-white)",
-        borderRadius: maximized ? 0 : 12,
-        boxShadow:    "0 8px 40px rgba(0,0,0,0.22)",
-        border:       "0.5px solid var(--color-border)",
-        transition:   "top 0.2s ease, bottom 0.2s ease, left 0.2s ease, right 0.2s ease, border-radius 0.2s ease",
-      }}>
+    <DetailPanelShell maximized={maximized} onClose={onClose}>
 
         {/* ── Left sidebar ── */}
         <div style={{
@@ -1108,7 +1090,6 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
             {toast}
           </div>
         )}
-      </div>
-    </>
+    </DetailPanelShell>
   );
 }
