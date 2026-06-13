@@ -6,6 +6,7 @@ import type { Project, Task, Note, Contact } from "@/types/database";
 import { Maximize2, Minimize2, X, Settings, FileText, CheckSquare, FolderOpen, Trash2, Pencil, Plus, Link2, ExternalLink, Users, Mail, Phone } from "lucide-react";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import DetailPanelShell from "@/components/ui/DetailPanelShell";
+import SharedEditableField from "@/components/ui/EditableField";
 import AshPromptsModule, { type AshPrompt } from "@/components/ui/AshPromptsModule";
 import { useProjectOptions, type ProjectOption } from "@/lib/projects/options";
 import PriorityPicker from "@/components/tasks/PriorityPicker";
@@ -1830,9 +1831,9 @@ export default function ProjectDetailPanel({
               <div style={{ marginTop: 12 }}>
                 <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Details</p>
                 <EditableField label="Price"      display={localProject.listing_price ? `$${localProject.listing_price.toLocaleString()}` : "—"} editDefault={localProject.listing_price?.toString() ?? ""} inputType="number" placeholder="0" onSave={v => handleUpdate("listing_price", v ? parseFloat(v) : null)} />
-                <EditableField label="Dimensions" display={localProject.dimensions ?? "—"} editDefault={localProject.dimensions ?? ""} placeholder='84" × 38"' onSave={v => handleUpdate("dimensions", v || null)} />
-                <EditableField label="Materials"  display={localProject.materials  ?? "—"} editDefault={localProject.materials  ?? ""} placeholder="White oak" onSave={v => handleUpdate("materials",  v || null)} />
-                <EditableField label="Weight"     display={localProject.weight     ?? "—"} editDefault={localProject.weight     ?? ""} placeholder="~180 lbs"  onSave={v => handleUpdate("weight",     v || null)} />
+                <SharedEditableField label="Dimensions" value={localProject.dimensions} onSave={v => handleUpdate("dimensions", v)} openWhenEmpty />
+                <SharedEditableField label="Materials"  value={localProject.materials}  onSave={v => handleUpdate("materials",  v)} openWhenEmpty />
+                <SharedEditableField label="Weight"     value={localProject.weight}     onSave={v => handleUpdate("weight",     v)} openWhenEmpty />
               </div>
             ) : (
               <div style={{ marginTop: 12 }}>

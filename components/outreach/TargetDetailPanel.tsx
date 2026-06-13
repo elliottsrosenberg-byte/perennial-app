@@ -263,7 +263,7 @@ function OrphanTargetPrompt({
 // and click-to-edit blanks (no open-when-empty). The Link row passes `isLink`
 // to render the value as an external anchor with an inline Edit affordance.
 
-function EditableField(props: { label: string; value: string | null; placeholder?: string; onSave: (v: string | null) => void; isLink?: boolean }) {
+function EditableField(props: { label: string; value: string | null; placeholder?: string; onSave: (v: string | null) => void; isLink?: boolean; openWhenEmpty?: boolean }) {
   return <SharedEditableField {...props} labelWidth={80} />;
 }
 
@@ -877,7 +877,7 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
             {/* Details */}
             <div style={{ marginBottom: 14 }}>
               <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 4 }}>Details</p>
-              <EditableField label="Location" value={target.location} placeholder="—" onSave={v => saveField({ location: v })} />
+              <EditableField label="Location" value={target.location} openWhenEmpty onSave={v => saveField({ location: v })} />
               <EditableField label="Link" value={target.link} placeholder="—" isLink onSave={v => saveField({ link: v })} />
               <DateField label="Deadline" value={target.results_deadline} onSave={v => saveField({ results_deadline: v })} />
               <div style={{ display: "flex", alignItems: "center", padding: "4px 0" }}>
