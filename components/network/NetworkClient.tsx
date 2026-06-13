@@ -8,7 +8,6 @@ import ContactDetailPanel from "./ContactDetailPanel";
 import OrganizationDetailPanel from "./OrganizationDetailPanel";
 import NewContactModal from "./NewContactModal";
 import NewOrganizationModal from "./NewOrganizationModal";
-import Topbar from "@/components/layout/Topbar";
 import EmptyState from "@/components/ui/EmptyState";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import ImportContactsModal from "./ImportContactsModal";
@@ -422,101 +421,38 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <Topbar
-        title="Network"
-        actions={
-          <>
-            {/* 3-dot options menu — list-wide preferences + bulk actions. */}
-            <div style={{ position: "relative" }}>
-              <button
-                type="button"
-                onClick={() => setOptionsOpen(v => !v)}
-                aria-label={optionsLabel}
-                title={optionsLabel}
-                style={{
-                  width: 28, height: 28, borderRadius: 7,
-                  display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  background: optionsOpen ? "var(--color-surface-sunken)" : "transparent",
-                  border: "none", cursor: "pointer",
-                  color: "var(--color-text-secondary)",
-                  transition: "background 0.12s ease",
-                }}
-                onMouseEnter={e => { if (!optionsOpen) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
-                onMouseLeave={e => { if (!optionsOpen) e.currentTarget.style.background = "transparent"; }}
-              >
-                <MoreHorizontal size={16} strokeWidth={2} />
-              </button>
-              {optionsOpen && (
-                <NetworkOptionsMenu
-                  showArchived={showArchived}
-                  onToggleShowArchived={() => setShowArchived(v => !v)}
-                  archivedCount={archivedCount}
-                  onClose={() => setOptionsOpen(false)}
-                />
-              )}
-            </div>
-            {/* New button — themed per view (sage / amber / blue) */}
-            <span data-tour-target="contacts.new-button">
-              <button
-                onClick={openNewModal}
-                style={{
-                  padding: "7px 20px", fontSize: 12, fontWeight: 500,
-                  borderRadius: 8, border: "none", cursor: "pointer",
-                  background: accent.primary, color: "white",
-                  fontFamily: "inherit",
-                  transition: "background 0.12s ease",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = accent.primaryHover)}
-                onMouseLeave={(e) => (e.currentTarget.style.background = accent.primary)}
-              >
-                {newCtaLabel}
-              </button>
-            </span>
-          </>
-        }
-      />
-
-      {/* ── Contacts / Leads / Organizations view toggle ── */}
-      <div
-        style={{
-          display: "flex", alignItems: "center",
-          padding: "10px 24px", borderBottom: "0.5px solid var(--color-border)",
-          background: "var(--color-off-white)", flexShrink: 0,
-        }}
-      >
-        <div
-          role="tablist"
-          aria-label="Network view"
-          style={{
-            display: "inline-flex",
-            padding: 3,
-            background: "var(--color-surface-sunken)",
-            border: "0.5px solid var(--color-border)",
-            borderRadius: 8,
-          }}
-        >
+      {/* Custom topbar with tab strip — mirrors Finance/Presence: module
+          title at the left, the view tabs immediately to its right, and the
+          per-view actions (options + New) pinned to the far right. */}
+      <header className="flex items-stretch shrink-0"
+        style={{ height: 52, borderBottom: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
+        <div className="flex items-center px-6 shrink-0"
+          style={{ borderRight: "0.5px solid var(--color-border)" }}>
+          <h1 className="font-semibold text-[14px]" style={{ color: "var(--color-charcoal)" }}>Network</h1>
+        </div>
+        <div className="flex items-stretch" role="tablist" aria-label="Network view">
           {(["contacts", "leads", "organizations"] as const).map((v) => {
             const active = view === v;
             const tint = v === "leads"
-              ? { fg: "#b8860b" }
+              ? "#b8860b"
               : v === "organizations"
-                ? { fg: "#2563ab" }
-                : { fg: "#3d6b4f" };
+                ? "#2563ab"
+                : "var(--color-sage)";
             return (
               <button
                 key={v}
+                type="button"
                 role="tab"
                 aria-selected={active}
                 onClick={() => { setView(v); setSelected(new Set()); setStageFilter(null); setTagFilter(null); }}
+                className="px-5 text-[12px] capitalize"
                 style={{
-                  padding: "5px 16px", borderRadius: 6,
-                  fontSize: 12, fontWeight: 600,
-                  background: active ? "var(--color-surface-raised)" : "transparent",
-                  color: active ? tint.fg : "var(--color-text-tertiary)",
-                  border: "none", cursor: "pointer", fontFamily: "inherit",
-                  transition: "background 0.12s ease, color 0.12s ease",
-                  boxShadow: active ? "var(--shadow-sm)" : "none",
-                  textTransform: "capitalize",
+                  color: active ? "var(--color-charcoal)" : "var(--color-grey)",
+                  fontWeight: active ? 600 : 400,
+                  borderBottom: active ? `2px solid ${tint}` : "2px solid transparent",
+                  borderRight: "0.5px solid var(--color-border)",
+                  background: "transparent", borderTop: "none", borderLeft: "none",
+                  cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
                 }}
               >
                 {v}
@@ -524,7 +460,55 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
             );
           })}
         </div>
-      </div>
+        <div className="flex items-center gap-2 ml-auto px-5 shrink-0">
+          {/* 3-dot options menu — list-wide preferences + bulk actions. */}
+          <div style={{ position: "relative" }}>
+            <button
+              type="button"
+              onClick={() => setOptionsOpen(v => !v)}
+              aria-label={optionsLabel}
+              title={optionsLabel}
+              style={{
+                width: 28, height: 28, borderRadius: 7,
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                background: optionsOpen ? "var(--color-surface-sunken)" : "transparent",
+                border: "none", cursor: "pointer",
+                color: "var(--color-text-secondary)",
+                transition: "background 0.12s ease",
+              }}
+              onMouseEnter={e => { if (!optionsOpen) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
+              onMouseLeave={e => { if (!optionsOpen) e.currentTarget.style.background = "transparent"; }}
+            >
+              <MoreHorizontal size={16} strokeWidth={2} />
+            </button>
+            {optionsOpen && (
+              <NetworkOptionsMenu
+                showArchived={showArchived}
+                onToggleShowArchived={() => setShowArchived(v => !v)}
+                archivedCount={archivedCount}
+                onClose={() => setOptionsOpen(false)}
+              />
+            )}
+          </div>
+          {/* New button — themed per view (sage / amber / blue) */}
+          <span data-tour-target="contacts.new-button">
+            <button
+              onClick={openNewModal}
+              style={{
+                padding: "7px 20px", fontSize: 12, fontWeight: 500,
+                borderRadius: 8, border: "none", cursor: "pointer",
+                background: accent.primary, color: "white",
+                fontFamily: "inherit",
+                transition: "background 0.12s ease",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = accent.primaryHover)}
+              onMouseLeave={(e) => (e.currentTarget.style.background = accent.primary)}
+            >
+              {newCtaLabel}
+            </button>
+          </span>
+        </div>
+      </header>
 
       {/* ── Sort + filter bar ── */}
       <div
