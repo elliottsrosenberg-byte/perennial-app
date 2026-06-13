@@ -1064,6 +1064,12 @@ interface IGRecentPost {
   thumbnail_url: string | null;
   permalink: string | null;
   caption: string | null;
+  // Per-media insights (best-effort; may be absent for a given post).
+  reach?: number;
+  engagement?: number;      // total interactions
+  saved?: number;
+  shares?: number;
+  engagement_rate?: number; // total_interactions / reach * 100
 }
 
 function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
@@ -1349,6 +1355,14 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
                           <span>{post.comments.toLocaleString()} comments</span>
                           {ts && <span>· {ts.toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>}
                         </div>
+                        {(post.reach != null || post.engagement_rate != null || post.saved != null || post.shares != null) && (
+                          <div style={{ fontSize:10, color:"var(--color-grey)", display:"flex", flexWrap:"wrap", gap:10 }}>
+                            {post.reach != null && <span>{post.reach.toLocaleString()} reach</span>}
+                            {post.engagement_rate != null && <span>{post.engagement_rate}% eng</span>}
+                            {post.saved != null && <span>{post.saved.toLocaleString()} saved</span>}
+                            {post.shares != null && <span>{post.shares.toLocaleString()} shares</span>}
+                          </div>
+                        )}
                       </div>
                       {post.permalink && <span style={{ ...blueLink, alignSelf:"center", whiteSpace:"nowrap" }}>View →</span>}
                     </a>
