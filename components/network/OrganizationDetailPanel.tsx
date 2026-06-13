@@ -10,22 +10,15 @@ import CanvasAshHint from "@/components/ui/CanvasAshHint";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import AshPromptsModule, { type AshPrompt } from "@/components/ui/AshPromptsModule";
 import { fmtDayRelative as fmtDate, fmtTime } from "@/lib/format/date";
+import { hexToRgba, paletteColorForKey } from "@/lib/ui/palette";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const TAG_COLORS: Record<string, { bg: string; color: string }> = {
-  gallery:     { bg: "rgba(37,99,171,0.10)",   color: "#2563ab" },
-  brand:       { bg: "rgba(61,107,79,0.10)",   color: "#3d6b4f" },
-  publication: { bg: "rgba(184,134,11,0.10)",  color: "#b8860b" },
-  press:       { bg: "rgba(109,79,163,0.10)",  color: "#6d4fa3" },
-  fair:        { bg: "rgba(20,140,140,0.10)",  color: "#148c8c" },
-};
-function tagStyle(tag: string) {
-  const key = tag.toLowerCase().trim();
-  if (TAG_COLORS[key]) return TAG_COLORS[key];
-  let h = 0; for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) & 0xffffffff;
-  const FB = [{ bg: "rgba(37,99,171,0.10)", color: "#2563ab" }, { bg: "rgba(109,79,163,0.10)", color: "#6d4fa3" }, { bg: "rgba(20,140,140,0.10)", color: "#148c8c" }, { bg: "rgba(61,107,79,0.10)", color: "#3d6b4f" }, { bg: "rgba(184,134,11,0.10)", color: "#b8860b" }];
-  return FB[Math.abs(h) % FB.length];
+// Tags are user-created labels — colored deterministically from the shared
+// 10-color palette so the same tag reads the same color across every module.
+function tagStyle(tag: string): { bg: string; color: string } {
+  const { hex } = paletteColorForKey(tag);
+  return { bg: hexToRgba(hex, 0.12), color: hex };
 }
 
 const ACTIVITY_CONFIG: Record<ContactActivityType, { bg: string; color: string; label: string; icon: React.ReactNode }> = {
