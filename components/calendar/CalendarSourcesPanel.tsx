@@ -56,6 +56,9 @@ function groupLabel(c: UserCalendar): { account: string; provider: string } {
 export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
   const [calendars, setCalendars] = useState<UserCalendar[]>([]);
   const [removedCals, setRemovedCals] = useState<UserCalendar[]>([]);
+  // Account group keys whose stored credential is dead — rendered with a
+  // Reconnect prompt instead of silently showing an empty calendar.
+  const [reauthKeys, setReauthKeys] = useState<Set<string>>(new Set());
   const [defaultId, setDefaultId] = useState<string | null>(null);
   const [loading,   setLoading]   = useState(true);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -73,11 +76,12 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
     // reconcile with the server in the background.
     fetch("/api/integrations/calendar/calendars")
       .then((r) => r.json())
-      .then((d: { calendars?: UserCalendar[]; removed_calendars?: UserCalendar[]; default_calendar_id?: string | null }) => {
+      .then((d: { calendars?: UserCalendar[]; removed_calendars?: UserCalendar[]; default_calendar_id?: string | null; reauth_group_keys?: string[] }) => {
         if (cancelled) return;
         setCalendars(d.calendars ?? []);
         setRemovedCals(d.removed_calendars ?? []);
         setDefaultId(d.default_calendar_id ?? null);
+        setReauthKeys(new Set(d.reauth_group_keys ?? []));
         setLoading(false);
       })
       .catch(() => { if (!cancelled) setLoading(false); });
@@ -256,6 +260,11 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
 
       {groups.map((g) => {
         const isCollapsed = collapsed.has(g.key);
+        const needsReauth = reauthKeys.has(g.key);
+        const groupProvider = g.calendars[0]?.provider ?? g.removed[0]?.provider ?? "";
+        const reconnectHref = groupProvider.startsWith("google")
+          ? "/api/auth/google"
+          : groupProvider === "microsoft" ? "/api/auth/microsoft" : null;
         return (
           <div key={g.key} style={{ marginBottom: 6 }}>
             <button
@@ -283,6 +292,24 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
                 {g.label.account}
               </span>
             </button>
+
+            {needsReauth && reconnectHref && (
+              <a
+                href={reconnectHref}
+                title="This account's connection expired — reconnect to load its events again."
+                style={{
+                  display: "flex", alignItems: "center", gap: 5,
+                  margin: "0 10px 4px 20px", padding: "5px 8px",
+                  fontSize: 10.5, fontWeight: 500, textDecoration: "none",
+                  color: "var(--color-red-orange)",
+                  background: "rgba(220,62,13,0.07)",
+                  border: "0.5px solid rgba(220,62,13,0.25)", borderRadius: 6,
+                }}
+              >
+                <RefreshCw size={11} style={{ flexShrink: 0 }} />
+                <span>Connection expired — reconnect</span>
+              </a>
+            )}
 
             {!isCollapsed && g.calendars.map((c) => {
               const color = c.color ?? PROVIDER_DEFAULT_COLOR[c.provider] ?? "#888";

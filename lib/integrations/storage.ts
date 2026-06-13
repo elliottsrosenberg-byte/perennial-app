@@ -137,6 +137,35 @@ export async function recordSyncSuccess(
   if (error) throw new Error(`storage.recordSyncSuccess: ${error.message}`);
 }
 
+/** Mark an integration as needing re-authentication. Distinct from 'error'
+ *  (a transient sync hiccup) — this means the stored credential is dead
+ *  (refresh token missing or rejected by the provider) and only a fresh
+ *  OAuth grant fixes it. The Calendar rail and Settings surface a Reconnect
+ *  prompt for accounts in this state instead of silently dropping events. */
+export async function recordReauthRequired(integrationId: string, message: string): Promise<void> {
+  const supabase = await createClient();
+  await supabase
+    .from("integrations")
+    .update({
+      status:        "needs_reauth",
+      last_error:    message.slice(0, 1000),
+      last_error_at: new Date().toISOString(),
+      updated_at:    new Date().toISOString(),
+    })
+    .eq("id", integrationId);
+}
+
+/** Clear a prior 'needs_reauth'/'error' state after a token refresh (or any
+ *  call) succeeds again. No-op write cost when already active. */
+export async function clearIntegrationError(integrationId: string): Promise<void> {
+  const supabase = await createClient();
+  await supabase
+    .from("integrations")
+    .update({ status: "active", last_error: null, last_error_at: null, updated_at: new Date().toISOString() })
+    .eq("id", integrationId)
+    .neq("status", "active");
+}
+
 /** Record a sync failure. Switches `status` to 'error' so the Settings UI
  *  can surface the issue. */
 export async function recordSyncError(integrationId: string, message: string): Promise<void> {

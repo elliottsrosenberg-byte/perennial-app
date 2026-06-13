@@ -1682,6 +1682,11 @@ export default function CalendarClient({
   // returns one merged list. Also re-fires when the options-menu
   // "Refresh calendars" dispatches `calendar:refresh-events`.
   const [refreshNonce, setRefreshNonce] = useState(0);
+  // Bumped (independently of refreshNonce, so it doesn't re-trigger the
+  // events fetch) to make the sources rail re-read /calendars when the
+  // events response reveals an account whose credential just died.
+  const [sourcesNonce, setSourcesNonce] = useState(0);
+  const reauthSigRef = useRef("");
   useEffect(() => {
     function onRefresh() { setRefreshNonce((n) => n + 1); }
     function onCreated(e: Event) {
@@ -1716,9 +1721,17 @@ export default function CalendarClient({
     setEventsLoading(true);
     fetch(`/api/integrations/calendar/events?startDate=${start}&endDate=${end}`)
       .then(r => r.json())
-      .then((d: { events?: CalEvent[] }) => {
+      .then((d: { events?: CalEvent[]; reauth_group_keys?: string[] }) => {
         if (cancelled) return;
         setGcalEvents(d.events ?? []);
+        // If an account's credential died, nudge the sources rail to re-read
+        // /calendars so it shows the Reconnect prompt. Only on change, so a
+        // persistent reauth state doesn't loop the panel every fetch.
+        const sig = (d.reauth_group_keys ?? []).slice().sort().join("|");
+        if (sig !== reauthSigRef.current) {
+          reauthSigRef.current = sig;
+          setSourcesNonce((n) => n + 1);
+        }
       })
       .catch(() => { /* swallow — failure leaves the previous events in place */ })
       .finally(() => { if (!cancelled) setEventsLoading(false); });
@@ -2216,7 +2229,7 @@ export default function CalendarClient({
               we have something to show; first paint of a fresh
               connection triggers a background sync server-side. */}
           {anyConnected && (
-            <CalendarSourcesPanel refreshNonce={refreshNonce} />
+            <CalendarSourcesPanel refreshNonce={refreshNonce + sourcesNonce} />
           )}
 
           {/* Opportunities — controls which opportunity bars show on the

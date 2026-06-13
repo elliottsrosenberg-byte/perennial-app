@@ -5,6 +5,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { readIntegrationSecret, setIntegrationSecret } from "./vault";
+import { recordReauthRequired, clearIntegrationError } from "./storage";
 import { microsoftAdapter } from "./microsoft";
 
 const REFRESH_LEAD_MS = 60_000;
@@ -34,6 +35,7 @@ export async function getValidMicrosoftAccessToken(integrationId: string): Promi
 
   const refreshToken = await readIntegrationSecret(integrationId, "refresh_token");
   if (!refreshToken) {
+    await recordReauthRequired(integrationId, "no refresh token on file — user must re-authenticate");
     throw new MicrosoftTokenRefreshFailed("no refresh token on file — user must re-authenticate");
   }
 
@@ -41,6 +43,7 @@ export async function getValidMicrosoftAccessToken(integrationId: string): Promi
   try {
     refreshed = await microsoftAdapter.refreshTokens(refreshToken);
   } catch (e) {
+    await recordReauthRequired(integrationId, "Microsoft rejected the refresh token — reconnect required");
     throw new MicrosoftTokenRefreshFailed("Microsoft rejected the refresh token", e);
   }
 
@@ -57,6 +60,8 @@ export async function getValidMicrosoftAccessToken(integrationId: string): Promi
       updated_at:       new Date().toISOString(),
     })
     .eq("id", integrationId);
+  // A successful refresh clears any prior needs_reauth/error flag.
+  await clearIntegrationError(integrationId);
 
   return refreshed.accessToken;
 }

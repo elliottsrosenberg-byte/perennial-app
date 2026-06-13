@@ -349,6 +349,20 @@ export async function GET(req: Request) {
 
   const all = (await Promise.all(work)).flat();
 
+  // Token getters flip an account to `needs_reauth` when its refresh token
+  // is dead. Re-read post-fetch (a failure above may have just set it) so
+  // the client can badge those accounts with a Reconnect prompt instead of
+  // silently showing an empty calendar. Keyed to match the rail's grouping.
+  const { data: reauthRows } = await supabase
+    .from("integrations")
+    .select("provider, account_name")
+    .eq("user_id", user.id)
+    .eq("status", "needs_reauth")
+    .in("provider", ["google_calendar", "google", "microsoft"]);
+  const reauthGroupKeys = (reauthRows ?? []).map(
+    (r) => `${r.provider}::${r.account_name ?? "primary"}`,
+  );
+
   // Best-effort timestamp update on every queried integration so the
   // Settings UI's "last synced" stays accurate.
   await Promise.all(
@@ -359,7 +373,7 @@ export async function GET(req: Request) {
     ),
   );
 
-  return NextResponse.json({ connected: sources.length > 0, events: all, sources });
+  return NextResponse.json({ connected: sources.length > 0, events: all, sources, reauth_group_keys: reauthGroupKeys });
 }
 
 // ── POST: create a new event on a user_calendar the user can write to ─────

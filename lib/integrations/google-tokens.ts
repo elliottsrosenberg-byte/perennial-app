@@ -4,6 +4,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { readIntegrationSecret, setIntegrationSecret } from "./vault";
+import { recordReauthRequired, clearIntegrationError } from "./storage";
 import { googleAdapter } from "./google";
 
 /** Refresh threshold: refresh if the access token expires within this
@@ -40,6 +41,7 @@ export async function getValidGoogleAccessToken(integrationId: string): Promise<
 
   const refreshToken = await readIntegrationSecret(integrationId, "refresh_token");
   if (!refreshToken) {
+    await recordReauthRequired(integrationId, "no refresh token on file — user must re-authenticate");
     throw new TokenRefreshFailed("no refresh token on file — user must re-authenticate");
   }
 
@@ -47,6 +49,7 @@ export async function getValidGoogleAccessToken(integrationId: string): Promise<
   try {
     refreshed = await googleAdapter.refreshTokens(refreshToken);
   } catch (e) {
+    await recordReauthRequired(integrationId, "Google rejected the refresh token — reconnect required");
     throw new TokenRefreshFailed("Google rejected the refresh token", e);
   }
 
@@ -58,6 +61,8 @@ export async function getValidGoogleAccessToken(integrationId: string): Promise<
       updated_at:       new Date().toISOString(),
     })
     .eq("id", integrationId);
+  // A successful refresh clears any prior needs_reauth/error flag.
+  await clearIntegrationError(integrationId);
 
   return refreshed.accessToken;
 }
