@@ -18,6 +18,7 @@ import TaskQuickEditPopover from "./TaskQuickEditPopover";
 import QuickTaskCard, { type QuickTaskInput } from "./QuickTaskCard";
 import CalendarIntroModal from "@/components/tour/calendar/CalendarIntroModal";
 import CalendarTooltipTour from "@/components/tour/calendar/CalendarTooltipTour";
+import { fmtTime } from "@/lib/format/date";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -3311,7 +3312,7 @@ export default function CalendarClient({
                       const heightPx = ((endMin - startMin) / 60) * PX_PER_HOUR;
                       const startD   = dayWithMinutes(day, startMin);
                       const endD     = dayWithMinutes(day, endMin);
-                      const fmt = (d: Date) => d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+                      const fmt = fmtTime;
                       return (
                         <div
                           style={{
@@ -3348,7 +3349,7 @@ export default function CalendarClient({
                       .map((w) => {
                         const topPx = timeToY(w.start.getHours(), w.start.getMinutes());
                         const hPx   = Math.max(16, timeToY(w.end.getHours(), w.end.getMinutes()) - topPx);
-                        const fmt = (d: Date) => d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+                        const fmt = fmtTime;
                         return (
                           <div
                             key={w.id}

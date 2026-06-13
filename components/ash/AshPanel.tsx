@@ -6,6 +6,7 @@ import remarkGfm from "remark-gfm";
 import AshMark from "@/components/ui/AshMark";
 import { createClient } from "@/lib/supabase/client";
 import { Maximize2, Minimize2, X, Clock } from "lucide-react";
+import { timeAgoDays as timeAgo } from "@/lib/format/date";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -65,15 +66,6 @@ const SUGGESTIONS: Record<string, string[]> = {
 };
 
 const ASH_GRADIENT = "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)";
-
-function timeAgo(d: string) {
-  const diff = Date.now() - new Date(d).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 7)  return `${days}d ago`;
-  return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
 
 // ─── AshPanel ─────────────────────────────────────────────────────────────────
 

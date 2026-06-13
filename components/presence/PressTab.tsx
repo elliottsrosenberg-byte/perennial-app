@@ -6,6 +6,7 @@ import type { PressMention, PressType, PressStats } from "@/types/database";
 import { Plus, X, ExternalLink, Trash2, ChevronDown, Newspaper, ArrowRight } from "lucide-react";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
+import { fmtDateShortBlank as fmtDate } from "@/lib/format/date";
 
 const TYPE_META: Record<PressType, { label: string; color: string; bg: string }> = {
   feature:   { label: "Feature",   color: "var(--color-sage)", bg: "rgba(155,163,122,0.14)" },
@@ -41,11 +42,6 @@ const cardStyle: React.CSSProperties = {
 const titleStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 600, color: "var(--color-charcoal)",
 };
-
-function fmtDate(d: string | null): string {
-  if (!d) return "";
-  return new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
 
 export default function PressTab() {
   const [mentions, setMentions] = useState<PressMention[]>([]);

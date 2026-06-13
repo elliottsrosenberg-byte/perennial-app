@@ -5,6 +5,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import OverviewCharts from "./OverviewCharts";
 import { formatInvoiceNumber } from "@/lib/invoices/format";
 import { Landmark } from "lucide-react";
+import { fmtTimer } from "@/lib/format/date";
 
 type Tab = "overview" | "time" | "invoices" | "banking";
 
@@ -44,11 +45,6 @@ function fmtDuration(min: number) {
   if (h === 0) return `${m}m`;
   if (m === 0) return `${h}h`;
   return `${h}h ${m}m`;
-}
-
-function fmtTimer(s: number) {
-  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
-  return `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
 }
 
 function isOverdue(inv: Invoice) {

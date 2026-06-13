@@ -13,17 +13,9 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import { getRichExtensions, RichToolbar, InlineAshPopover, submitInlineAsh } from "@/components/ui/RichEditor";
 import type { AshPromptState } from "@/components/ui/RichEditor";
 import AshPromptsModule, { type AshPrompt } from "@/components/ui/AshPromptsModule";
+import { fmtDayRelative as fmtDate } from "@/lib/format/date";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function fmtDate(iso: string) {
-  const d = new Date(iso);
-  const today = new Date();
-  const yest = new Date(today); yest.setDate(today.getDate() - 1);
-  if (d.toDateString() === today.toDateString()) return "Today";
-  if (d.toDateString() === yest.toDateString()) return "Yesterday";
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
 
 function daysSince(iso: string) {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);

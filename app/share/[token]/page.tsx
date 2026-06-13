@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { fmtTimestampLong as fmtDate } from "@/lib/format/date";
 
 // Anon client — RLS policy allows SELECT on shared notes
 const supabase = createClient(
@@ -23,10 +24,6 @@ export async function generateMetadata({ params }: { params: Promise<{ token: st
   return {
     title: note?.title ? `${note.title} — Perennial` : "Shared note — Perennial",
   };
-}
-
-function fmtDate(d: string) {
-  return new Date(d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
 export default async function SharedNotePage({ params }: { params: Promise<{ token: string }> }) {
