@@ -24,7 +24,7 @@ export type ProviderId =
   | "teller"            // banking
   | "stripe";
 
-export type IntegrationStatus = "active" | "error" | "disconnected" | "pending";
+export type IntegrationStatus = "active" | "error" | "disconnected" | "pending" | "needs_reauth";
 
 /** A single row from `public.integrations`. Token secrets are NOT included
  *  here — they're fetched on demand via the vault RPCs. */

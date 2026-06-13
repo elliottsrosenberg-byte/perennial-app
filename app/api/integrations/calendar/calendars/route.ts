@@ -95,14 +95,35 @@ export async function GET() {
   // Hide calendars whose account no longer has a live (active, calendar-
   // scoped) integration — e.g. after the user disconnects that account in
   // Settings. Otherwise the disconnected account ghosts in the rail.
+  //
+  // Exception: accounts flagged `needs_reauth` (token expired/revoked) stay
+  // visible. We want the rail to show them with a Reconnect prompt rather
+  // than silently dropping the calendar as if it were never connected.
   const live = liveAccountKeys(integrations ?? []);
-  const isLive = (c: { provider: string; account_email: string | null }) =>
-    live.has(calendarAccountKey(c.provider, c.account_email));
+  const reauthKeys = new Set<string>();
+  for (const intg of integrations ?? []) {
+    if (intg.status !== "needs_reauth") continue;
+    if (intg.provider !== "google_calendar" && !((intg.scopes ?? {}) as Record<string, boolean>).calendar) continue;
+    reauthKeys.add(calendarAccountKey(intg.provider, intg.account_name));
+  }
+  const isLive = (c: { provider: string; account_email: string | null }) => {
+    const key = calendarAccountKey(c.provider, c.account_email);
+    return live.has(key) || reauthKeys.has(key);
+  };
+
+  // Group keys (matching the rail's `${provider}::${account}` keying) that
+  // need reconnecting, so the panel can badge exactly those account groups.
+  const reauthGroupKeys = Array.from(new Set(
+    (cals ?? [])
+      .filter((c) => reauthKeys.has(calendarAccountKey(c.provider, c.account_email)))
+      .map((c) => `${c.provider}::${c.account_email ?? "primary"}`),
+  ));
 
   return NextResponse.json({
     calendars: (cals ?? []).filter(isLive),
     removed_calendars: (removed ?? []).filter(isLive),
     default_calendar_id: defaultId,
+    reauth_group_keys: reauthGroupKeys,
   });
 }
 
