@@ -513,8 +513,8 @@ function OverviewTab({ onTabChange, opps, instagram, plausible, newsletter, onCo
 
   return (
     <div className="flex-1 overflow-y-auto" style={{ padding:"22px 24px", display:"flex", flexDirection:"column", gap:18 }}>
-      {/* Stat cards */}
-      <div style={{ display:"flex", gap:12 }}>
+      {/* Stat cards — single row of equal-width cards */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4, minmax(0, 1fr))", gap:12 }}>
         {/* Website stat — real data if Plausible connected */}
         {plausible ? (
           <StatCard label="Website" value={plausible.metadata.sessions ? String(plausible.metadata.sessions) : plausible.metadata.visitors_30d ? String(plausible.metadata.visitors_30d) : "—"} sub="Sessions · last 30 days" subUp detail={plausible.metadata.property_name as string ?? plausible.account_name ?? ""} badge="Connected" helpText="Sessions from Google Analytics." askAsh ashMessage="How can I drive more traffic to my website?" onClick={() => onTabChange("website")} />
