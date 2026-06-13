@@ -33,6 +33,10 @@ interface CalendarEvent {
   location:    string | null;
   htmlLink:    string | null;
   colorId:     string | null;
+  // The parent calendar's user-chosen colour, resolved server-side from
+  // user_calendars so event chips render correctly tinted on first paint —
+  // no second round-trip to /calendars before colours appear.
+  color:       string | null;
   source:      "google" | "microsoft";
   accountName: string | null;
   // The user_calendars row this event lives in. Needed for write-back
@@ -81,6 +85,7 @@ interface CalendarMeta {
   externalId: string;
   rowId:      string | null;   // user_calendars.id
   writable:   boolean;
+  color:      string | null;   // user_calendars.color
 }
 
 async function fetchGoogleEvents(
@@ -121,6 +126,7 @@ async function fetchGoogleEvents(
         location:    e.location ?? null,
         htmlLink:    e.htmlLink ?? null,
         colorId:     e.colorId ?? null,
+        color:       cal.color,
         source:      "google" as const,
         accountName,
         calendarId:  cal.rowId,
@@ -163,11 +169,11 @@ async function fetchMicrosoftEvents(
       })),
     );
     return lists.flatMap(({ cal, items }) =>
-      items.filter((e) => !e.isCancelled).map((e) => normalizeGraphEvent(e, accountName, cal.rowId, cal.writable)),
+      items.filter((e) => !e.isCancelled).map((e) => normalizeGraphEvent(e, accountName, cal.rowId, cal.writable, cal.color)),
     );
   }
   const items = await fetchOne(`/me/calendarView`);
-  return items.filter((e) => !e.isCancelled).map((e) => normalizeGraphEvent(e, accountName, null, false));
+  return items.filter((e) => !e.isCancelled).map((e) => normalizeGraphEvent(e, accountName, null, false, null));
 }
 
 function normalizeGraphEvent(
@@ -175,6 +181,7 @@ function normalizeGraphEvent(
   accountName: string | null,
   calendarId:  string | null,
   writable:    boolean,
+  color:       string | null,
 ): CalendarEvent {
   const isAllDay = !!e.isAllDay;
   // Graph returns dateTime as unzoned ISO; the UI parses these as
@@ -196,6 +203,7 @@ function normalizeGraphEvent(
     location:    e.location?.displayName ?? null,
     htmlLink:    e.webLink ?? null,
     colorId:     null,
+    color,
     source:      "microsoft",
     accountName,
     calendarId,
@@ -237,7 +245,7 @@ export async function GET(req: Request) {
   //   aggregator fans out to exactly these.
   const { data: userCalendars } = await supabase
     .from("user_calendars")
-    .select("id, provider, account_email, external_id, visible, writable, removed")
+    .select("id, provider, account_email, external_id, visible, writable, removed, color")
     .eq("user_id", user.id);
   // Key by provider::account, NOT provider alone. With multiple accounts on
   // the same provider (e.g. two Google logins), a provider-only bucket made
@@ -252,7 +260,7 @@ export async function GET(req: Request) {
     const key = acctKey(c.provider, c.account_email);
     const entry = calendarsByAccount.get(key) ?? { metas: [], hasAny: false };
     entry.hasAny = true;
-    if (c.visible && !c.removed) entry.metas.push({ externalId: c.external_id, rowId: c.id, writable: !!c.writable });
+    if (c.visible && !c.removed) entry.metas.push({ externalId: c.external_id, rowId: c.id, writable: !!c.writable, color: c.color ?? null });
     calendarsByAccount.set(key, entry);
   }
 
@@ -271,7 +279,7 @@ export async function GET(req: Request) {
     const entry = calendarsByAccount.get(acctKey(provider, account));
     if (!entry) {
       needsBackfill = true;
-      return [{ externalId: "primary", rowId: null, writable: false }];
+      return [{ externalId: "primary", rowId: null, writable: false, color: null }];
     }
     return entry.metas;
   }
