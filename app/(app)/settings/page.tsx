@@ -1400,7 +1400,7 @@ export default function SettingsPage() {
                       name: "TikTok",
                       desc: "Show your video performance and follower stats in Presence.",
                       iconBg: "rgba(0,0,0,0.06)",
-                      href: "/api/auth/tiktok",
+                      soon: true,
                     },
                     {
                       provider: "google_analytics",
