@@ -15,30 +15,16 @@ import ContactsIntroModal from "@/components/tour/contacts/ContactsIntroModal";
 import ContactsTooltipTour from "@/components/tour/contacts/ContactsTooltipTour";
 import NetworkOptionsMenu from "./NetworkOptionsMenu";
 import FilterTabs from "@/components/ui/FilterTabs";
+import { hexToRgba, paletteColorForKey } from "@/lib/ui/palette";
 import { Users, Building2, Upload, MoreHorizontal, ArrowUpDown } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const TAG_COLORS: Record<string, { bg: string; color: string }> = {
-  gallery:  { bg: "rgba(37,99,171,0.10)",   color: "#2563ab" },
-  client:   { bg: "rgba(61,107,79,0.10)",   color: "#3d6b4f" },
-  supplier: { bg: "rgba(184,134,11,0.10)",  color: "#b8860b" },
-  press:    { bg: "rgba(109,79,163,0.10)",  color: "#6d4fa3" },
-  event:    { bg: "rgba(20,140,140,0.10)",  color: "#148c8c" },
-};
-const FALLBACK_COLORS = [
-  { bg: "rgba(37,99,171,0.10)",  color: "#2563ab" },
-  { bg: "rgba(109,79,163,0.10)", color: "#6d4fa3" },
-  { bg: "rgba(20,140,140,0.10)", color: "#148c8c" },
-  { bg: "rgba(61,107,79,0.10)",  color: "#3d6b4f" },
-  { bg: "rgba(184,134,11,0.10)", color: "#b8860b" },
-];
-function tagStyle(tag: string) {
-  const key = tag.toLowerCase().trim();
-  if (TAG_COLORS[key]) return TAG_COLORS[key];
-  let h = 0;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) & 0xffffffff;
-  return FALLBACK_COLORS[Math.abs(h) % FALLBACK_COLORS.length];
+// Tags are user-created labels — colored deterministically from the shared
+// 10-color palette so the same tag reads the same color across every module.
+function tagStyle(tag: string): { bg: string; color: string } {
+  const { hex } = paletteColorForKey(tag);
+  return { bg: hexToRgba(hex, 0.12), color: hex };
 }
 
 const STATUS_CONFIG: Record<ContactStatus, { dot: string; label: string }> = {
