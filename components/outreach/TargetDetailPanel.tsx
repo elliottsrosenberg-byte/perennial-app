@@ -12,6 +12,7 @@ import { useProjectOptions } from "@/lib/projects/options";
 import Select from "@/components/ui/Select";
 import DetailPanelShell from "@/components/ui/DetailPanelShell";
 import SharedEditableField from "@/components/ui/EditableField";
+import DatePillField from "@/components/ui/DatePillField";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { getRichExtensions, RichToolbar, InlineAshPopover, submitInlineAsh } from "@/components/ui/RichEditor";
 import type { AshPromptState } from "@/components/ui/RichEditor";
@@ -24,25 +25,9 @@ function daysSince(iso: string) {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
 }
 
-function isoToDateInput(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 function dateInputToISO(s: string): string | null {
   if (!s) return null;
   return new Date(`${s}T12:00:00`).toISOString();
-}
-
-function fmtDeadline(iso: string | null): { label: string; color: string } {
-  if (!iso) return { label: "—", color: "var(--color-grey)" };
-  const d = new Date(iso);
-  const days = Math.ceil((d.getTime() - Date.now()) / 86400000);
-  const formatted = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  if (days < 0) return { label: `${formatted} · ${Math.abs(days)}d overdue`, color: "var(--color-red-orange)" };
-  if (days <= 14) return { label: `${formatted} · ${days === 0 ? "today" : `${days}d left`}`, color: "#b8860b" };
-  return { label: formatted, color: "#6b6860" };
 }
 
 // ── Canvas editor (unchanged from before) ─────────────────────────────────────
@@ -268,40 +253,34 @@ function EditableField(props: { label: string; value: string | null; placeholder
 }
 
 // ── Date field ────────────────────────────────────────────────────────────────
+//
+// Uses the shared, styled DatePillField (same control as Projects' Start/Due)
+// instead of a native date input. Target stores `results_deadline` as a full
+// ISO timestamp, so we adapt at the boundary: ISO → Date in (anchored to noon
+// so a date-only value doesn't drift across timezones), Date → ISO out via the
+// existing dateInputToISO helper. Past deadlines flag the pill red via `alert`.
 
 function DateField({ label, value, onSave }: {
   label: string; value: string | null; onSave: (v: string | null) => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [draft,   setDraft]   = useState(isoToDateInput(value));
-  useEffect(() => { setDraft(isoToDateInput(value)); }, [value]);
+  const dateValue = value ? new Date(value) : null;
+  const overdue = !!value && new Date(value).getTime() < Date.now();
 
-  function commit() {
-    setEditing(false);
-    const next = dateInputToISO(draft);
-    if (next !== value) onSave(next);
+  function buildISO(d: Date): string | null {
+    return dateInputToISO(
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+    );
   }
-
-  const display = fmtDeadline(value);
 
   return (
     <div style={{ display: "flex", alignItems: "center", padding: "4px 0", borderBottom: "0.5px solid var(--color-border)" }}>
       <span style={{ fontSize: 11, color: "var(--color-grey)", width: 80, flexShrink: 0 }}>{label}</span>
-      {editing
-        ? <input type="date" value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit} autoFocus
-            style={{ flex: 1, fontSize: 12, background: "transparent", border: "none", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit", borderBottom: "1px solid var(--color-sage)" }} />
-        : <span onClick={() => setEditing(true)} style={{ flex: 1, fontSize: 12, color: display.color, cursor: "text", display: "inline-flex", alignItems: "center", gap: 6 }}>
-            {display.label}
-            {value && (
-              <button onClick={(e) => { e.stopPropagation(); onSave(null); }}
-                style={{ background: "none", border: "none", color: "var(--color-grey)", fontSize: 10, cursor: "pointer", padding: "0 4px", marginLeft: "auto", fontFamily: "inherit" }}
-                title="Clear deadline"
-              >
-                Clear
-              </button>
-            )}
-          </span>
-      }
+      <DatePillField
+        value={dateValue}
+        onChange={d => onSave(buildISO(d))}
+        onClear={value ? () => onSave(null) : undefined}
+        alert={overdue}
+      />
     </div>
   );
 }
