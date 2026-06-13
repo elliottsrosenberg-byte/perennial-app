@@ -104,6 +104,7 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
   const [view, setView]                         = useState<View>("contacts");
   const [search,   setSearch]                   = useState("");
   const [tagFilter, setTagFilter]               = useState<string | null>(null);
+  const [orgTagFilter, setOrgTagFilter]         = useState<string | null>(null);
   const [stageFilter, setStageFilter]           = useState<LeadStage | null>(null);
   const [showArchived, setShowArchived]         = useState(false);
   const [optionsOpen, setOptionsOpen]           = useState(false);
@@ -199,6 +200,15 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
     return Array.from(set).sort();
   }, [contacts]);
 
+  // Organizations carry their own tags (galleries / press / brands / fairs…).
+  // Mirror the contacts tag-pill row so the Organizations view is filterable
+  // the same way the other two views are.
+  const allOrgTags = useMemo(() => {
+    const set = new Set<string>();
+    organizations.filter(o => !o.archived).forEach(o => (o.tags ?? []).forEach(t => set.add(t)));
+    return Array.from(set).sort();
+  }, [organizations]);
+
   // Whether the active view has ANY rows ignoring search/tag/stage filters.
   // Drives the rich vs. terse empty-state branch below.
   const viewHasAnyRows = useMemo(() => {
@@ -260,6 +270,7 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
     const q = search.toLowerCase().trim();
     let list = organizations.filter(o => {
       if (!showArchived && o.archived) return false;
+      if (orgTagFilter && !(o.tags ?? []).includes(orgTagFilter)) return false;
       if (q) {
         const name = o.name.toLowerCase();
         const loc  = (o.location ?? "").toLowerCase();
@@ -281,7 +292,7 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
       }
       return sortAsc ? cmp : -cmp;
     });
-  }, [organizations, search, showArchived, sortKey, sortAsc]);
+  }, [organizations, search, showArchived, orgTagFilter, sortKey, sortAsc]);
 
   function toggleSelect(id: string) {
     setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -444,7 +455,7 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
                 type="button"
                 role="tab"
                 aria-selected={active}
-                onClick={() => { setView(v); setSelected(new Set()); setStageFilter(null); setTagFilter(null); }}
+                onClick={() => { setView(v); setSelected(new Set()); setStageFilter(null); setTagFilter(null); setOrgTagFilter(null); }}
                 className="px-5 text-[12px] capitalize"
                 style={{
                   color: active ? "var(--color-charcoal)" : "var(--color-grey)",
@@ -601,8 +612,28 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
       {/* ── Secondary filter strip ──────────────────────────────────────────
           Contacts view: tag pills.
           Leads view: stage pills with counts.
-          Organizations view: nothing — panel handles org tagging. */}
-      {isLeads ? (
+          Organizations view: tag pills (galleries / press / brands / fairs…). */}
+      {isOrgs && allOrgTags.length > 0 ? (
+        <div className="flex items-center gap-1.5 px-6 py-1.5 shrink-0 overflow-x-auto"
+          style={{ borderBottom: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
+          <button onClick={() => setOrgTagFilter(null)}
+            className="px-2.5 py-0.5 rounded-full text-[10px] font-medium shrink-0"
+            style={{ background: orgTagFilter === null ? "#2563ab" : "transparent", color: orgTagFilter === null ? "white" : "var(--color-text-tertiary)", border: `0.5px solid ${orgTagFilter === null ? "#2563ab" : "var(--color-border)"}` }}>
+            All
+          </button>
+          {allOrgTags.map(tag => {
+            const s = tagStyle(tag);
+            const active = orgTagFilter === tag;
+            return (
+              <button key={tag} onClick={() => setOrgTagFilter(active ? null : tag)}
+                className="px-2.5 py-0.5 rounded-full text-[10px] font-medium shrink-0"
+                style={{ background: active ? s.color : "transparent", color: active ? "white" : s.color, border: `0.5px solid ${active ? s.color : s.color + "55"}` }}>
+                {tag}
+              </button>
+            );
+          })}
+        </div>
+      ) : isLeads ? (
         <div className="flex items-center gap-1.5 px-6 py-1.5 shrink-0 overflow-x-auto"
           style={{ borderBottom: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
           <button onClick={() => setStageFilter(null)}
