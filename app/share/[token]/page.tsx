@@ -57,12 +57,24 @@ export default async function SharedNotePage({ params }: { params: Promise<{ tok
           .prose blockquote { border-left: 3px solid #9ba37a; padding-left: 14px; color: #6b6860; margin: 0.6em 0; }
           div[data-type="toggle"] { margin: 4px 0; }
           div[data-type="toggle"] > * { padding-left: 24px; color: #6b6860; margin-top: 4px; }
+          /* User-generated images must not overflow the viewport on mobile. */
+          .prose img { max-width: 100%; height: auto; border-radius: 6px; }
+          /* Layout in CSS (not inline) so it can respond to small screens —
+             this is a client-facing shared link, opened on phones. */
+          .share-head-inner { max-width: 720px; margin: 0 auto; padding: 0 40px; display: flex; align-items: center; justify-content: space-between; }
+          .share-main { max-width: 720px; margin: 0 auto; padding: 56px 40px 120px; }
+          .share-title { font-family: 'Newsreader', serif; font-size: 32px; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; color: #1f211a; margin-bottom: 16px; }
+          @media (max-width: 600px) {
+            .share-head-inner { padding: 0 20px; }
+            .share-main { padding: 36px 20px 64px; }
+            .share-title { font-size: 24px; }
+          }
         `}</style>
       </head>
       <body>
         {/* Header */}
         <header style={{ borderBottom: "0.5px solid #d6d8cf", background: "#fffefc", padding: "12px 0" }}>
-          <div style={{ maxWidth: 720, margin: "0 auto", padding: "0 40px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div className="share-head-inner">
             <span style={{ fontFamily: "'Newsreader', serif", fontSize: 18, fontWeight: 500, color: "#1f211a", letterSpacing: "-0.02em" }}>
               Perennial
             </span>
@@ -73,9 +85,9 @@ export default async function SharedNotePage({ params }: { params: Promise<{ tok
         </header>
 
         {/* Note */}
-        <main style={{ maxWidth: 720, margin: "0 auto", padding: "56px 40px 120px" }}>
+        <main className="share-main">
           {note.title && (
-            <h1 style={{ fontFamily: "'Newsreader', serif", fontSize: 32, fontWeight: 700, lineHeight: 1.2, letterSpacing: "-0.02em", color: "#1f211a", marginBottom: 16 }}>
+            <h1 className="share-title">
               {note.title}
             </h1>
           )}

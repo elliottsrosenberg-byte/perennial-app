@@ -221,6 +221,21 @@ export default async function PublicInvoicePage({
           max-width: 1080px; margin: 24px auto 0; text-align: center;
           font-size: 11px; color: #9a9690;
         }
+
+        /* Phones: this page is client-facing (clients pay invoices on mobile),
+           so it must stay usable. Tighten fixed paddings, stack the header and
+           the meta grid, and let long item names wrap. */
+        @media (max-width: 600px) {
+          .pi-shell { padding: 16px 12px 48px; }
+          .pi-paper { padding: 20px 16px; }
+          .pi-header { flex-direction: column; gap: 14px; margin-bottom: 24px; }
+          .pi-studio-logo { height: 56px; max-width: 160px; }
+          .pi-inv-label, .pi-inv-num { text-align: left; }
+          .pi-meta { grid-template-columns: 1fr; gap: 16px; margin-bottom: 20px; }
+          .pi-items td, .pi-items th { overflow-wrap: anywhere; word-break: break-word; }
+          .pi-pay { padding: 18px 16px; }
+          .pi-due-amt, .pi-pay-amount { font-size: 24px; }
+        }
       `}</style>
 
       <div className="pi-shell">
