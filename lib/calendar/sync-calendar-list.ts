@@ -199,18 +199,37 @@ export async function syncUserCalendarList(userId: string): Promise<{ count: num
 
   if (upserts.length === 0) return { count: 0, providers: Array.from(providers) };
 
-  // Upsert by the natural key; existing `visible` choices are preserved
-  // because Postgres on-conflict only overwrites the columns we name.
-  const { error } = await supabase
+  // Split into new vs already-known calendars so we don't clobber the user's
+  // own choices on re-sync. `visible`/`removed` are already safe (never in the
+  // payload), but `color` IS in the payload — so on existing rows we must omit
+  // it, or every sync (self-heal / backfill / Resync / reconnect) overwrites a
+  // user-picked colour with the provider default. New calendars still seed
+  // their initial colour from the provider.
+  const key = (p: string, x: string) => `${p}:${x}`;
+  const { data: existing } = await supabase
     .from("user_calendars")
-    .upsert(upserts, {
-      onConflict: "user_id,provider,external_id",
-      ignoreDuplicates: false,
-    });
+    .select("provider, external_id")
+    .eq("user_id", userId);
+  const existingKeys = new Set((existing ?? []).map((e) => key(e.provider, e.external_id)));
 
-  if (error) {
-    console.error("[syncUserCalendarList] upsert failed:", error);
-    return { count: 0, providers: Array.from(providers) };
+  const toInsert = upserts.filter((u) => !existingKeys.has(key(u.provider, u.external_id)));
+  // Existing rows: refresh only provider-owned fields; strip `color` so the
+  // user's choice survives. (on-conflict only sets the columns present.)
+  const toUpdate = upserts
+    .filter((u) => existingKeys.has(key(u.provider, u.external_id)))
+    .map(({ color: _color, ...providerOwned }) => providerOwned);
+
+  if (toInsert.length > 0) {
+    const { error } = await supabase
+      .from("user_calendars")
+      .upsert(toInsert, { onConflict: "user_id,provider,external_id", ignoreDuplicates: false });
+    if (error) console.error("[syncUserCalendarList] insert failed:", error);
+  }
+  if (toUpdate.length > 0) {
+    const { error } = await supabase
+      .from("user_calendars")
+      .upsert(toUpdate, { onConflict: "user_id,provider,external_id", ignoreDuplicates: false });
+    if (error) console.error("[syncUserCalendarList] update failed:", error);
   }
 
   return { count: upserts.length, providers: Array.from(providers) };
