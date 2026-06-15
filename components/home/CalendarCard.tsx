@@ -91,7 +91,7 @@ export default function CalendarCard({ items }: { items: CalendarItem[] }) {
 
   return (
     <div
-      className="flex flex-col h-full rounded-xl overflow-hidden"
+      className="flex flex-col rounded-xl overflow-hidden"
       style={{
         background: "var(--color-off-white)",
         boxShadow: "0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)",

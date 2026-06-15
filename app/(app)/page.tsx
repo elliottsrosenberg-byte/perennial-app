@@ -187,7 +187,7 @@ export default async function HomePage() {
           <div
             data-tour-step="dashboard.capture"
             className="grid gap-[14px] min-h-0"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gridAutoRows: "minmax(0, 1fr)" }}
+            style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gridAutoRows: "minmax(0, 1fr)" }}
           >
             <NotesCard notes={(rawNotes ?? []) as HomeNote[]} />
             <TasksCard initialTasks={tasksTyped} />
@@ -196,7 +196,7 @@ export default async function HomePage() {
           <div
             data-tour-step="dashboard.snapshots"
             className="grid gap-[14px] min-h-0"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gridAutoRows: "minmax(0, 1fr)" }}
+            style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gridAutoRows: "minmax(0, 1fr)" }}
           >
             <FinanceCard
               billableHours={billableMinutes / 60}
