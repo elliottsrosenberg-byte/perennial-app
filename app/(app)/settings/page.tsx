@@ -679,7 +679,7 @@ export default function SettingsPage() {
 
         {/* ── Content ── */}
         <main className="flex-1 overflow-y-auto" style={{ background: "var(--color-warm-white)" }}>
-          <div style={{ maxWidth: 560, padding: "32px 40px" }}>
+          <div style={{ maxWidth: 640, margin: "0 auto", padding: "32px 40px" }}>
 
             {/* ── Account ── */}
             {active === "account" && (
