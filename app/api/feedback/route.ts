@@ -52,7 +52,11 @@ export async function POST(req: Request) {
   const name   = profile?.display_name || user.email || "Unknown user";
   const studio = profile?.studio_name || "";
 
-  const from = process.env.RESEND_FROM ?? "onboarding@resend.dev";
+  // Feedback comes from help@<domain> (derived from the verified RESEND_FROM
+  // domain), separate from invoices@/bookings@. Overridable via env.
+  const baseFrom = process.env.RESEND_FROM ?? "onboarding@resend.dev";
+  const helpAddr = process.env.RESEND_FEEDBACK_FROM ?? baseFrom.replace(/^[^@]+@/, "help@");
+  const from = `Perennial Feedback <${helpAddr}>`;
   const html = `
     <div style="font-family: -apple-system, system-ui, sans-serif; font-size: 14px; color: #1f211a;">
       <p style="white-space: pre-wrap; line-height: 1.6; margin: 0 0 16px;">${esc(message)}</p>
