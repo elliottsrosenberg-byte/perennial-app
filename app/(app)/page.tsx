@@ -180,10 +180,13 @@ export default async function HomePage() {
           <WelcomeBanner />
         </div>
 
-        <div className="flex-1 min-h-0 flex flex-col gap-[14px]">
+        <div
+          className="flex-1 min-h-0 grid gap-[14px]"
+          style={{ gridTemplateRows: "1fr 1fr" }}
+        >
           <div
             data-tour-step="dashboard.capture"
-            className="grid gap-[14px] md:flex-1 md:min-h-0"
+            className="grid gap-[14px] min-h-0"
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gridAutoRows: "minmax(0, 1fr)" }}
           >
             <NotesCard notes={(rawNotes ?? []) as HomeNote[]} />
@@ -192,7 +195,7 @@ export default async function HomePage() {
           </div>
           <div
             data-tour-step="dashboard.snapshots"
-            className="grid gap-[14px] md:flex-1 md:min-h-0"
+            className="grid gap-[14px] min-h-0"
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gridAutoRows: "minmax(0, 1fr)" }}
           >
             <FinanceCard
