@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import VisitButton from "@/components/ui/VisitButton";
 
 export interface CalendarItem {
@@ -7,6 +8,24 @@ export interface CalendarItem {
   title: string;
   date:  string;
   kind:  "deadline" | "task";
+}
+
+// A connected-calendar event, as returned by /api/integrations/calendar/events.
+interface CalEvent {
+  id:     string;
+  title:  string;
+  start:  string;
+  allDay: boolean;
+}
+
+// Unified row rendered in the card — real calendar events merged with project
+// deadlines and dated tasks, sorted by date.
+interface Row {
+  key:   string;
+  title: string;
+  date:  string;   // ISO (date or datetime) used for the day badge + sort
+  label: string;   // "Event" / "Project deadline" / "Task"
+  time?: string;   // "3:30 PM" for timed events
 }
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -23,16 +42,56 @@ function relative(iso: string): string {
   return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
 
+function fmtTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
 export default function CalendarCard({ items }: { items: CalendarItem[] }) {
   const now = new Date();
-  const upcoming = items
-    .slice()
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(0, 5);
+  const [events, setEvents] = useState<CalEvent[]>([]);
+
+  // Pull upcoming events from the connected calendars (Google/Outlook). If no
+  // calendar is connected the response is empty and the card falls back to
+  // deadlines/tasks only.
+  useEffect(() => {
+    const start = new Date();
+    const end   = new Date(Date.now() + 21 * 86400000);
+    const s = start.toISOString().split("T")[0];
+    const e = end.toISOString().split("T")[0];
+    let cancelled = false;
+    fetch(`/api/integrations/calendar/events?startDate=${s}&endDate=${e}`)
+      .then((r) => r.json())
+      .then((d: { events?: CalEvent[] }) => { if (!cancelled) setEvents(d.events ?? []); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+
+  const rows: Row[] = [
+    ...events.map((ev) => ({
+      key:   `event-${ev.id}`,
+      title: ev.title,
+      date:  ev.start,
+      label: "Event",
+      time:  ev.allDay ? undefined : fmtTime(ev.start),
+    })),
+    ...items.map((it) => ({
+      key:   `${it.kind}-${it.id}`,
+      title: it.title,
+      date:  it.date,
+      label: it.kind === "deadline" ? "Project deadline" : "Task",
+    })),
+  ];
+
+  const upcoming = rows
+    .filter((r) => new Date(r.date).getTime() >= startOfToday.getTime())
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(0, 6);
 
   return (
     <div
-      className="flex flex-col rounded-xl overflow-hidden"
+      className="flex flex-col h-full rounded-xl overflow-hidden"
       style={{
         background: "var(--color-off-white)",
         boxShadow: "0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)",
@@ -56,18 +115,18 @@ export default function CalendarCard({ items }: { items: CalendarItem[] }) {
         {upcoming.length === 0 ? (
           <div className="flex flex-col items-center justify-center text-center py-8 px-4 h-full">
             <p className="text-[12px] font-medium mb-0.5" style={{ color: "var(--color-charcoal)" }}>
-              Nothing on the calendar
+              Nothing upcoming
             </p>
             <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>
-              Project deadlines and dated tasks will show up here.
+              Calendar events, project deadlines, and dated tasks show up here.
             </p>
           </div>
         ) : (
-          upcoming.map((item) => {
-            const d = new Date(item.date);
+          upcoming.map((row) => {
+            const d = new Date(row.date);
             return (
               <div
-                key={`${item.kind}-${item.id}`}
+                key={row.key}
                 className="flex items-center gap-3 px-[14px] py-[9px]"
                 style={{ borderBottom: "0.5px solid var(--color-border)" }}
               >
@@ -88,10 +147,10 @@ export default function CalendarCard({ items }: { items: CalendarItem[] }) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-[12px] truncate" style={{ color: "var(--color-charcoal)" }}>
-                    {item.title}
+                    {row.title}
                   </p>
                   <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>
-                    {relative(item.date)} · {item.kind === "deadline" ? "Project deadline" : "Task"}
+                    {relative(row.date)}{row.time ? ` · ${row.time}` : ""} · {row.label}
                   </p>
                 </div>
               </div>
