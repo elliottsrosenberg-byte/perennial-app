@@ -16,6 +16,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { type BaseTheme, resolvedTheme, isAutoTheme, paintCurrentTheme, setBaseTheme } from "@/lib/theme";
 import Menu, { type MenuContent } from "@/components/ui/Menu";
+import FeedbackModal from "./FeedbackModal";
 
 // ─── Nav groups ───────────────────────────────────────────────────────────────
 
@@ -38,17 +39,6 @@ const NAV_GROUPS: NavItem[][] = [
     { href: "/presence",  label: "Presence",  icon: Globe                    },
     { href: "/resources", label: "Resources", icon: FolderOpen               },
   ],
-];
-
-const APP_MENU: MenuContent[] = [
-  { label: "What's new",         icon: Zap,           badge: "Soon", disabled: true },
-  { label: "Documentation",      icon: BookOpen,      badge: "Soon", disabled: true },
-  { label: "Keyboard shortcuts", icon: Hash,          badge: "Soon", disabled: true },
-  "divider",
-  { label: "Give feedback",      icon: MessageSquare, badge: "Soon", disabled: true },
-  { label: "Refer a friend",     icon: Share,         badge: "Soon", disabled: true },
-  "divider",
-  { label: "perennial.design",   icon: ExternalLink,  external: true },
 ];
 
 // ─── Tokens ───────────────────────────────────────────────────────────────────
@@ -110,6 +100,7 @@ export default function Sidebar() {
   const [profileName,  setProfileName]  = useState<string | null>(null);
   const [studioName,   setStudioName]   = useState<string | null>(null);
   const [appMenuOpen, setAppMenuOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [tooltip,     setTooltip]     = useState<TooltipState | null>(null);
 
@@ -212,6 +203,17 @@ export default function Sidebar() {
     ?? (userEmail ? userEmail.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Loading…");
   const userInitial = (profileName?.[0] ?? userEmail?.[0] ?? "—").toUpperCase();
 
+  const appMenu: MenuContent[] = [
+    { label: "What's new",         icon: Zap,           badge: "Soon", disabled: true },
+    { label: "Documentation",      icon: BookOpen,      badge: "Soon", disabled: true },
+    { label: "Keyboard shortcuts", icon: Hash,          badge: "Soon", disabled: true },
+    "divider",
+    { label: "Give feedback",      icon: MessageSquare, onClick: () => { setAppMenuOpen(false); setFeedbackOpen(true); } },
+    { label: "Refer a friend",     icon: Share,         badge: "Soon", disabled: true },
+    "divider",
+    { label: "perennial.design",   icon: ExternalLink,  external: true },
+  ];
+
   const PROFILE_MENU: MenuContent[] = [
     { label: "Edit profile",     icon: UserCog, href: "/settings" },
     "divider",
@@ -237,7 +239,7 @@ export default function Sidebar() {
         {/* ── App menu dropdown ── */}
         {appMenuOpen && expanded && (
           <div ref={appMenuRef} style={{ position: "absolute", top: 56, left: 7, right: 7, zIndex: 50 }}>
-            <Menu items={APP_MENU} onClose={() => setAppMenuOpen(false)} />
+            <Menu items={appMenu} onClose={() => setAppMenuOpen(false)} />
           </div>
         )}
 
@@ -526,6 +528,8 @@ export default function Sidebar() {
           </div>
         </div>
       )}
+
+      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </>
   );
 }
