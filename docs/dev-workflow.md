@@ -119,10 +119,16 @@ Legend: **[you]** = owner/dashboard/secret work · **[claude]** = Claude can do 
     bookkeeping-only prod write, gated as a separate decision.
 
 ### C. Stand up the staging Supabase project
-- [ ] **[you]** Create a new Supabase project named `perennial-staging` (same region).
-      Note its project-ref, URL, anon key, service-role key.
-- [ ] **[claude]** Apply the baseline + all migrations to staging (`supabase db push`
-      against the staging ref) so its schema matches prod.
+- [x] **[claude]** Created `perennial-staging` via the Supabase MCP — project-ref
+      **`qkasrugrgchmmwredfyf`**, region `us-east-1`, org `Perennial`, $0/mo. The CLI is
+      now `link`ed to staging (not prod) — staging is the default `db push` target.
+- [x] **[claude]** Applied the baseline via `supabase db push --linked`. Verified staging
+      == prod: 43 tables, RLS on all 43, 53 policies, 11 functions, 8 triggers; history row
+      `20260616180825` recorded (so future pushes only apply new migrations).
+  - **Known staging gaps (deferred):** the baseline is `--schema=public` only, so two
+    cross-schema objects that live in prod aren't on staging — the `auth.users` → 
+    `handle_new_user()` signup trigger, and the `rls_auto_enable` event trigger. Recreate
+    them on staging if/when we test real signups there.
 - [ ] **[you]** Seed staging with fake data (no prod user data). Claude can write a
       `supabase/seed.sql`.
 

@@ -2,8 +2,6 @@
 -- PostgreSQL database dump
 --
 
-\restrict j44X1szWuiWBRySei5NeUnbYezcxu1l0FpEQzbhNqYCV86aERSvhS7Jcj8nbLgO
-
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.10 (Homebrew)
 
@@ -19,19 +17,9 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
---
--- Name: public; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA public;
-
-
---
--- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: -
---
-
-COMMENT ON SCHEMA public IS 'standard public schema';
-
+-- NOTE: `CREATE SCHEMA public` and `COMMENT ON SCHEMA public` were removed from the raw
+-- pg_dump: the public schema already exists on a fresh Supabase project (this mirrors the
+-- cleanup `supabase db pull` performs). All other objects are unchanged.
 
 --
 -- Name: handle_new_user(); Type: FUNCTION; Schema: public; Owner: -
@@ -3572,6 +3560,4 @@ CREATE POLICY website_sites_owner ON public.website_sites USING ((auth.uid() = u
 --
 -- PostgreSQL database dump complete
 --
-
-\unrestrict j44X1szWuiWBRySei5NeUnbYezcxu1l0FpEQzbhNqYCV86aERSvhS7Jcj8nbLgO
 
