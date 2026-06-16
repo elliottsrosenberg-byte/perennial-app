@@ -147,9 +147,15 @@ Legend: **[you]** = owner/dashboard/secret work · **[claude]** = Claude can do 
 
 ---
 
-## Open decisions for you
+## Decisions (agreed 2026-06-16)
 
-1. **Local Docker vs. staging-only?** Recommend both, but staging-project-only is fine to
-   start (skip Docker install).
-2. **Keep the trivial-UI fast path to `main`,** or go strict (everything through a PR)?
-3. **Stable `staging.perennial.design` domain,** or just use per-PR Vercel preview URLs?
+1. **Staging project only** — one hosted `perennial-staging` Supabase project for both
+   local dev and Vercel Previews. **Skip Docker** for now (no local `supabase start`).
+2. **Keep the trivial-UI fast path** — UI-only, no-schema/auth/payments changes can still
+   go straight to `main`. Anything touching schema/auth/payments takes the full staging
+   loop.
+3. **Per-PR Vercel preview URLs** — no stable `staging.perennial.design` domain for now.
+
+These trim the setup checklist: skip the Docker install (A) and the optional
+`staging.perennial.design` domain (D). Local `.env.local` (E) points at the staging
+project, not Docker.
