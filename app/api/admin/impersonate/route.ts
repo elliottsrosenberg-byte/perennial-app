@@ -59,7 +59,7 @@ export async function POST(req: Request) {
   const url =
     `${origin}/auth/confirm` +
     `?token_hash=${encodeURIComponent(link.properties.hashed_token)}` +
-    `&type=magiclink&next=/`;
+    `&type=magiclink&next=/&impersonated=1`;
 
   console.log(`[impersonate] admin=${admin.id} -> user=${userId} (${email})`);
 

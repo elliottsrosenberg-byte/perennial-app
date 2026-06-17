@@ -38,7 +38,18 @@ export async function GET(request: NextRequest) {
 
     const { error } = await supabase.auth.verifyOtp({ type, token_hash });
     if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
+      const res = NextResponse.redirect(`${origin}${next}`);
+      // Admin impersonation ("View as") links carry impersonated=1. Flag the
+      // session so client analytics opt out (no PostHog capture/replay while
+      // viewing as a user). Readable by client JS — it's just a flag, no secret.
+      if (searchParams.get("impersonated") === "1") {
+        res.cookies.set("ph_impersonated", "1", {
+          path: "/",
+          maxAge: 60 * 60, // ~ the impersonation session window
+          sameSite: "lax",
+        });
+      }
+      return res;
     }
   }
 
