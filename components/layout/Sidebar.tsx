@@ -11,7 +11,7 @@ import {
   Receipt, Globe, FolderOpen, Settings, ChevronLeft, Palette,
   Sun, Moon, ChevronUp, LogOut, UserCog,
   Zap, BookOpen, MessageSquare, Share, ExternalLink, Hash, ChevronDown,
-  CheckSquare, ClipboardList,
+  CheckSquare, ClipboardList, Eye,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { type BaseTheme, resolvedTheme, isAutoTheme, paintCurrentTheme, setBaseTheme } from "@/lib/theme";
@@ -99,6 +99,7 @@ export default function Sidebar() {
   const [userEmail,    setUserEmail]    = useState<string | null>(null);
   const [profileName,  setProfileName]  = useState<string | null>(null);
   const [studioName,   setStudioName]   = useState<string | null>(null);
+  const [isAdmin,      setIsAdmin]      = useState(false);
   const [appMenuOpen, setAppMenuOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -146,6 +147,12 @@ export default function Sidebar() {
       if (prof?.studio_name)  setStudioName(prof.studio_name);
       if (prof?.display_name) setProfileName(prof.display_name);
     });
+    // Admin allowlist check runs server-side (ADMIN_USER_IDS never reaches the
+    // client); we only learn the boolean. Gates the "Users" support link below.
+    fetch("/api/admin/check")
+      .then((r) => (r.ok ? r.json() : { isAdmin: false }))
+      .then((d) => setIsAdmin(!!d?.isAdmin))
+      .catch(() => setIsAdmin(false));
   }, []);
 
   // Listen for profile updates from Settings
@@ -219,6 +226,12 @@ export default function Sidebar() {
     "divider",
     { label: "Switch workspace", icon: Users,   badge: "Soon", disabled: true },
     "divider",
+    ...(isAdmin
+      ? ([
+          { label: "Users (admin)", icon: Eye, href: "/admin/users" },
+          "divider",
+        ] as MenuContent[])
+      : []),
     { label: "Log out",          icon: LogOut,  danger: true, onClick: handleLogout },
   ];
 
