@@ -212,7 +212,7 @@ export default function Sidebar() {
 
   const appMenu: MenuContent[] = [
     { label: "What's new",         icon: Zap,           badge: "Soon", disabled: true },
-    { label: "Documentation",      icon: BookOpen,      badge: "Soon", disabled: true },
+    { label: "Documentation",      icon: BookOpen,      href: "/docs" },
     { label: "Keyboard shortcuts", icon: Hash,          badge: "Soon", disabled: true },
     "divider",
     { label: "Give feedback",      icon: MessageSquare, onClick: () => { setAppMenuOpen(false); setFeedbackOpen(true); } },
@@ -226,12 +226,6 @@ export default function Sidebar() {
     "divider",
     { label: "Switch workspace", icon: Users,   badge: "Soon", disabled: true },
     "divider",
-    ...(isAdmin
-      ? ([
-          { label: "Users (admin)", icon: Eye, href: "/admin/users" },
-          "divider",
-        ] as MenuContent[])
-      : []),
     { label: "Log out",          icon: LogOut,  danger: true, onClick: handleLogout },
   ];
 
@@ -369,35 +363,41 @@ export default function Sidebar() {
             {expanded && <span style={{ fontSize: 12, fontWeight: 500 }}>Settings</span>}
           </Link>
 
-          <Link
-            href="/design"
-            style={{ ...itemBase, color: C.dimText, opacity: 0.65 }}
-            onMouseEnter={(e) => { tip(e, "Design system"); e.currentTarget.style.background = C.hoverBg; e.currentTarget.style.color = C.hoverText; e.currentTarget.style.opacity = "1"; }}
-            onMouseLeave={(e) => { hideTip(); e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.dimText; e.currentTarget.style.opacity = "0.65"; }}
-          >
-            <Palette size={15} strokeWidth={1.75} style={{ flexShrink: 0 }} />
-            {expanded && <span style={{ fontSize: 12, fontWeight: 500 }}>Design system</span>}
-          </Link>
+          {/* Admin-only tools: Design system, View as (support), Curate.
+              Hidden entirely for non-admins (isAdmin from /api/admin/check). */}
+          {isAdmin && (
+            <>
+              <Link
+                href="/design"
+                style={{ ...itemBase, color: C.dimText, opacity: 0.65 }}
+                onMouseEnter={(e) => { tip(e, "Design system"); e.currentTarget.style.background = C.hoverBg; e.currentTarget.style.color = C.hoverText; e.currentTarget.style.opacity = "1"; }}
+                onMouseLeave={(e) => { hideTip(); e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.dimText; e.currentTarget.style.opacity = "0.65"; }}
+              >
+                <Palette size={15} strokeWidth={1.75} style={{ flexShrink: 0 }} />
+                {expanded && <span style={{ fontSize: 12, fontWeight: 500 }}>Design system</span>}
+              </Link>
 
-          <Link
-            href="/docs"
-            style={{ ...itemBase, color: C.dimText, opacity: 0.65 }}
-            onMouseEnter={(e) => { tip(e, "Docs"); e.currentTarget.style.background = C.hoverBg; e.currentTarget.style.color = C.hoverText; e.currentTarget.style.opacity = "1"; }}
-            onMouseLeave={(e) => { hideTip(); e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.dimText; e.currentTarget.style.opacity = "0.65"; }}
-          >
-            <BookOpen size={15} strokeWidth={1.75} style={{ flexShrink: 0 }} />
-            {expanded && <span style={{ fontSize: 12, fontWeight: 500 }}>Docs</span>}
-          </Link>
+              <Link
+                href="/admin/users"
+                style={{ ...itemBase, color: C.dimText, opacity: 0.65 }}
+                onMouseEnter={(e) => { tip(e, "View as"); e.currentTarget.style.background = C.hoverBg; e.currentTarget.style.color = C.hoverText; e.currentTarget.style.opacity = "1"; }}
+                onMouseLeave={(e) => { hideTip(); e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.dimText; e.currentTarget.style.opacity = "0.65"; }}
+              >
+                <Eye size={15} strokeWidth={1.75} style={{ flexShrink: 0 }} />
+                {expanded && <span style={{ fontSize: 12, fontWeight: 500 }}>View as</span>}
+              </Link>
 
-          <Link
-            href="/admin"
-            style={{ ...itemBase, color: C.dimText, opacity: 0.65 }}
-            onMouseEnter={(e) => { tip(e, "Curate"); e.currentTarget.style.background = C.hoverBg; e.currentTarget.style.color = C.hoverText; e.currentTarget.style.opacity = "1"; }}
-            onMouseLeave={(e) => { hideTip(); e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.dimText; e.currentTarget.style.opacity = "0.65"; }}
-          >
-            <ClipboardList size={15} strokeWidth={1.75} style={{ flexShrink: 0 }} />
-            {expanded && <span style={{ fontSize: 12, fontWeight: 500 }}>Curate</span>}
-          </Link>
+              <Link
+                href="/admin"
+                style={{ ...itemBase, color: C.dimText, opacity: 0.65 }}
+                onMouseEnter={(e) => { tip(e, "Curate"); e.currentTarget.style.background = C.hoverBg; e.currentTarget.style.color = C.hoverText; e.currentTarget.style.opacity = "1"; }}
+                onMouseLeave={(e) => { hideTip(); e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.dimText; e.currentTarget.style.opacity = "0.65"; }}
+              >
+                <ClipboardList size={15} strokeWidth={1.75} style={{ flexShrink: 0 }} />
+                {expanded && <span style={{ fontSize: 12, fontWeight: 500 }}>Curate</span>}
+              </Link>
+            </>
+          )}
 
           <button
             onClick={() => setExpanded(!expanded)}
