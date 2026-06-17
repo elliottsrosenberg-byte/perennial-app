@@ -11,6 +11,7 @@ This is the index for `docs/architecture/`. It gives a high-level map of the app
 | [design-system.md](./design-system.md) | CSS-variable tokens, inline-style convention, dark mode, `components/ui/` primitives |
 | [mobile-responsiveness.md](./mobile-responsiveness.md) | Sidebar vs. `MobileNav`, the desktop-only notice, responsive surfaces |
 | [change-playbook.md](./change-playbook.md) | Step-by-step recipes for common app-wide changes |
+| [operations.md](./operations.md) | Observability (Sentry/PostHog/tracking pixel) + the work pipeline (Slack→Linear→agent→PR→Vercel), cron, env-var map, ops gaps |
 
 ## Stack
 

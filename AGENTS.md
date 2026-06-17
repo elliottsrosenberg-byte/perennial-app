@@ -17,6 +17,7 @@ without missing spots:
 - [`design-system.md`](docs/architecture/design-system.md) — tokens, inline-style convention, `components/ui/` primitives, duplication
 - [`mobile-responsiveness.md`](docs/architecture/mobile-responsiveness.md) — current state + remediation plan
 - [`change-playbook.md`](docs/architecture/change-playbook.md) — **"to change X app-wide, edit exactly these files"** + the duplication registry
+- [`operations.md`](docs/architecture/operations.md) — observability (Sentry/PostHog/tracking pixel), the work pipeline (Slack→Linear→agent→PR→Vercel), cron, env-var map; read before debugging prod or wiring a new service
 
 Much of the app was built by **cloning, not sharing** — one logical change
 often means editing the same thing in 4–13 places. Grep first; consult the
