@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Newsreader, Albert_Sans } from "next/font/google";
 import "./globals.css";
+import PostHogProvider from "@/components/analytics/PostHogProvider";
 
 const newsreader = Newsreader({
   variable: "--font-newsreader",
@@ -41,7 +42,9 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="h-full antialiased">{children}</body>
+      <body className="h-full antialiased">
+        <PostHogProvider>{children}</PostHogProvider>
+      </body>
     </html>
   );
 }
