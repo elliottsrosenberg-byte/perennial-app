@@ -21,3 +21,13 @@ export const POSTHOG_OPTIONS: Partial<PostHogConfig> = {
 
   debug: false,
 };
+
+// Client-only: is the current browser session an admin impersonation ("View
+// as")? `/auth/confirm` sets the `ph_impersonated` cookie when the magic link
+// was minted by the admin support tool. We use it to keep PostHog fully off
+// during impersonation so the admin's session never pollutes the impersonated
+// user's analytics or session replays.
+export function isImpersonationSession(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.cookie.split("; ").includes("ph_impersonated=1");
+}
