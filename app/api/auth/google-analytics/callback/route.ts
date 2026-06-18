@@ -6,8 +6,21 @@ export async function GET(req: Request) {
   const code  = searchParams.get("code");
   const error = searchParams.get("error");
 
+  // `state` carries the post-connect destination (e.g. /onboarding?step=9) set
+  // when the flow began, so we return the user where they started instead of
+  // always dropping them on /presence. Restrict to same-origin relative paths.
+  const stateNext = searchParams.get("state");
+  const safeNext = stateNext && stateNext.startsWith("/") && !stateNext.startsWith("//") ? stateNext : null;
+  const back = (qs: string) => {
+    if (safeNext) {
+      const sep = safeNext.includes("?") ? "&" : "?";
+      return `${origin}${safeNext}${sep}${qs}`;
+    }
+    return `${origin}/presence?tab=website&${qs}`;
+  };
+
   if (error || !code) {
-    return NextResponse.redirect(`${origin}/presence?tab=website&error=ga4_cancelled`);
+    return NextResponse.redirect(back("error=ga4_cancelled"));
   }
 
   const clientId     = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!;
@@ -30,7 +43,7 @@ export async function GET(req: Request) {
 
   if (!tokenRes.ok) {
     console.error("GA4 token exchange failed:", await tokenRes.text());
-    return NextResponse.redirect(`${origin}/presence?tab=website&error=ga4_token`);
+    return NextResponse.redirect(back("error=ga4_token"));
   }
 
   const tokens = await tokenRes.json() as {
@@ -43,7 +56,7 @@ export async function GET(req: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    return NextResponse.redirect(`${origin}/presence?tab=website&error=not_authenticated`);
+    return NextResponse.redirect(back("error=not_authenticated"));
   }
 
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
@@ -61,6 +74,10 @@ export async function GET(req: Request) {
     connected_at:     new Date().toISOString(),
   }, { onConflict: "user_id,provider,account_id" });
 
-  // Redirect back — presence will detect "select_property" step and show property picker
-  return NextResponse.redirect(`${origin}/presence?tab=website&step=select-property`);
+  // Success. If we came from onboarding (or elsewhere via `state`), return there
+  // to keep the user in their flow; otherwise go to Presence, where the
+  // "select_property" step prompts the user to pick a GA4 property.
+  return NextResponse.redirect(
+    safeNext ? `${origin}${safeNext}` : `${origin}/presence?tab=website&step=select-property`
+  );
 }
