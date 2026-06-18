@@ -300,8 +300,20 @@ export default function QuickTaskCard({
 }
 
 function TimeChip({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  // The chip is only as wide as its "9 AM" label, so the native time
+  // input's clock/spin controls get clipped outside the clickable box and
+  // tapping the chip does nothing. Open the native picker explicitly on
+  // click so the chip is reliably interactive regardless of icon position.
+  const openPicker = () => {
+    const el = inputRef.current;
+    if (el && typeof el.showPicker === "function") {
+      try { el.showPicker(); } catch { /* not allowed / unsupported — fall back to focus */ }
+    }
+  };
   return (
     <label
+      onClick={openPicker}
       style={{
         display: "inline-flex", alignItems: "center", gap: 4,
         padding: "3px 8px", borderRadius: 6,
@@ -313,6 +325,7 @@ function TimeChip({ value, onChange }: { value: string; onChange: (v: string) =>
     >
       {fmtTimeChip(value)}
       <input
+        ref={inputRef}
         type="time"
         value={value}
         onChange={(e) => onChange(e.target.value)}
