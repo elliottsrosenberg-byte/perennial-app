@@ -3,12 +3,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Layers, Users, Receipt, Send, Clock, Globe, BookOpen, UploadCloud, X as XIcon, Armchair, Lamp, Diamond, Gem, Palette, Hammer, PenTool, Briefcase, Boxes, Pencil, Video } from "lucide-react";
+import { Layers, Users, Receipt, Send, Clock, Globe, BookOpen, UploadCloud, X as XIcon, Armchair, Lamp, Diamond, Gem, Palette, Hammer, PenTool, Briefcase, Boxes, Pencil, Video, Monitor, Code2, Shapes } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import AshMark from "@/components/ui/AshMark";
 import Select from "@/components/ui/Select";
 import { COUNTRIES, BUSINESS_TYPES, composeStudioAddress } from "@/lib/profile/business";
+import { uploadStudioLogo } from "@/lib/uploads/studio-logo";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -18,7 +19,7 @@ const TOTAL_STEPS = 9;
 const PRACTICE_OPTIONS = [
   "Furniture", "Objects & lighting", "Ceramics & glass", "Textiles",
   "Jewelry", "Painting", "Illustration", "Sculpture", "Printmaking",
-  "Video", "Client-based work",
+  "Video", "Graphic design", "Websites", "Software", "Client-based work",
 ];
 
 // Stable key + colour per practice option so the Projects board can default
@@ -36,6 +37,9 @@ const PRACTICE_TO_PROJECT_TYPE: Record<string, { key: string; color: string }> =
   "Sculpture":          { key: "sculpture",    color: "#5a6470" },
   "Printmaking":        { key: "printmaking",  color: "#4a4fa3" },
   "Video":              { key: "video",        color: "#a1308a" },
+  "Graphic design":     { key: "graphic_design", color: "#b5179e" },
+  "Websites":           { key: "websites",     color: "#1d7a8c" },
+  "Software":           { key: "software",      color: "#3f3f9e" },
   "Client-based work":  { key: "client_project", color: "#2563ab" },
 };
 
@@ -79,6 +83,9 @@ const PRACTICE_ICONS: Record<string, LucideIcon> = {
   "Sculpture":          Hammer,
   "Printmaking":        PenTool,
   "Video":              Video,
+  "Graphic design":     Shapes,
+  "Websites":           Monitor,
+  "Software":           Code2,
   "Client-based work":  Briefcase,
 };
 
@@ -166,6 +173,9 @@ interface OnboardingData {
   addressZip:      string;
   phone:           string;
   ein:             string;
+  logoUrl:         string | null;
+  logoPath:        string | null;
+  brandColor:      string;
   practiceTypes:   string[];
   workTypes:       string[];
   sellingChannels: string[];
@@ -383,7 +393,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
     studioName: "", city: "", website: "", tagline: "", bio: "",
     businessType: "", country: "", addressLine1: "", addressLine2: "",
     addressCity: "", addressState: "", addressZip: "",
-    phone: "", ein: "",
+    phone: "", ein: "", logoUrl: null, logoPath: null, brandColor: "",
     practiceTypes: [], workTypes: [], sellingChannels: [],
     priceRange: "", yearsInPractice: "", challenges: [],
     businessIssues: "", urgentNeeds: "",
@@ -490,6 +500,9 @@ export default function OnboardingClient({ userId }: { userId: string }) {
       website:             data.website || null,
       phone:               data.phone || null,
       ein:                 data.ein || null,
+      logo_url:            data.logoUrl,
+      logo_path:           data.logoPath,
+      brand_color:         data.brandColor || null,
       ...billingPatch(data),
       practice_types:      data.practiceTypes,
       work_types:          data.workTypes,
@@ -525,6 +538,9 @@ export default function OnboardingClient({ userId }: { userId: string }) {
       bio:                 data.bio || null,
       phone:               data.phone || null,
       ein:                 data.ein || null,
+      logo_url:            data.logoUrl,
+      logo_path:           data.logoPath,
+      brand_color:         data.brandColor || null,
       ...billingPatch(data),
       onboarding_complete: true,
       tour_visited:        {},
@@ -774,6 +790,15 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                     }}
                     onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
                     onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Logo &amp; brand color</FieldLabel>
+                  <StudioBrandFields
+                    logoUrl={data.logoUrl}
+                    brandColor={data.brandColor}
+                    onLogo={(url, path) => setData(d => ({ ...d, logoUrl: url, logoPath: path }))}
+                    onColor={v => set("brandColor", v)}
                   />
                 </div>
                 <div>
@@ -1190,6 +1215,7 @@ interface ConnectTile {
   name:  string;
   desc:  string;
   href:  string;
+  multi?: boolean;   // provider supports connecting multiple accounts
 }
 interface ConnectCategory {
   title: string;
@@ -1202,8 +1228,8 @@ const ONBOARDING_CATEGORIES: ConnectCategory[] = [
     title: "Communication",
     hint:  "Auto-log emails and meetings against your Network contacts.",
     tiles: [
-      { id: "google",    name: "Google",        desc: "Gmail + Calendar + Contacts + Drive",  href: `/api/auth/google?next=${encodeURIComponent(CONNECT_NEXT)}` },
-      { id: "microsoft", name: "Microsoft 365", desc: "Outlook Mail + Calendar + Contacts",   href: `/api/auth/microsoft?next=${encodeURIComponent(CONNECT_NEXT)}` },
+      { id: "google",    name: "Google",        desc: "Gmail + Calendar + Contacts + Drive",  href: `/api/auth/google?next=${encodeURIComponent(CONNECT_NEXT)}`, multi: true },
+      { id: "microsoft", name: "Microsoft 365", desc: "Outlook Mail + Calendar + Contacts",   href: `/api/auth/microsoft?next=${encodeURIComponent(CONNECT_NEXT)}`, multi: true },
     ],
   },
   {
@@ -1273,9 +1299,16 @@ function IntegrationConnectStep() {
                     <p style={{ fontSize: 11, color: "var(--color-grey)", marginTop: 1 }}>{t.desc}</p>
                   </div>
                   {isConnected ? (
-                    <span style={{ fontSize: 10, fontWeight: 600, color: "#3d6b4f", background: "rgba(141,208,71,0.18)", padding: "3px 8px", borderRadius: 99 }}>
-                      Connected ✓
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: "#3d6b4f", background: "rgba(141,208,71,0.18)", padding: "3px 8px", borderRadius: 99 }}>
+                        Connected ✓
+                      </span>
+                      {t.multi && (
+                        <a href={t.href} style={{ fontSize: 10, fontWeight: 600, color: "var(--color-sage)", textDecoration: "none" }}>
+                          + Add another
+                        </a>
+                      )}
+                    </div>
                   ) : (
                     <a
                       href={t.href}
@@ -1295,6 +1328,98 @@ function IntegrationConnectStep() {
         </div>
       ))}
       {loading && <p style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>Checking your connections…</p>}
+    </div>
+  );
+}
+
+// ─── Studio logo + brand color (onboarding step 3) ──────────────────────────
+
+function StudioBrandFields({
+  logoUrl, brandColor, onLogo, onColor,
+}: {
+  logoUrl:    string | null;
+  brandColor: string;
+  onLogo:     (url: string | null, path: string | null) => void;
+  onColor:    (v: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err,  setErr]  = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  async function pick(file: File) {
+    setErr(null);
+    setBusy(true);
+    try {
+      const { url, path } = await uploadStudioLogo(file);
+      onLogo(url, path);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Couldn't upload that logo.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+      <div>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+          style={{ display: "none" }}
+          onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) pick(f); }}
+        />
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={busy}
+          aria-label="Upload studio logo"
+          style={{
+            width: 72, height: 72, borderRadius: 12, padding: 0,
+            border: "1px dashed var(--color-border)", background: "var(--color-off-white)",
+            cursor: busy ? "default" : "pointer", overflow: "hidden",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          {logoUrl
+            ? <img src={logoUrl} alt="Studio logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+            : <UploadCloud size={20} strokeWidth={1.5} style={{ color: "var(--color-grey)" }} />}
+        </button>
+        {logoUrl && (
+          <button
+            type="button"
+            onClick={() => onLogo(null, null)}
+            style={{ display: "block", marginTop: 6, fontSize: 10, color: "var(--color-grey)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+          >
+            Remove
+          </button>
+        )}
+      </div>
+      <div style={{ flex: 1 }}>
+        <p style={{ fontSize: 11, color: "var(--color-grey)", lineHeight: 1.6, marginBottom: 10 }}>
+          {busy ? "Uploading…" : "Optional — your logo and brand color appear on invoices and the emails clients receive."}
+        </p>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <input
+            type="color"
+            value={brandColor || "#9ba37a"}
+            onChange={e => onColor(e.target.value)}
+            aria-label="Brand color"
+            style={{ width: 40, height: 30, padding: 0, border: "0.5px solid var(--color-border)", borderRadius: 7, background: "none", cursor: "pointer" }}
+          />
+          <span style={{ fontSize: 12, color: "var(--color-charcoal)" }}>{brandColor || "Default sage"}</span>
+          {brandColor && (
+            <button
+              type="button"
+              onClick={() => onColor("")}
+              style={{ fontSize: 10, color: "var(--color-grey)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+            >
+              Reset
+            </button>
+          )}
+        </div>
+        {err && <p style={{ fontSize: 11, color: "var(--color-red-orange)", marginTop: 8 }}>{err}</p>}
+      </div>
     </div>
   );
 }
