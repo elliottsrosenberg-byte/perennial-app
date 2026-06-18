@@ -935,10 +935,13 @@ function TimeChip({ value, onChange, disabled }: { value: string; onChange: (v: 
   // input's clock/spin controls get clipped outside the clickable box and
   // tapping the chip does nothing. Open the native picker explicitly on
   // click so the chip is reliably interactive regardless of icon position.
-  const openPicker = () => {
+  const openPicker = (e: React.MouseEvent) => {
     if (disabled) return;
     const el = inputRef.current;
     if (el && typeof el.showPicker === "function") {
+      // Suppress the label's default click-forwarding to the input so the
+      // native picker isn't opened twice (which can open-then-close it).
+      e.preventDefault();
       try { el.showPicker(); } catch { /* not allowed / unsupported — fall back to focus */ }
     }
   };
@@ -976,10 +979,13 @@ function DateChip({ value, onChange, disabled }: { value: string; onChange: (v: 
   // Same clipped-icon problem as TimeChip: the chip is only as wide as its
   // date label, so the native date input's calendar-picker icon sits past
   // the right edge of the clickable box. Open the picker explicitly on click.
-  const openPicker = () => {
+  const openPicker = (e: React.MouseEvent) => {
     if (disabled) return;
     const el = inputRef.current;
     if (el && typeof el.showPicker === "function") {
+      // Suppress the label's default click-forwarding to the input so the
+      // native picker isn't opened twice (which can open-then-close it).
+      e.preventDefault();
       try { el.showPicker(); } catch { /* not allowed / unsupported — fall back to focus */ }
     }
   };
