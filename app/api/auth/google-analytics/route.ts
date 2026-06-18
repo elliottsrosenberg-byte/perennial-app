@@ -22,6 +22,14 @@ export async function GET(req: Request) {
     prompt:        "consent",   // always show consent to ensure refresh token is returned
   });
 
+  // Carry a post-connect destination through OAuth `state` so the callback can
+  // return the user where they started (e.g. /onboarding) instead of always
+  // dropping them on /presence. Only same-origin relative paths are allowed.
+  const next = new URL(req.url).searchParams.get("next");
+  if (next && next.startsWith("/") && !next.startsWith("//")) {
+    params.set("state", next);
+  }
+
   return NextResponse.redirect(
     `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
   );

@@ -131,7 +131,7 @@ const GOAL_OPTIONS: { id: string; label: string; Icon: LucideIcon | null }[] = [
   { id: "invoicing", label: "Send professional invoices",            Icon: Receipt  },
   { id: "time",      label: "Log time and understand profitability", Icon: Clock    },
   { id: "contacts",  label: "Build and maintain relationships",      Icon: Users    },
-  { id: "outreach",  label: "Stay on top of gallery outreach",       Icon: Send     },
+  { id: "outreach",  label: "Stay on top of outreach",               Icon: Send     },
   { id: "presence",  label: "Track opportunities and visibility",    Icon: Globe    },
   { id: "learn",     label: "Learn how to run my studio",            Icon: BookOpen },
   { id: "ash",       label: "Use AI to think through decisions",     Icon: null     },
@@ -149,7 +149,8 @@ interface StagedFile {
 }
 
 interface OnboardingData {
-  displayName:     string;
+  firstName:       string;
+  lastName:        string;
   studioName:      string;
   city:            string;
   website:         string;
@@ -251,17 +252,18 @@ function SingleChip({
 }
 
 function OtherInput({
-  values, knownIds, onAdd, placeholder = "Add your own",
-}: { values: string[]; knownIds: string[]; onAdd: (v: string) => void; placeholder?: string }) {
+  values, knownIds, onAdd, placeholder = "Add your own", disabled = false,
+}: { values: string[]; knownIds: string[]; onAdd: (v: string) => void; placeholder?: string; disabled?: boolean }) {
   const [val, setVal] = useState("");
   function submit() {
+    if (disabled) return;
     const v = val.trim();
     if (!v) return;
     if (knownIds.includes(v) || values.includes(v)) { setVal(""); return; }
     onAdd(v);
     setVal("");
   }
-  const ready = val.trim().length > 0;
+  const ready = val.trim().length > 0 && !disabled;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
       <span style={{ fontSize: 11, color: "var(--color-grey)", flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>Other</span>
@@ -377,7 +379,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
   const [saving, setSaving] = useState(false);
 
   const [data, setData] = useState<OnboardingData>({
-    displayName: "",
+    firstName: "", lastName: "",
     studioName: "", city: "", website: "", tagline: "", bio: "",
     businessType: "", country: "", addressLine1: "", addressLine2: "",
     addressCity: "", addressState: "", addressZip: "",
@@ -480,7 +482,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
 
     await supabase.from("profiles").upsert({
       user_id:             userId,
-      display_name:        data.displayName || null,
+      display_name:        [data.firstName, data.lastName].map(s => s.trim()).filter(Boolean).join(" ") || null,
       studio_name:         data.studioName || null,
       tagline:             data.tagline || null,
       bio:                 data.bio || null,
@@ -517,7 +519,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
     const supabase = createClient();
     await supabase.from("profiles").upsert({
       user_id:             userId,
-      display_name:        data.displayName || null,
+      display_name:        [data.firstName, data.lastName].map(s => s.trim()).filter(Boolean).join(" ") || null,
       studio_name:         data.studioName || null,
       tagline:             data.tagline || null,
       bio:                 data.bio || null,
@@ -534,7 +536,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
     router.refresh();
   }
 
-  const canAdvance2 = data.displayName.trim().length > 0;
+  const canAdvance2 = data.firstName.trim().length > 0;
   const canAdvance3 = data.studioName.trim().length > 0;
 
   return (
@@ -591,7 +593,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
         padding: "32px 24px 48px", position: "relative", zIndex: 1,
         overflowY: "auto",
       }}>
-        <div style={{ width: "100%", maxWidth: 560 }}>
+        <div style={{ width: "100%", maxWidth: 680 }}>
 
           {/* ── Step 1: Welcome ──────────────────────────────────────────────── */}
           {step === 1 && (
@@ -625,7 +627,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                     color: "#f5f1e9", letterSpacing: "-0.01em",
                     marginBottom: 10,
                   }}>
-                    Welcome to Perennial.
+                    Welcome.
                   </h1>
                   <p style={{ fontSize: 13, color: "rgba(245,241,233,0.65)", lineHeight: 1.6, maxWidth: 380, margin: "0 auto" }}>
                     Studio management for independent designers and makers.
@@ -682,15 +684,28 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                 Ash addresses you by name. You can add more about yourself in Settings later.
               </p>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                 <div>
-                  <FieldLabel>Your name *</FieldLabel>
+                  <FieldLabel>First name *</FieldLabel>
                   <input
                     ref={firstInputRef as React.RefObject<HTMLInputElement>}
                     type="text"
-                    value={data.displayName}
-                    onChange={e => set("displayName", e.target.value)}
+                    value={data.firstName}
+                    onChange={e => set("firstName", e.target.value)}
                     placeholder="What should Ash call you?"
+                    onKeyDown={e => { if (e.key === "Enter" && canAdvance2) setStep(3); }}
+                    style={{ width: "100%", padding: "9px 13px", fontSize: 13, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 9, color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
+                    onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
+                    onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Last name</FieldLabel>
+                  <input
+                    type="text"
+                    value={data.lastName}
+                    onChange={e => set("lastName", e.target.value)}
+                    placeholder="Surname (optional)"
                     onKeyDown={e => { if (e.key === "Enter" && canAdvance2) setStep(3); }}
                     style={{ width: "100%", padding: "9px 13px", fontSize: 13, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 9, color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
                     onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
@@ -924,18 +939,20 @@ export default function OnboardingClient({ userId }: { userId: string }) {
               <div>
                 <FieldLabel>Biggest challenges right now <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(pick up to 3)</span></FieldLabel>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {CHALLENGE_OPTIONS.map(opt => (
-                    <Chip
-                      key={opt}
-                      selected={data.challenges.includes(opt)}
-                      onClick={() => {
-                        if (!data.challenges.includes(opt) && data.challenges.length >= 3) return;
-                        toggle("challenges", opt);
-                      }}
-                    >
-                      {opt}
-                    </Chip>
-                  ))}
+                  {CHALLENGE_OPTIONS.map(opt => {
+                    const selected = data.challenges.includes(opt);
+                    const blocked = !selected && data.challenges.length >= 3;
+                    return (
+                      <span key={opt} style={blocked ? { opacity: 0.4 } : undefined}>
+                        <Chip
+                          selected={selected}
+                          onClick={() => { if (blocked) return; toggle("challenges", opt); }}
+                        >
+                          {opt}
+                        </Chip>
+                      </span>
+                    );
+                  })}
                   {data.challenges.filter(v => !CHALLENGE_OPTIONS.includes(v)).map(v => (
                     <Chip key={v} selected onClick={() => toggle("challenges", v)}>
                       {v}
@@ -945,11 +962,17 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                 <OtherInput
                   values={data.challenges}
                   knownIds={CHALLENGE_OPTIONS}
+                  disabled={data.challenges.length >= 3}
                   onAdd={v => {
                     if (data.challenges.length >= 3) return;
                     set("challenges", [...data.challenges, v]);
                   }}
                 />
+                {data.challenges.length >= 3 && (
+                  <p style={{ fontSize: 10, color: "var(--color-grey)", marginTop: 8 }}>
+                    That&apos;s 3 — remove one to choose a different challenge.
+                  </p>
+                )}
               </div>
 
               <div style={{ marginTop: 20 }}>
@@ -1072,6 +1095,8 @@ export default function OnboardingClient({ userId }: { userId: string }) {
               <h2 style={titleStyle}>Bring in your studio materials</h2>
               <p style={subtitleStyle}>
                 Drop in artist statements, bios, press, lookbooks, contracts — anything that defines your studio. Ash reads these to stay on-voice and reference your work. They land in <strong style={{ color: "var(--color-charcoal)", fontWeight: 600 }}>Resources</strong> so you can find them later.
+                <br />
+                <span style={{ color: "var(--color-grey)" }}>Don&apos;t worry — this is optional, and you can always add these later from Resources.</span>
               </p>
 
               <FileDropzone
@@ -1195,7 +1220,7 @@ const ONBOARDING_CATEGORIES: ConnectCategory[] = [
     title: "Finance",
     hint:  "See live transactions and cash flow in the Finance module.",
     tiles: [
-      { id: "teller", name: "Bank account", desc: "Connect via Teller (Plaid-style flow)", href: "/finance" },
+      { id: "teller", name: "Bank account", desc: "Connect your bank securely via Plaid", href: "/finance" },
     ],
   },
 ];
@@ -1255,8 +1280,8 @@ function IntegrationConnectStep() {
                     <a
                       href={t.href}
                       style={{
-                        padding: "6px 12px", fontSize: 11, fontWeight: 500,
-                        background: "var(--color-charcoal)", color: "var(--color-warm-white)",
+                        padding: "6px 12px", fontSize: 11, fontWeight: 600,
+                        background: "var(--color-sage)", color: "var(--color-warm-white)",
                         border: "none", borderRadius: 7, textDecoration: "none",
                       }}
                     >
@@ -1408,12 +1433,12 @@ const panelStyle: React.CSSProperties = {
 };
 
 const titleStyle: React.CSSProperties = {
-  fontSize: 22, fontWeight: 700, color: "var(--color-charcoal)",
+  fontSize: 24, fontWeight: 700, color: "var(--color-charcoal)",
   fontFamily: "var(--font-display)", marginBottom: 6, letterSpacing: "-0.01em",
 };
 
 const subtitleStyle: React.CSSProperties = {
-  fontSize: 12, color: "var(--color-grey)", lineHeight: 1.6, marginBottom: 22,
+  fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.6, marginBottom: 22,
 };
 
 const backLinkStyle: React.CSSProperties = {
