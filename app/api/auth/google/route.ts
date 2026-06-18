@@ -82,10 +82,14 @@ export async function GET(req: Request) {
       state,
       redirectUri,
       scopes,
-      // login_hint nudges Google to default the account picker to the
-      // signed-in Perennial email (helpful when the user has multiple
-      // Google accounts in their browser).
-      options: user.email ? { login_hint: user.email } : undefined,
+      // prompt=select_account always shows Google's account chooser, so a user
+      // can connect more than one Google account (each becomes its own
+      // integration row, keyed by account_id). "consent" stays so Google keeps
+      // issuing refresh tokens; login_hint just highlights the Perennial email.
+      options: {
+        prompt: "select_account consent",
+        ...(user.email ? { login_hint: user.email } : {}),
+      },
     });
 
     const res = NextResponse.redirect(url);
