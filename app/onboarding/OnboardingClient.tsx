@@ -593,7 +593,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
         padding: "32px 24px 48px", position: "relative", zIndex: 1,
         overflowY: "auto",
       }}>
-        <div style={{ width: "100%", maxWidth: 620 }}>
+        <div style={{ width: "100%", maxWidth: 680 }}>
 
           {/* ── Step 1: Welcome ──────────────────────────────────────────────── */}
           {step === 1 && (
@@ -1220,7 +1220,7 @@ const ONBOARDING_CATEGORIES: ConnectCategory[] = [
     title: "Finance",
     hint:  "See live transactions and cash flow in the Finance module.",
     tiles: [
-      { id: "teller", name: "Bank account", desc: "Connect via Teller (Plaid-style flow)", href: "/finance" },
+      { id: "teller", name: "Bank account", desc: "Connect your bank securely via Plaid", href: "/finance" },
     ],
   },
 ];
@@ -1280,8 +1280,8 @@ function IntegrationConnectStep() {
                     <a
                       href={t.href}
                       style={{
-                        padding: "6px 12px", fontSize: 11, fontWeight: 500,
-                        background: "var(--color-charcoal)", color: "var(--color-warm-white)",
+                        padding: "6px 12px", fontSize: 11, fontWeight: 600,
+                        background: "var(--color-sage)", color: "var(--color-warm-white)",
                         border: "none", borderRadius: 7, textDecoration: "none",
                       }}
                     >
