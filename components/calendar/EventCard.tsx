@@ -972,8 +972,20 @@ function TimeChip({ value, onChange, disabled }: { value: string; onChange: (v: 
 }
 
 function DateChip({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Same clipped-icon problem as TimeChip: the chip is only as wide as its
+  // date label, so the native date input's calendar-picker icon sits past
+  // the right edge of the clickable box. Open the picker explicitly on click.
+  const openPicker = () => {
+    if (disabled) return;
+    const el = inputRef.current;
+    if (el && typeof el.showPicker === "function") {
+      try { el.showPicker(); } catch { /* not allowed / unsupported — fall back to focus */ }
+    }
+  };
   return (
     <label
+      onClick={openPicker}
       style={{
         display: "inline-flex", alignItems: "center",
         padding: "3px 8px", borderRadius: 6,
@@ -986,6 +998,7 @@ function DateChip({ value, onChange, disabled }: { value: string; onChange: (v: 
     >
       {fmtDateChip(value)}
       <input
+        ref={inputRef}
         type="date"
         value={value}
         onChange={(e) => onChange(e.target.value)}
