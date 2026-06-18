@@ -305,9 +305,12 @@ function TimeChip({ value, onChange }: { value: string; onChange: (v: string) =>
   // input's clock/spin controls get clipped outside the clickable box and
   // tapping the chip does nothing. Open the native picker explicitly on
   // click so the chip is reliably interactive regardless of icon position.
-  const openPicker = () => {
+  const openPicker = (e: React.MouseEvent) => {
     const el = inputRef.current;
     if (el && typeof el.showPicker === "function") {
+      // Suppress the label's default click-forwarding to the input so the
+      // native picker isn't opened twice (which can open-then-close it).
+      e.preventDefault();
       try { el.showPicker(); } catch { /* not allowed / unsupported — fall back to focus */ }
     }
   };
