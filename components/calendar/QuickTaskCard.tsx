@@ -14,6 +14,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { X, Clock, FileText, ArrowRight } from "lucide-react";
+import { TimeChip } from "./ChipPickers";
 
 interface Props {
   /** The day this quick-create was triggered for (tasks-ribbon click). */
@@ -47,13 +48,6 @@ function combineLocalIso(dateStr: string, timeStr: string): string {
   const [y, m, dd] = dateStr.split("-").map(Number);
   const [h, mm]    = timeStr.split(":").map(Number);
   return new Date(y, (m ?? 1) - 1, dd, h, mm, 0, 0).toISOString();
-}
-
-function fmtTimeChip(timeHHMM: string): string {
-  const [h, m] = timeHHMM.split(":").map(Number);
-  const period = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return m === 0 ? `${h12} ${period}` : `${h12}:${pad(m)} ${period}`;
 }
 
 export default function QuickTaskCard({
@@ -299,44 +293,3 @@ export default function QuickTaskCard({
   );
 }
 
-function TimeChip({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  // The chip is only as wide as its "9 AM" label, so the native time
-  // input's clock/spin controls get clipped outside the clickable box and
-  // tapping the chip does nothing. Open the native picker explicitly on
-  // click so the chip is reliably interactive regardless of icon position.
-  const openPicker = (e: React.MouseEvent) => {
-    const el = inputRef.current;
-    if (el && typeof el.showPicker === "function") {
-      // Suppress the label's default click-forwarding to the input so the
-      // native picker isn't opened twice (which can open-then-close it).
-      e.preventDefault();
-      try { el.showPicker(); } catch { /* not allowed / unsupported — fall back to focus */ }
-    }
-  };
-  return (
-    <label
-      onClick={openPicker}
-      style={{
-        display: "inline-flex", alignItems: "center", gap: 4,
-        padding: "3px 8px", borderRadius: 6,
-        background: "var(--color-cream)",
-        border: "0.5px solid var(--color-border)",
-        fontSize: 12, color: "var(--color-text-primary)",
-        cursor: "pointer", position: "relative",
-      }}
-    >
-      {fmtTimeChip(value)}
-      <input
-        ref={inputRef}
-        type="time"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          position: "absolute", inset: 0,
-          opacity: 0, cursor: "pointer",
-        }}
-      />
-    </label>
-  );
-}
