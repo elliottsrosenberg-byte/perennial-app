@@ -35,7 +35,7 @@ jobs:
             exit 0
           fi
           payload=$(jq -n \
-            --arg text ":rocket: *<${PR_URL}|#${PR_NUMBER}: ${PR_TITLE}>* merged to \`main\` by ${PR_AUTHOR}" \
+            --arg text ":rocket: *<${PR_URL}|#${PR_NUMBER}: ${PR_TITLE}>* shipped to \`main\` by ${PR_AUTHOR}" \
             '{text: $text}')
           curl -sf -X POST -H 'Content-type: application/json' \
             --data "$payload" "$SLACK_WEBHOOK_URL"
