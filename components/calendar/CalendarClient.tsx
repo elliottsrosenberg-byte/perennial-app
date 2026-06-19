@@ -3242,7 +3242,11 @@ export default function CalendarClient({
               )}
               {visiblePanDays.map((day, colIdx) => {
                 const today = isToday(day);
-                const dragHere = dragCreate?.columnIdx === colIdx ? dragCreate : null;
+                // Match the ghost to its column by DAY (not the original
+                // columnIdx) so it follows when the create card changes the
+                // date. During an active drag day and columnIdx agree, so
+                // this is equivalent to the old behavior.
+                const dragHere = dragCreate && isSameDay(dragCreate.day, day) ? dragCreate : null;
                 return (
                   <div
                     key={colIdx}
@@ -3863,6 +3867,13 @@ export default function CalendarClient({
           defaultStart={newEventPrefill?.start}
           defaultEnd={newEventPrefill?.end}
           defaultAllDay={newEventPrefill?.allDay}
+          onStartDateChange={(d) => {
+            // Pan the calendar to the newly picked date and move the
+            // drag-create ghost onto that day so the card's selection
+            // stays visible in context.
+            setViewDate(d);
+            setDragCreate((prev) => (prev ? { ...prev, day: d } : prev));
+          }}
           onClose={() => {
             setNewEventOpen(false);
             setNewEventPrefill(null);

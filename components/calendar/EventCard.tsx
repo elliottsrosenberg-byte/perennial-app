@@ -58,6 +58,9 @@ interface Props {
   /** Used for the color stripe at the top in edit mode. */
   color?: string;
   onClose: () => void;
+  /** Fired when the start date changes (create mode) so the parent can
+   *  pan the calendar — and the drag ghost — to the newly chosen date. */
+  onStartDateChange?: (date: Date) => void;
   /** Fired after a successful create (create mode only). */
   onCreated?: (event: EventCardEvent) => void;
   /** Fired after a successful PATCH (edit mode only). */
@@ -140,7 +143,7 @@ const REMINDER_CHOICES: { label: string; minutes: number | null }[] = [
 
 export default function EventCard({
   event, defaultStart, defaultEnd, defaultAllDay, defaultCalendarId,
-  anchorRect, color, onClose, onCreated, onUpdated, onDeleted,
+  anchorRect, color, onClose, onStartDateChange, onCreated, onUpdated, onDeleted,
 }: Props) {
   const isEdit   = !!event;
   // In edit mode we still let writable=false events render the card —
@@ -544,7 +547,7 @@ export default function EventCard({
 
       {/* Date row */}
       <div style={{ padding: "4px 16px 6px", display: "flex", alignItems: "center", gap: 6 }}>
-        <DateChip value={startDate} onChange={(v) => { setStartDate(v); if (v > endDate) setEndDate(v); }} disabled={fieldsDisabled} />
+        <DateChip value={startDate} onChange={(v) => { setStartDate(v); if (v > endDate) setEndDate(v); onStartDateChange?.(new Date(v + "T00:00:00")); }} disabled={fieldsDisabled} />
         {(allDay && startDate !== endDate) && (
           <>
             <ArrowRight size={11} style={{ color: "var(--color-text-tertiary)" }} />
