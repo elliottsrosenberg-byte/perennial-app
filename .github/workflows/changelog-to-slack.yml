@@ -1,0 +1,41 @@
+name: Changelog to Slack
+
+# Posts a one-line changelog message to the #changes Slack channel whenever a
+# PR is merged into main. This is NOT a CI gate — it runs no tsc/lint/build/test.
+#
+# Setup (one-time, done outside the repo):
+#   1. Create a Slack incoming webhook pointed at #changes
+#      (api.slack.com/apps → your app → Incoming Webhooks → Add to #changes).
+#   2. Add the URL as a repo secret named SLACK_CHANGES_WEBHOOK_URL
+#      (GitHub repo → Settings → Secrets and variables → Actions).
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  notify:
+    # Only fire on an actual merge, not a closed-without-merge PR.
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post merged PR to #changes
+        env:
+          # Untrusted PR fields are passed via env (never interpolated into the
+          # script body) so a crafted PR title can't inject shell commands.
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_CHANGES_WEBHOOK_URL }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_CHANGES_WEBHOOK_URL is not set — skipping Slack post."
+            exit 0
+          fi
+          payload=$(jq -n \
+            --arg text ":rocket: *<${PR_URL}|#${PR_NUMBER}: ${PR_TITLE}>* merged to \`main\` by ${PR_AUTHOR}" \
+            '{text: $text}')
+          curl -sf -X POST -H 'Content-type: application/json' \
+            --data "$payload" "$SLACK_WEBHOOK_URL"
