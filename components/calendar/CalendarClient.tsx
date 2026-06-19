@@ -1254,6 +1254,10 @@ export default function CalendarClient({
   // ones moving scrollLeft (centering, Today, extending). Native scroll
   // resumes normal handling on the next user gesture.
   const programmaticScrollRef = useRef(false);
+  // When set, the next week-centering aligns the EXACT viewDate day to the
+  // left edge (used when the create card changes the date) instead of the
+  // default week-start alignment. Reset once consumed.
+  const panToDayRef = useRef(false);
 
   // showWeekends filter applies AFTER we choose the visible window — we
   // simply drop Sat/Sun from the column list. With continuous scroll the
@@ -1510,14 +1514,19 @@ export default function CalendarClient({
     const el = gridWrapRef.current;
     if (!el) return;
     const weekStart = getWeekStart(viewDate);
-    // Center on the week containing viewDate. When weekends are hidden,
-    // index against visiblePanDays (the actually-rendered list) so the
-    // pixel math lines up; Monday of that week becomes the leftmost.
-    const targetDate = showWeekends
+    // Default: center on the week containing viewDate (week-start leftmost;
+    // Monday when weekends are hidden). When panToDayRef is set (date picked
+    // in the create card), put the EXACT selected day at the left edge.
+    const weekTarget = showWeekends
       ? weekStart
       : (() => { const m = new Date(weekStart); m.setDate(m.getDate() + 1); return m; })();
-    const idx = visiblePanDays.findIndex(d => isSameDay(d, targetDate));
+    let idx = -1;
+    if (panToDayRef.current) {
+      idx = visiblePanDays.findIndex(d => isSameDay(d, viewDate));
+    }
+    if (idx < 0) idx = visiblePanDays.findIndex(d => isSameDay(d, weekTarget));
     if (idx < 0) return;
+    panToDayRef.current = false;
     programmaticScrollRef.current = true;
     el.scrollLeft = idx * dayPx;
     initialScrollDoneRef.current = true;
@@ -3868,11 +3877,25 @@ export default function CalendarClient({
           defaultEnd={newEventPrefill?.end}
           defaultAllDay={newEventPrefill?.allDay}
           onStartDateChange={(d) => {
-            // Pan the calendar to the newly picked date and move the
-            // drag-create ghost onto that day so the card's selection
-            // stays visible in context.
+            // Pan the calendar so the newly picked day sits at the left edge.
+            panToDayRef.current = true;
             setViewDate(d);
-            setDragCreate((prev) => (prev ? { ...prev, day: d } : prev));
+          }}
+          onRangeChange={(start, end) => {
+            // Move the drag-create ghost to match the edited start/end. The
+            // ghost stores pixel offsets from the column top, which the
+            // renderer inverts via yToMinutes.
+            setDragCreate((prev) => {
+              if (!prev) return prev;
+              const sameDay = isSameDay(start, end);
+              return {
+                ...prev,
+                day:      start,
+                startY:   timeToY(start.getHours(), start.getMinutes()),
+                currentY: sameDay ? timeToY(end.getHours(), end.getMinutes()) : GRID_HEIGHT,
+                active:   false,
+              };
+            });
           }}
           onClose={() => {
             setNewEventOpen(false);

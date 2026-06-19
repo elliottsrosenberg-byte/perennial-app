@@ -61,6 +61,9 @@ interface Props {
   /** Fired when the start date changes (create mode) so the parent can
    *  pan the calendar — and the drag ghost — to the newly chosen date. */
   onStartDateChange?: (date: Date) => void;
+  /** Fired whenever the start/end range changes (create mode) so the parent
+   *  can move the drag-create ghost to match the edited times. */
+  onRangeChange?: (start: Date, end: Date) => void;
   /** Fired after a successful create (create mode only). */
   onCreated?: (event: EventCardEvent) => void;
   /** Fired after a successful PATCH (edit mode only). */
@@ -143,7 +146,7 @@ const REMINDER_CHOICES: { label: string; minutes: number | null }[] = [
 
 export default function EventCard({
   event, defaultStart, defaultEnd, defaultAllDay, defaultCalendarId,
-  anchorRect, color, onClose, onStartDateChange, onCreated, onUpdated, onDeleted,
+  anchorRect, color, onClose, onStartDateChange, onRangeChange, onCreated, onUpdated, onDeleted,
 }: Props) {
   const isEdit   = !!event;
   // In edit mode we still let writable=false events render the card —
@@ -209,6 +212,68 @@ export default function EventCard({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]           = useState<string | null>(null);
   const [needsReconnect, setNeedsReconnect] = useState<{ url: string; provider: string } | null>(null);
+
+  const MIN_MS = 15 * 60_000;
+
+  // Time/date edits keep the event coherent and notify the parent so the
+  // drag-create ghost (and, on a date change, the visible week) follow:
+  //   • Start time  → end follows, preserving the event's length.
+  //   • End time after start → resize (keep start).
+  //   • End time at/before start → can't invert, so shift start to preserve
+  //     length and land on the new end.
+  //   • Start date  → move the event to the new day, keeping its length.
+  function handleStartTimeChange(v: string) {
+    const oldStart = combineLocal(startDate, startTime);
+    const oldEnd   = combineLocal(endDate, endTime);
+    const durMs    = Math.max(MIN_MS, oldEnd.getTime() - oldStart.getTime());
+    const newStart = combineLocal(startDate, v);
+    const newEnd   = new Date(newStart.getTime() + durMs);
+    setStartTime(v);
+    setEndDate(toLocalDateInput(newEnd));
+    setEndTime(toLocalTimeInput(newEnd));
+    onRangeChange?.(newStart, newEnd);
+  }
+  function handleEndTimeChange(v: string) {
+    const start  = combineLocal(startDate, startTime);
+    const oldEnd  = combineLocal(endDate, endTime);
+    const newEnd  = combineLocal(endDate, v);
+    if (newEnd.getTime() <= start.getTime()) {
+      const durMs    = Math.max(MIN_MS, oldEnd.getTime() - start.getTime());
+      const newStart = new Date(newEnd.getTime() - durMs);
+      setStartDate(toLocalDateInput(newStart));
+      setStartTime(toLocalTimeInput(newStart));
+      setEndDate(toLocalDateInput(newEnd));
+      setEndTime(v);
+      onRangeChange?.(newStart, newEnd);
+    } else {
+      setEndTime(v);
+      onRangeChange?.(start, newEnd);
+    }
+  }
+  function handleStartDateChange(v: string) {
+    if (allDay) {
+      const oldS = new Date(startDate + "T00:00:00");
+      const oldE = new Date(endDate + "T00:00:00");
+      const spanMs = Math.max(0, oldE.getTime() - oldS.getTime());
+      const newS = new Date(v + "T00:00:00");
+      const newE = new Date(newS.getTime() + spanMs);
+      setStartDate(v);
+      setEndDate(toLocalDateInput(newE));
+      onRangeChange?.(newS, newE);
+      onStartDateChange?.(newS);
+      return;
+    }
+    const oldStart = combineLocal(startDate, startTime);
+    const oldEnd   = combineLocal(endDate, endTime);
+    const durMs    = Math.max(MIN_MS, oldEnd.getTime() - oldStart.getTime());
+    const newStart = combineLocal(v, startTime);
+    const newEnd   = new Date(newStart.getTime() + durMs);
+    setStartDate(v);
+    setEndDate(toLocalDateInput(newEnd));
+    setEndTime(toLocalTimeInput(newEnd));
+    onRangeChange?.(newStart, newEnd);
+    onStartDateChange?.(newStart);
+  }
 
   const titleRef = useRef<HTMLInputElement>(null);
   const cardRef  = useRef<HTMLDivElement>(null);
@@ -536,9 +601,9 @@ export default function EventCard({
       {/* Time row */}
       {!allDay && (
         <div style={{ padding: "4px 16px", display: "flex", alignItems: "center", gap: 8 }}>
-          <TimeChip value={startTime} onChange={setStartTime} disabled={fieldsDisabled} />
+          <TimeChip value={startTime} onChange={handleStartTimeChange} disabled={fieldsDisabled} />
           <ArrowRight size={11} style={{ color: "var(--color-text-tertiary)" }} />
-          <TimeChip value={endTime} onChange={setEndTime} disabled={fieldsDisabled} />
+          <TimeChip value={endTime} onChange={handleEndTimeChange} disabled={fieldsDisabled} />
           <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginLeft: 2 }}>
             {fmtDuration(startDate, startTime, endDate, endTime, allDay)}
           </span>
@@ -547,7 +612,7 @@ export default function EventCard({
 
       {/* Date row */}
       <div style={{ padding: "4px 16px 6px", display: "flex", alignItems: "center", gap: 6 }}>
-        <DateChip value={startDate} onChange={(v) => { setStartDate(v); if (v > endDate) setEndDate(v); onStartDateChange?.(new Date(v + "T00:00:00")); }} disabled={fieldsDisabled} />
+        <DateChip value={startDate} onChange={handleStartDateChange} disabled={fieldsDisabled} />
         {(allDay && startDate !== endDate) && (
           <>
             <ArrowRight size={11} style={{ color: "var(--color-text-tertiary)" }} />
