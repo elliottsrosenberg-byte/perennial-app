@@ -102,7 +102,13 @@ function ChipPopover({
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") { e.stopPropagation(); close(); }
     }
-    function onScroll() { close(); }
+    function onScroll(e: Event) {
+      // The time list auto-scrolls to the current time on open, which fires a
+      // scroll event from inside the popover — that must NOT close it. Only
+      // close when the user scrolls something outside the popover.
+      if (popRef.current?.contains(e.target as Node)) return;
+      close();
+    }
     const stopNative = (e: Event) => e.stopPropagation();
     const pop = popRef.current;
     pop?.addEventListener("mousedown", stopNative);
