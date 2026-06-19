@@ -24,6 +24,7 @@ This is the index for `docs/architecture/`. It gives a high-level map of the app
 | Payments | Stripe Connect (Standard, direct charges) |
 | Integrations | GA4, Instagram, Beehiiv/Kit/Mailchimp/Substack, Plaid (banking), Google Calendar conferencing |
 | AI | "Ash" assistant, globally mounted |
+| Observability | Sentry (errors + traces), PostHog (product analytics + session replay) — see [`operations.md`](./operations.md) |
 | Hosting | Vercel, push-to-prod from `main` (`app.perennial.design`) |
 
 Routing structure:
@@ -75,7 +76,7 @@ The app is **effectively single-user today but built for multi-user**.
 | Settings | `app/(app)/settings/page.tsx` (`/settings`) | Per-user config; hosts integration connection UI (`?section=integrations`) |
 | Integrations | no route (in Settings) | Shared connection plumbing; Presence is the primary consumer |
 | Onboarding | `app/onboarding/page.tsx` (`/onboarding`) | Outside `(app)`, no sidebar; redirects on auth/completion |
-| Admin / Curate | `app/(app)/admin/page.tsx` (`/admin`) | Opportunity/suggestion curation; reached via Sidebar "Curate" |
+| Admin / Curate | `app/(app)/admin/page.tsx` (`/admin`) · `app/(app)/admin/users/page.tsx` (`/admin/users`) | Opportunity/suggestion curation + admin user list with "View as" impersonation; both gated to `ADMIN_USER_IDS` |
 | Ash | no route (in layout) | Global AI assistant FAB + panel on every authed page |
 
 See [modules.md](./modules.md) for the full per-module breakdown including all deep-link params and public surfaces.

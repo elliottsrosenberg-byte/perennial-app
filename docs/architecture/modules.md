@@ -1112,19 +1112,20 @@ This document is a module-by-module architecture reference for the Perennial app
 
 ### Main components
 - `app/onboarding/page.tsx` — server component: auth check + `onboarding_complete` redirect, renders OnboardingClient
-- `app/onboarding/OnboardingClient.tsx` — 1471-line client wizard, 9 steps (`TOTAL_STEPS=9`)
-- Steps: 1 Welcome, 2 About you (name), 3 Studio identity + billing + practice types, 4 How you work, 5 How you sell + price, 6 Where you are + challenges/issues, 7 Goals, 8 Resource upload (FileDropzone), 9 Integration connect (IntegrationConnectStep)
-- Helpers in-file: Chip, SingleChip, OtherInput, StepProgress, SelectInput, StepFooter, FileDropzone, IntegrationConnectStep
+- `app/onboarding/OnboardingClient.tsx` — client wizard, 9 steps (`TOTAL_STEPS=9`); modal max-width 680px
+- Steps: 1 Welcome, 2 About you (First + Last name, composed into `display_name`; no schema change), 3 Studio identity + billing + practice types + **logo upload + brand color picker** (uploads via `uploadStudioLogo` → `studio-logos` bucket; saves to `profiles.logo_url/logo_path/brand_color`), 4 How you work (make options now include "Graphic design", "Websites", "Software" with `key/color/icon` mappings → `profiles.project_options.type`), 5 How you sell + price, 6 Where you are + challenges/issues (cap 3, with "That's 3 — remove one" feedback UI and `OtherInput` `disabled` prop), 7 Goals, 8 Resource upload (FileDropzone), 9 Integration connect (IntegrationConnectStep; multi-account providers show "+ Add another" when one is already connected)
+- Helpers in-file: Chip, SingleChip, OtherInput, StepProgress, SelectInput, StepFooter, FileDropzone, IntegrationConnectStep, StudioBrandStep (logo + color sub-component)
 - `lib/profile/business.ts` (shared composeStudioAddress/BUSINESS_TYPES/COUNTRIES)
+- `lib/uploads/studio-logo.ts` (reused from Settings for the Step 3 logo upload)
 - `components/ui/AshMark.tsx`
 
 ### API routes
 - `/api/integrations/connect-status` (IntegrationConnectStep checks which providers connected)
-- OAuth start routes with `?next=/onboarding?step=9`: `/api/auth/google`, `/api/auth/microsoft`, `/api/auth/instagram`, `/api/auth/google-analytics`
+- OAuth start routes with `?next=/onboarding?step=9`: `/api/auth/google` (uses `prompt=select_account` so a different Google account can be chosen; supports multi-account), `/api/auth/microsoft`, `/api/auth/instagram`, `/api/auth/google-analytics` (threads `next` via OAuth `state` so callback returns to onboarding instead of `/presence`)
 - No dedicated save API — writes directly via supabase client
 
 ### Tables
-`profiles` (upsert on finish/skip: display_name, studio_name, tagline, bio, location, website, phone, ein, billingPatch structured address, practice_types, work_types, selling_channels, price_range, years_in_practice, primary_challenges, business_issues, urgent_needs, perennial_goals, onboarding_complete=true, project_options jsonb merge, tour_visited={}, tour_dismissed=false) · `resources` (handleFinish inserts one row per staged file) · Supabase Storage `resources` bucket (file uploads namespaced `${userId}/...`)
+`profiles` (upsert on finish/skip: display_name [composed from firstName + lastName], studio_name, tagline, bio, location, website, phone, ein, billingPatch structured address, practice_types, work_types, selling_channels, price_range, years_in_practice, primary_challenges, business_issues, urgent_needs, perennial_goals, logo_url, logo_path, brand_color, onboarding_complete=true, project_options jsonb merge [includes new make-option keys: graphic_design/websites/software], tour_visited={}, tour_dismissed=false) · `resources` (handleFinish inserts one row per staged file) · Supabase Storage `resources` bucket (file uploads namespaced `${userId}/...`) · Supabase Storage `studio-logos` bucket (Step 3 logo upload)
 
 ### Key patterns
 - Step state mirrored to `?step=` query (`history.replaceState`) so OAuth round-trips return to the right step
@@ -1155,16 +1156,22 @@ This document is a module-by-module architecture reference for the Perennial app
 
 | | |
 |---|---|
-| **Routes** | `/admin` (`app/(app)/admin/page.tsx` — thin server wrapper rendering AdminClient) · Reached via Sidebar "Curate" link (ClipboardList icon, bottom utilities) |
+| **Routes** | `/admin` (`app/(app)/admin/page.tsx` — thin server wrapper rendering AdminClient; admin-only via `ADMIN_USER_IDS`) · `/admin/users` (`app/(app)/admin/users/page.tsx` — user list + "View as" impersonation, gated to `ADMIN_USER_IDS`) |
 
 ### Main components
 - `app/(app)/admin/page.tsx` (renders `<AdminClient/>`)
 - `components/admin/AdminClient.tsx` — two tabs: Listings (opportunities feed) + Suggestions (pending `opportunity_suggestions`)
 - `EditModal` (add/edit opportunity), `Field` helper
+- `app/(app)/admin/users/page.tsx` — server: auth-gated to `ADMIN_USER_IDS`; lists all `auth.users` accounts + "View as" per row; renders `AdminUsersTable`
+- `components/admin/AdminUsersTable.tsx` — user list with impersonation link generation; calls `POST /api/admin/impersonate`
+- `lib/admin/guard.ts` — `getAdminUser()`: verifies session + checks `ADMIN_USER_IDS` env var; throws 401/403 for unauthorized callers; used by all admin API routes
+- `app/auth/confirm/route.ts` — public SSR handler for email OTP + impersonation magic links; sets `ph_impersonated=1` cookie on impersonation sessions to suppress PostHog (see `operations.md`)
 
 ### API routes
-- `/api/admin/opportunities` (POST — create/update listing, quick status changes)
-- `/api/admin/suggestions` (POST — `{id, action: promote|dismiss}`)
+- `POST /api/admin/opportunities` — create/update listing, quick status changes
+- `POST /api/admin/suggestions` — `{id, action: promote|dismiss}`
+- `GET /api/admin/check` — returns `{ isAdmin }` via `getAdminUser()` (server-side `ADMIN_USER_IDS` allowlist; only the boolean reaches the client); used by Sidebar to gate admin-only links
+- `POST /api/admin/impersonate` — admin-gated (service-role); mints a one-time magic-link `token_hash` for the target user; returns a `/auth/confirm` link safe to open in an incognito window (does NOT clobber the admin's session); every generation is logged with both user IDs
 
 ### Tables
 `opportunities` (read all + upsert via API; status published/draft/archived; category fair/openCall/award/grant/residency/festival) · `opportunity_suggestions` (read pending; promote→opportunities, dismiss)
@@ -1174,16 +1181,18 @@ This document is a module-by-module architecture reference for the Perennial app
 - Optimistic update on suggestion action (filters out of list before API resolves)
 - Quick inline status toggles (publish/unpublish/archive) via `saveOpp`
 - Standard modal pattern (`fixed inset-0 z-50` backdrop, maxWidth md)
-- No auth/role gate visible in the client — relies on proxy/RLS; this is the human side of the opportunities monitoring routine (cron writes suggestions here)
+- Admin gating: `lib/admin/guard.ts` `getAdminUser()` checks the `ADMIN_USER_IDS` env var on every admin API route and the `/admin/users` page; the Sidebar client receives only the boolean `isAdmin` from `GET /api/admin/check`
+- Impersonation: `/api/admin/impersonate` uses service-role `supabase.auth.admin.generateLink` to mint a one-time magic link; invitee-side `/auth/confirm` handles the OTP exchange and sets `ph_impersonated=1` cookie to suppress PostHog analytics for the impersonated session
 
 ### Cross-module links
 - Published opportunities feed the Presence module's opportunities surface and Ash's `get_opportunities` tool
-- Monitoring cron/ingest endpoint writes `opportunity_suggestions` (per memory: needs CRON_SECRET)
+- Monitoring cron/ingest endpoint writes `opportunity_suggestions` (needs `CRON_SECRET` in Vercel — see `operations.md`)
 - Uses `Opportunity` type from `types/database`
+- PostHog impersonation suppression: `app/auth/confirm` → `ph_impersonated` cookie → `PostHogProvider` + `PostHogAuth` opt-out (see `operations.md`)
 
 ### Known TODOs / mocked
-- No explicit admin-role check in the client; assumes single-operator/Curate is internal
-- Opportunities monitoring cron needs CRON_SECRET in Vercel (per memory)
+- Admin-role check is now real (`ADMIN_USER_IDS` env var via `lib/admin/guard.ts`); no longer "any signed-in user" — but still a server-side allowlist, not a DB-level `profiles.role` column
+- Opportunities monitoring cron needs `CRON_SECRET` in Vercel (see `operations.md`)
 
 ### Mobile issues
 - Listing/suggestion rows are flex rows with multiple action icon buttons + status chips that crowd on narrow widths (no wrap)
@@ -1242,7 +1251,7 @@ This document is a module-by-module architecture reference for the Perennial app
 | **Routes** | `app/(app)/layout.tsx` wraps all authed routes · Renders: Sidebar (desktop), MobileNav (mobile), MobileDesktopNotice, AshContainer, TourTracker, TourCallout |
 
 ### Main components
-- `components/layout/Sidebar.tsx` — desktop rail (`hidden md:flex`), collapsible 200px/52px, nav groups, theme toggle, app menu, profile menu, links to Settings/Design system/Docs/Curate
+- `components/layout/Sidebar.tsx` — desktop rail (`hidden md:flex`), collapsible 200px/52px, nav groups, theme toggle, app menu, profile menu; fetches `isAdmin` from `GET /api/admin/check` on mount — Design system / View as / Curate links in the bottom-left are shown **only for admins**; non-admins see Settings only
 - `components/layout/MobileNav.tsx` — mobile top bar + slide-in drawer (`md:hidden`), full nav + Settings + Logout
 - `components/layout/MobileDesktopNotice.tsx` — dismissible "best on desktop" banner (localStorage, useSyncExternalStore)
 - `components/layout/Topbar.tsx` — per-page header (title/greeting/actions)
@@ -1250,7 +1259,7 @@ This document is a module-by-module architecture reference for the Perennial app
 - `lib/theme.ts` (BaseTheme, paintCurrentTheme, setBaseTheme, isAutoTheme)
 
 ### API routes
-- None — pure navigation; logout via `supabase.auth.signOut()`
+- `GET /api/admin/check` — fetched by Sidebar on mount to gate admin-only bottom-rail links; logout via `supabase.auth.signOut()`
 
 ### Tables
 `profiles` (Sidebar + MobileNav read studio_name + display_name for the profile footer/header)
@@ -1269,7 +1278,7 @@ This document is a module-by-module architecture reference for the Perennial app
 - Profile menu "Edit profile" → `/settings`
 
 ### Known TODOs / mocked
-- `APP_MENU` items all badge "Soon"/disabled: What's new, Documentation, Keyboard shortcuts, Give feedback, Refer a friend
+- `APP_MENU` items — "Documentation" is now enabled at `/docs`; "What's new", "Keyboard shortcuts", "Refer a friend" still badge "Soon"/disabled
 - Profile menu "Switch workspace" badge "Soon"/disabled
 - NavItem supports a `soon` flag but none currently set
 
