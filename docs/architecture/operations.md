@@ -97,7 +97,7 @@ Watches how users move through *our* app: events, funnels, session recordings.
 
 ```
 Slack (Elliott + users file bugs/ideas)
-   │   Linear Slack integration: 🔗 react or /linear → Triage issue (NOT YET WIRED — see PER-62)
+   │   Linear Slack integration (WIRED, PER-62): emoji-react or /linear → Triage issue
    ▼
 Linear  ── Triage ──►  human triage gate (accept / prioritize / label)   ← keep this
    │      (team PER; projects = modules; labels: Type + Source group)
@@ -106,7 +106,7 @@ Claude Code (the agent / "hands")
    │   branch named with the issue id (e.g. elliott/per-8-…) → implement
    ▼
 GitHub  ── PR ──►  Vercel auto-builds a Preview deploy per PR
-   │   (Linear GitHub integration auto-moves the issue Todo→In Progress→In Review→Done — NOT YET WIRED)
+   │   (Linear GitHub integration auto-moves the issue Todo→In Progress→In Review→Done — WIRED, PER-62)
    ▼
 Elliott reviews the preview → merges to main → Vercel deploys prod (app.perennial.design)
    ▲
@@ -120,7 +120,7 @@ Claude Code = the hands (*does* it). Linear never touches the codebase; the agen
 
 | Tool | Role | In the repo? | How an agent touches it |
 | --- | --- | --- | --- |
-| **Slack** | User/community intake of bugs & ideas | **No code** — purely external | Reaches it only via the (future) Linear Slack integration; agents don't call Slack directly |
+| **Slack** | User/community intake of bugs & ideas | **No code** — purely external | Reaches it via the Linear Slack integration (wired, PER-62); agents don't call Slack directly |
 | **Linear** | Issue queue, projects, priorities, status | **No code** — external via MCP | `linear` MCP server: read/create/update issues. Team `Perennial` (PER). See [`project_linear_workflow` memory] |
 | **GitHub** | Source of truth for code; branch→PR | Git remote; **no `.github/` CI** | `gh` CLI / git. Branch per issue; PR per issue |
 | **Vercel** | Hosting; per-PR previews; prod from `main` | Vercel git integration (no `vercel.json`) | `vercel` MCP: deployments, build/runtime logs |
@@ -175,13 +175,14 @@ deploy-level env vars.
 
 ## Known gaps (things an agent should NOT assume exist)
 
-- **No CI.** There is no `.github/` directory and no GitHub Actions — nothing runs
-  tsc/lint/build/tests on push or PR. Review is manual via the Vercel preview. A CI gate is
-  a prerequisite before the autonomous auto-PR agent (PER-64) is safe.
+- **No CI _gate_.** `.github/workflows/changelog-to-slack.yml` exists, but it only posts a
+  changelog line to Slack's #changes on PR-merge-to-main — it runs **no** tsc/lint/build/tests.
+  Review is still manual via the Vercel preview. A real CI gate is a prerequisite before the
+  autonomous auto-PR agent (PER-64) is safe.
 - **No `vercel.json`.** Cron + build settings are configured in the Vercel dashboard, not
   in the repo — they're invisible to a code search.
 - **No `.env.example`.** New-env discovery means reading `.env.local` or this doc. Adding a
   committed example file would help.
-- **Linear/Slack integrations not yet wired** (PER-62) — the pipeline diagram's
-  Slack→Linear and GitHub→Linear auto-status arrows are aspirational until then.
 - **No code presence for Slack or Linear** — both are external-only; don't grep for them.
+  The integrations themselves (Slack→Linear, GitHub→Linear, Sentry→Linear) are wired
+  (PER-62) but live in Linear/Slack settings, not the repo — invisible to a code search.
