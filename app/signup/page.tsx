@@ -81,7 +81,14 @@ export default function SignupPage() {
     setError(null);
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      // Send the confirmation link back through our callback handler so the
+      // verification code is exchanged into a session. Without this the link
+      // falls back to the project Site URL and lands the user logged-out.
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=/` },
+    });
 
     if (error) {
       setError(error.message);
