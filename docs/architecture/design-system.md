@@ -251,7 +251,7 @@ Custom primitives exist for selects, dates, and checkboxes, but native HTML inpu
 
 Each panel was cloned from the previous (comments in the Network panels literally say "matches project panel style" and "matches ContactDetailPanel"). What differs:
 
-- **Tab sets:** Project → canvas/tasks/notes/files/contacts; Contact & Org → canvas/activity/tasks/notes/files; Target → canvas/tasks/people/notes/files.
+- **Tab sets:** Project → canvas/tasks/notes/files/contacts; Contact & Org → canvas/activity/tasks/notes/files; Target → canvas/activity/tasks/people/notes/files (Activity/Tasks/Notes/Files wrap the linked Contact/Org).
 - **Left-sidebar identity/details blocks** differ per entity.
 
 This is the **"Scrim Card Pattern"** flagged in MEMORY (`project_scrim_card_pattern.md`) as a candidate for a portable primitive — still unaddressed.
@@ -336,10 +336,10 @@ Bold/Italic/Underline/Strike/H1/H2/lists/toggle/image + Generate-tasks.
 | Location |
 |---|
 | `components/projects/ProjectDetailPanel.tsx:874` `ProjectTasksTab`, `:1115` `NotesTab`, `:1261` `FilesTab`, `:1429` `ContactsTab` |
-| `components/network/ContactDetailPanel.tsx:332` `ActivityTab`, `:546` `TasksTab`, `:628` `NotesTab` |
-| `components/network/OrganizationDetailPanel.tsx:305` `ActivityTab`, `:510` `TasksTab`, `:592` `NotesTab` |
+| `components/network/ContactDetailPanel.tsx` inline `TasksTab` / `NotesTab` |
+| `components/network/OrganizationDetailPanel.tsx` inline `TasksTab` / `NotesTab` |
 
-Same tab bodies, same prop shape (`{entityId, items[], setItems, highlightedId}`), parameterized only by foreign key (`project_id` vs `contact_id` vs `organization_id`). → Extract entity-agnostic `<NotesTab>`/`<TasksTab>`/`<ActivityTab>` taking a `{column, id}` link descriptor.
+**Partly resolved.** Shared entity-agnostic tabs now live in `components/detail/`: `EntityTasksTab`, `EntityNotesTab`, `EntityFilesTab`, and `EntityActivityTab` — each takes a `{fkColumn, id}` link descriptor (+ optional controlled state). The Outreach `TargetDetailPanel` uses all four; `ContactDetailPanel`/`OrganizationDetailPanel` use the shared `EntityActivityTab` but still have their own inline `TasksTab`/`NotesTab`/`FilesTab`. → Remaining: migrate the network panels' Tasks/Notes/Files onto the shared components, and fold `ProjectDetailPanel`'s copies in too.
 
 ### 7.6 Task date-picker / priority-picker / due-chip helpers
 

@@ -15,7 +15,7 @@ interface Props {
   onCreated: (target: OutreachTarget) => void;
 }
 
-type TargetKind = "organization" | "person";
+type TargetKind = "organization" | "person" | "unlinked";
 
 const inputCls = "w-full px-3 py-2 text-[13px] rounded-lg border transition-colors focus:outline-none";
 const inputStyle = { background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" };
@@ -36,6 +36,10 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
   // Linked entity. Mutually exclusive — switching kind clears the other side.
   const [linkedContact,      setLinkedContact]      = useState<Contact | null>(null);
   const [linkedOrganization, setLinkedOrganization] = useState<Organization | null>(null);
+
+  // Name for a bare ("unlinked") target — a card with no Contact/Organization
+  // yet. Opening it in the scrim later prompts to link or create one.
+  const [unlinkedName, setUnlinkedName] = useState("");
 
   const [search, setSearch] = useState("");
   const [searchContacts,      setSearchContacts]      = useState<Contact[]>([]);
@@ -211,13 +215,16 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
   }
 
   const linked = linkedContact ?? linkedOrganization;
-  const derivedName = linkedContact
-    ? `${linkedContact.first_name} ${linkedContact.last_name}`.trim()
-    : linkedOrganization?.name ?? "";
+  const derivedName = kind === "unlinked"
+    ? unlinkedName.trim()
+    : linkedContact
+      ? `${linkedContact.first_name} ${linkedContact.last_name}`.trim()
+      : linkedOrganization?.name ?? "";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!linked || !pipelineId || !stageId) return;
+    const hasTarget = kind === "unlinked" ? !!derivedName : !!linked;
+    if (!hasTarget || !pipelineId || !stageId) return;
     setLoading(true);
     setError(null);
 
@@ -249,8 +256,10 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
     onClose();
   }
 
-  // Submit-disabled rule: must have a pipeline, a stage, and a linked entity.
-  const canSubmit = !loading && !!pipelineId && !!stageId && !!linked;
+  // Submit-disabled rule: must have a pipeline, a stage, and either a linked
+  // entity or (for a bare card) a name.
+  const canSubmit = !loading && !!pipelineId && !!stageId
+    && (kind === "unlinked" ? !!unlinkedName.trim() : !!linked);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -275,20 +284,27 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
             <label className="block text-[11px] font-medium mb-2" style={{ color: "var(--color-charcoal)" }}>
               This target is…
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <KindButton
                 active={kind === "organization"}
                 onClick={() => switchKind("organization")}
                 icon={<Building2 size={13} strokeWidth={1.75} />}
-                label="An organization"
-                hint="Gallery, brand, publication, fair"
+                label="Organization"
+                hint="Gallery, brand, fair"
               />
               <KindButton
                 active={kind === "person"}
                 onClick={() => switchKind("person")}
                 icon={<User size={13} strokeWidth={1.75} />}
-                label="A person"
-                hint="Adds them as a lead too"
+                label="Person"
+                hint="Adds a lead too"
+              />
+              <KindButton
+                active={kind === "unlinked"}
+                onClick={() => switchKind("unlinked")}
+                icon={<Plus size={13} strokeWidth={1.75} />}
+                label="Just a name"
+                hint="Link later"
               />
             </div>
           </div>
@@ -323,13 +339,26 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
             </div>
           </div>
 
-          {/* Linked entity — search-or-create, conditional on kind. */}
+          {/* Linked entity — search-or-create, conditional on kind. For a bare
+              "Just a name" target we collect only a name and link a record later. */}
           <div>
             <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>
-              {kind === "person" ? "Person *" : "Organization *"}
+              {kind === "person" ? "Person *" : kind === "organization" ? "Organization *" : "Name *"}
             </label>
 
-            {linked ? (
+            {kind === "unlinked" ? (
+              <>
+                <input
+                  type="text" value={unlinkedName}
+                  onChange={(e) => setUnlinkedName(e.target.value)}
+                  placeholder="e.g. Spring open call, that gallery in Berlin…"
+                  className={inputCls} style={inputStyle}
+                />
+                <p className="text-[10px] mt-1" style={{ color: "var(--color-grey)" }}>
+                  Adds a card with no contact or organization yet. Open it later to link or create one.
+                </p>
+              </>
+            ) : linked ? (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
                 style={{ background: "var(--color-cream)", border: "0.5px solid var(--color-border)" }}>
                 <div className="w-6 h-6 rounded flex items-center justify-center text-[10px] font-semibold"
