@@ -49,7 +49,7 @@ The scaffold is byte-for-byte consistent (each was cloned from the previous — 
 
 ### What legitimately differs per panel (do NOT try to unify blindly)
 
-- **Tab sets:** Project = canvas/tasks/notes/files/contacts · Contact & Org = canvas/activity/tasks/notes/files · Target = canvas/tasks/people/notes/files.
+- **Tab sets:** Project = canvas/tasks/notes/files/contacts · Contact & Org = canvas/activity/tasks/notes/files · Target = canvas/activity/tasks/people/notes/files (Activity/Tasks/Notes/Files wrap the linked Contact/Org).
 - **Left-sidebar identity/details block** — entity-specific.
 
 ### Recommended fix (per MEMORY `project_scrim_card_pattern.md`, still unaddressed)
@@ -255,12 +255,13 @@ Styling identical everywhere (0.5px border-bottom row, 11px grey label, sage foc
 
 `components/home/NotesCard.tsx:86` correctly uses the shared `RichToolbar`. → **delete `FormatToolbar`**, add a `tourTarget` prop to `RichToolbar`. **Any new formatting button must currently be added in BOTH.**
 
-### E. Per-panel `NotesTab` / `TasksTab` / `ActivityTab` / `FilesTab` — **many copies**
-- `projects/ProjectDetailPanel.tsx:874 ProjectTasksTab`, `:1115 NotesTab`, `:1261 FilesTab`, `:1429 ContactsTab`
-- `network/ContactDetailPanel.tsx:332 ActivityTab`, `:546 TasksTab`, `:628 NotesTab`
-- `network/OrganizationDetailPanel.tsx:305 ActivityTab`, `:510 TasksTab`, `:592 NotesTab`
+### E. Per-panel `NotesTab` / `TasksTab` / `ActivityTab` / `FilesTab` — **partly consolidated**
+Shared entity-agnostic tabs live in `components/detail/`: `EntityTasksTab`, `EntityNotesTab`, `EntityFilesTab`, `EntityActivityTab` — each takes `{fkColumn, id}` (+ optional controlled state).
+- ✅ `outreach/TargetDetailPanel.tsx` — uses all four (wrapping the linked Contact/Org).
+- ◐ `network/ContactDetailPanel.tsx` + `network/OrganizationDetailPanel.tsx` — use shared `EntityActivityTab`; still inline `TasksTab` / `NotesTab` / `FilesTab`.
+- ✗ `projects/ProjectDetailPanel.tsx` — still has its own `ProjectTasksTab` / `NotesTab` / `FilesTab` / `ContactsTab`.
 
-Same prop shape `{entityId, items[], setItems, highlightedId}`, parameterized only by foreign key (`project_id` vs `contact_id` vs `organization_id`). → extract entity-agnostic tabs taking a `{column, id}` link descriptor.
+→ Remaining: migrate the network + project panels' Tasks/Notes/Files onto the shared `Entity*Tab` components.
 
 ### F. Task date-picker / priority-picker / due-chip helpers — **duplicated with drift**
 - `projects/ProjectDetailPanel.tsx:605 TaskDatePicker`, `:702 TaskPriorityPicker`, `:586 getDueChipLabel`, `:596 getDueChipColor`

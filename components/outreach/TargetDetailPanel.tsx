@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { OutreachTarget, OutreachPipeline, PipelineStage, Project, Contact } from "@/types/database";
+import type { OutreachTarget, OutreachPipeline, PipelineStage, Project, Contact, Organization } from "@/types/database";
 import {
   X, Maximize2, Minimize2, FileText, Trash2, Settings,
   CheckSquare, Users, FolderOpen, Plus, Link2,
-  UserCheck, FolderPlus,
+  UserCheck, FolderPlus, Calendar, Building2, User,
 } from "lucide-react";
 import { useProjectOptions } from "@/lib/projects/options";
 import Select from "@/components/ui/Select";
@@ -16,6 +16,7 @@ import DatePillField from "@/components/ui/DatePillField";
 import EntityTasksTab from "@/components/detail/EntityTasksTab";
 import EntityNotesTab from "@/components/detail/EntityNotesTab";
 import EntityFilesTab from "@/components/detail/EntityFilesTab";
+import EntityActivityTab from "@/components/detail/EntityActivityTab";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { getRichExtensions, RichToolbar, InlineAshPopover, submitInlineAsh } from "@/components/ui/RichEditor";
 import type { AshPromptState } from "@/components/ui/RichEditor";
@@ -142,17 +143,62 @@ function EntityCanvasEditor({
   );
 }
 
-// Orphan-target prompt — shown when a target isn't linked to a Contact or
-// Organization yet. Surfaces a one-click migration: turn the target's name
-// into either a new lead or a new organization, link it, and the canvas
-// editor takes over on the next render.
+// Orphan-target prompt — shown across the whole scrim when a target isn't yet
+// linked to a Contact or Organization. A target is allowed to exist as a bare
+// card on a pipeline; the moment you open it, this asks you to link an existing
+// Network record OR create a new one. Once linked, the entity's canvas / tasks /
+// notes / files / activity take over and the target is a thin pipeline-position
+// wrapper over that record.
+type OrphanLink = {
+  contact_id?:      string | null;
+  organization_id?: string | null;
+  contact?:         Contact | null;
+  organization?:    Organization | null;
+};
+
 function OrphanTargetPrompt({
   target, onLinked,
 }: {
   target: OutreachTarget;
-  onLinked: (next: { contact_id?: string | null; organization_id?: string | null }) => void;
+  onLinked: (next: OrphanLink) => void;
 }) {
   const [busy, setBusy] = useState<"organization" | "person" | null>(null);
+  const [linkKind, setLinkKind] = useState<"organization" | "person">("organization");
+  const [query, setQuery] = useState("");
+  const [contactResults, setContactResults] = useState<Contact[]>([]);
+  const [orgResults,     setOrgResults]     = useState<Organization[]>([]);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) { setContactResults([]); setOrgResults([]); return; }
+    const handle = setTimeout(async () => {
+      const supabase = createClient();
+      if (linkKind === "person") {
+        const { data } = await supabase.from("contacts")
+          .select("*, organization:organizations(*)")
+          .eq("archived", false)
+          .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`)
+          .limit(6);
+        setContactResults((data ?? []) as Contact[]); setOrgResults([]);
+      } else {
+        const { data } = await supabase.from("organizations")
+          .select("*").eq("archived", false).ilike("name", `%${q}%`).limit(6);
+        setOrgResults((data ?? []) as Organization[]); setContactResults([]);
+      }
+    }, 220);
+    return () => clearTimeout(handle);
+  }, [query, linkKind]);
+
+  async function linkContact(c: Contact) {
+    await createClient().from("outreach_targets")
+      .update({ contact_id: c.id, organization_id: null }).eq("id", target.id);
+    onLinked({ contact_id: c.id, organization_id: null, contact: c, organization: null });
+  }
+  async function linkOrg(o: Organization) {
+    await createClient().from("outreach_targets")
+      .update({ organization_id: o.id, contact_id: null }).eq("id", target.id);
+    onLinked({ organization_id: o.id, contact_id: null, organization: o, contact: null });
+  }
 
   async function makeOrganization() {
     if (busy) return;
@@ -167,7 +213,7 @@ function OrphanTargetPrompt({
       await supabase.from("outreach_targets")
         .update({ organization_id: org.id, contact_id: null })
         .eq("id", target.id);
-      onLinked({ organization_id: org.id, contact_id: null });
+      onLinked({ organization_id: org.id, contact_id: null, organization: org as Organization, contact: null });
     }
     setBusy(null);
   }
@@ -192,7 +238,7 @@ function OrphanTargetPrompt({
       await supabase.from("outreach_targets")
         .update({ contact_id: contact.id, organization_id: null })
         .eq("id", target.id);
-      onLinked({ contact_id: contact.id, organization_id: null });
+      onLinked({ contact_id: contact.id, organization_id: null, contact: contact as Contact, organization: null });
     }
     setBusy(null);
   }
@@ -207,9 +253,69 @@ function OrphanTargetPrompt({
           What is <span style={{ fontWeight: 600 }}>{target.name}</span>?
         </h3>
         <p style={{ fontSize: 13, color: "var(--color-grey)", lineHeight: 1.55, marginBottom: 24 }}>
-          Targets are now linked to a person or an organization in Network. Pick one and your canvas, files, notes, and activity all live there — visible from both this pipeline and the Network module.
+          A target wraps a person or an organization in Network. Link an existing record — or create a new one — and the canvas, tasks, notes, files, and activity all live there, visible from both this pipeline and the Network module.
         </p>
 
+        {/* Link an existing Network record */}
+        <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 8 }}>
+          Link an existing record
+        </p>
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          {([
+            { value: "organization" as const, icon: <Building2 size={13} strokeWidth={1.75} />, label: "Organization" },
+            { value: "person" as const,       icon: <User      size={13} strokeWidth={1.75} />, label: "Person" },
+          ]).map(({ value, icon, label }) => (
+            <button key={value} type="button" onClick={() => { setLinkKind(value); setQuery(""); }}
+              style={{
+                flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                padding: "6px 10px", borderRadius: 8, fontSize: 12, fontFamily: "inherit", cursor: "pointer",
+                background: linkKind === value ? "var(--color-cream)" : "var(--color-warm-white)",
+                border: linkKind === value ? "0.5px solid var(--color-charcoal)" : "0.5px solid var(--color-border)",
+                color: "var(--color-charcoal)",
+              }}>
+              {icon} {label}
+            </button>
+          ))}
+        </div>
+        <input
+          type="text" value={query} onChange={e => setQuery(e.target.value)}
+          placeholder={linkKind === "person" ? "Search people by name or email…" : "Search organizations…"}
+          style={{
+            width: "100%", padding: "8px 10px", fontSize: 13, borderRadius: 8,
+            background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)",
+            color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none",
+          }}
+        />
+        {query.trim() && (
+          <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 2, border: "0.5px solid var(--color-border)", borderRadius: 8, overflow: "hidden", background: "var(--color-warm-white)" }}>
+            {linkKind === "person" && contactResults.map(c => (
+              <button key={c.id} type="button" onClick={() => linkContact(c)}
+                style={{ textAlign: "left", padding: "8px 10px", fontSize: 12, background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: "var(--color-charcoal)" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                {`${c.first_name} ${c.last_name}`.trim()}
+                {c.organization?.name && <span style={{ color: "var(--color-grey)", marginLeft: 6 }}>· {c.organization.name}</span>}
+              </button>
+            ))}
+            {linkKind === "organization" && orgResults.map(o => (
+              <button key={o.id} type="button" onClick={() => linkOrg(o)}
+                style={{ textAlign: "left", padding: "8px 10px", fontSize: 12, background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: "var(--color-charcoal)" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                {o.name}
+                {(o.location ?? o.website) && <span style={{ color: "var(--color-grey)", marginLeft: 6 }}>· {o.location ?? o.website}</span>}
+              </button>
+            ))}
+            {((linkKind === "person" && contactResults.length === 0) || (linkKind === "organization" && orgResults.length === 0)) && (
+              <p style={{ fontSize: 11, color: "var(--color-grey)", padding: "8px 10px" }}>No matches.</p>
+            )}
+          </div>
+        )}
+
+        {/* Or create a new one from the target's name */}
+        <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", margin: "22px 0 8px" }}>
+          Or create a new record
+        </p>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <button type="button" onClick={makeOrganization} disabled={busy !== null}
             style={{
@@ -219,10 +325,10 @@ function OrphanTargetPrompt({
               cursor: busy ? "default" : "pointer", opacity: busy && busy !== "organization" ? 0.5 : 1,
             }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 4 }}>
-              {busy === "organization" ? "Creating…" : "An organization"}
+              {busy === "organization" ? "Creating…" : `New organization`}
             </div>
             <div style={{ fontSize: 11, color: "var(--color-grey)", lineHeight: 1.5 }}>
-              Gallery, brand, publication, fair. The workspace lives on the organization, shared across any targets that wrap it.
+              Gallery, brand, publication, fair. Workspace lives on the org, shared across any targets that wrap it.
             </div>
           </button>
           <button type="button" onClick={makeLead} disabled={busy !== null}
@@ -233,7 +339,7 @@ function OrphanTargetPrompt({
               cursor: busy ? "default" : "pointer", opacity: busy && busy !== "person" ? 0.5 : 1,
             }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 4 }}>
-              {busy === "person" ? "Creating…" : "A person"}
+              {busy === "person" ? "Creating…" : "New person"}
             </div>
             <div style={{ fontSize: 11, color: "var(--color-grey)", lineHeight: 1.5 }}>
               A specific human — curator, editor, buyer. Creates a lead in Network you can convert to a contact later.
@@ -592,7 +698,7 @@ interface Props {
   onDeleted: (targetId: string) => void;
 }
 
-type SectionTab = "canvas" | "tasks" | "people" | "notes" | "files";
+type SectionTab = "canvas" | "activity" | "tasks" | "people" | "notes" | "files";
 
 export default function TargetDetailPanel({ target: initialTarget, pipeline, onClose, onUpdated, onDeleted }: Props) {
   const supabase = createClient();
@@ -612,6 +718,45 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
   const [promoteTitle,     setPromoteTitle]     = useState("");
   const [promoteType,      setPromoteType]      = useState<string>("");
   const [promoting,        setPromoting]        = useState(false);
+
+  // The wrapped Network entity (Contact or Organization) the target points at.
+  // Every workspace tab — canvas, activity, tasks, notes, files — reads/writes
+  // this record, so the target is a thin pipeline-position wrapper rather than a
+  // separate entity. `null` means an orphan target (a bare card) that hasn't
+  // been linked yet; opening it surfaces the link-or-create prompt.
+  const entity = useMemo(() => {
+    if (target.contact_id) {
+      return {
+        kind:             "contact" as const,
+        id:               target.contact_id,
+        fkColumn:         "contact_id" as const,
+        name:             target.contact ? `${target.contact.first_name} ${target.contact.last_name}`.trim() : target.name,
+        route:            `/network?contactId=${target.contact_id}`,
+        filesTable:       "contact_files" as const,
+        activitiesTable:  "contact_activities" as const,
+        parentTable:      "contacts" as const,
+        parentBumpColumn: "last_contacted_at" as const,
+        parentCurrent:    target.contact?.last_contacted_at ?? null,
+        buildStoragePath: ({ userId, id, fileName }: { userId: string; id: string; fileName: string }) => `${userId}/${id}/${Date.now()}_${fileName}`,
+      };
+    }
+    if (target.organization_id) {
+      return {
+        kind:             "organization" as const,
+        id:               target.organization_id,
+        fkColumn:         "organization_id" as const,
+        name:             target.organization?.name ?? target.name,
+        route:            `/network?view=organizations&organizationId=${target.organization_id}`,
+        filesTable:       "organization_files" as const,
+        activitiesTable:  "organization_activities" as const,
+        parentTable:      "organizations" as const,
+        parentBumpColumn: "last_touched_at" as const,
+        parentCurrent:    target.organization?.last_touched_at ?? null,
+        buildStoragePath: ({ userId, id, fileName }: { userId: string; id: string; fileName: string }) => `${userId}/org-files/${id}/${Date.now()}_${fileName}`,
+      };
+    }
+    return null;
+  }, [target.contact_id, target.organization_id, target.contact, target.organization, target.name]);
 
   useEffect(() => {
     if (!toast) return;
@@ -680,24 +825,22 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
   const activeStages  = pipeline.stages.filter(s => !s.is_outcome);
   const outcomeStages = pipeline.stages.filter(s =>  s.is_outcome);
 
-  // Load canvas from the wrapped entity (Contact's or Organization's
-  // canvas_html). The target itself no longer carries canvas content.
+  // Reset panel chrome when a different target is opened.
   useEffect(() => {
     setTarget(initialTarget);
     setActiveTab("canvas");
     setSettingsOpen(false);
+  }, [initialTarget.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load canvas from the wrapped entity (Contact's or Organization's
+  // canvas_html). Keyed on the resolved entity so linking an orphan target
+  // re-loads the newly linked record's canvas without reopening the panel.
+  useEffect(() => {
+    if (!entity) { setCanvasHtml(null); return; }
     setCanvasHtml(undefined);
-    if (initialTarget.contact_id) {
-      supabase.from("contacts").select("canvas_html").eq("id", initialTarget.contact_id).single()
-        .then(({ data }) => setCanvasHtml(data?.canvas_html ?? null));
-    } else if (initialTarget.organization_id) {
-      supabase.from("organizations").select("canvas_html").eq("id", initialTarget.organization_id).single()
-        .then(({ data }) => setCanvasHtml(data?.canvas_html ?? null));
-    } else {
-      // Orphan target — no wrapped entity yet. No canvas to load.
-      setCanvasHtml(null);
-    }
-  }, [initialTarget.id, initialTarget.contact_id, initialTarget.organization_id]); // eslint-disable-line react-hooks/exhaustive-deps
+    supabase.from(entity.parentTable).select("canvas_html").eq("id", entity.id).single()
+      .then(({ data }) => setCanvasHtml((data as { canvas_html?: string | null } | null)?.canvas_html ?? null));
+  }, [entity?.parentTable, entity?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Hide floating Ash FAB in scrim mode
   useEffect(() => {
@@ -747,7 +890,8 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
   const stale = daysSince(target.last_touched_at);
 
   const NAV_ITEMS: { key: SectionTab; label: string; icon: React.ReactNode }[] = [
-    { key: "canvas", label: "Canvas", icon: <FileText    size={13} strokeWidth={1.75} /> },
+    { key: "canvas",   label: "Canvas",   icon: <FileText    size={13} strokeWidth={1.75} /> },
+    { key: "activity", label: "Activity", icon: <Calendar    size={13} strokeWidth={1.75} /> },
     { key: "tasks",  label: "Tasks",  icon: <CheckSquare size={13} strokeWidth={1.75} /> },
     { key: "people", label: "People", icon: <Users       size={13} strokeWidth={1.75} /> },
     { key: "notes",  label: "Notes",  icon: <FileText    size={13} strokeWidth={1.75} /> },
@@ -1017,53 +1161,74 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
             </div>
           </div>
 
-          {/* Content */}
+          {/* Content. An orphan target (no linked Contact/Organization) shows the
+              link-or-create prompt across every tab — there's no entity to attach
+              work to yet. Once linked, all tabs read/write the wrapped record so
+              it's the same data the user sees in Network. */}
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            {activeTab === "canvas" && (() => {
-              const entity = target.contact_id
-                ? { kind: "contact" as const, id: target.contact_id, name: target.contact
-                    ? `${target.contact.first_name} ${target.contact.last_name}`.trim()
-                    : target.name, route: `/network?contactId=${target.contact_id}` }
-                : target.organization_id
-                  ? { kind: "organization" as const, id: target.organization_id, name: target.organization?.name ?? target.name, route: `/network?view=organizations&organizationId=${target.organization_id}` }
-                  : null;
-              if (!entity) {
-                return <OrphanTargetPrompt
-                  target={target}
-                  onLinked={({ contact_id, organization_id }) => {
-                    const next = { ...target, contact_id: contact_id ?? null, organization_id: organization_id ?? null } as OutreachTarget;
-                    setTarget(next);
-                    onUpdated(next);
-                  }}
-                />;
-              }
-              if (canvasHtml === undefined) {
-                return <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "var(--color-grey)" }}>Loading…</div>;
-              }
-              return <EntityCanvasEditor
-                key={`${entity.kind}:${entity.id}`}
-                targetId={target.id}
-                targetName={target.name}
-                entityKind={entity.kind}
-                entityId={entity.id}
-                entityName={entity.name}
-                entityRoute={entity.route}
-                initialHtml={canvasHtml}
-              />;
-            })()}
-            {activeTab === "tasks"  && <EntityTasksTab key={target.id} fkColumn="target_id" id={target.id} idPrefix="target" />}
-            {activeTab === "people" && <StubPane heading="People at this target" body="Galleries, fairs, and publications usually involve more than one person. Link the directors, curators, and editors you're talking to here." />}
-            {activeTab === "notes"  && <EntityNotesTab key={target.id} fkColumn="target_id" id={target.id} idPrefix="target" />}
-            {activeTab === "files"  && (
-              <EntityFilesTab
-                key={target.id}
-                filesTable="target_files"
-                fkColumn="target_id"
-                id={target.id}
-                bucket="contact-files"
-                buildStoragePath={({ userId, id, fileName }) => `${userId}/target-files/${id}/${Date.now()}_${fileName}`}
-                emptyHint="Decks, attachments, references — anything you'd want at hand for this target."
+            {!entity ? (
+              <OrphanTargetPrompt
+                target={target}
+                onLinked={({ contact_id, organization_id, contact, organization }) => {
+                  const next = {
+                    ...target,
+                    contact_id:      contact_id ?? null,
+                    organization_id: organization_id ?? null,
+                    contact:         contact ?? null,
+                    organization:    organization ?? null,
+                  } as OutreachTarget;
+                  setTarget(next);
+                  onUpdated(next);
+                }}
               />
+            ) : (
+              <>
+                {activeTab === "canvas" && (
+                  canvasHtml === undefined
+                    ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "var(--color-grey)" }}>Loading…</div>
+                    : <EntityCanvasEditor
+                        key={`${entity.kind}:${entity.id}`}
+                        targetId={target.id}
+                        targetName={target.name}
+                        entityKind={entity.kind}
+                        entityId={entity.id}
+                        entityName={entity.name}
+                        entityRoute={entity.route}
+                        initialHtml={canvasHtml}
+                      />
+                )}
+                {activeTab === "activity" && (
+                  <EntityActivityTab
+                    key={entity.id}
+                    activitiesTable={entity.activitiesTable}
+                    fkColumn={entity.fkColumn}
+                    id={entity.id}
+                    onLogged={() => { void saveField({}); }}
+                    parent={{
+                      table:        entity.parentTable,
+                      bumpColumn:   entity.parentBumpColumn,
+                      currentValue: entity.parentCurrent,
+                      onBumped:     iso => setTarget(prev => entity.kind === "contact"
+                        ? { ...prev, contact: prev.contact ? { ...prev.contact, last_contacted_at: iso } : prev.contact }
+                        : { ...prev, organization: prev.organization ? { ...prev.organization, last_touched_at: iso } : prev.organization }),
+                    }}
+                  />
+                )}
+                {activeTab === "tasks"  && <EntityTasksTab key={entity.id} fkColumn={entity.fkColumn} id={entity.id} idPrefix="target" />}
+                {activeTab === "people" && <StubPane heading="People at this target" body="Galleries, fairs, and publications usually involve more than one person. Link the directors, curators, and editors you're talking to here." />}
+                {activeTab === "notes"  && <EntityNotesTab key={entity.id} fkColumn={entity.fkColumn} id={entity.id} idPrefix="target" />}
+                {activeTab === "files"  && (
+                  <EntityFilesTab
+                    key={entity.id}
+                    filesTable={entity.filesTable}
+                    fkColumn={entity.fkColumn}
+                    id={entity.id}
+                    bucket="contact-files"
+                    buildStoragePath={entity.buildStoragePath}
+                    emptyHint="Decks, attachments, references — shared with this record in Network."
+                  />
+                )}
+              </>
             )}
           </div>
         </div>
