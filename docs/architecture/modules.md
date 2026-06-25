@@ -449,7 +449,7 @@ This document is a module-by-module architecture reference for the Perennial app
 - `components/outreach/PipelineBoard.tsx` — kanban (1411 lines) via `@hello-pangea/dnd`; stage columns + outcome columns + "The Ether" parking lot; meta-stage aggregate columns for all-pipelines view; inline follow-up logger on card right-edge
 - `components/outreach/LeadsBoard.tsx` — kanban of `is_lead` contacts by `lead_stage`; LeadCard shows pipeline-membership chip (fetched from outreach_targets)
 - `components/outreach/FollowUpsBoard.tsx` — contacts not touched in >30 days
-- `components/outreach/TargetDetailPanel.tsx` — scrim/detail panel (1162 lines); canvas of wrapped entity, stage picker, linked projects/people rails, promote-to-project, convert-lead-to-contact, OrphanTargetPrompt; Tasks/Notes/Files are StubPanes
+- `components/outreach/TargetDetailPanel.tsx` — scrim/detail panel; stage picker, linked projects/people rails, promote-to-project, convert-lead-to-contact, OrphanTargetPrompt. **A target is a thin pipeline-position wrapper over a Contact/Organization**: Canvas/Activity/Tasks/Notes/Files all read+write the wrapped entity (keyed by `contact_id`/`organization_id`, NOT `target_id`), so it's the same data shown in Network. An orphan target (no linked entity) renders the link-or-create prompt across every tab. Activity uses the shared `components/detail/EntityActivityTab.tsx`
 - `components/outreach/NewPipelineModal.tsx`, `EditPipelineModal.tsx`, `NewTargetModal.tsx` — modals
 - `components/outreach/OutreachOptionsMenu.tsx` — show-outcomes / show-closed toggles (UI-only), edit/archive pipeline
 - `lib/outreach/seed-pipelines.ts` — idempotent onboarding-driven pipeline seeding (flags `seeded=true`)
@@ -473,7 +473,7 @@ This document is a module-by-module architecture reference for the Perennial app
 - `seed-pipelines` reads `profiles` onboarding answers
 
 ### Known TODOs / mocked
-- `TargetDetailPanel.tsx:628-645` + `1137-1140` — Tasks / Notes / People / Files tabs are StubPane placeholders; only Canvas is real
+- `TargetDetailPanel.tsx` — only the **People** tab is still a StubPane; Canvas/Activity/Tasks/Notes/Files are live and wired to the wrapped Contact/Organization
 - `OutreachClient.tsx:62-66` — showOutcomes/showClosed prefs are UI-only, not persisted to `profiles.outreach_preferences`
 - `OutreachClient.tsx:670` — "Suggested" pill logic relies on `seeded` flag; tied to seed templates that duplicate `NewPipelineModal` options (seed-pipelines.ts notes the duplication)
 - TargetDetailPanel toast is a local string hack ("no toast lib in the app yet")
