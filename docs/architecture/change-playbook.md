@@ -101,7 +101,8 @@ If you restyle an input primitive, these native hold-outs will **not** pick up t
 `components/scheduling/BookingClient.tsx:281` · `components/calendar/EventCard.tsx:730,916` · `components/scheduling/SchedulingLinkModal.tsx:200,255,261` · `components/network/NewContactModal.tsx:237,245` · `components/presence/PresenceClient.tsx:834,1993,2142` · `components/admin/AdminClient.tsx:196,208` · `components/outreach/TargetDetailPanel.tsx:993` · `components/outreach/NewTargetModal.tsx:298` · `app/(app)/settings/page.tsx:189` · `components/outreach/PipelineBoard.tsx:688` · `app/onboarding/OnboardingClient.tsx:355`
 
 **Native `<input type=date|datetime-local>`** (use `DatePicker`; per MEMORY `feedback_ui_polish` native date inputs are off-design):
-`components/scheduling/SchedulingLinkModal.tsx:240,273` · `components/calendar/EventCard.tsx:976` · `components/network/OrganizationDetailPanel.tsx:423` · `components/network/ContactDetailPanel.tsx:458` · `components/admin/AdminClient.tsx:200,201,203` · `components/presence/PresenceClient.tsx:2148` · `components/outreach/TargetDetailPanel.tsx:335` · `components/outreach/NewTargetModal.tsx:473`
+`components/scheduling/SchedulingLinkModal.tsx:240,273` · `components/network/OrganizationDetailPanel.tsx:423` · `components/network/ContactDetailPanel.tsx:458` · `components/admin/AdminClient.tsx:200,201,203` · `components/presence/PresenceClient.tsx:2148` · `components/outreach/TargetDetailPanel.tsx:335` · `components/outreach/NewTargetModal.tsx:473`
+Note: `EventCard.tsx` and `QuickTaskCard.tsx` were migrated to `components/calendar/ChipPickers.tsx` (PER-84).
 
 **Native `<input type=checkbox>`** (use `Checkbox`):
 `components/scheduling/SchedulingLinkModal.tsx:220,270` · `components/calendar/EventCard.tsx:628` · `components/finance/AddExpenseModal.tsx:219` · `components/finance/ManualTransactionModal.tsx:189` · `app/(app)/settings/page.tsx:2353` · `components/finance/BankingTab.tsx:2481`

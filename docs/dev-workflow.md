@@ -126,9 +126,11 @@ Legend: **[you]** = owner/dashboard/secret work · **[claude]** = Claude can do 
       == prod: 43 tables, RLS on all 43, 53 policies, 11 functions, 8 triggers; history row
       `20260616180825` recorded (so future pushes only apply new migrations).
   - **Known staging gaps (deferred):** the baseline is `--schema=public` only, so two
-    cross-schema objects that live in prod aren't on staging — the `auth.users` → 
-    `handle_new_user()` signup trigger, and the `rls_auto_enable` event trigger. Recreate
-    them on staging if/when we test real signups there.
+    cross-schema objects that live in prod aren't on staging. The `auth.users` →
+    `handle_new_user()` signup trigger is now covered by migration
+    `20260623160000_resilient_signup_profile_trigger.sql` and will be applied to staging on
+    the next `supabase db push`. The `rls_auto_enable` event trigger is still absent from
+    staging — recreate it manually if/when you test schema changes there.
 - [ ] **[you]** Seed staging with fake data (no prod user data). Claude can write a
       `supabase/seed.sql`.
 

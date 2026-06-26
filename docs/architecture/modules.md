@@ -33,6 +33,7 @@ This document is a module-by-module architecture reference for the Perennial app
 - `app/(app)/calendar/page.tsx` — server: `Promise.all` fetch of tasks/projects/contacts/integrations/opportunities + profile `practice_types`; collapses integration rows into google/outlook connection summaries
 - `components/calendar/CalendarClient.tsx` — 3942-line client; owns ALL view state, continuous-pan week & month grids, drag-create, task drag-reschedule, opportunity feed, scheduling overlay
 - `components/calendar/EventCard.tsx` — unified create + view/edit + read-only card; POST/PATCH/DELETE to events API; fetches `/calendars` for the calendar picker; LocationInput autocomplete
+- `components/calendar/ChipPickers.tsx` — shared `DateChip` and `TimeChip` Perennial-styled popover pickers (design-token themed, portaled to `<body>`, viewport-anchored); used by EventCard + QuickTaskCard. `DateChip` reuses the exported `MonthGrid` from `components/ui/DatePicker`; `TimeChip` shows a 15-min slot list with sage highlight
 - `components/calendar/CalendarSourcesPanel.tsx` — left-rail calendar list: per-account groups, visibility, color, set-default, disconnect/reconnect/refresh
 - `components/calendar/CalendarOptionsMenu.tsx` — topbar 3-dot: show weekends/declined, opens settings
 - `components/calendar/CalendarSettingsModal.tsx` — full-scrim modal; tabs are "Coming soon" stubs
@@ -72,7 +73,7 @@ This document is a module-by-module architecture reference for the Perennial app
 - Time grid uses fixed `PX_PER_HOUR=64` and day-column floor `DAY_MIN_PX=96` (line 44) — a 7-column week needs ~672px+; below that it horizontal-scrolls (`overflow-x-auto` ~2643) rather than reflowing
 - EventCard/QuickTaskCard/TaskQuickEditPopover are fixed-width panels (`PANEL_W=340`; overlays W=280/260 at ~3629/3754) positioned by viewport math — no mobile sheet
 - Month overlay & all-day overflow popovers clamp to `window.innerHeight` but use fixed pixel widths that can exceed a narrow viewport
-- `EventCard.tsx` uses native `<input type=date/time>` and `<select>` (TimeChip/DateChip/RepeatSelect/Reminder) — UI-polish backlog item
+- `EventCard.tsx` / `QuickTaskCard.tsx` date and time chips are now Perennial-styled popovers (via `ChipPickers.tsx`, PER-84); RepeatSelect/Reminder still use native `<select>` — UI-polish backlog item
 - Whole grid relies on mouse drag-create/reschedule (`mousedown/mousemove/mouseup`) with no touch handlers — drag won't work on touch devices
 
 ---
