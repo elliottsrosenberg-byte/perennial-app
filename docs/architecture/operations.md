@@ -124,7 +124,7 @@ Claude Code = the hands (*does* it). Linear never touches the codebase; the agen
 | **Linear** | Issue queue, projects, priorities, status | **No code** — external via MCP | `linear` MCP server: read/create/update issues. Team `Perennial` (PER). See [`project_linear_workflow` memory] |
 | **GitHub** | Source of truth for code; branch→PR | Git remote; **no `.github/` CI** | `gh` CLI / git. Branch per issue; PR per issue |
 | **Vercel** | Hosting; per-PR previews; prod from `main` | Vercel git integration (no `vercel.json`) | `vercel` MCP: deployments, build/runtime logs |
-| **Claude Code** | The coding agent | `AGENTS.md`, `CLAUDE.md`, `~/.claude/.../memory/` | This. Instruction layer + persistent memory + all the MCP servers above |
+| **Claude Code** | The coding agent | `AGENTS.md`, `CLAUDE.md`, `.mcp.json`, `~/.claude/.../memory/` | This. Instruction layer + persistent memory + all the MCP servers above. `.mcp.json` wires two Supabase servers: `supabase-prod` (project `nmfzmbjjqsjcqkedswfc`) for read/inspection and `supabase-staging` (project `qkasrugrgchmmwredfyf`) for write/migration work |
 
 ### Decisions in force (2026-06-17)
 

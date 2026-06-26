@@ -4,6 +4,35 @@ Maintained by the weekly documentation agent. Each entry covers the prior week's
 
 ---
 
+## 2026-06-26 (week of 2026-06-19)
+
+### Features
+- `844182b` Calendar: replace native `<input type=date|time>` chips in EventCard and QuickTaskCard with Perennial-styled popovers — new `components/calendar/ChipPickers.tsx` (`DateChip` + `TimeChip`); `DatePicker` now exports `MonthGrid` for reuse; duration-aware time edits, ghost/pan follows date changes (PER-84)
+- `3a894eb` Outreach: targets are now thin wrappers over Network records — Canvas/Activity/Tasks/Notes/Files in `TargetDetailPanel` all key off the linked `contact_id`/`organization_id`, not `target_id`; orphan targets show a link-or-create prompt; Activity tab added; "Just a name" option added to `NewTargetModal` (PER-113)
+- `3a894eb` Extract `components/detail/EntityActivityTab` (shared entity-agnostic activity tab); `ContactDetailPanel` and `OrganizationDetailPanel` migrated to it (net −284 lines); `TargetDetailPanel` uses all four shared `Entity*Tab` components
+
+### Fixes
+- `a411bd0` Auth: resilient `handle_new_user()` profile trigger — exception-guarded so a profiles insert failure can never abort the GoTrue signup transaction; trigger recreated idempotently in `supabase/migrations/20260623160000_resilient_signup_profile_trigger.sql`; `emailRedirectTo=/auth/callback` added to `app/signup` so email confirmation lands with a live session (PER-126, PER-127)
+- `0390919` CI: changelog-to-slack workflow wording — "shipped to `main`" instead of "merged to `main`" (PER-108)
+
+### Infra
+- `54001bd` MCP: split single Supabase MCP server into `supabase-prod` (`nmfzmbjjqsjcqkedswfc`) and `supabase-staging` (`qkasrugrgchmmwredfyf`) in `.mcp.json`
+
+### Docs
+- This run: `modules.md` — add `ChipPickers.tsx` to Calendar components; update Calendar mobile-issues note (date/time chips now Perennial-styled)
+- This run: `design-system.md` — update DatePicker primitive to note `MonthGrid` export; remove EventCard from native-date-input bypass list
+- This run: `change-playbook.md` — remove EventCard from native `<input type=date>` bypass list; note migration to ChipPickers
+- This run: `data-model.md` — document resilient `handle_new_user()` trigger + migration file on the `profiles` table row
+- This run: `dev-workflow.md` — update staging gap note: `handle_new_user()` trigger now covered by migration; `rls_auto_enable` still missing
+- This run: `operations.md` — document `supabase-prod`/`supabase-staging` MCP server split
+
+### Needs review
+- Migration `20260623160000_resilient_signup_profile_trigger.sql` creates the `handle_new_user()` trigger on `auth.users` (cross-schema). It must be pushed to staging via `supabase db push --linked`. Confirm the auth fix is live on prod (PR #11 merged to main).
+- `TargetDetailPanel` People tab is still a `StubPane` — the only remaining placeholder tab in the module (PER-113 commit note).
+- `rls_auto_enable` event trigger is still absent from staging schema (no migration covers it).
+
+---
+
 ## 2026-06-19 (week of 2026-06-12)
 
 ### Features

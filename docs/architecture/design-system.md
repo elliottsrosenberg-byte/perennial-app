@@ -158,7 +158,7 @@ All tokens are defined in `app/globals.css` `@theme inline` (lines ~4–88). Dar
 | **Button** | `components/ui/Button.tsx` | Primary action button. 5 variants (primary/dark/secondary/ghost/danger) × 3 sizes (sm/md/lg), `useState` hover, all inline style. | **7 files**: ProjectsClient, ImportContactsModal, ImportNoteModal, NotesClient, NewProjectModal, FinanceClient, OutreachClient. Most other screens hand-roll `<button>`. |
 | **Checkbox** | `components/ui/Checkbox.tsx` | Custom 16px square checkbox (div + inline SVG check), sage when checked. | **1 file**; native `<input type=checkbox>` used in 7 places instead. |
 | **ConfirmDialog** | `components/ui/ConfirmDialog.tsx` | Modal confirm/cancel, danger\|primary tone, Escape-to-close, scrim + scale-in. | **Widely used — 12 files.** |
-| **DatePicker** | `components/ui/DatePicker.tsx` | Custom calendar-grid date picker, click-outside close, sage selected/today states. | **9 files**; native `<input type=date/datetime-local>` still in ~10 places. |
+| **DatePicker** | `components/ui/DatePicker.tsx` | Custom calendar-grid date picker, click-outside close, sage selected/today states. Now also exports `MonthGrid` (the calendar grid sub-component) for use by `components/calendar/ChipPickers.tsx`. | **9 files** + `ChipPickers.tsx`; native `<input type=date/datetime-local>` still in ~9 places (EventCard/QuickTaskCard migrated to `ChipPickers`). |
 | **EmptyState** | `components/ui/EmptyState.tsx` | Centered empty-state: icon tile, display-font heading, body, optional numbered tips card, primary/secondary CTA, and "Ask Ash" button (dispatches `open-ash`). Re-implements button markup inline. | **Widely used — 12 files.** |
 | **FilterTabs** | `components/ui/FilterTabs.tsx` | Segmented-control tab group, sage-tinted track, optional counts. | **2 files only**; many views build their own tab rows inline. |
 | **Menu** | `components/ui/Menu.tsx` | Generic dropdown menu (items + dividers, icons, danger, badge, external link). Caller owns positioning + click-outside. | **3 files**; many kebab menus hand-rolled. |
@@ -203,7 +203,6 @@ Custom primitives exist for selects, dates, and checkboxes, but native HTML inpu
 | File:line |
 |---|
 | `components/scheduling/SchedulingLinkModal.tsx:240`, `:273` |
-| `components/calendar/EventCard.tsx:976` |
 | `components/network/OrganizationDetailPanel.tsx:423` (datetime-local) |
 | `components/network/ContactDetailPanel.tsx:458` (datetime-local) |
 | `components/admin/AdminClient.tsx:200`, `:201`, `:203` |
