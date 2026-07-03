@@ -8,8 +8,8 @@
  *     contact STATE labels ("OVERDUE", "ACTIVE").
  *   • variant="tag" — lowercase, medium, softer tint — free-form labels
  *     ("gallery", "client", "press").
- *   • variant="solid" — filled, title-case, semibold — high-emphasis state
- *     chips that read as buttons/stamps ("Draft", "Paid", "Sent").
+ *   • variant="solid" — filled uppercase (status, but a solid fill instead of a
+ *     tint) — high-emphasis state stamps ("DRAFT", "PAID", "OVERDUE").
  *
  * Colour comes from a fixed `tone` palette (never ad-hoc rgba), so every pill
  * in the product reads as one system. Tinted variants derive from a single RGB
@@ -62,6 +62,10 @@ export default function Badge({
   const t = TONES[tone];
   const isStatus = variant === "status";
   const isSolid  = variant === "solid";
+  const isTag    = variant === "tag";
+  // status + solid share the uppercase state-label typography; only the fill
+  // differs (tint vs solid). tag is the softer lowercase form.
+  const upper = isStatus || isSolid;
   // Neutral (charcoal) needs a lighter tint than the chromatic tones to stay
   // subtle; status pills sit a step stronger than tags.
   const alpha = tone === "neutral" ? 0.07 : isStatus ? 0.16 : 0.1;
@@ -71,14 +75,14 @@ export default function Badge({
       style={{
         display:        "inline-flex",
         alignItems:     "center",
-        fontSize:       isStatus ? 10 : isSolid ? 10 : 11,
-        fontWeight:     isSolid ? 600 : isStatus ? 700 : 500,
-        padding:        isStatus ? "3px 8px" : isSolid ? "3px 9px" : "3px 10px",
+        fontSize:       isTag ? 11 : 10,
+        fontWeight:     isTag ? 500 : 700,
+        padding:        isTag ? "3px 10px" : "3px 8px",
         borderRadius:   9999,
         background:     isSolid ? t.solid : `rgba(${t.rgb},${alpha})`,
         color:          isSolid ? t.solidText : t.text,
-        textTransform:  isStatus ? "uppercase" : "none",
-        letterSpacing:  isStatus ? "0.04em" : "normal",
+        textTransform:  upper ? "uppercase" : "none",
+        letterSpacing:  upper ? "0.04em" : "normal",
         lineHeight:     1,
         whiteSpace:     "nowrap",
       }}
