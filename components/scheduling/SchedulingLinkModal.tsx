@@ -6,8 +6,9 @@
 // target calendar, and an Advanced section (notice, window, buffers).
 
 import { useMemo, useState } from "react";
-import { X, Trash2, Plus } from "lucide-react";
+import { Trash2, Plus } from "lucide-react";
 import { wallClockToUtc } from "@/lib/scheduling/availability";
+import Modal from "@/components/ui/Modal";
 import type {
   SchedulingLink, SchedulingLinkKind, SchedulingLocationType,
   SchedulingAvailability, DayWindow,
@@ -171,16 +172,26 @@ export default function SchedulingLinkModal({ link, kind: createKind, calendars,
   const showDetail = ["phone", "in_person", "custom"].includes(locationType);
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-black/30 p-4 py-10" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-[#eceae3] px-6 py-4">
-          <h2 className="text-base font-semibold text-[#1f211a]">
-            {isEdit ? "Edit link" : kind === "one_off" ? "New one-off link" : "New recurring link"}
-          </h2>
-          <button onClick={onClose} className="text-[#9a9690] hover:text-[#4a4842]"><X size={18} /></button>
+    <Modal
+      onClose={onClose}
+      size="lg"
+      title={isEdit ? "Edit link" : kind === "one_off" ? "New one-off link" : "New recurring link"}
+      bodyStyle={{ padding: 0 }}
+      footer={
+        <div className="flex flex-1 items-center justify-between">
+          {isEdit
+            ? <button onClick={remove} className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-600"><Trash2 size={15} /> Delete</button>
+            : <span />}
+          <div className="flex gap-2">
+            <button onClick={onClose} className="rounded-lg px-3 py-2 text-sm text-[#4a4842] hover:bg-[#f0eee8]">Cancel</button>
+            <button onClick={save} disabled={saving} className="rounded-lg bg-[#4a5842] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+              {saving ? "Saving…" : isEdit ? "Save changes" : "Create link"}
+            </button>
+          </div>
         </div>
-
-        <div className="max-h-[70vh] space-y-4 overflow-y-auto px-6 py-5">
+      }
+    >
+        <div className="space-y-4 px-6 py-5">
           <Row label="Title">
             <input value={title} onChange={(e) => setTitle(e.target.value)} className="sl-input" />
           </Row>
@@ -290,26 +301,13 @@ export default function SchedulingLinkModal({ link, kind: createKind, calendars,
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
 
-        <div className="flex items-center justify-between border-t border-[#eceae3] px-6 py-4">
-          {isEdit
-            ? <button onClick={remove} className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-600"><Trash2 size={15} /> Delete</button>
-            : <span />}
-          <div className="flex gap-2">
-            <button onClick={onClose} className="rounded-lg px-3 py-2 text-sm text-[#4a4842] hover:bg-[#f0eee8]">Cancel</button>
-            <button onClick={save} disabled={saving} className="rounded-lg bg-[#4a5842] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-              {saving ? "Saving…" : isEdit ? "Save changes" : "Create link"}
-            </button>
-          </div>
-        </div>
-      </div>
-
       <style>{`
         .sl-input { width:100%; border:1px solid #e4e2db; border-radius:8px; padding:7px 10px; font-size:14px; color:#1f211a; background:#fff; outline:none; }
         .sl-input:focus { border-color:#4a5842; box-shadow:0 0 0 3px #4a584222; }
         .sl-time { border:1px solid #e4e2db; border-radius:7px; padding:5px 8px; font-size:13px; color:#1f211a; background:#fff; outline:none; }
         .sl-time:focus { border-color:#4a5842; }
       `}</style>
-    </div>
+    </Modal>
   );
 }
 
