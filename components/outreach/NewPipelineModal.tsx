@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { OutreachPipeline, PipelineStage, MetaStage } from "@/types/database";
 import { X, GripVertical, Plus } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
+import Modal from "@/components/ui/Modal";
 
 interface Props {
   onClose: () => void;
@@ -241,26 +242,29 @@ export default function NewPipelineModal({ onClose, onCreated }: Props) {
   const outcomeStages = stages.filter(s =>  s.is_outcome);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(31,33,26,0.5)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
-        style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 shrink-0"
-          style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-          <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>New pipeline</h2>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg"
-            style={{ color: "var(--color-grey)" }}
+    <Modal
+      onClose={onClose}
+      size="md"
+      title="New pipeline"
+      bodyStyle={{ padding: 0 }}
+      footer={
+        <>
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-[13px] rounded-lg transition-colors"
+            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-            <X size={14} />
+            Cancel
           </button>
-        </div>
-
-        {/* Body */}
-        <div className="overflow-y-auto" style={{ flex: 1 }}>
+          <button onClick={handleSubmit as unknown as React.MouseEventHandler}
+            disabled={loading || !name.trim() || activeStages.length === 0}
+            className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50"
+            style={{ background: color }}>
+            {loading ? "Creating…" : "Create pipeline"}
+          </button>
+        </>
+      }
+    >
           <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
 
             {/* Name */}
@@ -447,27 +451,7 @@ export default function NewPipelineModal({ onClose, onCreated }: Props) {
 
             {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
           </form>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-6 py-4 shrink-0"
-          style={{ borderTop: "0.5px solid var(--color-border)" }}>
-          <button type="button" onClick={onClose}
-            className="px-4 py-2 text-[13px] rounded-lg transition-colors"
-            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-            Cancel
-          </button>
-          <button onClick={handleSubmit as unknown as React.MouseEventHandler}
-            disabled={loading || !name.trim() || activeStages.length === 0}
-            className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50"
-            style={{ background: color }}>
-            {loading ? "Creating…" : "Create pipeline"}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
