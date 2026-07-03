@@ -10,6 +10,7 @@ import Menu from "@/components/ui/Menu";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
+import Badge, { type BadgeTone } from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import { formatInvoiceNumber, paymentMethodLabel } from "@/lib/invoices/format";
 import { buildInvoiceEmailHtml } from "@/lib/invoices/email-template";
@@ -242,6 +243,11 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }>
   paid:    { bg: "var(--color-sage)",        color: "white",   label: "Paid"    },
   overdue: { bg: "var(--color-red-orange)",  color: "white",   label: "Overdue" },
   voided:  { bg: "var(--color-grey)",        color: "white",   label: "Void"    },
+};
+
+// Status → Badge tone (solid variant). The menu swatch still reads STATUS_STYLE.
+const STATUS_TONE: Record<string, BadgeTone> = {
+  draft: "blue", saved: "blue", sent: "amber", paid: "sage", overdue: "red", voided: "neutral",
 };
 
 // Left-stripe color per status for the list rows.
@@ -966,15 +972,8 @@ export default function InvoicesTab({
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] flex-1 truncate" style={{ color: "var(--color-grey)" }}>{inv.project?.title ?? ""}</span>
                     {showDate && <span className="text-[10px]" style={{ color: "var(--color-grey)" }}>{dateLabel} {fmtDate(dateVal)}</span>}
-                    {overdue && (
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
-                        style={{ background: STATUS_STYLE.overdue.bg, color: STATUS_STYLE.overdue.color }}>
-                        Overdue
-                      </span>
-                    )}
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide" style={{ background: st.bg, color: st.color }}>
-                      {st.label}
-                    </span>
+                    {overdue && <Badge tone="red" variant="solid">Overdue</Badge>}
+                    <Badge tone={STATUS_TONE[inv.status] ?? "blue"} variant="solid">{st.label}</Badge>
                   </div>
                 </div>,
               );
@@ -1094,10 +1093,7 @@ export default function InvoicesTab({
               const statusKey = overdue ? "overdue" : selectedInvoice.status;
               const st = STATUS_STYLE[statusKey] ?? STATUS_STYLE.draft;
               return (
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shrink-0"
-                  style={{ background: st.bg, color: st.color }}>
-                  {st.label}
-                </span>
+                <Badge tone={STATUS_TONE[statusKey] ?? "blue"} variant="solid">{st.label}</Badge>
               );
             })()}
 
