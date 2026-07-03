@@ -498,7 +498,7 @@ export default function AshPanel({
                       textAlign: "left", fontFamily: "inherit", lineHeight: 1.4,
                       transition: "background 0.1s ease",
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(155,163,122,0.16)")}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.16)")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-ash-tint)")}
                   >
                     {s}
