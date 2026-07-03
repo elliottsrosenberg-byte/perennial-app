@@ -97,6 +97,7 @@ export default async function InvoicePrintPage({ params, searchParams }: { param
 
         /* Powered-by tag at the foot of the document — screen + PDF. */
         .pp-footer { margin-top: 44px; padding-top: 20px; border-top: 1px solid #eff0e7; text-align: center; font-size: 11px; color: #9a9690; }
+        .pp-footer a { color: inherit; text-decoration: none; }
 
         @media print {
           .no-print { display: none !important; }
@@ -309,7 +310,7 @@ export default async function InvoicePrintPage({ params, searchParams }: { param
           </div>
         )}
 
-        <div className="pp-footer">Powered by Perennial</div>
+        <div className="pp-footer"><a href="https://app.perennial.design" target="_blank" rel="noopener noreferrer">Powered by Perennial</a></div>
       </div>
     </>
   );
