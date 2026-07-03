@@ -55,10 +55,10 @@ function invoiceTotal(inv: Invoice) {
   return (inv.line_items ?? []).reduce((s, li) => s + Number(li.amount), 0);
 }
 
-// Draft & saved blue, sent yellow, paid green, voided grey, overdue red.
+// Draft & saved orange, sent yellow, paid green, voided grey, overdue red.
 const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  draft:   { bg: "rgba(var(--color-blue-rgb),0.12)",  color: "var(--color-blue)",                 label: "Draft"   },
-  saved:   { bg: "rgba(var(--color-blue-rgb),0.12)",  color: "var(--color-blue)",                 label: "Saved"   },
+  draft:   { bg: "rgba(var(--color-orange-rgb),0.12)", color: "var(--color-orange-deep)",         label: "Draft"   },
+  saved:   { bg: "rgba(var(--color-orange-rgb),0.12)", color: "var(--color-orange-deep)",         label: "Saved"   },
   sent:    { bg: "rgba(224,168,46,0.18)", color: "#9a6a00",                 label: "Sent"    },
   paid:    { bg: "rgba(var(--color-green-deep-rgb),0.1)",   color: "var(--color-sage)",       label: "Paid"    },
   overdue: { bg: "rgba(var(--color-red-rgb),0.1)",   color: "var(--color-red-orange)", label: "Overdue" },
