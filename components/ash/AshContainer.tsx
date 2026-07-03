@@ -67,6 +67,10 @@ export default function AshContainer() {
     };
   }, []);
 
+  // Home is the full-page canvas with its own inline Ash surface — the global
+  // floating button + right panel are hidden there (PER-70).
+  if (pathname === "/") return null;
+
   return (
     <>
       {/* Floating Ash button — fades out when panel is open */}

@@ -137,6 +137,7 @@ export default function CanvasObjectContent({
     case "sticky": {
       const c = object.content as StickyContent;
       const sw = STICKY_PALETTE[c.color] ?? STICKY_PALETTE.amber;
+      const stickyFont = c.fontSize ?? 13;
       return (
         <div
           style={{
@@ -176,7 +177,7 @@ export default function CanvasObjectContent({
                 value={c.text}
                 placeholder="Write a note…"
                 color="var(--color-text-primary)"
-                fontSize={13}
+                fontSize={stickyFont}
                 onChange={onText}
                 onEndEdit={onEndEdit}
               />
@@ -185,7 +186,7 @@ export default function CanvasObjectContent({
                 style={{
                   color: c.text ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
                   fontFamily: FONT,
-                  fontSize: 13,
+                  fontSize: stickyFont,
                   lineHeight: 1.4,
                   whiteSpace: "pre-wrap",
                   wordBreak: "break-word",

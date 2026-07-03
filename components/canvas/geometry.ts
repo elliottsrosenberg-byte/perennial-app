@@ -47,12 +47,49 @@ const DEFAULTS: Record<
 
 let seq = 0;
 /** Client-side id. crypto.randomUUID where available; falls back for old envs. */
-function newId(): string {
+export function newId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
   }
   seq += 1;
   return `tmp-${Date.now()}-${seq}`;
+}
+
+/** Axis-aligned bounding box of an object (rotation ignored — good enough for
+ *  marquee hit-testing). */
+export function objectAABB(o: { x: number; y: number; width: number; height: number }) {
+  return { left: o.x, top: o.y, right: o.x + o.width, bottom: o.y + o.height };
+}
+
+/** Does rect A fully contain rect B? */
+export function rectContains(
+  a: { left: number; top: number; right: number; bottom: number },
+  b: { left: number; top: number; right: number; bottom: number },
+) {
+  return a.left <= b.left && a.top <= b.top && a.right >= b.right && a.bottom >= b.bottom;
+}
+
+/** Do rects A and B overlap at all? */
+export function rectIntersects(
+  a: { left: number; top: number; right: number; bottom: number },
+  b: { left: number; top: number; right: number; bottom: number },
+) {
+  return a.left <= b.right && a.right >= b.left && a.top <= b.bottom && a.bottom >= b.top;
+}
+
+/** A normalized world-space rect from two corner points. */
+export function normRect(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+) {
+  return {
+    left: Math.min(x0, x1),
+    top: Math.min(y0, y1),
+    right: Math.max(x0, x1),
+    bottom: Math.max(y0, y1),
+  };
 }
 
 export interface CreateObjectOptions {
@@ -87,5 +124,17 @@ export function createObject(
     content: { ...d.content, ...(opts.content ?? {}) } as CanvasContent,
     refType: opts.refType ?? null,
     refId: opts.refId ?? null,
+  };
+}
+
+/** Deep-ish copy of an object with a fresh id, offset by (dx, dy). */
+export function cloneObject(o: CanvasObject, dx: number, dy: number, zIndex: number): CanvasObject {
+  return {
+    ...o,
+    id: newId(),
+    x: o.x + dx,
+    y: o.y + dy,
+    zIndex,
+    content: { ...o.content },
   };
 }

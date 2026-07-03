@@ -10,6 +10,9 @@ import type {
 
 export type { CanvasObjectType, CanvasRefType };
 
+/** Active canvas tool. */
+export type CanvasTool = "select" | "hand" | "sticky" | "text" | "shape" | "pen";
+
 /** Sticky/shape colour keys — the app's 10-colour palette (see palette.ts). */
 export type StickyColor =
   | "sage"
@@ -34,6 +37,7 @@ export interface StickyContent {
   text: string;
   color: StickyColor;
   tag?: string;
+  fontSize?: number;
 }
 export interface ShapeContent {
   shape: "rect" | "ellipse";
