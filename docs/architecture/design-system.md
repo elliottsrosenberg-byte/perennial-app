@@ -50,6 +50,15 @@ All tokens are defined in `app/globals.css` `@theme inline` (lines ~4–88). Dar
 | `--color-off-white` | `#fffefc` |
 | `--color-cream` | `#eff0e7` |
 | `--color-grey` | `#9a9690` |
+| `--color-green-deep` | `#3d6b4f` |
+
+**RGB tint-base helpers** (for `rgba(var(--color-X-rgb), α)` tints):
+
+| Token | RGB triplet |
+|---|---|
+| `--color-sage-rgb` | `155,163,122` |
+| `--color-grey-rgb` | `154,150,144` |
+| `--color-green-deep-rgb` | `61,107,79` |
 
 ### Status / semantic colors
 
@@ -154,10 +163,12 @@ All tokens are defined in `app/globals.css` `@theme inline` (lines ~4–88). Dar
 
 | Name | File | Purpose | Used by |
 |---|---|---|---|
-| **Badge** | `components/ui/Badge.tsx` | Pill/tag, 8 color variants (success, in-progress, warning, alert, neutral, info, sage, amber); 10px bold uppercase, full-radius. | **DEAD — 0 importers.** Meanwhile ~29 files hand-roll their own pill/chip markup inline. |
+| **Badge** | `components/ui/Badge.tsx` | Pill/tag; three variants: `status` (10px bold uppercase, state labels), `tag` (lowercase/medium, softer tint), `solid` (filled, high-emphasis). 11 tones: `sage` + 10 palette colors (green/grey/brown/orange/yellow/olive/blue/purple/rose/red) via `lib/ui/palette.ts`. | **2 importers**: `InvoicesTab.tsx` (solid variant for invoice status pills), `app/design/page.tsx`. ~29 files still hand-roll pill/chip markup inline. |
 | **Button** | `components/ui/Button.tsx` | Primary action button. 5 variants (primary/dark/secondary/ghost/danger) × 3 sizes (sm/md/lg), `useState` hover, all inline style. | **7 files**: ProjectsClient, ImportContactsModal, ImportNoteModal, NotesClient, NewProjectModal, FinanceClient, OutreachClient. Most other screens hand-roll `<button>`. |
 | **Checkbox** | `components/ui/Checkbox.tsx` | Custom 16px square checkbox (div + inline SVG check), sage when checked. | **1 file**; native `<input type=checkbox>` used in 7 places instead. |
-| **ConfirmDialog** | `components/ui/ConfirmDialog.tsx` | Modal confirm/cancel, danger\|primary tone, Escape-to-close, scrim + scale-in. | **Widely used — 12 files.** |
+| **Card** | `components/ui/Card.tsx` | Surface container. 3 variants (`raised`/`flat`/`sunken`), 4 padding sizes (`none`/`sm`/`md`/`lg`), `interactive` prop adds hover lift. Radius `--radius-lg` (12px). | **1 file**: `app/design/page.tsx` only — new primitive, not yet adopted in feature screens. |
+| **ConfirmDialog** | `components/ui/ConfirmDialog.tsx` | Modal confirm/cancel, danger\|primary tone, Escape-to-close, scrim + scale-in. Sits on `Modal` shell in bare mode. | **Widely used — 12 files.** |
+| **Modal** | `components/ui/Modal.tsx` | Shared dialog shell. 4 sizes (`sm`/`md`/`lg`/`xl`; widths 380/460/512/640px). Props: `onClose`, `open?`, `title?` (convenience header + close button), `header?` (custom), `footer?`, `children`. | **~25 importers** — the most widely adopted new primitive this week. `ConfirmDialog` sits on it in bare mode. |
 | **DatePicker** | `components/ui/DatePicker.tsx` | Custom calendar-grid date picker, click-outside close, sage selected/today states. Now also exports `MonthGrid` (the calendar grid sub-component) for use by `components/calendar/ChipPickers.tsx`. | **9 files** + `ChipPickers.tsx`; native `<input type=date/datetime-local>` still in ~9 places (EventCard/QuickTaskCard migrated to `ChipPickers`). |
 | **EmptyState** | `components/ui/EmptyState.tsx` | Centered empty-state: icon tile, display-font heading, body, optional numbered tips card, primary/secondary CTA, and "Ask Ash" button (dispatches `open-ash`). Re-implements button markup inline. | **Widely used — 12 files.** |
 | **FilterTabs** | `components/ui/FilterTabs.tsx` | Segmented-control tab group, sage-tinted track, optional counts. | **2 files only**; many views build their own tab rows inline. |
@@ -173,8 +184,9 @@ All tokens are defined in `app/globals.css` `@theme inline` (lines ~4–88). Dar
 
 ### Adoption summary
 
-- **Well-shared:** the rich-text editor extensions + inline-Ash path (every canvas routes through `getRichExtensions`/`submitInlineAsh`), `ConfirmDialog`, `EmptyState`, `DatePicker` (where modules opt in).
-- **Under-adopted (exist but bypassed):** `FilterTabs` (2/~10 list clients), `Select`/`Menu` (bespoke dropdowns coexist), `DatePicker` (panels ship custom calendars), `Badge` (**0 importers — dead**).
+- **Well-shared:** the rich-text editor extensions + inline-Ash path (every canvas routes through `getRichExtensions`/`submitInlineAsh`), `ConfirmDialog`, `EmptyState`, `DatePicker` (where modules opt in), `Modal` (~25 importers — the dialog shell is now unified).
+- **Under-adopted (exist but bypassed):** `FilterTabs` (2/~10 list clients), `Select`/`Menu` (bespoke dropdowns coexist), `DatePicker` (panels ship custom calendars), `Badge` (**2 importers; ~29 hand-rolled sites remain**).
+- **New, limited adoption:** `Card` (1 importer — design showcase only, not yet in feature screens).
 
 ---
 
@@ -377,7 +389,7 @@ Same `var(--color-surface-raised)` + `0.5px solid var(--color-border)` + `border
 |---|
 | `components/projects/ProjectDetailPanel.tsx:12` `chipBg`/`optionTagStyle` |
 | `components/network/ContactDetailPanel.tsx:16` `TAG_COLORS`/`tagStyle`, `:31` `STATUS_CONFIG`, `:38` `LEAD_STAGE_CONFIG` |
-| `components/ui/Badge.tsx` — **0 importers (dead)** |
+| `components/ui/Badge.tsx` — **2 importers** (InvoicesTab solid variant, design showcase); ~29 hand-rolled sites remain |
 
 Pill/chip rendering is hand-styled inline per module with per-module color maps; `Badge` has zero importers. → Either adopt `Badge` for chips or delete it. A shared `chipStyle(color)` util would centralize the `rgba(...,0.10–0.18)` soft-bg convention used everywhere.
 
@@ -477,7 +489,7 @@ Each canvas editor wraps the shared `submitInlineAsh`/`InlineAshPopover`; only t
 4. **Entity-agnostic `<NotesTab>`/`<TasksTab>`/`<ActivityTab>`** taking a `{column, id}` link descriptor (§7.5).
 5. **Consolidate task pickers** → one `<TaskDuePicker>`, one `<PriorityPicker>`, one `dueChip(due)` util, routed through `DatePicker` (§7.6).
 6. **Adopt under-used primitives** — route bespoke dropdowns through `Select`/`Menu`, migrate custom calendars to `DatePicker`, standardize filter rows on `FilterTabs` (§7.7, §7.8, §7.13).
-7. **Resolve `Badge`** — adopt for chips (back it with a `chipStyle(color)` util) or delete (§7.9).
+7. **Expand `Badge` adoption** — Badge is active (3 variants, 11 tones, 2 importers) but ~29 hand-rolled chip/pill sites remain. Continue adopting `Badge` for status pills and tag chips; add a shared `chipStyle(color)` util for the soft `rgba` background convention (§7.9).
 8. **Extract `lib/format/date.ts`** for `timeAgo`/`fmtDate`/`fmtTime` (§7.11).
 9. **Replace remaining native `<input type=date>`/`<select>`** with `DatePicker`/`Select` per the `feedback_ui_polish` backlog (§4).
 10. **Leave the inline-Ash path as-is** — it is correctly centralized in `RichEditor.submitInlineAsh` (§8).
