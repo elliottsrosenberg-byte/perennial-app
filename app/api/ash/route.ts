@@ -82,7 +82,9 @@ export async function POST(req: Request) {
           const tools = [
             ...(ANTHROPIC_TOOLS as Anthropic.Tool[]),
             {
-              type: "web_search_20250305",
+              // Dynamic-filtering web search — supported on Sonnet 5; filters
+              // results before they hit the context window. No beta header needed.
+              type: "web_search_20260209",
               name: "web_search",
               max_uses: 5,
             } as unknown as Anthropic.Tool,
@@ -91,8 +93,13 @@ export async function POST(req: Request) {
           // Max 5 agentic turns to prevent runaway loops
           for (let turn = 0; turn < 5; turn++) {
             const stream = anthropic.messages.stream({
-              model:      "claude-sonnet-4-6",
+              model:      "claude-sonnet-5",
               max_tokens: 2048,
+              // Sonnet 5 runs adaptive thinking when `thinking` is omitted; keep
+              // Ash snappy by leaving it off. To trade latency for deeper reasoning,
+              // switch to { type: "adaptive" } and raise max_tokens (~4096) so the
+              // answer isn't truncated by thinking spend.
+              thinking:   { type: "disabled" },
               system:     systemBlocks as Anthropic.TextBlockParam[],
               tools,
               messages,
