@@ -86,6 +86,7 @@ const PROVIDER_DISPLAY: Record<string, string> = {
   mailchimp:        "Mailchimp",
   beehiiv:          "Beehiiv",
   substack:         "Substack",
+  plaid:            "Bank account",
   teller:           "Bank account",
   stripe:           "Stripe",
 };
@@ -1374,9 +1375,9 @@ export default function SettingsPage() {
                       href: "/api/auth/google-analytics",
                     },
                     {
-                      provider: "teller",
+                      provider: "plaid",
                       name: "Bank account",
-                      desc: "Connect your bank to see transactions and cash flow in Finance. Powered by Teller.",
+                      desc: "Connect your bank to see transactions and cash flow in Finance. Powered by Plaid.",
                       iconBg: "rgba(var(--color-blue-rgb),0.08)",
                       href: "/finance",
                     },

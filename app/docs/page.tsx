@@ -498,7 +498,7 @@ export default function DocsPage() {
             {[
               ["Track every project from sketch to invoice", "Projects, tasks, time, materials and linked contacts all live in one place. Drag cards between status columns; everything saves as you go."],
               ["Manage relationships like a real CRM", "Contacts, leads, and organizations with tags, last-contacted dates, activity feed, and a separate Outreach pipeline for galleries, press and clients."],
-              ["Run your finances", "Time tracking with a sidebar timer, expenses by category, invoices with PDF export and email sending, and a banking tab via Teller for transaction import."],
+              ["Run your finances", "Time tracking with a sidebar timer, expenses by category, invoices with PDF export and email sending, and a banking tab via Plaid for transaction import."],
               ["Write and share notes", "Rich-text editor, pin notes, link to projects, and generate a public share link for any note."],
               ["Get a working partner, not a chatbot", "Ash sees your live data and can read or modify it on your behalf — searching projects, logging time, creating contacts, drafting reminders."],
             ].map(([title, detail]) => (
@@ -545,7 +545,7 @@ export default function DocsPage() {
             </p>
             <Card>
               <p style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.7 }}>
-                <strong>Most useful first connections:</strong> Google Calendar (so Perennial&apos;s Calendar module shows your real events), Google Contacts (one-click contact import), and your bank via Teller (so the Banking tab in Finance shows real transactions).
+                <strong>Most useful first connections:</strong> Google Calendar (so Perennial&apos;s Calendar module shows your real events), Google Contacts (one-click contact import), and your bank via Plaid (so the Banking tab in Finance shows real transactions).
               </p>
             </Card>
           </Sub>
@@ -612,7 +612,7 @@ export default function DocsPage() {
             <ModuleRow name="Network"   status="live"     ash="live"     features={["Contacts · Leads · Organizations","Search & tags","Activity feed","Organization linking","Bulk actions","Cross-module finance"]} />
             <ModuleRow name="Outreach"  status="live"     ash="live"     features={["Pipeline board","Leads board","Follow-ups board","Stage tracking","Per-target activity"]} />
             <ModuleRow name="Notes"     status="live"     ash="live"     features={["Rich editor","Pin","Project link","Public share link","Markdown export"]} />
-            <ModuleRow name="Finance"   status="live"     ash="live"     features={["Overview","Time tracking + timer","Expenses","Invoices + PDF","Banking via Teller","Send invoice email"]} />
+            <ModuleRow name="Finance"   status="live"     ash="live"     features={["Overview","Time tracking + timer","Expenses","Invoices + PDF","Banking via Plaid","Send invoice email"]} />
             <ModuleRow name="Calendar"  status="live"     ash="progress" features={["Week view","Tasks on calendar","Project deadlines","Google Calendar sync"]} />
             <ModuleRow name="Presence"  status="live"     ash="progress" features={["Opportunities feed","Saved / dismissed","GA4 stats","Instagram stats"]} />
             <ModuleRow name="Resources" status="progress" ash="planned"  features={["Category nav","Studio brand assets","Health bar","Storage uploads — coming"]} />
@@ -762,13 +762,13 @@ export default function DocsPage() {
               body: "Build an invoice from scratch or convert logged time + expenses into one. Each invoice has a number (auto-incremented), line items, total, due date, status, and a unique print URL. Export as PDF or send by email (once your email integration is set up).",
               bullets: [
                 "Sending: connect your sending domain in Settings → Email. Right now invoice emails ship from a default address until your studio domain is verified.",
-                "Mark invoices Paid manually or via Teller transaction matching once banking is wired up.",
+                "Mark invoices Paid manually or via Plaid transaction matching once banking is wired up.",
                 "Statuses: draft, sent, paid, overdue. Overdue is automatic based on due date.",
               ],
             },
             {
               heading: "Banking",
-              body: "Connect a real bank account through Teller. Imported transactions show in the Banking tab and can be categorized and tagged to projects. The connection uses Teller's encrypted credential flow — Perennial never sees your bank password.",
+              body: "Connect a real bank account through Plaid. Imported transactions show in the Banking tab and can be categorized and tagged to projects. The connection uses Plaid Link's secure flow — Perennial never sees your bank password.",
             },
           ]}
         />
@@ -1169,9 +1169,9 @@ export default function DocsPage() {
               scopes="App-specific password"
               purpose="Calendar + contact sync for iCloud users."
               where="Settings → Integrations" />
-            <IntegrationRow name="Teller · Banking"             status="live"
+            <IntegrationRow name="Plaid · Banking"             status="live"
               scopes="Transactions, balances (read-only)"
-              purpose="Pull real transactions into the Banking tab of Finance. Teller's encrypted flow — Perennial never sees your bank password."
+              purpose="Pull real transactions into the Banking tab of Finance. Plaid Link's secure flow — Perennial never sees your bank password."
               where="Finance → Banking" />
             <IntegrationRow name="Instagram"                    status="live"
               scopes="Basic Display API"
@@ -1245,12 +1245,12 @@ export default function DocsPage() {
         </Section>
 
         {/* ════════════════════════ INT BANKING ════════════════════════ */}
-        <Section id="int-banking" title="Banking · Teller"
+        <Section id="int-banking" title="Banking · Plaid"
           subtitle="Connect a real US bank account and Perennial pulls transactions into the Banking tab of Finance.">
 
           <Sub title="How it works">
             <p style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.7 }}>
-              Teller is a banking API used by Perennial. It runs an encrypted credential flow inside an iframe — Perennial never sees your bank login. Teller exchanges your credentials for a long-lived account token, which it stores; we only get read-only access to transactions and balances for the account(s) you select.
+              Plaid is a banking API used by Perennial. Plaid Link runs a secure sign-in flow in your browser — Perennial never sees your bank login. Plaid exchanges your credentials for a long-lived access token, which it stores; we only get read-only access to transactions and balances for the account(s) you select.
             </p>
           </Sub>
 
@@ -1261,7 +1261,7 @@ export default function DocsPage() {
               <li><span style={{ color: "var(--color-sage)" }}>·</span> Pending vs. posted status</li>
             </ul>
             <p style={{ fontSize: 12, color: "var(--color-text-tertiary)", marginTop: 10, fontStyle: "italic" }}>
-              Beta is on Teller&apos;s development environment — supported banks are limited. Production environment switch happens immediately post-beta.
+              Beta is on Plaid&apos;s sandbox/development environment — supported banks are limited. Production environment switch happens immediately post-beta.
             </p>
           </Sub>
         </Section>
@@ -1353,7 +1353,7 @@ export default function DocsPage() {
             {[
               "Google OAuth (Calendar, Contacts, Gmail in testing)",
               "Microsoft OAuth (Mail, Calendar, Contacts)",
-              "Teller banking integration",
+              "Plaid banking integration",
               "Instagram Basic Display",
               "Mailchimp + Beehiiv newsletter stats",
               "GA4 + Plausible website traffic",
@@ -1559,7 +1559,7 @@ export default function DocsPage() {
                 { label: "Auth",          value: "Supabase Auth (email + OAuth)" },
                 { label: "Hosting",       value: "Vercel · app.perennial.design" },
                 { label: "AI model",      value: "Claude Sonnet 4.6" },
-                { label: "Banking",       value: "Teller" },
+                { label: "Banking",       value: "Plaid" },
                 { label: "Email",         value: "Resend" },
               ].map((item) => (
                 <Card key={item.label} style={{ padding: "12px 14px" }}>
@@ -1604,7 +1604,7 @@ export default function DocsPage() {
               <li><span style={{ color: "var(--color-sage)" }}>·</span> Row-Level Security on every table — a user can only read or modify their own rows</li>
               <li><span style={{ color: "var(--color-sage)" }}>·</span> All traffic over TLS</li>
               <li><span style={{ color: "var(--color-sage)" }}>·</span> Encrypted at rest in Supabase</li>
-              <li><span style={{ color: "var(--color-sage)" }}>·</span> Bank credentials never touch our servers (Teller iframe)</li>
+              <li><span style={{ color: "var(--color-sage)" }}>·</span> Bank credentials never touch our servers (Plaid Link)</li>
               <li><span style={{ color: "var(--color-sage)" }}>·</span> OAuth tokens stored in an encrypted vault, never exposed to the client</li>
               <li><span style={{ color: "var(--color-sage)" }}>·</span> Anthropic API terms: no training on your data, no human review absent legal compulsion</li>
             </ul>
