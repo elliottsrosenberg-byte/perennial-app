@@ -94,6 +94,7 @@ export default function ProviderIcon({ provider, size = 20, color }: ProviderIco
     case "google_analytics":  return <SiGoogleanalytics   {...props} />;
     case "google_calendar":   return <SiGooglecalendar    {...props} />;
 
+    case "plaid":
     case "teller":
     case "bank":
       return (
