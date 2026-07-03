@@ -266,7 +266,7 @@ export default async function PublicInvoicePage({
                   <div className="pi-studio-line">
                     {[studioAddress || fallbackLocation, studioPhone].filter(Boolean).join("\n")}
                   </div>
-                  {studioEin && <div className="pi-studio-line" style={{ marginTop: 6, color: "#9a9690", fontSize: 11 }}>EIN: {studioEin}</div>}
+                  {studioEin && <div className="pi-studio-line" style={{ marginTop: 6, color: "var(--color-text-tertiary)", fontSize: 11 }}>EIN: {studioEin}</div>}
                 </div>
                 <div>
                   <div className="pi-inv-label">Invoice</div>
@@ -293,11 +293,11 @@ export default async function PublicInvoicePage({
                   {inv.due_at && (
                     <div className="pi-date-row">
                       <span className="pi-date-key">Due</span>
-                      <span className="pi-date-val" style={{ color: isOverdue ? "#dc3e0d" : undefined }}>{fmtDate(inv.due_at)}</span>
+                      <span className="pi-date-val" style={{ color: isOverdue ? "var(--color-red-orange)" : undefined }}>{fmtDate(inv.due_at)}</span>
                     </div>
                   )}
                   {inv.payment_terms && <div className="pi-date-row"><span className="pi-date-key">Terms</span><span className="pi-date-val">{inv.payment_terms}</span></div>}
-                  {inv.paid_at && <div className="pi-date-row"><span className="pi-date-key">Paid</span><span className="pi-date-val" style={{ color: "#3d6b4f" }}>{fmtDate(inv.paid_at)}</span></div>}
+                  {inv.paid_at && <div className="pi-date-row"><span className="pi-date-key">Paid</span><span className="pi-date-val" style={{ color: "var(--color-green-deep)" }}>{fmtDate(inv.paid_at)}</span></div>}
                 </div>
               </div>
 
@@ -314,7 +314,7 @@ export default async function PublicInvoicePage({
                 </thead>
                 <tbody>
                   {(inv.line_items ?? []).length === 0 ? (
-                    <tr><td colSpan={4} style={{ color: "#9a9690", fontStyle: "italic" }}>No line items.</td></tr>
+                    <tr><td colSpan={4} style={{ color: "var(--color-text-tertiary)", fontStyle: "italic" }}>No line items.</td></tr>
                   ) : (inv.line_items ?? []).map((li) => (
                     <tr key={li.id}>
                       <td>{li.description}</td>
@@ -336,7 +336,7 @@ export default async function PublicInvoicePage({
               {inv.notes && (
                 <div style={{ marginTop: 28, paddingTop: 20, borderTop: "1px solid #eff0e7" }}>
                   <div className="pi-meta-label">Notes</div>
-                  <p style={{ fontSize: 12, color: "#6b6860", lineHeight: 1.6 }}>{inv.notes}</p>
+                  <p style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.6 }}>{inv.notes}</p>
                 </div>
               )}
 
@@ -346,7 +346,7 @@ export default async function PublicInvoicePage({
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
                     {(inv.attachments ?? []).map((a) => (
                       <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer"
-                        style={{ fontSize: 12, color: "#3d6b4f", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        style={{ fontSize: 12, color: "var(--color-green-deep)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}>
                         <span aria-hidden>📎</span> {a.name}
                       </a>
                     ))}
@@ -373,9 +373,9 @@ export default async function PublicInvoicePage({
                 {inv.paid_at && <div className="pi-pay-meta">on {fmtDate(inv.paid_at)}</div>}
               </div>
             ) : inv.status === "voided" ? (
-              <div className="pi-pay" style={{ background: "#eff0e7", border: "0.5px solid #e6e4dd" }}>
+              <div className="pi-pay" style={{ background: "var(--color-surface-sunken)", border: "0.5px solid #e6e4dd" }}>
                 <div className="pi-pay-title" style={{ marginBottom: 6 }}>Invoice voided</div>
-                <p style={{ fontSize: 12, color: "#6b6860", lineHeight: 1.6 }}>
+                <p style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
                   This invoice has been voided and is no longer payable. Please contact the sender with any questions.
                 </p>
               </div>

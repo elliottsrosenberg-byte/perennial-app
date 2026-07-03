@@ -65,7 +65,7 @@ export default function AshPromptsModule({
       marginTop: 14,
       borderRadius: 12,
       background: ASH_GRADIENT,
-      border: "0.5px solid rgba(155,163,122,0.36)",
+      border: "0.5px solid rgba(var(--color-sage-rgb),0.36)",
       padding: "10px 11px 10px",
       display: "flex", flexDirection: "column", gap: 8,
     }}>
@@ -151,7 +151,7 @@ export default function AshPromptsModule({
           display: "flex", alignItems: "center", gap: 6,
           padding: "4px 8px", borderRadius: 8,
           background: "rgba(255,255,255,0.7)",
-          border: "0.5px solid rgba(155,163,122,0.34)",
+          border: "0.5px solid rgba(var(--color-sage-rgb),0.34)",
         }}
       >
         <input

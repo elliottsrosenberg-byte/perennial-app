@@ -30,7 +30,7 @@ export default function ConfirmDialog({
         {tone === "danger" && (
           <div style={{
             width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-            background: "rgba(220,62,13,0.10)",
+            background: "rgba(var(--color-red-rgb),0.10)",
             display: "flex", alignItems: "center", justifyContent: "center",
             color: "var(--color-red-orange)",
           }}>

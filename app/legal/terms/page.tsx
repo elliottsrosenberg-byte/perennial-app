@@ -38,7 +38,7 @@ export default function TermsOfServicePage() {
       {/* ── Top bar ────────────────────────────────────────────────────── */}
       <header
         style={{
-          borderBottom: "0.5px solid rgba(31,33,26,0.12)",
+          borderBottom: "0.5px solid rgba(var(--color-charcoal-rgb),0.12)",
           background: "#f5f1e9",
         }}
       >
@@ -62,7 +62,7 @@ export default function TermsOfServicePage() {
               style={{ height: "auto" }}
             />
           </Link>
-          <nav style={{ display: "flex", gap: 18, fontSize: 12, color: "#6b6860" }}>
+          <nav style={{ display: "flex", gap: 18, fontSize: 12, color: "var(--color-text-secondary)" }}>
             <Link href="/legal/privacy" style={{ color: "inherit", textDecoration: "none" }}>
               Privacy
             </Link>
@@ -119,7 +119,7 @@ export default function TermsOfServicePage() {
         <p style={BODY}>
           By creating an account or otherwise using the Service, you agree to be
           bound by these Terms and by our{" "}
-          <Link href="/legal/privacy" style={{ color: "#3d6b4f" }}>
+          <Link href="/legal/privacy" style={{ color: "var(--color-green-deep)" }}>
             Privacy Policy
           </Link>
           . If you do not agree, do not use the Service.
@@ -144,7 +144,7 @@ export default function TermsOfServicePage() {
         <ul style={LIST}>
           <li>Provide accurate, complete, and current information when you register;</li>
           <li>Keep your password confidential and not share your account with others;</li>
-          <li>Notify us promptly at <a href="mailto:security@perennial.design" style={{ color: "#3d6b4f" }}>security@perennial.design</a> if you suspect your account has been compromised.</li>
+          <li>Notify us promptly at <a href="mailto:security@perennial.design" style={{ color: "var(--color-green-deep)" }}>security@perennial.design</a> if you suspect your account has been compromised.</li>
         </ul>
         <p style={BODY}>
           We are not liable for losses resulting from unauthorized use of your
@@ -240,7 +240,7 @@ export default function TermsOfServicePage() {
           newsletter platform, or a social platform), you authorize us to access
           and process data from that service under the scopes you grant, as
           described in our{" "}
-          <Link href="/legal/privacy" style={{ color: "#3d6b4f" }}>
+          <Link href="/legal/privacy" style={{ color: "var(--color-green-deep)" }}>
             Privacy Policy
           </Link>
           . Your use of each third-party service remains governed by that
@@ -406,7 +406,7 @@ export default function TermsOfServicePage() {
         </p>
         <p style={BODY}>
           <strong>Email:</strong>{" "}
-          <a href="mailto:legal@perennial.design" style={{ color: "#3d6b4f" }}>
+          <a href="mailto:legal@perennial.design" style={{ color: "var(--color-green-deep)" }}>
             legal@perennial.design
           </a>
           <br />
@@ -418,7 +418,7 @@ export default function TermsOfServicePage() {
       {/* ── Footer ─────────────────────────────────────────────────────── */}
       <footer
         style={{
-          borderTop: "0.5px solid rgba(31,33,26,0.12)",
+          borderTop: "0.5px solid rgba(var(--color-charcoal-rgb),0.12)",
           padding: "24px",
           textAlign: "center",
         }}

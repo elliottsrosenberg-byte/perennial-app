@@ -396,7 +396,7 @@ export default function NewInvoiceModal({
           </div>
           <button type="button" onClick={onClose}
             className="px-4 py-2 text-[13px] rounded-lg"
-            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
+            style={{ color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>Cancel</button>
           <button onClick={handleSubmit as unknown as React.MouseEventHandler}
@@ -439,7 +439,7 @@ export default function NewInvoiceModal({
                     style={{ background: "rgba(61,107,79,0.12)", color: "var(--color-sage-hover)" }}>From project</span>
                 )}
                 <span className="text-[10px] px-1.5 py-0.5 rounded"
-                  style={{ background: "rgba(31,33,26,0.07)", color: "var(--color-grey)" }}>
+                  style={{ background: "rgba(var(--color-charcoal-rgb),0.07)", color: "var(--color-grey)" }}>
                   {client?.kind === "organization" ? "Organization" : "Contact"}
                 </span>
                 <button type="button" onClick={clearClient} style={{ color: "var(--color-grey)" }}><X size={12} /></button>
@@ -648,7 +648,7 @@ function ReadyToBillPanel({
       {uninvoicedTime.length > 0 && (
         <div>
           <div className="flex items-center gap-2 px-4 py-2"
-            style={{ borderBottom: "0.5px solid var(--color-border)", background: "rgba(31,33,26,0.03)" }}>
+            style={{ borderBottom: "0.5px solid var(--color-border)", background: "rgba(var(--color-charcoal-rgb),0.03)" }}>
             <Clock size={11} style={{ color: "var(--color-sage)" }} />
             <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>Time</span>
             <span className="text-[11px] ml-auto tabular-nums" style={{ color: "var(--color-grey)" }}>
@@ -690,7 +690,7 @@ function ReadyToBillPanel({
         <div>
           <div className="flex items-center gap-2 px-4 py-2"
             style={{ borderTop: uninvoicedTime.length > 0 ? "0.5px solid var(--color-border)" : "none",
-                     borderBottom: "0.5px solid var(--color-border)", background: "rgba(31,33,26,0.03)" }}>
+                     borderBottom: "0.5px solid var(--color-border)", background: "rgba(var(--color-charcoal-rgb),0.03)" }}>
             <Receipt size={11} style={{ color: "var(--color-dark-orange)" }} />
             <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>Expenses</span>
             <span className="text-[11px] ml-auto tabular-nums" style={{ color: "var(--color-grey)" }}>
@@ -710,7 +710,7 @@ function ReadyToBillPanel({
                     {x.description || "Expense"}
                   </span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wider"
-                    style={{ background: "rgba(31,33,26,0.06)", color: "var(--color-grey)" }}>
+                    style={{ background: "rgba(var(--color-charcoal-rgb),0.06)", color: "var(--color-grey)" }}>
                     {x.category}
                   </span>
                   <span className="text-[11px] font-medium tabular-nums w-14 text-right" style={{ color: "var(--color-charcoal)" }}>{fmtMoney(Number(x.amount))}</span>
@@ -738,7 +738,7 @@ function ReadyToBillPanel({
           style={{
             borderTop: (uninvoicedTime.length > 0 || uninvoicedExpenses.length > 0) ? "0.5px solid var(--color-border)" : "none",
             borderBottom: "0.5px solid var(--color-border)",
-            background: "rgba(31,33,26,0.03)",
+            background: "rgba(var(--color-charcoal-rgb),0.03)",
           }}>
           <Plus size={11} style={{ color: "var(--color-charcoal)" }} />
           <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>Manual</span>
@@ -952,7 +952,7 @@ function ClientPicker({
 
   const groupHeader = (label: string, accent: boolean) => (
     <div className="px-4 py-1.5 text-[9.5px] font-bold uppercase tracking-wider"
-      style={{ color: "var(--color-grey)", background: accent ? "rgba(61,107,79,0.06)" : "rgba(31,33,26,0.03)",
+      style={{ color: "var(--color-grey)", background: accent ? "rgba(61,107,79,0.06)" : "rgba(var(--color-charcoal-rgb),0.03)",
                borderTop: accent ? undefined : "0.5px solid var(--color-border)", borderBottom: "0.5px solid var(--color-border)" }}>
       {label}
     </div>
@@ -1055,7 +1055,7 @@ function ClientRow({ item, onPick }: { item: SelectedClient; onPick: () => void 
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
       <span className="text-[12px] font-medium" style={{ color: "var(--color-charcoal)" }}>{label}</span>
       <span className="text-[9px] px-1.5 py-0.5 rounded shrink-0"
-        style={{ background: "rgba(31,33,26,0.07)", color: "var(--color-grey)" }}>
+        style={{ background: "rgba(var(--color-charcoal-rgb),0.07)", color: "var(--color-grey)" }}>
         {isOrg ? "Org" : "Contact"}
       </span>
       {email && (

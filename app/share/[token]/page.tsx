@@ -73,12 +73,12 @@ export default async function SharedNotePage({ params }: { params: Promise<{ tok
       </head>
       <body>
         {/* Header */}
-        <header style={{ borderBottom: "0.5px solid #d6d8cf", background: "#fffefc", padding: "12px 0" }}>
+        <header style={{ borderBottom: "0.5px solid #d6d8cf", background: "var(--color-surface-raised)", padding: "12px 0" }}>
           <div className="share-head-inner">
-            <span style={{ fontFamily: "'Newsreader', serif", fontSize: 18, fontWeight: 500, color: "#1f211a", letterSpacing: "-0.02em" }}>
+            <span style={{ fontFamily: "'Newsreader', serif", fontSize: 18, fontWeight: 500, color: "var(--color-text-primary)", letterSpacing: "-0.02em" }}>
               Perennial
             </span>
-            <a href="/login" style={{ fontSize: 12, color: "#9a9690", textDecoration: "none" }}>
+            <a href="/login" style={{ fontSize: 12, color: "var(--color-text-tertiary)", textDecoration: "none" }}>
               Sign in →
             </a>
           </div>
@@ -92,7 +92,7 @@ export default async function SharedNotePage({ params }: { params: Promise<{ tok
             </h1>
           )}
 
-          <p style={{ fontSize: 12, color: "#9a9690", marginBottom: 36 }}>
+          <p style={{ fontSize: 12, color: "var(--color-text-tertiary)", marginBottom: 36 }}>
             Last updated {fmtDate(note.updated_at)}
           </p>
 
@@ -105,9 +105,9 @@ export default async function SharedNotePage({ params }: { params: Promise<{ tok
 
         {/* Footer */}
         <footer style={{ borderTop: "0.5px solid #d6d8cf", padding: "20px 0", textAlign: "center" }}>
-          <p style={{ fontSize: 11, color: "#9a9690" }}>
+          <p style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
             Shared from{" "}
-            <a href="/login" style={{ color: "#9ba37a", textDecoration: "none" }}>Perennial</a>
+            <a href="/login" style={{ color: "var(--color-sage)", textDecoration: "none" }}>Perennial</a>
             {" "}— workspace for independent designers
           </p>
         </footer>

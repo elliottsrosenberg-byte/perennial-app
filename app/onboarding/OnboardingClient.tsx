@@ -224,7 +224,7 @@ function Chip({
         borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
         transition: "all 0.1s ease", textAlign: "left",
         background: selected ? "var(--color-sage)" : "var(--color-off-white)",
-        color:      selected ? "var(--color-warm-white)" : "#6b6860",
+        color:      selected ? "var(--color-warm-white)" : "var(--color-text-secondary)",
         border:     `0.5px solid ${selected ? "var(--color-sage)" : "var(--color-border)"}`,
         display: "flex", flexDirection: "column", gap: 2,
       }}
@@ -246,7 +246,7 @@ function SingleChip({
         borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
         transition: "all 0.1s ease", textAlign: "left",
         background: selected ? "var(--color-sage)" : "var(--color-off-white)",
-        color:      selected ? "var(--color-warm-white)" : "#6b6860",
+        color:      selected ? "var(--color-warm-white)" : "var(--color-text-secondary)",
         border:     `0.5px solid ${selected ? "var(--color-sage)" : "var(--color-border)"}`,
         display: "flex", flexDirection: "column", gap: 2,
         position: "relative",
@@ -663,8 +663,8 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                     <div key={label} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
                       <div style={{
                         width: 38, height: 38, borderRadius: 10, flexShrink: 0,
-                        background: ash ? "rgba(155,163,122,0.12)" : "var(--color-cream)",
-                        border: `0.5px solid ${ash ? "rgba(155,163,122,0.25)" : "var(--color-border)"}`,
+                        background: ash ? "rgba(var(--color-sage-rgb),0.12)" : "var(--color-cream)",
+                        border: `0.5px solid ${ash ? "rgba(var(--color-sage-rgb),0.25)" : "var(--color-border)"}`,
                         display: "flex", alignItems: "center", justifyContent: "center",
                         color: ash ? "var(--color-sage)" : "var(--color-charcoal)",
                       }}>
@@ -1077,7 +1077,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                           ? <AshMark size={16} variant={sel ? "on-dark" : "on-light"} />
                           : <Icon size={15} strokeWidth={1.5} />}
                       </div>
-                      <span style={{ fontSize: 12, fontWeight: 500, color: sel ? "var(--color-warm-white)" : "#6b6860" }}>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: sel ? "var(--color-warm-white)" : "var(--color-text-secondary)" }}>
                         {opt.label}
                       </span>
                       {sel && <span style={{ marginLeft: "auto", fontSize: 12, color: "rgba(255,255,255,0.8)" }}>✓</span>}
@@ -1132,14 +1132,14 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                 uploadError={uploadError}
               />
 
-              <div style={{ padding: "14px 16px", borderRadius: 12, background: "rgba(155,163,122,0.08)", border: "0.5px solid rgba(155,163,122,0.22)", marginTop: 20, marginBottom: 20 }}>
+              <div style={{ padding: "14px 16px", borderRadius: 12, background: "rgba(var(--color-sage-rgb),0.08)", border: "0.5px solid rgba(var(--color-sage-rgb),0.22)", marginTop: 20, marginBottom: 20 }}>
                 <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
                   <div style={{ width: 24, height: 24, borderRadius: "50%", background: ASH_GRADIENT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <AshMark size={13} variant="on-dark" animate />
                   </div>
                   <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-charcoal)" }}>Ash is ready</p>
                 </div>
-                <p style={{ fontSize: 11, color: "#6b6860", lineHeight: 1.6 }}>
+                <p style={{ fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
                   When you finish, Ash will open with a personalized response based on everything you&apos;ve shared — your practice, goals, challenges, and any documents you uploaded. It will walk you through where to start.
                 </p>
               </div>
@@ -1289,8 +1289,8 @@ function IntegrationConnectStep() {
                   style={{
                     display: "flex", alignItems: "center", gap: 12,
                     padding: "11px 14px",
-                    background: isConnected ? "rgba(141,208,71,0.10)" : "var(--color-off-white)",
-                    border:     isConnected ? "0.5px solid rgba(141,208,71,0.32)" : "0.5px solid var(--color-border)",
+                    background: isConnected ? "rgba(var(--color-green-rgb),0.10)" : "var(--color-off-white)",
+                    border:     isConnected ? "0.5px solid rgba(var(--color-green-rgb),0.32)" : "0.5px solid var(--color-border)",
                     borderRadius: 10,
                   }}
                 >
@@ -1300,7 +1300,7 @@ function IntegrationConnectStep() {
                   </div>
                   {isConnected ? (
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: "#3d6b4f", background: "rgba(141,208,71,0.18)", padding: "3px 8px", borderRadius: 99 }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: "var(--color-green-deep)", background: "rgba(var(--color-green-rgb),0.18)", padding: "3px 8px", borderRadius: 99 }}>
                         Connected ✓
                       </span>
                       {t.multi && (
@@ -1456,7 +1456,7 @@ function FileDropzone({
           padding: "28px 24px",
           borderRadius: 12,
           border: `1px dashed ${hover ? "var(--color-sage)" : "var(--color-border)"}`,
-          background: hover ? "rgba(155,163,122,0.06)" : "var(--color-off-white)",
+          background: hover ? "rgba(var(--color-sage-rgb),0.06)" : "var(--color-off-white)",
           textAlign: "center", cursor: "pointer",
           transition: "all 0.12s ease",
         }}

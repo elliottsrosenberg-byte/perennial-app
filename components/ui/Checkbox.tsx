@@ -18,7 +18,7 @@ export default function Checkbox({ checked, onChange, disabled = false }: Checkb
         background:   checked ? "var(--color-sage)" : "transparent",
         border:       checked
           ? "1.5px solid var(--color-sage)"
-          : "1.5px solid rgba(31,33,26,0.25)",
+          : "1.5px solid rgba(var(--color-charcoal-rgb),0.25)",
         display:      "flex",
         alignItems:   "center",
         justifyContent: "center",

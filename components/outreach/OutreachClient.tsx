@@ -400,12 +400,12 @@ function OutreachClientInner({ initialPipelines, initialTargets, initialContacts
             style={{
               padding: "7px 20px", fontSize: 12, fontWeight: 500,
               borderRadius: 8, border: "none", cursor: "pointer",
-              background: "#b8860b", color: "white",
+              background: "var(--color-gold)", color: "white",
               fontFamily: "inherit",
               transition: "background 0.12s ease",
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "#a07800")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "#b8860b")}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-amber-deep)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-gold)")}
           >
             + New lead
           </button>
@@ -435,7 +435,7 @@ function OutreachClientInner({ initialPipelines, initialTargets, initialContacts
         <NavItem
           label="Leads"
           count={leads.length}
-          dot="#b8860b"
+          dot="var(--color-gold)"
           active={activeSection === "leads"}
           onClick={() => switchSection("leads")}
         />
@@ -666,7 +666,7 @@ function NavItem({ label, count, dot, active, onClick, suggestedPill }: {
           style={{
             fontSize: 8, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em",
             padding: "1px 5px", borderRadius: 9999,
-            background: "rgba(125,148,86,0.16)", color: "#5a7040",
+            background: "rgba(125,148,86,0.16)", color: "var(--color-sage-deep)",
             border: "0.5px solid rgba(125,148,86,0.35)",
             flexShrink: 0,
           }}>
@@ -699,7 +699,7 @@ function ArchivePipelineConfirm({
         <>
           <button type="button" onClick={onCancel}
             className="px-4 py-2 text-[13px] rounded-lg"
-            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
+            style={{ color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
             Cancel

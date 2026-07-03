@@ -102,7 +102,7 @@ export default function LoginPage() {
             background: "var(--color-off-white)",
             borderRadius: 20,
             border: "0.5px solid var(--color-border)",
-            boxShadow: "0 8px 40px rgba(31,33,26,0.10), 0 1px 4px rgba(31,33,26,0.06)",
+            boxShadow: "0 8px 40px rgba(var(--color-charcoal-rgb),0.10), 0 1px 4px rgba(var(--color-charcoal-rgb),0.06)",
             padding: "40px 44px",
           }}>
             <h1 style={{ fontFamily: "var(--font-newsreader)", fontSize: 26, fontWeight: 700,
@@ -162,7 +162,7 @@ export default function LoginPage() {
                     borderRadius: 10, color: "var(--color-charcoal)",
                     outline: "none", fontFamily: "inherit",
                   }}
-                  onFocus={(e) => { e.target.style.borderColor = "var(--color-sage)"; e.target.style.boxShadow = "0 0 0 3px rgba(155,163,122,0.18)"; }}
+                  onFocus={(e) => { e.target.style.borderColor = "var(--color-sage)"; e.target.style.boxShadow = "0 0 0 3px rgba(var(--color-sage-rgb),0.18)"; }}
                   onBlur={(e) => { e.target.style.borderColor = "var(--color-border)"; e.target.style.boxShadow = "none"; }}
                 />
               </div>
@@ -191,7 +191,7 @@ export default function LoginPage() {
                       borderRadius: 10, color: "var(--color-charcoal)",
                       outline: "none", fontFamily: "inherit",
                     }}
-                    onFocus={(e) => { e.target.style.borderColor = "var(--color-sage)"; e.target.style.boxShadow = "0 0 0 3px rgba(155,163,122,0.18)"; }}
+                    onFocus={(e) => { e.target.style.borderColor = "var(--color-sage)"; e.target.style.boxShadow = "0 0 0 3px rgba(var(--color-sage-rgb),0.18)"; }}
                     onBlur={(e) => { e.target.style.borderColor = "var(--color-border)"; e.target.style.boxShadow = "none"; }}
                   />
                   <button

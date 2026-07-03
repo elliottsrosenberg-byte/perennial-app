@@ -67,14 +67,14 @@ export default function PaymentSection({
 
   if (redirectStatus === "succeeded") {
     return (
-      <div style={{ background: "rgba(61,107,79,0.12)", color: "#3d6b4f", padding: "12px 14px", borderRadius: 8, fontSize: 12, lineHeight: 1.55, fontWeight: 500 }}>
+      <div style={{ background: "rgba(61,107,79,0.12)", color: "var(--color-green-deep)", padding: "12px 14px", borderRadius: 8, fontSize: 12, lineHeight: 1.55, fontWeight: 500 }}>
         Payment received — thank you.
       </div>
     );
   }
   if (redirectStatus === "processing") {
     return (
-      <div style={{ background: "rgba(31,33,26,0.06)", color: "#1f211a", padding: "12px 14px", borderRadius: 8, fontSize: 12, lineHeight: 1.55 }}>
+      <div style={{ background: "rgba(var(--color-charcoal-rgb),0.06)", color: "var(--color-text-primary)", padding: "12px 14px", borderRadius: 8, fontSize: 12, lineHeight: 1.55 }}>
         Payment is processing. You&apos;ll get a confirmation email when it clears.
       </div>
     );
@@ -86,7 +86,7 @@ export default function PaymentSection({
 
   if (!publishableKey) {
     return (
-      <div style={{ background: "white", padding: "12px 14px", borderRadius: 8, fontSize: 12, color: "#dc3e0d", lineHeight: 1.55 }}>
+      <div style={{ background: "white", padding: "12px 14px", borderRadius: 8, fontSize: 12, color: "var(--color-red-orange)", lineHeight: 1.55 }}>
         Card payment isn&apos;t configured. Add NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY to your environment.
       </div>
     );
@@ -96,9 +96,9 @@ export default function PaymentSection({
     <>
       {redirectStatus && redirectStatus !== "succeeded" && redirectStatus !== "processing" && (
         <div style={{
-          background: "rgba(220,62,13,0.07)", color: "#dc3e0d",
+          background: "rgba(var(--color-red-rgb),0.07)", color: "var(--color-red-orange)",
           padding: "10px 12px", borderRadius: 8, fontSize: 11.5, lineHeight: 1.5,
-          marginBottom: 12, border: "0.5px solid rgba(220,62,13,0.2)",
+          marginBottom: 12, border: "0.5px solid rgba(var(--color-red-rgb),0.2)",
         }}>
           Your last attempt didn&apos;t go through{redirectStatus === "requires_payment_method" ? " — the card was declined or authentication wasn't completed" : ""}. Please try again below.
         </div>
@@ -112,7 +112,7 @@ function PaidChip() {
   return (
     <div
       style={{
-        background: "rgba(61,107,79,0.12)", color: "#3d6b4f",
+        background: "rgba(61,107,79,0.12)", color: "var(--color-green-deep)",
         padding: "10px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
       }}
     >
@@ -167,14 +167,14 @@ function PaymentFlow({
 
   if (error) {
     return (
-      <div style={{ background: "white", padding: "12px 14px", borderRadius: 8, fontSize: 12, color: "#dc3e0d", lineHeight: 1.55 }}>
+      <div style={{ background: "white", padding: "12px 14px", borderRadius: 8, fontSize: 12, color: "var(--color-red-orange)", lineHeight: 1.55 }}>
         {error}
       </div>
     );
   }
   if (!clientSecret || !stripeJs) {
     return (
-      <div style={{ background: "white", padding: "12px 14px", borderRadius: 8, fontSize: 12, color: "#9a9690", lineHeight: 1.55 }}>
+      <div style={{ background: "white", padding: "12px 14px", borderRadius: 8, fontSize: 12, color: "var(--color-text-tertiary)", lineHeight: 1.55 }}>
         Loading secure payment…
       </div>
     );
@@ -316,12 +316,12 @@ function PayForm({
         />
       </div>
       {elementError && (
-        <p style={{ fontSize: 11.5, color: "#dc3e0d", marginBottom: 10, lineHeight: 1.5 }}>
+        <p style={{ fontSize: 11.5, color: "var(--color-red-orange)", marginBottom: 10, lineHeight: 1.5 }}>
           Payment form couldn&apos;t load: {elementError}
         </p>
       )}
       {!elementError && elementReady && !elementComplete && (
-        <p style={{ fontSize: 11.5, color: "#9a9690", marginBottom: 10, lineHeight: 1.5 }}>
+        <p style={{ fontSize: 11.5, color: "var(--color-text-tertiary)", marginBottom: 10, lineHeight: 1.5 }}>
           Enter your payment details to continue.
         </p>
       )}
@@ -330,13 +330,13 @@ function PayForm({
           style={{
             background: "white", border: "0.5px solid #e6e4dd", borderRadius: 8,
             padding: "12px 14px", marginBottom: 12, fontSize: 11.5,
-            color: "#1f211a", lineHeight: 1.55,
+            color: "var(--color-text-primary)", lineHeight: 1.55,
           }}
         >
           <p style={{ fontWeight: 600, marginBottom: 6 }}>
             Payment form didn&apos;t load.
           </p>
-          <p style={{ color: "#6b6860", marginBottom: 10 }}>
+          <p style={{ color: "var(--color-text-secondary)", marginBottom: 10 }}>
             This usually means no payment methods are enabled in your Stripe account.
             Open Stripe Dashboard → Settings → Payment methods, enable Card, then refresh.
           </p>
@@ -356,7 +356,7 @@ function PayForm({
         </div>
       )}
       {err && (
-        <p style={{ fontSize: 11.5, color: "#dc3e0d", marginBottom: 10, lineHeight: 1.5 }}>{err}</p>
+        <p style={{ fontSize: 11.5, color: "var(--color-red-orange)", marginBottom: 10, lineHeight: 1.5 }}>{err}</p>
       )}
       <button
         type="submit"

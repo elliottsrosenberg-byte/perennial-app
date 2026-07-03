@@ -20,7 +20,7 @@ const CARD_STYLE: React.CSSProperties = {
   background:   "var(--color-off-white)",
   border:       "0.5px solid var(--color-border)",
   borderRadius: 12,
-  boxShadow:    "0 2px 8px rgba(31,33,26,0.04)",
+  boxShadow:    "0 2px 8px rgba(var(--color-charcoal-rgb),0.04)",
   padding:      "14px 16px",
 };
 const TITLE_STYLE: React.CSSProperties = {

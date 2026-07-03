@@ -73,14 +73,14 @@ export default function DatePillField({
           fontSize: 10, fontWeight: 500,
           fontFamily: "inherit",
           background: filled
-            ? (alert ? "rgba(220,62,13,0.10)" : "var(--color-surface-sunken)")
+            ? (alert ? "rgba(var(--color-red-rgb),0.10)" : "var(--color-surface-sunken)")
             : "transparent",
           color: alert
             ? "var(--color-red-orange)"
             : filled
-              ? "#6b6860"
+              ? "var(--color-text-secondary)"
               : "var(--color-grey)",
-          border: `0.5px ${filled ? "solid" : "dashed"} ${alert ? "rgba(220,62,13,0.35)" : "var(--color-border-strong)"}`,
+          border: `0.5px ${filled ? "solid" : "dashed"} ${alert ? "rgba(var(--color-red-rgb),0.35)" : "var(--color-border-strong)"}`,
           cursor: "pointer",
           transition: "background 0.1s ease, border-color 0.1s ease",
         }}

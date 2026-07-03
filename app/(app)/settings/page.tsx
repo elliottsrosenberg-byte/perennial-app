@@ -183,7 +183,7 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: () =>
       type="button"
       onClick={onChange}
       className="relative rounded-full transition-colors shrink-0"
-      style={{ width: 36, height: 20, background: checked ? "var(--color-sage)" : "rgba(31,33,26,0.15)" }}
+      style={{ width: 36, height: 20, background: checked ? "var(--color-sage)" : "rgba(var(--color-charcoal-rgb),0.15)" }}
     >
       <span
         className="absolute top-[2px] w-4 h-4 bg-white rounded-full shadow-sm transition-all"
@@ -269,9 +269,9 @@ function SaveBar({ saving, saved, onSave }: { saving: boolean; saved: boolean; o
         disabled={saving}
         className="px-4 py-2 text-[12px] font-medium rounded-lg transition-all"
         style={{
-          background: saved ? "rgba(141,208,71,0.12)" : "var(--color-charcoal)",
-          color:      saved ? "#3d6b4f"               : "var(--color-warm-white)",
-          border:     saved ? "0.5px solid rgba(141,208,71,0.25)" : "none",
+          background: saved ? "rgba(var(--color-green-rgb),0.12)" : "var(--color-charcoal)",
+          color:      saved ? "var(--color-green-deep)"               : "var(--color-warm-white)",
+          border:     saved ? "0.5px solid rgba(var(--color-green-rgb),0.25)" : "none",
           opacity:    saving ? 0.6 : 1,
         }}
       >
@@ -400,7 +400,7 @@ function StudioLogoField({
               style={{
                 background: "transparent",
                 color:      "var(--color-red-orange)",
-                border:     "0.5px solid rgba(220,62,13,0.3)",
+                border:     "0.5px solid rgba(var(--color-red-rgb),0.3)",
                 opacity:    busy ? 0.5 : 1,
               }}
             >
@@ -611,7 +611,7 @@ export default function SettingsPage() {
         className="w-full text-left px-4 py-[8px] text-[13px] transition-colors"
         style={{
           background:  isActive ? "var(--color-cream)" : "transparent",
-          color:       isActive ? "var(--color-charcoal)" : "#6b6860",
+          color:       isActive ? "var(--color-charcoal)" : "var(--color-text-secondary)",
           fontWeight:  isActive ? 500 : 400,
           borderLeft:  `2px solid ${isActive ? "var(--color-charcoal)" : "transparent"}`,
         }}
@@ -694,7 +694,7 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-4 mb-5">
                   <div
                     className="w-16 h-16 rounded-full flex items-center justify-center text-[20px] font-semibold shrink-0"
-                    style={{ background: "var(--color-cream)", border: "0.5px solid var(--color-border)", color: "#6b6860" }}
+                    style={{ background: "var(--color-cream)", border: "0.5px solid var(--color-border)", color: "var(--color-text-secondary)" }}
                   >
                     {initials}
                   </div>
@@ -735,7 +735,7 @@ export default function SettingsPage() {
                     </div>
                     <button
                       className="px-3 py-[6px] text-[11px] font-medium rounded-lg transition-colors"
-                      style={{ border: "0.5px solid var(--color-border)", color: "#6b6860", background: "transparent" }}
+                      style={{ border: "0.5px solid var(--color-border)", color: "var(--color-text-secondary)", background: "transparent" }}
                       onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
                       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                       onClick={async () => {
@@ -766,7 +766,7 @@ export default function SettingsPage() {
 
                 <div
                   className="flex items-center justify-between p-4 rounded-xl"
-                  style={{ border: "0.5px solid rgba(220,62,13,0.25)", background: "rgba(220,62,13,0.04)" }}
+                  style={{ border: "0.5px solid rgba(var(--color-red-rgb),0.25)", background: "rgba(var(--color-red-rgb),0.04)" }}
                 >
                   <div>
                     <p className="text-[12px] font-medium" style={{ color: "var(--color-charcoal)" }}>Delete account</p>
@@ -776,8 +776,8 @@ export default function SettingsPage() {
                   </div>
                   <button
                     className="px-3 py-[6px] text-[11px] font-medium rounded-lg shrink-0 ml-4 transition-colors"
-                    style={{ border: "0.5px solid rgba(220,62,13,0.3)", color: "var(--color-red-orange)", background: "transparent" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(220,62,13,0.08)")}
+                    style={{ border: "0.5px solid rgba(var(--color-red-rgb),0.3)", color: "var(--color-red-orange)", background: "transparent" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(var(--color-red-rgb),0.08)")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                     onClick={() => {
                       if (window.confirm("Are you absolutely sure? This will permanently delete your account and all data.")) {
@@ -851,7 +851,7 @@ export default function SettingsPage() {
                         className="px-3 py-1.5 rounded-full text-[11px] font-medium transition-colors"
                         style={{
                           background: isSelected ? "var(--color-charcoal)" : "transparent",
-                          color:      isSelected ? "var(--color-warm-white)" : "#6b6860",
+                          color:      isSelected ? "var(--color-warm-white)" : "var(--color-text-secondary)",
                           border:     `0.5px solid ${isSelected ? "var(--color-charcoal)" : "var(--color-border)"}`,
                         }}
                       >
@@ -1225,7 +1225,7 @@ export default function SettingsPage() {
                         <span className="text-[18px] font-bold" style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>
                           Free Beta
                         </span>
-                        <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(141,208,71,0.15)", color: "#3d6b4f" }}>
+                        <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(var(--color-green-rgb),0.15)", color: "var(--color-green-deep)" }}>
                           Active
                         </span>
                       </div>
@@ -1250,18 +1250,18 @@ export default function SettingsPage() {
                           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#3d6b4f" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M2 8l4 4 8-8"/>
                           </svg>
-                          <span className="text-[11px]" style={{ color: "#6b6860" }}>{f}</span>
+                          <span className="text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{f}</span>
                         </div>
                       ))}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 p-4 rounded-xl" style={{ background: "rgba(155,163,122,0.07)", border: "0.5px solid rgba(155,163,122,0.2)" }}>
+                <div className="flex items-center gap-3 p-4 rounded-xl" style={{ background: "rgba(var(--color-sage-rgb),0.07)", border: "0.5px solid rgba(var(--color-sage-rgb),0.2)" }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-sage)" strokeWidth="1.5">
                     <circle cx="12" cy="12" r="9"/><path d="M12 8v4l2 2"/>
                   </svg>
-                  <p className="text-[11px]" style={{ color: "#6b6860" }}>
+                  <p className="text-[11px]" style={{ color: "var(--color-text-secondary)" }}>
                     We&apos;ll notify you before billing begins. No credit card required during beta.
                   </p>
                 </div>
@@ -1377,7 +1377,7 @@ export default function SettingsPage() {
                       provider: "teller",
                       name: "Bank account",
                       desc: "Connect your bank to see transactions and cash flow in Finance. Powered by Teller.",
-                      iconBg: "rgba(37,99,171,0.08)",
+                      iconBg: "rgba(var(--color-blue-rgb),0.08)",
                       href: "/finance",
                     },
                     {
@@ -1549,16 +1549,16 @@ function ProviderCard({ provider, integrations, onReload }: {
                 <a
                   href={intg.provider?.startsWith("google") ? "/api/auth/google" : intg.provider === "microsoft" ? "/api/auth/microsoft" : "#"}
                   className="text-[10px] font-semibold px-2.5 py-[3px] rounded-full"
-                  style={{ background: "rgba(220,62,13,0.12)", color: "var(--color-red-orange)", textDecoration: "none" }}
+                  style={{ background: "rgba(var(--color-red-rgb),0.12)", color: "var(--color-red-orange)", textDecoration: "none" }}
                 >
                   Reconnect
                 </a>
               ) : intg.status === "error" ? (
-                <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(220,62,13,0.12)", color: "var(--color-red-orange)" }}>
+                <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(var(--color-red-rgb),0.12)", color: "var(--color-red-orange)" }}>
                   Error
                 </span>
               ) : (
-                <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(141,208,71,0.15)", color: "#3d6b4f" }}>
+                <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full" style={{ background: "rgba(var(--color-green-rgb),0.15)", color: "var(--color-green-deep)" }}>
                   Connected
                 </span>
               )}
@@ -1748,7 +1748,7 @@ function ConnectFormModal({ formKey, onClose, onConnected }: {
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
         position: "fixed", inset: 0, zIndex: 200,
-        background: "rgba(31,33,26,0.55)", backdropFilter: "blur(4px)",
+        background: "rgba(var(--color-charcoal-rgb),0.55)", backdropFilter: "blur(4px)",
         display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
       }}
     >
@@ -1759,7 +1759,7 @@ function ConnectFormModal({ formKey, onClose, onConnected }: {
           background: "var(--color-warm-white)",
           borderRadius: 14,
           border: "0.5px solid var(--color-border)",
-          boxShadow: "0 24px 64px rgba(31,33,26,0.32), 0 4px 12px rgba(31,33,26,0.16)",
+          boxShadow: "0 24px 64px rgba(var(--color-charcoal-rgb),0.32), 0 4px 12px rgba(var(--color-charcoal-rgb),0.16)",
         }}
       >
         <div style={{ padding: "18px 20px 12px", borderBottom: "0.5px solid var(--color-border)" }}>
@@ -1909,15 +1909,15 @@ function OAuthResultToast() {
     <div
       className="flex items-start gap-3 p-4 rounded-xl mb-6"
       style={{
-        background: isSuccess ? "rgba(141,208,71,0.12)" : "rgba(220,62,13,0.08)",
-        border:     isSuccess ? "0.5px solid rgba(141,208,71,0.32)" : "0.5px solid rgba(220,62,13,0.24)",
+        background: isSuccess ? "rgba(var(--color-green-rgb),0.12)" : "rgba(var(--color-red-rgb),0.08)",
+        border:     isSuccess ? "0.5px solid rgba(var(--color-green-rgb),0.32)" : "0.5px solid rgba(var(--color-red-rgb),0.24)",
       }}
     >
       <div
         style={{
           width: 22, height: 22, borderRadius: 99, flexShrink: 0,
-          background: isSuccess ? "rgba(141,208,71,0.22)" : "rgba(220,62,13,0.16)",
-          color:      isSuccess ? "#3d6b4f"               : "var(--color-red-orange)",
+          background: isSuccess ? "rgba(var(--color-green-rgb),0.22)" : "rgba(var(--color-red-rgb),0.16)",
+          color:      isSuccess ? "var(--color-green-deep)"               : "var(--color-red-orange)",
           display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: 13, fontWeight: 700,
         }}
@@ -1928,7 +1928,7 @@ function OAuthResultToast() {
         <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-charcoal)" }}>
           {isSuccess ? `${friendly} connected` : `${friendly} couldn't connect`}
         </p>
-        <p style={{ fontSize: 11, color: "#6b6860", marginTop: 2, lineHeight: 1.55 }}>
+        <p style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 2, lineHeight: 1.55 }}>
           {message}
         </p>
         {params.error && (
@@ -2257,7 +2257,7 @@ function DrivePickerModal({ onClose }: { onClose: () => void }) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
         position: "fixed", inset: 0, zIndex: 200,
-        background: "rgba(31,33,26,0.55)", backdropFilter: "blur(4px)",
+        background: "rgba(var(--color-charcoal-rgb),0.55)", backdropFilter: "blur(4px)",
         display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
       }}
     >
@@ -2265,7 +2265,7 @@ function DrivePickerModal({ onClose }: { onClose: () => void }) {
         width: "100%", maxWidth: 560, maxHeight: "82vh",
         background: "var(--color-warm-white)",
         borderRadius: 14, border: "0.5px solid var(--color-border)",
-        boxShadow: "0 24px 64px rgba(31,33,26,0.32), 0 4px 12px rgba(31,33,26,0.16)",
+        boxShadow: "0 24px 64px rgba(var(--color-charcoal-rgb),0.32), 0 4px 12px rgba(var(--color-charcoal-rgb),0.16)",
         display: "flex", flexDirection: "column", overflow: "hidden",
       }}>
         <div style={{ padding: "16px 20px 12px", borderBottom: "0.5px solid var(--color-border)" }}>
@@ -2291,7 +2291,7 @@ function DrivePickerModal({ onClose }: { onClose: () => void }) {
 
         <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px" }}>
           {error && (
-            <div style={{ padding: "10px 12px", fontSize: 11, color: "var(--color-red-orange)", background: "rgba(220,62,13,0.08)", borderRadius: 7, marginBottom: 8 }}>
+            <div style={{ padding: "10px 12px", fontSize: 11, color: "var(--color-red-orange)", background: "rgba(var(--color-red-rgb),0.08)", borderRadius: 7, marginBottom: 8 }}>
               {error}
             </div>
           )}
@@ -2308,7 +2308,7 @@ function DrivePickerModal({ onClose }: { onClose: () => void }) {
                 style={{
                   display: "flex", alignItems: "center", gap: 10,
                   padding: "8px 10px", borderRadius: 7, cursor: "pointer",
-                  background: isSel ? "rgba(155,163,122,0.10)" : "transparent",
+                  background: isSel ? "rgba(var(--color-sage-rgb),0.10)" : "transparent",
                 }}
                 onMouseEnter={(e) => { if (!isSel) e.currentTarget.style.background = "var(--color-cream)"; }}
                 onMouseLeave={(e) => { if (!isSel) e.currentTarget.style.background = "transparent"; }}
@@ -2516,7 +2516,7 @@ function WebsiteSection() {
                 Snippet
               </button>
               {s.status === "active" ? (
-                <span style={{ fontSize: 10, fontWeight: 600, color: "#3d6b4f", background: "rgba(141,208,71,0.18)", padding: "3px 8px", borderRadius: 99 }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: "var(--color-green-deep)", background: "rgba(var(--color-green-rgb),0.18)", padding: "3px 8px", borderRadius: 99 }}>
                   Active
                 </span>
               ) : (
@@ -2589,11 +2589,11 @@ function AddWebsiteModal({ onClose, onCreated }: {
     <div
       role="dialog" aria-modal="true"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(31,33,26,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+      style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(var(--color-charcoal-rgb),0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
     >
       <form
         onSubmit={handleSubmit}
-        style={{ width: "100%", maxWidth: 440, background: "var(--color-warm-white)", borderRadius: 14, border: "0.5px solid var(--color-border)", boxShadow: "0 24px 64px rgba(31,33,26,0.32)" }}
+        style={{ width: "100%", maxWidth: 440, background: "var(--color-warm-white)", borderRadius: 14, border: "0.5px solid var(--color-border)", boxShadow: "0 24px 64px rgba(var(--color-charcoal-rgb),0.32)" }}
       >
         <div style={{ padding: "16px 20px 10px", borderBottom: "0.5px solid var(--color-border)" }}>
           <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--color-charcoal)" }}>Add website</h3>
@@ -2675,9 +2675,9 @@ function SnippetModal({ site, onClose }: { site: WebsiteSite; onClose: () => voi
     <div
       role="dialog" aria-modal="true"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(31,33,26,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+      style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(var(--color-charcoal-rgb),0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
     >
-      <div style={{ width: "100%", maxWidth: 520, background: "var(--color-warm-white)", borderRadius: 14, border: "0.5px solid var(--color-border)", boxShadow: "0 24px 64px rgba(31,33,26,0.32)" }}>
+      <div style={{ width: "100%", maxWidth: 520, background: "var(--color-warm-white)", borderRadius: 14, border: "0.5px solid var(--color-border)", boxShadow: "0 24px 64px rgba(var(--color-charcoal-rgb),0.32)" }}>
         <div style={{ padding: "16px 20px 10px", borderBottom: "0.5px solid var(--color-border)" }}>
           <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--color-charcoal)" }}>Tracking snippet</h3>
           <p style={{ fontSize: 11, color: "var(--color-grey)", marginTop: 4 }}>

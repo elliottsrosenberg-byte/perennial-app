@@ -79,7 +79,7 @@ export default function EditableField({
               onKeyDown={e => { if (e.key === "Escape") { setDraft(value ?? ""); setEditing(false); } if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commit(); } }}
               autoFocus={editing} rows={editing ? 3 : 2}
               style={{ width: "100%", minWidth: 0, resize: "vertical", fontSize: 12, lineHeight: 1.55, background: "transparent", border: editing ? "0.5px solid var(--color-sage)" : "0.5px solid transparent", borderRadius: 6, padding: editing ? "5px 7px" : "5px 0", outline: "none", color: "var(--color-charcoal)", fontFamily: "inherit" }} />
-          : <span onClick={() => setEditing(true)} style={{ fontSize: 12, lineHeight: 1.55, color: "#6b6860", cursor: "text", whiteSpace: "pre-wrap", wordBreak: "break-word" }} title="Click to edit">
+          : <span onClick={() => setEditing(true)} style={{ fontSize: 12, lineHeight: 1.55, color: "var(--color-text-secondary)", cursor: "text", whiteSpace: "pre-wrap", wordBreak: "break-word" }} title="Click to edit">
               {value}
             </span>
         }
@@ -118,7 +118,7 @@ export default function EditableField({
                 Edit
               </button>
             </span>
-          : <span onClick={() => setEditing(true)} style={{ flex: 1, minWidth: 0, fontSize: 12, color: value ? "#6b6860" : "var(--color-grey)", cursor: "text", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title="Click to edit">
+          : <span onClick={() => setEditing(true)} style={{ flex: 1, minWidth: 0, fontSize: 12, color: value ? "var(--color-text-secondary)" : "var(--color-grey)", cursor: "text", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title="Click to edit">
               {value || placeholder}
             </span>
       }
