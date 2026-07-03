@@ -4,29 +4,29 @@ const ROWS = [
   {
     label: "Website",
     value: "1,240 visits · ↑18%",
-    iconBg: "rgba(37,99,171,0.12)",
-    iconColor: "#2563ab",
+    iconBg: "rgba(var(--color-blue-rgb),0.12)",
+    iconColor: "var(--color-blue)",
     icon: "🌐",
   },
   {
     label: "Socials",
     value: "8,400 reach · 4.2% eng.",
-    iconBg: "rgba(109,79,163,0.12)",
-    iconColor: "#6d4fa3",
+    iconBg: "rgba(var(--color-purple-rgb),0.12)",
+    iconColor: "var(--color-purple)",
     icon: "📸",
   },
   {
     label: "Newsletter",
     value: "47% open rate · 312 subs",
-    iconBg: "rgba(220,62,13,0.12)",
+    iconBg: "rgba(var(--color-red-rgb),0.12)",
     iconColor: "var(--color-red-orange)",
     icon: "✉️",
   },
   {
     label: "Next event",
     value: "ICFF in 34 days",
-    iconBg: "rgba(20,140,140,0.12)",
-    iconColor: "#148c8c",
+    iconBg: "rgba(var(--color-teal-rgb),0.12)",
+    iconColor: "var(--color-teal)",
     icon: "📅",
   },
 ];
@@ -71,8 +71,8 @@ export default function PresenceCard() {
             {row.icon}
           </div>
           <div className="flex flex-col gap-[1px]">
-            <span style={{ color: "#6b6860" }}>{row.label}</span>
-            <span style={{ color: "#6b6860" }}>{row.value}</span>
+            <span style={{ color: "var(--color-text-secondary)" }}>{row.label}</span>
+            <span style={{ color: "var(--color-text-secondary)" }}>{row.value}</span>
           </div>
         </div>
       ))}
