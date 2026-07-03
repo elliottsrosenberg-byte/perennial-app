@@ -100,7 +100,7 @@ export default function Select({ value, onChange, options, placeholder, disabled
                   border:     "none",
                   cursor:     "pointer",
                   fontFamily: "inherit",
-                  background: isActive ? "rgba(155,163,122,0.10)" : "transparent",
+                  background: isActive ? "rgba(var(--color-sage-rgb),0.10)" : "transparent",
                   color:      isActive ? "var(--color-text-primary)" : "var(--color-text-secondary)",
                   fontWeight: isActive ? 500 : 400,
                   display:    "flex",

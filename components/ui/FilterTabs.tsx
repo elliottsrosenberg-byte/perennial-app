@@ -19,9 +19,9 @@ export default function FilterTabs({ tabs, active, onSelect, showCount = false }
       display:      "flex",
       gap:          2,
       padding:      "6px",
-      background:   "rgba(155,163,122,0.08)",
+      background:   "rgba(var(--color-sage-rgb),0.08)",
       borderRadius: 10,
-      border:       "0.5px solid rgba(155,163,122,0.20)",
+      border:       "0.5px solid rgba(var(--color-sage-rgb),0.20)",
       width:        "fit-content",
     }}>
       {tabs.map((t) => {

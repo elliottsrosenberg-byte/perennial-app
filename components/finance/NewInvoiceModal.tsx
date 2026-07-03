@@ -13,6 +13,7 @@ type SelectedClient =
 import { X, AlertTriangle, Clock, Receipt, Plus, Check } from "lucide-react";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
+import Modal from "@/components/ui/Modal";
 
 interface Props {
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
@@ -356,11 +357,11 @@ export default function NewInvoiceModal({
   const hasReady = !!projectId || manualLines.length > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(31,33,26,0.5)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden"
-        style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}>
+    <Modal
+      onClose={onClose}
+      size="xl"
+      bodyStyle={{ padding: 0 }}
+      header={
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
           <div>
             <h2 className="text-[15px] font-semibold" style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>New invoice</h2>
@@ -382,8 +383,32 @@ export default function NewInvoiceModal({
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}><X size={14} /></button>
         </div>
-
-        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4 max-h-[72vh] overflow-y-auto">
+      }
+      footer={
+        <>
+          <div className="text-[11px] mr-auto" style={{ color: "var(--color-grey)" }}>
+            {hasReady && (
+              <>
+                <span style={{ color: "var(--color-charcoal)", fontWeight: 600 }}>{fmtMoney(grandTotal)}</span>
+                <span> on this draft</span>
+              </>
+            )}
+          </div>
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-[13px] rounded-lg"
+            style={{ color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>Cancel</button>
+          <button onClick={handleSubmit as unknown as React.MouseEventHandler}
+            disabled={loading || !clientLabel}
+            className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50"
+            style={{ background: "var(--color-charcoal)" }}>
+            {loading ? "Creating…" : "Create invoice"}
+          </button>
+        </>
+      }
+    >
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
           {/* Project — first, so the client picker below can suggest the
               contacts attached to it. */}
           <div>
@@ -411,10 +436,10 @@ export default function NewInvoiceModal({
                 <span className="flex-1 text-[13px]" style={{ color: "var(--color-charcoal)" }}>{clientLabel}</span>
                 {projectId && clientFromProject && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded"
-                    style={{ background: "rgba(61,107,79,0.12)", color: "var(--color-sage-hover)" }}>From project</span>
+                    style={{ background: "rgba(var(--color-green-deep-rgb),0.12)", color: "var(--color-sage-hover)" }}>From project</span>
                 )}
                 <span className="text-[10px] px-1.5 py-0.5 rounded"
-                  style={{ background: "rgba(31,33,26,0.07)", color: "var(--color-grey)" }}>
+                  style={{ background: "rgba(var(--color-charcoal-rgb),0.07)", color: "var(--color-grey)" }}>
                   {client?.kind === "organization" ? "Organization" : "Contact"}
                 </span>
                 <button type="button" onClick={clearClient} style={{ color: "var(--color-grey)" }}><X size={12} /></button>
@@ -467,7 +492,7 @@ export default function NewInvoiceModal({
               />
             ) : (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-[12px]"
-                style={{ background: "rgba(61,107,79,0.08)", border: "0.5px solid rgba(61,107,79,0.25)", color: "var(--color-sage-hover)" }}>
+                style={{ background: "rgba(var(--color-green-deep-rgb),0.08)", border: "0.5px solid rgba(var(--color-green-deep-rgb),0.25)", color: "var(--color-sage-hover)" }}>
                 <Check size={12} />
                 <span>Rate set: <strong>{fmtMoney(projectRate)}/hr</strong></span>
                 <button type="button"
@@ -566,32 +591,7 @@ export default function NewInvoiceModal({
 
           {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
         </form>
-
-        <div className="flex items-center justify-between gap-2 px-5 py-4" style={{ borderTop: "0.5px solid var(--color-border)" }}>
-          <div className="text-[11px]" style={{ color: "var(--color-grey)" }}>
-            {hasReady && (
-              <>
-                <span style={{ color: "var(--color-charcoal)", fontWeight: 600 }}>{fmtMoney(grandTotal)}</span>
-                <span> on this draft</span>
-              </>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={onClose}
-              className="px-4 py-2 text-[13px] rounded-lg"
-              style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>Cancel</button>
-            <button onClick={handleSubmit as unknown as React.MouseEventHandler}
-              disabled={loading || !clientLabel}
-              className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50"
-              style={{ background: "var(--color-charcoal)" }}>
-              {loading ? "Creating…" : "Create invoice"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -648,7 +648,7 @@ function ReadyToBillPanel({
       {uninvoicedTime.length > 0 && (
         <div>
           <div className="flex items-center gap-2 px-4 py-2"
-            style={{ borderBottom: "0.5px solid var(--color-border)", background: "rgba(31,33,26,0.03)" }}>
+            style={{ borderBottom: "0.5px solid var(--color-border)", background: "rgba(var(--color-charcoal-rgb),0.03)" }}>
             <Clock size={11} style={{ color: "var(--color-sage)" }} />
             <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>Time</span>
             <span className="text-[11px] ml-auto tabular-nums" style={{ color: "var(--color-grey)" }}>
@@ -690,7 +690,7 @@ function ReadyToBillPanel({
         <div>
           <div className="flex items-center gap-2 px-4 py-2"
             style={{ borderTop: uninvoicedTime.length > 0 ? "0.5px solid var(--color-border)" : "none",
-                     borderBottom: "0.5px solid var(--color-border)", background: "rgba(31,33,26,0.03)" }}>
+                     borderBottom: "0.5px solid var(--color-border)", background: "rgba(var(--color-charcoal-rgb),0.03)" }}>
             <Receipt size={11} style={{ color: "var(--color-dark-orange)" }} />
             <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>Expenses</span>
             <span className="text-[11px] ml-auto tabular-nums" style={{ color: "var(--color-grey)" }}>
@@ -710,7 +710,7 @@ function ReadyToBillPanel({
                     {x.description || "Expense"}
                   </span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wider"
-                    style={{ background: "rgba(31,33,26,0.06)", color: "var(--color-grey)" }}>
+                    style={{ background: "rgba(var(--color-charcoal-rgb),0.06)", color: "var(--color-grey)" }}>
                     {x.category}
                   </span>
                   <span className="text-[11px] font-medium tabular-nums w-14 text-right" style={{ color: "var(--color-charcoal)" }}>{fmtMoney(Number(x.amount))}</span>
@@ -738,7 +738,7 @@ function ReadyToBillPanel({
           style={{
             borderTop: (uninvoicedTime.length > 0 || uninvoicedExpenses.length > 0) ? "0.5px solid var(--color-border)" : "none",
             borderBottom: "0.5px solid var(--color-border)",
-            background: "rgba(31,33,26,0.03)",
+            background: "rgba(var(--color-charcoal-rgb),0.03)",
           }}>
           <Plus size={11} style={{ color: "var(--color-charcoal)" }} />
           <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>Manual</span>
@@ -952,7 +952,7 @@ function ClientPicker({
 
   const groupHeader = (label: string, accent: boolean) => (
     <div className="px-4 py-1.5 text-[9.5px] font-bold uppercase tracking-wider"
-      style={{ color: "var(--color-grey)", background: accent ? "rgba(61,107,79,0.06)" : "rgba(31,33,26,0.03)",
+      style={{ color: "var(--color-grey)", background: accent ? "rgba(var(--color-green-deep-rgb),0.06)" : "rgba(var(--color-charcoal-rgb),0.03)",
                borderTop: accent ? undefined : "0.5px solid var(--color-border)", borderBottom: "0.5px solid var(--color-border)" }}>
       {label}
     </div>
@@ -1055,7 +1055,7 @@ function ClientRow({ item, onPick }: { item: SelectedClient; onPick: () => void 
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
       <span className="text-[12px] font-medium" style={{ color: "var(--color-charcoal)" }}>{label}</span>
       <span className="text-[9px] px-1.5 py-0.5 rounded shrink-0"
-        style={{ background: "rgba(31,33,26,0.07)", color: "var(--color-grey)" }}>
+        style={{ background: "rgba(var(--color-charcoal-rgb),0.07)", color: "var(--color-grey)" }}>
         {isOrg ? "Org" : "Contact"}
       </span>
       {email && (

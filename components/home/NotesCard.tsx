@@ -169,7 +169,7 @@ export default function NotesCard({ notes: initialNotes }: { notes: HomeNote[] }
                   {note.title || "Untitled"}
                 </div>
                 {notePreview(note.content) && (
-                  <div className="text-[11px] truncate mt-0.5" style={{ color: "#6b6860" }}>
+                  <div className="text-[11px] truncate mt-0.5" style={{ color: "var(--color-text-secondary)" }}>
                     {notePreview(note.content)}
                   </div>
                 )}

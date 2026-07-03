@@ -21,7 +21,7 @@ export default function ComingSoonOverlay({
       >
         <span
           className="text-[10px] font-semibold uppercase tracking-wider px-3 py-1 rounded-full mb-5"
-          style={{ background: "rgba(155,163,122,0.15)", color: "var(--color-sage)" }}
+          style={{ background: "rgba(var(--color-sage-rgb),0.15)", color: "var(--color-sage)" }}
         >
           Coming soon
         </span>
@@ -31,7 +31,7 @@ export default function ComingSoonOverlay({
         >
           {module}
         </h2>
-        <p className="text-[12px] leading-relaxed" style={{ color: "#6b6860" }}>
+        <p className="text-[12px] leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>
           {description}
         </p>
       </div>

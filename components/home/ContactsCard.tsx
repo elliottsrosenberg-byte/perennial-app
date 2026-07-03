@@ -18,7 +18,7 @@ function lastContactedLabel(date: string | null): { text: string; color: string 
   if (days === 0)  return { text: "Today",              color: "var(--color-sage)"       };
   if (days < 7)    return { text: `${days}d ago`,       color: "var(--color-sage)"       };
   if (days < 14)   return { text: `${Math.floor(days / 7)}w ago`,  color: "var(--color-charcoal)" };
-  if (days < 60)   return { text: `${Math.floor(days / 7)}w ago`,  color: "#b8860b"               };
+  if (days < 60)   return { text: `${Math.floor(days / 7)}w ago`,  color: "var(--color-gold)"     };
   return { text: `${Math.floor(days / 30)}mo ago`,      color: "var(--color-red-orange)" };
 }
 
@@ -87,7 +87,7 @@ export default function ContactsCard({ contacts, totalCount }: Props) {
               <Link
                 href="/network?import=1"
                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium"
-                style={{ background: "transparent", color: "#6b6860", border: "0.5px solid var(--color-border)" }}
+                style={{ background: "transparent", color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}
               >
                 <Upload size={11} strokeWidth={2} />
                 Import CSV
@@ -118,7 +118,7 @@ export default function ContactsCard({ contacts, totalCount }: Props) {
                 style={{
                   background: "var(--color-cream)",
                   border: "0.5px solid var(--color-border)",
-                  color: "#6b6860",
+                  color: "var(--color-text-secondary)",
                 }}
               >
                 {initials(c.first_name, c.last_name)}

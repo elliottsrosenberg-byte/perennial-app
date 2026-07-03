@@ -70,7 +70,7 @@ export default function Menu({ items, onClose, style }: MenuProps) {
 
         const iconColor = danger ? "var(--color-red-orange)" : "var(--color-text-tertiary)";
 
-        const hoverBg = danger ? "rgba(220,62,13,0.06)" : "var(--color-surface-sunken)";
+        const hoverBg = danger ? "rgba(var(--color-red-rgb),0.06)" : "var(--color-surface-sunken)";
 
         const baseStyle: React.CSSProperties = {
           display:        "flex",

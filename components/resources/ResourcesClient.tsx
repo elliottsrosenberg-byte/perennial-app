@@ -14,11 +14,11 @@ import {
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
-  accent: "var(--color-sage)", accentHex: "#9BA37A", accentL: "rgba(155,163,122,0.12)",
-  blue:   "var(--color-sage)", blueL:     "rgba(155,163,122,0.12)",
-  purple: "#6d4fa3",           purpleL:   "rgba(109,79,163,0.09)",
-  amber:  "#b8860b",           amberL:    "rgba(184,134,11,0.10)",
-  darkAccent: "#3d6b4f",       darkAccentL: "rgba(61,107,79,0.09)",
+  accent: "var(--color-sage)", accentHex: "var(--color-sage)", accentL: "rgba(var(--color-sage-rgb),0.12)",
+  blue:   "var(--color-sage)", blueL:     "rgba(var(--color-sage-rgb),0.12)",
+  purple: "var(--color-purple)",           purpleL:   "rgba(var(--color-purple-rgb),0.09)",
+  amber:  "var(--color-gold)",           amberL:    "rgba(var(--color-gold-rgb),0.10)",
+  darkAccent: "var(--color-green-deep)",       darkAccentL: "rgba(var(--color-green-deep-rgb),0.09)",
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -263,7 +263,7 @@ const IcTarget   = () => <svg width="22" height="22" viewBox="0 0 24 24" fill="n
 // ─── Health pip ───────────────────────────────────────────────────────────────
 function HealthPip({ filled, total }: { filled: number; total: number }) {
   const pct = filled / total;
-  const color = pct >= 0.8 ? C.darkAccent : pct >= 0.35 ? C.amber : "rgba(31,33,26,0.22)";
+  const color = pct >= 0.8 ? C.darkAccent : pct >= 0.35 ? C.amber : "rgba(var(--color-charcoal-rgb),0.22)";
   return <div style={{ width:5, height:5, borderRadius:"50%", background:color, flexShrink:0 }} />;
 }
 
@@ -679,7 +679,7 @@ function SetupModal({ resource, onClose, onSaved }: {
 
         <div style={{ flex:1, overflowY:"auto", padding:20 }}>
           {/* Why card */}
-          <div style={{ background:C.darkAccentL, border:"0.5px solid rgba(61,107,79,0.18)", borderRadius:8, padding:"12px 14px", fontSize:11, color:"var(--color-grey)", lineHeight:1.55, marginBottom:16 }}>
+          <div style={{ background:C.darkAccentL, border:"0.5px solid rgba(var(--color-green-deep-rgb),0.18)", borderRadius:8, padding:"12px 14px", fontSize:11, color:"var(--color-grey)", lineHeight:1.55, marginBottom:16 }}>
             {cfg.why}
           </div>
 
@@ -1130,7 +1130,7 @@ function CategoryUploadBar({
           marginBottom: 18,
           padding: "28px 20px",
           border: `1px dashed ${dragOver ? "var(--color-sage)" : "var(--color-border)"}`,
-          background: dragOver ? "rgba(155,163,122,0.08)" : "var(--color-cream)",
+          background: dragOver ? "rgba(var(--color-sage-rgb),0.08)" : "var(--color-cream)",
           borderRadius: 12,
           display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
           transition: "background 0.12s",
@@ -1172,7 +1172,7 @@ function CategoryUploadBar({
         marginBottom: 14,
         padding: "10px 14px",
         border: `0.5px dashed ${dragOver ? "var(--color-sage)" : "var(--color-border)"}`,
-        background: dragOver ? "rgba(155,163,122,0.08)" : "var(--color-off-white)",
+        background: dragOver ? "rgba(var(--color-sage-rgb),0.08)" : "var(--color-off-white)",
         borderRadius: 10,
         gap: 12,
         transition: "background 0.12s, border-color 0.12s",
@@ -1328,7 +1328,7 @@ function isImageFile(url: string, type: string | null): boolean {
 function FileTypeThumb({ kind }: { kind: FileKind }) {
   const map: Record<FileKind, { bg: string; fg: string; label: string }> = {
     image: { bg: C.darkAccentL, fg: C.darkAccent, label: "IMG" },
-    pdf:   { bg: "rgba(220,62,13,0.10)", fg: "#c0420d", label: "PDF" },
+    pdf:   { bg: "rgba(var(--color-red-rgb),0.10)", fg: "#c0420d", label: "PDF" },
     doc:   { bg: C.accentL, fg: C.darkAccent, label: "DOC" },
     other: { bg: "var(--color-cream)", fg: "var(--color-grey)", label: "FILE" },
   };
@@ -1529,7 +1529,7 @@ function OnboardingBanner({ studioName, onDismiss, onJumpToBrand }: {
         marginBottom: 14,
         padding: "12px 16px",
         background: "linear-gradient(135deg, rgba(155,163,122,0.16) 0%, rgba(155,163,122,0.06) 100%)",
-        border: "0.5px solid rgba(155,163,122,0.4)",
+        border: "0.5px solid rgba(var(--color-sage-rgb),0.4)",
         borderRadius: 10,
       }}
     >
@@ -1978,7 +1978,7 @@ export default function ResourcesClient({
             void handleDroppedFiles(e.dataTransfer.files);
           }}>
           {dragActive && (
-            <div style={{ position:"absolute", inset:12, zIndex:40, borderRadius:14, border:"1.5px dashed var(--color-sage)", background:"rgba(155,163,122,0.10)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8, pointerEvents:"none", backdropFilter:"blur(1px)" }}>
+            <div style={{ position:"absolute", inset:12, zIndex:40, borderRadius:14, border:"1.5px dashed var(--color-sage)", background:"rgba(var(--color-sage-rgb),0.10)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8, pointerEvents:"none", backdropFilter:"blur(1px)" }}>
               <div style={{ width:44, height:44, borderRadius:11, background:"var(--color-sage)", color:"white", display:"flex", alignItems:"center", justifyContent:"center" }}><IcPlus /></div>
               <div style={{ fontSize:14, fontWeight:700, color:"var(--color-charcoal)" }}>Drop to upload</div>
               <div style={{ fontSize:11.5, color:"var(--color-grey)" }}>

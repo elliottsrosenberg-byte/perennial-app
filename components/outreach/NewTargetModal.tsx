@@ -6,6 +6,7 @@ import type { OutreachPipeline, OutreachTarget, Contact, Organization } from "@/
 import { X, User, Building2, UserPlus, Plus } from "lucide-react";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
+import Modal from "@/components/ui/Modal";
 
 interface Props {
   pipelines: OutreachPipeline[];
@@ -262,23 +263,30 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
     && (kind === "unlinked" ? !!unlinkedName.trim() : !!linked);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(31,33,26,0.5)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
-        style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}>
-        <div className="flex items-center justify-between px-6 py-4"
-          style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-          <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>New target</h2>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg"
-            style={{ color: "var(--color-grey)" }}
+    <Modal
+      onClose={onClose}
+      size="md"
+      title="New target"
+      bodyStyle={{ padding: 0 }}
+      footer={
+        <>
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-[13px] rounded-lg transition-colors"
+            style={{ color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-            <X size={14} />
+            Cancel
           </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+          <button onClick={handleSubmit as unknown as React.MouseEventHandler}
+            disabled={!canSubmit}
+            className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50"
+            style={{ background: selectedPipeline?.color ?? "var(--color-sage)" }}>
+            {loading ? "Adding…" : "Add target"}
+          </button>
+        </>
+      }
+    >
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
           {/* Kind toggle — the first thing the user picks. */}
           <div>
             <label className="block text-[11px] font-medium mb-2" style={{ color: "var(--color-charcoal)" }}>
@@ -330,7 +338,7 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
                   className="px-3 py-1 rounded-full text-[11px] transition-colors"
                   style={{
                     background: stageId === s.id ? (selectedPipeline?.color ?? "var(--color-sage)") : "var(--color-cream)",
-                    color: stageId === s.id ? "white" : "#6b6860",
+                    color: stageId === s.id ? "white" : "var(--color-text-secondary)",
                     border: "0.5px solid var(--color-border)",
                   }}>
                   {s.name}
@@ -441,8 +449,8 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
 
                 {createOpen && kind === "person" && (
                   <div className="mt-2 rounded-xl p-3"
-                    style={{ background: "rgba(184,134,11,0.06)", border: "0.5px solid rgba(184,134,11,0.25)" }}>
-                    <p className="text-[11px] font-medium mb-2" style={{ color: "#b8860b" }}>
+                    style={{ background: "rgba(var(--color-gold-rgb),0.06)", border: "0.5px solid rgba(var(--color-gold-rgb),0.25)" }}>
+                    <p className="text-[11px] font-medium mb-2" style={{ color: "var(--color-gold)" }}>
                       New lead: {search.trim() || "—"}
                     </p>
                     <input type="email" value={newPersonEmail}
@@ -465,8 +473,8 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
 
                 {createOpen && kind === "organization" && (
                   <div className="mt-2 rounded-xl p-3"
-                    style={{ background: "rgba(37,99,171,0.06)", border: "0.5px solid rgba(37,99,171,0.25)" }}>
-                    <p className="text-[11px] font-medium mb-2" style={{ color: "#2563ab" }}>
+                    style={{ background: "rgba(var(--color-blue-rgb),0.06)", border: "0.5px solid rgba(var(--color-blue-rgb),0.25)" }}>
+                    <p className="text-[11px] font-medium mb-2" style={{ color: "var(--color-blue)" }}>
                       New organization: {search.trim() || "—"}
                     </p>
                     <input type="url" value={newOrgWebsite}
@@ -480,7 +488,7 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
                       className="w-full px-2.5 py-1.5 text-[12px] rounded-md border focus:outline-none"
                       style={inputStyle} />
                     <CreateActions
-                      accent="#2563ab"
+                      accent="var(--color-blue)"
                       onCancel={() => { setCreateOpen(false); setNewOrgWebsite(""); setNewOrgLocation(""); }}
                       onCreate={createAndLinkOrg}
                       disabled={!search.trim()}
@@ -520,25 +528,7 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
 
           {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
         </form>
-
-        <div className="flex items-center justify-end gap-2 px-6 py-4"
-          style={{ borderTop: "0.5px solid var(--color-border)" }}>
-          <button type="button" onClick={onClose}
-            className="px-4 py-2 text-[13px] rounded-lg transition-colors"
-            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-            Cancel
-          </button>
-          <button onClick={handleSubmit as unknown as React.MouseEventHandler}
-            disabled={!canSubmit}
-            className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50"
-            style={{ background: selectedPipeline?.color ?? "var(--color-sage)" }}>
-            {loading ? "Adding…" : "Add target"}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -566,8 +556,8 @@ function KindButton({ active, onClick, icon, label, hint }: {
 function ResultRow({ kind, title, sub, onClick }: {
   kind: TargetKind; title: string; sub: string; onClick: () => void;
 }) {
-  const tagBg = kind === "person" ? "var(--color-cream)" : "rgba(37,99,171,0.10)";
-  const tagFg = kind === "person" ? "#6b6860" : "#2563ab";
+  const tagBg = kind === "person" ? "var(--color-cream)" : "rgba(var(--color-blue-rgb),0.10)";
+  const tagFg = kind === "person" ? "var(--color-text-secondary)" : "var(--color-blue)";
   return (
     <button type="button" onClick={onClick}
       className="w-full text-left px-4 py-2.5 flex items-center gap-2.5 transition-colors"
@@ -591,28 +581,28 @@ function CreateRow({ label, hint, icon, onClick }: {
   return (
     <button type="button" onClick={onClick}
       className="w-full text-left px-4 py-2.5 flex items-center gap-2.5 transition-colors"
-      style={{ background: "rgba(184,134,11,0.06)" }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(184,134,11,0.12)")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(184,134,11,0.06)")}>
-      <span className="flex items-center justify-center" style={{ width: 18, height: 18, borderRadius: 9999, background: "rgba(184,134,11,0.18)", color: "#b8860b" }}>
+      style={{ background: "rgba(var(--color-gold-rgb),0.06)" }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(var(--color-gold-rgb),0.12)")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(var(--color-gold-rgb),0.06)")}>
+      <span className="flex items-center justify-center" style={{ width: 18, height: 18, borderRadius: 9999, background: "rgba(var(--color-gold-rgb),0.18)", color: "var(--color-gold)" }}>
         {icon}
       </span>
       <div>
-        <div className="text-[12px] font-medium" style={{ color: "#b8860b" }}>{label}</div>
+        <div className="text-[12px] font-medium" style={{ color: "var(--color-gold)" }}>{label}</div>
         <div className="text-[10px]" style={{ color: "var(--color-grey)" }}>{hint}</div>
       </div>
     </button>
   );
 }
 
-function CreateActions({ accent = "#b8860b", onCancel, onCreate, disabled }: {
+function CreateActions({ accent = "var(--color-gold)", onCancel, onCreate, disabled }: {
   accent?: string; onCancel: () => void; onCreate: () => void; disabled: boolean;
 }) {
   return (
     <div className="flex justify-end gap-1.5 mt-2">
       <button type="button" onClick={onCancel}
         className="px-2.5 py-1 text-[11px] rounded-md"
-        style={{ background: "transparent", color: "#6b6860", border: "0.5px solid var(--color-border)" }}>
+        style={{ background: "transparent", color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}>
         Cancel
       </button>
       <button type="button" onClick={onCreate} disabled={disabled}

@@ -18,7 +18,7 @@ interface Props {
 
 const CARD_STYLE: React.CSSProperties = {
   background: "var(--color-off-white)", border: "0.5px solid var(--color-border)",
-  borderRadius: 12, boxShadow: "0 2px 8px rgba(31,33,26,0.04)", padding: "14px 16px",
+  borderRadius: 12, boxShadow: "0 2px 8px rgba(var(--color-charcoal-rgb),0.04)", padding: "14px 16px",
 };
 const TITLE_STYLE: React.CSSProperties = {
   fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 600,
@@ -109,7 +109,7 @@ function FollowerGrowthCard({ history }: { history: { d: string; f: number }[] }
       <p style={CAPTION_STYLE}>{has ? `${delta >= 0 ? "+" : "−"}${fmt(Math.abs(delta))} over ${pts.length} days` : "Instagram"}</p>
       {has ? (
         <svg viewBox={`0 0 ${W} ${H + 2}`} preserveAspectRatio="none" style={{ width: "100%", height: 100, marginTop: 12, display: "block" }}>
-          <path d={area} fill="rgba(155,163,122,0.16)" />
+          <path d={area} fill="rgba(var(--color-sage-rgb),0.16)" />
           <path d={path} stroke="var(--color-sage)" strokeWidth={1.75} fill="none" strokeLinejoin="round" strokeLinecap="round" />
         </svg>
       ) : <EmptyNote text="We'll chart your follower growth as daily data builds." />}

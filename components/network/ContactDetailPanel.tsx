@@ -61,7 +61,7 @@ function lastContactedDisplay(date: string | null): { label: string; color: stri
   const days = Math.floor((Date.now() - new Date(date).getTime()) / 86400000);
   if (days === 0) return { label: "Today", color: "var(--color-sage)" };
   if (days < 7)  return { label: `${days}d ago`, color: "var(--color-sage)" };
-  if (days < 60) return { label: `${Math.floor(days / 7)}w ago`, color: days < 14 ? "var(--color-charcoal)" : "#b8860b" };
+  if (days < 60) return { label: `${Math.floor(days / 7)}w ago`, color: days < 14 ? "var(--color-charcoal)" : "var(--color-gold)" };
   return { label: `${Math.floor(days / 30)}mo ago`, color: "var(--color-red-orange)" };
 }
 
@@ -128,7 +128,7 @@ function ContactCanvasEditor({
       latestHtml.current = html;
       scheduleSave(html);
     },
-    editorProps: { attributes: { style: "outline: none; min-height: 300px; font-size: 14px; line-height: 1.8; color: #6b6860;" } },
+    editorProps: { attributes: { style: "outline: none; min-height: 300px; font-size: 14px; line-height: 1.8; color: var(--color-text-secondary);" } },
   }, [contactId]);
 
   // On unmount: flush any pending save with the ref-tracked HTML and bubble
@@ -217,12 +217,12 @@ function ContactCanvasEditor({
               style={{
                 fontSize: 10, fontWeight: 600,
                 padding: "2px 9px", borderRadius: 9999,
-                background: "rgba(155,163,122,0.16)", color: "var(--color-sage-text)",
-                border: "0.5px solid rgba(155,163,122,0.36)",
+                background: "rgba(var(--color-sage-rgb),0.16)", color: "var(--color-sage-text)",
+                border: "0.5px solid rgba(var(--color-sage-rgb),0.36)",
                 cursor: "pointer", fontFamily: "inherit",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(155,163,122,0.28)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(155,163,122,0.16)")}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.28)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.16)")}
             >
               View note →
             </button>
@@ -285,7 +285,7 @@ function TasksTab({ contactId, tasks, setTasks, highlightedTaskId }: {
                   display: "flex", alignItems: "center", gap: 10,
                   padding: "9px 8px", marginLeft: -8, marginRight: -8, borderRadius: 6,
                   borderBottom: "0.5px solid var(--color-border)",
-                  background: hi ? "rgba(155,163,122,0.18)" : "transparent",
+                  background: hi ? "rgba(var(--color-sage-rgb),0.18)" : "transparent",
                   transition: "background 0.6s ease",
                 }}
               >
@@ -351,8 +351,8 @@ function NotesTab({ contactId, notes, setNotes, highlightedNoteId }: {
               id={`contact-note-${note.id}`}
               style={{
                 display: "block", padding: "12px 14px", marginBottom: 8, borderRadius: 10,
-                background: hi ? "rgba(155,163,122,0.18)" : "var(--color-off-white)",
-                border: `0.5px solid ${hi ? "rgba(155,163,122,0.46)" : "var(--color-border)"}`,
+                background: hi ? "rgba(var(--color-sage-rgb),0.18)" : "var(--color-off-white)",
+                border: `0.5px solid ${hi ? "rgba(var(--color-sage-rgb),0.46)" : "var(--color-border)"}`,
                 textDecoration: "none", cursor: "pointer",
                 transition: "background 0.6s ease, border-color 0.6s ease",
               }}
@@ -922,7 +922,7 @@ export default function ContactDetailPanel({
                 <div
                   onClick={() => avatarInputRef.current?.click()}
                   title="Upload photo"
-                  style={{ width: 40, height: 40, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 600, flexShrink: 0, background: contact.is_lead ? "rgba(184,134,11,0.12)" : "var(--color-cream)", border: "0.5px solid var(--color-border)", color: contact.is_lead ? "#b8860b" : "#6b6860", cursor: "pointer", overflow: "hidden" }}>
+                  style={{ width: 40, height: 40, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 600, flexShrink: 0, background: contact.is_lead ? "rgba(var(--color-gold-rgb),0.12)" : "var(--color-cream)", border: "0.5px solid var(--color-border)", color: contact.is_lead ? "var(--color-gold)" : "var(--color-text-secondary)", cursor: "pointer", overflow: "hidden" }}>
                   {contact.avatar_url
                     ? <img src={contact.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     : initials(contact)}
@@ -936,7 +936,7 @@ export default function ContactDetailPanel({
                     if (first) saveField({ first_name: first, last_name: last });
                   }} />
                 </div>
-                {contact.is_lead && <span style={{ fontSize: 10, fontWeight: 600, color: "#b8860b", background: "rgba(184,134,11,0.12)", border: "0.5px solid #b8860b55", padding: "1px 6px", borderRadius: 9999 }}>Lead</span>}
+                {contact.is_lead && <span style={{ fontSize: 10, fontWeight: 600, color: "var(--color-gold)", background: "rgba(var(--color-gold-rgb),0.12)", border: "0.5px solid #b8860b55", padding: "1px 6px", borderRadius: 9999 }}>Lead</span>}
               </div>
             </div>
 
@@ -998,7 +998,7 @@ export default function ContactDetailPanel({
                   {contact.organization ? (
                     <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
                       <button onClick={() => { setShowOrgPicker(true); setOrgSearch(""); }}
-                        style={{ flex: 1, minWidth: 0, textAlign: "left", fontSize: 12, color: "#2563ab", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding: 0 }}
+                        style={{ flex: 1, minWidth: 0, textAlign: "left", fontSize: 12, color: "var(--color-blue)", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding: 0 }}
                         title="Change organization">
                         {contact.organization.name}
                       </button>
@@ -1029,13 +1029,13 @@ export default function ContactDetailPanel({
                             style={{ width: "100%", textAlign: "left", padding: "8px 12px", fontSize: 12, color: "var(--color-charcoal)", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", borderBottom: "0.5px solid var(--color-border)", display: "flex", alignItems: "center", gap: 6 }}
                             onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
                             onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                            <Link2 size={11} style={{ color: "#2563ab", flexShrink: 0 }} />
+                            <Link2 size={11} style={{ color: "var(--color-blue)", flexShrink: 0 }} />
                             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.name}</span>
                           </button>
                         ))}
                         {orgQuery && !orgExactMatch && (
                           <button onClick={() => createAndLinkOrganization(orgSearch)}
-                            style={{ width: "100%", textAlign: "left", padding: "8px 12px", fontSize: 12, color: "#2563ab", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}
+                            style={{ width: "100%", textAlign: "left", padding: "8px 12px", fontSize: 12, color: "var(--color-blue)", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}
                             onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
                             onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                             + Create “{orgSearch.trim()}”
@@ -1077,13 +1077,13 @@ export default function ContactDetailPanel({
                       onBlur={() => { if (tagInput.trim()) addTag(tagInput); setEditingTags(false); }}
                       autoFocus placeholder="Add tag…" style={{ fontSize: 10, background: "transparent", border: "0.5px solid var(--color-sage)", borderRadius: 9999, outline: "none", padding: "2px 6px", color: "var(--color-charcoal)", fontFamily: "inherit" }} />
                   : <button onClick={() => { setEditingTags(true); setTimeout(() => tagInputRef.current?.focus(), 0); }}
-                      style={{ fontSize: 10, color: "#2563ab", background: "transparent", border: "0.5px dashed var(--color-border)", borderRadius: 9999, padding: "2px 6px", cursor: "pointer", fontFamily: "inherit" }}>+ Tag</button>
+                      style={{ fontSize: 10, color: "var(--color-blue)", background: "transparent", border: "0.5px dashed var(--color-border)", borderRadius: 9999, padding: "2px 6px", cursor: "pointer", fontFamily: "inherit" }}>+ Tag</button>
                 }
               </div>
               {editingTags && tagInput === "" && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
                   {PRESET_TAGS.filter(t => !contact.tags.includes(t)).map(t => (
-                    <button key={t} onClick={() => addTag(t)} style={{ fontSize: 9, padding: "2px 6px", borderRadius: 9999, background: "var(--color-cream)", color: "#9a9690", border: "0.5px solid var(--color-border)", cursor: "pointer", fontFamily: "inherit" }}>+ {t}</button>
+                    <button key={t} onClick={() => addTag(t)} style={{ fontSize: 9, padding: "2px 6px", borderRadius: 9999, background: "var(--color-cream)", color: "var(--color-grey)", border: "0.5px solid var(--color-border)", cursor: "pointer", fontFamily: "inherit" }}>+ {t}</button>
                   ))}
                 </div>
               )}
@@ -1094,7 +1094,7 @@ export default function ContactDetailPanel({
               <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
                 <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", flex: 1, margin: 0 }}>Projects</p>
                 <div ref={pickerRef} style={{ position: "relative" }}>
-                  <button onClick={openProjectPicker} style={{ fontSize: 10, color: "#2563ab", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit" }}>+ Link</button>
+                  <button onClick={openProjectPicker} style={{ fontSize: 10, color: "var(--color-blue)", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit" }}>+ Link</button>
                   {showProjectPicker && (
                     <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 10, width: 200, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 10, boxShadow: "0 4px 20px rgba(0,0,0,0.12)", overflow: "hidden" }}>
                       <div style={{ padding: "6px 10px", borderBottom: "0.5px solid var(--color-border)" }}>
@@ -1137,11 +1137,11 @@ export default function ContactDetailPanel({
                 <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)", marginBottom: 6 }}>Finance</p>
                 <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: "0.5px solid var(--color-border)" }}>
                   <span style={{ fontSize: 11, color: "var(--color-grey)" }}>Invoices</span>
-                  <span style={{ fontSize: 11, fontWeight: 500, color: "#6b6860" }}>{invoiceData.count}</span>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)" }}>{invoiceData.count}</span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
                   <span style={{ fontSize: 11, color: "var(--color-grey)" }}>Total invoiced</span>
-                  <span style={{ fontSize: 11, fontWeight: 500, color: "#6b6860" }}>${invoiceData.total.toLocaleString()}</span>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)" }}>${invoiceData.total.toLocaleString()}</span>
                 </div>
                 <button
                   onClick={() => window.location.href = "/finance?tab=invoices"}
@@ -1171,8 +1171,8 @@ export default function ContactDetailPanel({
                     }}
                   onMouseEnter={e => { if (!active) e.currentTarget.style.background = "rgba(0,0,0,0.04)"; }}
                   onMouseLeave={e => { if (!active) e.currentTarget.style.background = "transparent"; }}>
-                    <span style={{ color: active ? "#5a7040" : "var(--color-grey)" }}>{item.icon}</span>
-                    <span style={{ fontSize: 12, flex: 1, textAlign: "left", color: active ? "#5a7040" : "var(--color-grey)", fontWeight: active ? 500 : 400 }}>{item.label}</span>
+                    <span style={{ color: active ? "var(--color-sage-deep)" : "var(--color-grey)" }}>{item.icon}</span>
+                    <span style={{ fontSize: 12, flex: 1, textAlign: "left", color: active ? "var(--color-sage-deep)" : "var(--color-grey)", fontWeight: active ? 500 : 400 }}>{item.label}</span>
                     {item.count !== undefined && item.count > 0 && <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>{item.count}</span>}
                   </button>
                 );
@@ -1194,15 +1194,15 @@ export default function ContactDetailPanel({
             {settingsOpen && (
               <div style={{ paddingBottom: 4 }}>
                 {contact.is_lead && (
-                  <button onClick={convertToContact} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit", color: "#3d6b4f" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "rgba(61,107,79,0.07)"}
+                  <button onClick={convertToContact} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit", color: "var(--color-green-deep)" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(var(--color-green-deep-rgb),0.07)"}
                     onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                     <Users size={13} strokeWidth={1.75} />
                     <span style={{ fontSize: 12 }}>Convert to contact</span>
                   </button>
                 )}
-                <button onClick={handleArchive} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit", color: "#b8860b" }}
-                  onMouseEnter={e => e.currentTarget.style.background = "rgba(184,134,11,0.07)"}
+                <button onClick={handleArchive} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit", color: "var(--color-gold)" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(var(--color-gold-rgb),0.07)"}
                   onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                   <Trash2 size={13} strokeWidth={1.75} />
                   <span style={{ fontSize: 12 }}>Archive {contact.is_lead ? "lead" : "contact"}</span>

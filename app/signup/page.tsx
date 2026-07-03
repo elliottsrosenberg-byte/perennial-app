@@ -110,7 +110,7 @@ export default function SignupPage() {
 
   function focusInput(e: React.FocusEvent<HTMLInputElement>) {
     e.target.style.borderColor = "var(--color-sage)";
-    e.target.style.boxShadow = "0 0 0 3px rgba(155,163,122,0.18)";
+    e.target.style.boxShadow = "0 0 0 3px rgba(var(--color-sage-rgb),0.18)";
   }
   function blurInput(e: React.FocusEvent<HTMLInputElement>) {
     e.target.style.borderColor = "var(--color-border)";
@@ -164,12 +164,12 @@ export default function SignupPage() {
             <div style={{
               background: "var(--color-off-white)", borderRadius: 20,
               border: "0.5px solid var(--color-border)",
-              boxShadow: "0 8px 40px rgba(31,33,26,0.10), 0 1px 4px rgba(31,33,26,0.06)",
+              boxShadow: "0 8px 40px rgba(var(--color-charcoal-rgb),0.10), 0 1px 4px rgba(var(--color-charcoal-rgb),0.06)",
               padding: "48px 44px", textAlign: "center",
             }}>
               <div style={{
                 width: 48, height: 48, borderRadius: "50%",
-                background: "rgba(155,163,122,0.15)",
+                background: "rgba(var(--color-sage-rgb),0.15)",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 margin: "0 auto 20px",
               }}>
@@ -217,7 +217,7 @@ export default function SignupPage() {
           <div style={{
             background: "var(--color-off-white)", borderRadius: 20,
             border: "0.5px solid var(--color-border)",
-            boxShadow: "0 8px 40px rgba(31,33,26,0.10), 0 1px 4px rgba(31,33,26,0.06)",
+            boxShadow: "0 8px 40px rgba(var(--color-charcoal-rgb),0.10), 0 1px 4px rgba(var(--color-charcoal-rgb),0.06)",
             padding: "40px 44px",
           }}>
             <h1 style={{ fontFamily: "var(--font-newsreader)", fontSize: 26, fontWeight: 700,

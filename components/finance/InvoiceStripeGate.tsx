@@ -48,7 +48,7 @@ export default function InvoiceStripeGate({
           borderRadius: 16,
           background: "var(--color-warm-white)",
           border: "0.5px solid var(--color-border)",
-          boxShadow: "var(--shadow-card, 0 1px 2px rgba(31,33,26,0.04))",
+          boxShadow: "var(--shadow-card, 0 1px 2px rgba(var(--color-charcoal-rgb),0.04))",
         }}
       >
         {/* Brand badge */}
@@ -58,7 +58,7 @@ export default function InvoiceStripeGate({
             width: 52,
             height: 52,
             borderRadius: 14,
-            background: isError ? "rgba(220,62,13,0.10)" : "rgba(99,91,255,0.10)",
+            background: isError ? "rgba(var(--color-red-rgb),0.10)" : "rgba(99,91,255,0.10)",
             color: isError ? "var(--color-red-orange)" : STRIPE_PURPLE,
             marginBottom: 18,
           }}

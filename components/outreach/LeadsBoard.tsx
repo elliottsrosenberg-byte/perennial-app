@@ -27,7 +27,7 @@ function lastContactedDisplay(date: string | null): { label: string; color: stri
   if (days === 0) return { label: "Today",        color: "var(--color-sage)" };
   if (days < 7)  return { label: `${days}d ago`,  color: "var(--color-sage)" };
   if (days < 14) return { label: `${Math.floor(days / 7)}w ago`, color: "var(--color-charcoal)" };
-  if (days < 60) return { label: `${Math.floor(days / 7)}w ago`, color: "#b8860b" };
+  if (days < 60) return { label: `${Math.floor(days / 7)}w ago`, color: "var(--color-gold)" };
   return { label: `${Math.floor(days / 30)}mo ago`, color: "var(--color-red-orange)" };
 }
 
@@ -68,14 +68,14 @@ function LeadCard({ contact, isDragging, onClick, pipelineRefs, onPipelineChipCl
         border: `0.5px solid ${hov && !isDragging ? "var(--color-border-strong)" : "var(--color-border)"}`,
         background: isDragging ? "var(--color-cream)" : "var(--color-off-white)",
         cursor: "inherit", fontFamily: "inherit",
-        boxShadow: isDragging ? "0 8px 24px rgba(31,33,26,0.18)" : hov ? "0 2px 8px rgba(0,0,0,0.06)" : "none",
+        boxShadow: isDragging ? "0 8px 24px rgba(var(--color-charcoal-rgb),0.18)" : hov ? "0 2px 8px rgba(0,0,0,0.06)" : "none",
         transition: "box-shadow 0.1s ease, border-color 0.1s ease",
         outline: "none",
         userSelect: "none",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-        <div style={{ width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, flexShrink: 0, background: "rgba(184,134,11,0.10)", color: "#b8860b", overflow: "hidden" }}>
+        <div style={{ width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, flexShrink: 0, background: "rgba(var(--color-gold-rgb),0.10)", color: "var(--color-gold)", overflow: "hidden" }}>
           {contact.avatar_url
             ? <img src={contact.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             : initials(contact)}
@@ -194,14 +194,14 @@ export default function LeadsBoard({ contacts, onOpen, onStageChange, onNewLead 
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflowY: "auto", padding: "24px", background: "var(--color-warm-white)" }}>
         <div style={{ width: "100%", maxWidth: 520 }}>
           <EmptyState
-            icon={<Users size={22} strokeWidth={1.5} color="#b8860b" />}
+            icon={<Users size={22} strokeWidth={1.5} color="var(--color-gold)" />}
             heading="Start your lead pipeline"
             body="Leads are the people you're chasing — galleries you'd love to show with, press you want covering you, collectors you're warming up. Each lead moves through stages from New to Qualified so you always know who's where."
             action={onNewLead ? {
               label:           "+ New lead",
               onClick:         onNewLead,
-              background:      "#b8860b",
-              backgroundHover: "#a07800",
+              background:      "var(--color-gold)",
+              backgroundHover: "var(--color-amber-deep)",
             } : undefined}
             ashPrompt="Help me identify leads to add to my outreach pipeline based on my practice."
             tips={[

@@ -58,13 +58,13 @@ export default function OpportunitiesCard() {
       <div
         className="flex items-center justify-between px-[14px] py-[9px] text-[11px]"
         style={{
-          background: "rgba(155,163,122,0.07)",
-          borderTop: "0.5px solid rgba(155,163,122,0.18)",
-          color: "#6b6860",
+          background: "rgba(var(--color-sage-rgb),0.07)",
+          borderTop: "0.5px solid rgba(var(--color-sage-rgb),0.18)",
+          color: "var(--color-text-secondary)",
         }}
       >
         <span>Ash: Want me to draft the Design Miami application?</span>
-        <span className="ml-2 cursor-pointer hover:underline shrink-0" style={{ color: "#2563ab" }}>Draft →</span>
+        <span className="ml-2 cursor-pointer hover:underline shrink-0" style={{ color: "var(--color-blue)" }}>Draft →</span>
       </div>
     </div>
   );

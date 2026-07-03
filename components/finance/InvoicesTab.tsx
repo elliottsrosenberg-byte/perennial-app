@@ -10,6 +10,8 @@ import Menu from "@/components/ui/Menu";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
+import Badge, { type BadgeTone } from "@/components/ui/Badge";
+import Modal from "@/components/ui/Modal";
 import { formatInvoiceNumber, paymentMethodLabel } from "@/lib/invoices/format";
 import { buildInvoiceEmailHtml } from "@/lib/invoices/email-template";
 import { fmtDateShort as fmtDate } from "@/lib/format/date";
@@ -99,11 +101,11 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
   const lineItems = invoice.line_items ?? [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
-      style={{ background: "rgba(31,33,26,0.5)" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full rounded-2xl overflow-hidden flex flex-col"
-        style={{ maxWidth: 1160, height: "92vh", background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+    <Modal
+      onClose={onClose}
+      maxWidth={1160}
+      bodyStyle={{ padding: 0, display: "flex", flexDirection: "column", minHeight: "80vh" }}
+      header={
         <div className="flex items-center justify-between px-5 py-4 shrink-0" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
           <div>
             <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>Send invoice</h2>
@@ -116,6 +118,25 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
             <X size={14} />
           </button>
         </div>
+      }
+      footer={!sent ? (
+        <>
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-[12px] rounded-lg"
+            style={{ color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}
+            onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+            onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+            Cancel
+          </button>
+          <button onClick={handleSend} disabled={loading || !to.trim()}
+            className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-medium rounded-lg text-white disabled:opacity-50"
+            style={{ background: "var(--color-sage)" }}>
+            <Send size={11} />
+            {loading ? "Sending…" : "Send invoice"}
+          </button>
+        </>
+      ) : undefined}
+    >
         {sent ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center px-5">
             <p className="text-[28px] mb-2">✓</p>
@@ -169,25 +190,7 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
             </div>
           </div>
         )}
-        {!sent && (
-          <div className="flex items-center justify-end gap-2 px-5 py-3 shrink-0" style={{ borderTop: "0.5px solid var(--color-border)" }}>
-            <button type="button" onClick={onClose}
-              className="px-4 py-2 text-[12px] rounded-lg"
-              style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-              onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
-              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-              Cancel
-            </button>
-            <button onClick={handleSend} disabled={loading || !to.trim()}
-              className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-medium rounded-lg text-white disabled:opacity-50"
-              style={{ background: "var(--color-sage)" }}>
-              <Send size={11} />
-              {loading ? "Sending…" : "Send invoice"}
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -234,20 +237,25 @@ function fmtHours(mins: number) { return `${(mins / 60).toFixed(1)}h`; }
 // Status palette: draft & saved blue, sent yellow, paid green, voided grey,
 // overdue red (shown as an extra tag, never replacing the real status).
 const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  draft:   { bg: "#2563ab",                  color: "white",   label: "Draft"   },
-  saved:   { bg: "#2563ab",                  color: "white",   label: "Saved"   },
-  sent:    { bg: "#e0a82e",                  color: "#1f211a", label: "Sent"    },
+  draft:   { bg: "var(--color-blue)",                  color: "white",   label: "Draft"   },
+  saved:   { bg: "var(--color-blue)",                  color: "white",   label: "Saved"   },
+  sent:    { bg: "var(--color-amber-solid)",                  color: "#1f211a", label: "Sent"    },
   paid:    { bg: "var(--color-sage)",        color: "white",   label: "Paid"    },
   overdue: { bg: "var(--color-red-orange)",  color: "white",   label: "Overdue" },
   voided:  { bg: "var(--color-grey)",        color: "white",   label: "Void"    },
+};
+
+// Status → Badge tone (solid variant). The menu swatch still reads STATUS_STYLE.
+const STATUS_TONE: Record<string, BadgeTone> = {
+  draft: "blue", saved: "blue", sent: "amber", paid: "sage", overdue: "red", voided: "neutral",
 };
 
 // Left-stripe color per status for the list rows.
 function stripeFor(status: string, overdue: boolean): string {
   if (overdue) return "var(--color-red-orange)";
   if (status === "paid")                          return "var(--color-sage)";
-  if (status === "sent")                          return "#e0a82e";
-  if (status === "draft" || status === "saved")   return "#2563ab";
+  if (status === "sent")                          return "var(--color-amber-solid)";
+  if (status === "draft" || status === "saved")   return "var(--color-blue)";
   if (status === "voided")                        return "var(--color-grey)";
   return "var(--color-border)";
 }
@@ -256,9 +264,9 @@ function stripeFor(status: string, overdue: boolean): string {
 const LINE_GRID = "1fr 70px 80px 90px 46px";
 
 const SOURCE_STYLE: Record<string, { bg: string; color: string }> = {
-  time:    { bg: "rgba(61,107,79,0.10)",  color: "var(--color-sage)" },
+  time:    { bg: "rgba(var(--color-green-deep-rgb),0.10)",  color: "var(--color-sage)" },
   expense: { bg: "rgba(220,153,13,0.10)", color: "var(--color-dark-orange)" },
-  manual:  { bg: "rgba(31,33,26,0.06)",   color: "var(--color-grey)" },
+  manual:  { bg: "rgba(var(--color-charcoal-rgb),0.06)",   color: "var(--color-grey)" },
 };
 
 export default function InvoicesTab({
@@ -779,7 +787,7 @@ export default function InvoicesTab({
   const inputCls = "px-2 py-1.5 text-[12px] rounded-lg focus:outline-none";
   const inputStyle = { background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", color: "var(--color-charcoal)" };
 
-  const cardShadow = "0 2px 8px rgba(31,33,26,0.04)";
+  const cardShadow = "0 2px 8px rgba(var(--color-charcoal-rgb),0.04)";
   const detailBg   = "var(--color-cream)";   // a real step darker than the list pane
 
   // Stripe is foundational here: no healthy connection, no invoicing. Gate
@@ -810,7 +818,7 @@ export default function InvoicesTab({
           {/* Summary — moved up from the footer. */}
           <div className="flex gap-4 mb-3">
             {[
-              { label: "Outstanding", value: fmtCurrency(outstanding), color: outstanding > 0 ? "#b8860b" : "var(--color-charcoal)" },
+              { label: "Outstanding", value: fmtCurrency(outstanding), color: outstanding > 0 ? "var(--color-gold)" : "var(--color-charcoal)" },
               { label: "Collected YTD", value: fmtCurrency(collectedYtd), color: "var(--color-charcoal)" },
               { label: "Draft", value: fmtCurrency(draftTotal), color: "var(--color-charcoal)" },
             ].map((item) => (
@@ -837,14 +845,14 @@ export default function InvoicesTab({
               </button>
               {statusMenuOpen && (
                 <div className="absolute right-0 mt-1 rounded-xl overflow-hidden z-30"
-                  style={{ top: "100%", width: 200, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 24px rgba(31,33,26,0.14)" }}>
+                  style={{ top: "100%", width: 200, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 24px rgba(var(--color-charcoal-rgb),0.14)" }}>
                   {STATUS_KEYS.map((k) => {
                     const on = statusFilter.has(k);
                     const meta = STATUS_STYLE[k];
                     return (
                       <button key={k} type="button" onClick={() => toggleStatus(k)}
                         className="w-full flex items-center gap-2 px-3 py-2 text-left"
-                        style={{ borderBottom: "0.5px solid var(--color-border)", background: on ? "rgba(155,163,122,0.10)" : "transparent" }}>
+                        style={{ borderBottom: "0.5px solid var(--color-border)", background: on ? "rgba(var(--color-sage-rgb),0.10)" : "transparent" }}>
                         <span className="w-3.5 h-3.5 rounded shrink-0 flex items-center justify-center"
                           style={{ background: on ? "var(--color-sage)" : "transparent", border: on ? "none" : "1.5px solid var(--color-border)" }}>
                           {on && <Check size={10} color="white" />}
@@ -874,14 +882,14 @@ export default function InvoicesTab({
               </button>
               {sortMenuOpen && (
                 <div className="absolute right-0 mt-1 rounded-xl overflow-hidden z-30"
-                  style={{ top: "100%", width: 180, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 24px rgba(31,33,26,0.14)" }}>
+                  style={{ top: "100%", width: 180, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 24px rgba(var(--color-charcoal-rgb),0.14)" }}>
                   <div className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider" style={{ color: "var(--color-grey)", borderBottom: "0.5px solid var(--color-border)" }}>Sort by</div>
                   {SORT_OPTIONS.map((opt) => {
                     const active = sortBy === opt.key;
                     return (
                       <button key={opt.key} type="button" onClick={() => pickSort(opt.key)}
                         className="w-full flex items-center gap-2 px-3 py-2 text-left text-[12px]"
-                        style={{ borderBottom: "0.5px solid var(--color-border)", background: active ? "rgba(155,163,122,0.10)" : "transparent", color: "var(--color-charcoal)", fontWeight: active ? 600 : 400 }}>
+                        style={{ borderBottom: "0.5px solid var(--color-border)", background: active ? "rgba(var(--color-sage-rgb),0.10)" : "transparent", color: "var(--color-charcoal)", fontWeight: active ? 600 : 400 }}>
                         <span className="flex-1">{opt.label}</span>
                         {active && (sortDir === "asc" ? <ArrowUp size={12} style={{ color: "var(--color-sage)" }} /> : <ArrowDown size={12} style={{ color: "var(--color-sage)" }} />)}
                       </button>
@@ -897,7 +905,7 @@ export default function InvoicesTab({
           {/* Uninvoiced ready banner — quiet sage, dismissable */}
           {!bannerDismissed && readyProjectCount > 0 && invoices.length > 0 && (
             <div className="flex items-center gap-2 px-4 py-2.5"
-              style={{ background: "rgba(155,163,122,0.10)", borderBottom: "0.5px solid var(--color-border)" }}>
+              style={{ background: "rgba(var(--color-sage-rgb),0.10)", borderBottom: "0.5px solid var(--color-border)" }}>
               <Sparkles size={11} style={{ color: "var(--color-sage)", flexShrink: 0 }} />
               <span className="text-[11px] flex-1" style={{ color: "var(--color-charcoal)" }}>
                 {readyProjectCount} {readyProjectCount === 1 ? "project has" : "projects have"} uninvoiced work
@@ -949,7 +957,7 @@ export default function InvoicesTab({
                   style={{
                     borderBottom: "0.5px solid var(--color-border)",
                     // Sage tint reads clearly on both the light and dark surfaces.
-                    background: isSelected ? "rgba(155,163,122,0.18)" : "transparent",
+                    background: isSelected ? "rgba(var(--color-sage-rgb),0.18)" : "transparent",
                     borderLeft: `${isSelected ? 3 : 2}px solid ${stripeColor}`,
                   }}
                   onClick={() => setSelectedId(inv.id)}>
@@ -964,15 +972,8 @@ export default function InvoicesTab({
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] flex-1 truncate" style={{ color: "var(--color-grey)" }}>{inv.project?.title ?? ""}</span>
                     {showDate && <span className="text-[10px]" style={{ color: "var(--color-grey)" }}>{dateLabel} {fmtDate(dateVal)}</span>}
-                    {overdue && (
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
-                        style={{ background: STATUS_STYLE.overdue.bg, color: STATUS_STYLE.overdue.color }}>
-                        Overdue
-                      </span>
-                    )}
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide" style={{ background: st.bg, color: st.color }}>
-                      {st.label}
-                    </span>
+                    {overdue && <Badge tone="red" variant="solid">Overdue</Badge>}
+                    <Badge tone={STATUS_TONE[inv.status] ?? "blue"} variant="solid">{st.label}</Badge>
                   </div>
                 </div>,
               );
@@ -1092,10 +1093,7 @@ export default function InvoicesTab({
               const statusKey = overdue ? "overdue" : selectedInvoice.status;
               const st = STATUS_STYLE[statusKey] ?? STATUS_STYLE.draft;
               return (
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shrink-0"
-                  style={{ background: st.bg, color: st.color }}>
-                  {st.label}
-                </span>
+                <Badge tone={STATUS_TONE[statusKey] ?? "blue"} variant="solid">{st.label}</Badge>
               );
             })()}
 
@@ -1131,7 +1129,7 @@ export default function InvoicesTab({
               {/* Overdue badge */}
               {selectedInvoice.status === "sent" && isOverdue(selectedInvoice) && (
                 <span className="text-[10px] font-semibold px-2 py-1 rounded"
-                  style={{ background: "rgba(220,62,13,0.10)", color: "var(--color-red-orange)" }}>
+                  style={{ background: "rgba(var(--color-red-rgb),0.10)", color: "var(--color-red-orange)" }}>
                   {overdueDays}d overdue
                 </span>
               )}
@@ -1362,9 +1360,9 @@ export default function InvoicesTab({
                     <div ref={pullerRef} style={{ position: "relative" }}>
                       <button onClick={() => setPullerOpen((v) => !v)}
                         className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg transition-colors"
-                        style={{ color: "var(--color-sage)", border: "0.5px solid rgba(155,163,122,0.4)", background: "rgba(155,163,122,0.06)" }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(155,163,122,0.12)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(155,163,122,0.06)")}>
+                        style={{ color: "var(--color-sage)", border: "0.5px solid rgba(var(--color-sage-rgb),0.4)", background: "rgba(var(--color-sage-rgb),0.06)" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.12)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.06)")}>
                         <Plus size={10} /> Pull more
                         <ChevronDown size={9} />
                       </button>
@@ -1579,7 +1577,7 @@ function PullMorePicker({
       background: "var(--color-warm-white)",
       border: "0.5px solid var(--color-border)",
       borderRadius: 12,
-      boxShadow: "0 8px 24px rgba(31,33,26,0.12)",
+      boxShadow: "0 8px 24px rgba(var(--color-charcoal-rgb),0.12)",
       overflow: "hidden",
     }}>
       <div className="px-3 py-2 flex items-center justify-between"
@@ -1594,7 +1592,7 @@ function PullMorePicker({
         {pullableTime.length > 0 && (
           <>
             <div className="flex items-center gap-1.5 px-3 py-1.5"
-              style={{ background: "rgba(31,33,26,0.03)" }}>
+              style={{ background: "rgba(var(--color-charcoal-rgb),0.03)" }}>
               <Clock size={10} style={{ color: "var(--color-sage)" }} />
               <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>Time</span>
             </div>
@@ -1603,7 +1601,7 @@ function PullMorePicker({
               return (
                 <button key={e.id} type="button" onClick={() => toggleT(e.id)}
                   className="w-full flex items-center gap-2 px-3 py-2 text-left"
-                  style={{ borderBottom: "0.5px solid var(--color-border)", background: on ? "rgba(155,163,122,0.10)" : "transparent" }}>
+                  style={{ borderBottom: "0.5px solid var(--color-border)", background: on ? "rgba(var(--color-sage-rgb),0.10)" : "transparent" }}>
                   <span className="w-3.5 h-3.5 rounded shrink-0" style={{
                     background: on ? "var(--color-sage)" : "transparent",
                     border: on ? "none" : "1.5px solid var(--color-border)",
@@ -1619,7 +1617,7 @@ function PullMorePicker({
         {pullableExpenses.length > 0 && (
           <>
             <div className="flex items-center gap-1.5 px-3 py-1.5"
-              style={{ background: "rgba(31,33,26,0.03)" }}>
+              style={{ background: "rgba(var(--color-charcoal-rgb),0.03)" }}>
               <Receipt size={10} style={{ color: "var(--color-dark-orange)" }} />
               <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>Expenses</span>
             </div>
@@ -1628,7 +1626,7 @@ function PullMorePicker({
               return (
                 <button key={x.id} type="button" onClick={() => toggleE(x.id)}
                   className="w-full flex items-center gap-2 px-3 py-2 text-left"
-                  style={{ borderBottom: "0.5px solid var(--color-border)", background: on ? "rgba(155,163,122,0.10)" : "transparent" }}>
+                  style={{ borderBottom: "0.5px solid var(--color-border)", background: on ? "rgba(var(--color-sage-rgb),0.10)" : "transparent" }}>
                   <span className="w-3.5 h-3.5 rounded shrink-0" style={{
                     background: on ? "var(--color-sage)" : "transparent",
                     border: on ? "none" : "1.5px solid var(--color-border)",
@@ -1847,9 +1845,9 @@ function InvoiceActivity({ invoice }: { invoice: Invoice }) {
     { label: "Invoice created", at: invoice.created_at, color: "var(--color-grey)" },
   ];
   if (invoice.sent_at) {
-    events.push({ label: "Sent to client", at: invoice.sent_at, color: "#e0a82e" });
+    events.push({ label: "Sent to client", at: invoice.sent_at, color: "var(--color-amber-solid)" });
   } else if (invoice.status === "sent" || invoice.status === "paid") {
-    events.push({ label: "Sent to client", at: null, color: "#e0a82e" });
+    events.push({ label: "Sent to client", at: null, color: "var(--color-amber-solid)" });
   }
   if (invoice.status === "paid") events.push({ label: "Payment received", at: invoice.paid_at, color: "var(--color-sage)" });
   if (invoice.status === "voided") events.push({ label: "Voided", at: invoice.voided_at, color: "var(--color-grey)" });
@@ -1859,7 +1857,7 @@ function InvoiceActivity({ invoice }: { invoice: Invoice }) {
   else if (invoice.status === "paid") next = "Complete — paid in full";
   else if (invoice.status === "voided") next = "This invoice is void";
 
-  const cardShadow = "0 2px 8px rgba(31,33,26,0.04)";
+  const cardShadow = "0 2px 8px rgba(var(--color-charcoal-rgb),0.04)";
   return (
     <div className="rounded-xl overflow-hidden"
       style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)", boxShadow: cardShadow }}>
@@ -1916,7 +1914,7 @@ function InvoicePdfPreview({ token, invoiceId, voided }: { token: string | null;
       {voided && !token && (
         <div className="absolute inset-0 flex items-start justify-center pointer-events-none" style={{ paddingTop: 80 }}>
           <span className="text-[64px] font-bold tracking-widest"
-            style={{ color: "rgba(220,62,13,0.18)", transform: "rotate(-18deg)", fontFamily: "var(--font-display)" }}>
+            style={{ color: "rgba(var(--color-red-rgb),0.18)", transform: "rotate(-18deg)", fontFamily: "var(--font-display)" }}>
             VOID
           </span>
         </div>
@@ -1945,7 +1943,7 @@ function ClientChooser({ contacts, loaded, onPick, onClose }: {
   );
   return (
     <div className="absolute left-0 mt-1 rounded-xl overflow-hidden z-30"
-      style={{ top: "100%", width: 280, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 24px rgba(31,33,26,0.14)" }}>
+      style={{ top: "100%", width: 280, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 24px rgba(var(--color-charcoal-rgb),0.14)" }}>
       <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: "0.5px solid var(--color-border)", background: "var(--color-warm-white)" }}>
         <Search size={12} style={{ color: "var(--color-grey)" }} />
         <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)}
@@ -2043,7 +2041,7 @@ function CopyPublicLinkButton({ invoiceId }: { invoiceId: string }) {
             color: "var(--color-warm-white)",
             whiteSpace: "nowrap",
             zIndex: 40,
-            boxShadow: "0 4px 12px rgba(31,33,26,0.18)",
+            boxShadow: "0 4px 12px rgba(var(--color-charcoal-rgb),0.18)",
           }}
         >
           {toast}

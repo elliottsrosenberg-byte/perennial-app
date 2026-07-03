@@ -63,7 +63,7 @@ export default function FinanceCard({
 
   const VARIANTS = {
     normal: "var(--color-charcoal)",
-    warn:   "#a07800",
+    warn:   "var(--color-amber-deep)",
     alert:  "var(--color-red-orange)",
   };
 
@@ -96,7 +96,7 @@ export default function FinanceCard({
           className="flex justify-between items-baseline px-[14px] py-[8px] text-[12px]"
           style={{ borderBottom: i < ROWS.length - 1 ? "0.5px solid var(--color-border)" : "none" }}
         >
-          <span style={{ color: "#6b6860" }}>{row.label}</span>
+          <span style={{ color: "var(--color-text-secondary)" }}>{row.label}</span>
           <span className="font-semibold" style={{ color: VARIANTS[row.variant] }}>{row.value}</span>
         </div>
       ))}

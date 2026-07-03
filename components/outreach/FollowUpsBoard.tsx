@@ -14,7 +14,7 @@ function lastContactedDisplay(date: string | null): { label: string; color: stri
   if (days === 0) return { label: "Today",        color: "var(--color-sage)" };
   if (days < 7)  return { label: `${days}d ago`,  color: "var(--color-sage)" };
   if (days < 14) return { label: `${Math.floor(days / 7)}w ago`, color: "var(--color-charcoal)" };
-  if (days < 60) return { label: `${Math.floor(days / 7)}w ago`, color: "#b8860b" };
+  if (days < 60) return { label: `${Math.floor(days / 7)}w ago`, color: "var(--color-gold)" };
   return { label: `${Math.floor(days / 30)}mo ago`, color: "var(--color-red-orange)" };
 }
 
@@ -40,7 +40,7 @@ function ContactCard({ contact, onClick }: { contact: Contact; onClick: () => vo
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-        <div style={{ width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, flexShrink: 0, background: "var(--color-cream)", color: "#6b6860" }}>
+        <div style={{ width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, flexShrink: 0, background: "var(--color-cream)", color: "var(--color-text-secondary)" }}>
           {initials(contact)}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -82,7 +82,7 @@ export default function FollowUpsBoard({ contacts, onOpen }: Props) {
   const columns: { label: string; dot: string; items: Contact[] }[] = [
     { label: "Never contacted", dot: "var(--color-grey)",       items: contacts.filter(c => !c.last_contacted_at) },
     { label: "60+ days",        dot: "var(--color-red-orange)", items: contacts.filter(c => daysSince(c) >= 60 && daysSince(c) < Infinity) },
-    { label: "30–60 days",      dot: "#b8860b",                 items: contacts.filter(c => daysSince(c) >= 30 && daysSince(c) < 60) },
+    { label: "30–60 days",      dot: "var(--color-gold)",       items: contacts.filter(c => daysSince(c) >= 30 && daysSince(c) < 60) },
   ];
 
   // Whole-board empty state — no one's stale.

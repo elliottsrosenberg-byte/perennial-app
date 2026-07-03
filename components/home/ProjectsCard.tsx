@@ -20,13 +20,13 @@ const STATUS_DOT: Record<string, string> = {
 function dueBadge(due: string | null): { label: string; color: string; bg: string } | null {
   if (!due) return null;
   const days = Math.ceil((new Date(due + "T12:00:00").getTime() - Date.now()) / 86400000);
-  if (days < 0)  return { label: "Overdue", color: "var(--color-red-orange)", bg: "rgba(220,62,13,0.10)" };
-  if (days === 0) return { label: "Today",  color: "#a07800",                 bg: "rgba(232,197,71,0.15)" };
-  if (days <= 7)  return { label: `${days}d`, color: "#a07800",               bg: "rgba(232,197,71,0.15)" };
+  if (days < 0)  return { label: "Overdue", color: "var(--color-red-orange)", bg: "rgba(var(--color-red-rgb),0.10)" };
+  if (days === 0) return { label: "Today",  color: "var(--color-amber-deep)", bg: "rgba(var(--color-amber-rgb),0.15)" };
+  if (days <= 7)  return { label: `${days}d`, color: "var(--color-amber-deep)", bg: "rgba(var(--color-amber-rgb),0.15)" };
   return {
     label: new Date(due + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }),
     color: "var(--color-grey)",
-    bg:    "rgba(31,33,26,0.06)",
+    bg:    "rgba(var(--color-charcoal-rgb),0.06)",
   };
 }
 
@@ -74,7 +74,7 @@ export default function ProjectsCard({ projects }: { projects: HomeProject[] }) 
               style={{ borderBottom: "0.5px solid var(--color-border)" }}
             >
               <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dot }} />
-              <span className="flex-1 truncate text-[12px]" style={{ color: "#6b6860" }}>{p.title}</span>
+              <span className="flex-1 truncate text-[12px]" style={{ color: "var(--color-text-secondary)" }}>{p.title}</span>
               {badge ? (
                 <span
                   className="text-[9px] font-semibold px-[6px] py-[2px] rounded-full shrink-0"

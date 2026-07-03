@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from "react";
 import { Check, Plus, Trash2, X } from "lucide-react";
+import Modal from "@/components/ui/Modal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Select from "@/components/ui/Select";
 import { createClient } from "@/lib/supabase/client";
@@ -63,16 +64,6 @@ export default function CustomizeCategoriesModal({ initial, onClose, onSaved }: 
   const [draftColor, setDraftColor]       = useState(CATEGORY_PALETTE[0].value);
   const [draftRoutes, setDraftRoutes]     = useState<ExpenseCategory>("other");
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
-  }, [onClose]);
-
   function addDraft() {
     const label = draftLabel.trim();
     if (!label) return;
@@ -119,33 +110,13 @@ export default function CustomizeCategoriesModal({ initial, onClose, onSaved }: 
   const routesOptions = BUILTIN_ORDER.map((k) => ({ value: k, label: `Routes to ${BUILTIN_LABELS[k]}` }));
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Customize categories"
-      onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, zIndex: 300,
-        background: "rgba(0,0,0,0.45)",
-        backdropFilter: "blur(4px)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 20,
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: "100%", maxWidth: 520, maxHeight: "calc(100vh - 40px)",
-          background: "var(--color-surface-raised)",
-          borderRadius: 14,
-          border: "0.5px solid var(--color-border)",
-          boxShadow: "var(--shadow-overlay)",
-          fontFamily: "inherit",
-          display: "flex", flexDirection: "column",
-          overflow: "hidden",
-        }}
-      >
-        {/* Header */}
+    <>
+    <Modal
+      onClose={onClose}
+      maxWidth={520}
+      ariaLabel="Customize categories"
+      bodyStyle={{ padding: 0 }}
+      header={
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "14px 18px 12px",
@@ -168,9 +139,36 @@ export default function CustomizeCategoriesModal({ initial, onClose, onSaved }: 
             <X size={14} />
           </button>
         </div>
-
+      }
+      footer={
+        <>
+          {error && (
+            <span style={{ flex: 1, fontSize: 11, color: "var(--color-red-orange)" }}>{error}</span>
+          )}
+          <button onClick={onClose}
+            style={{
+              padding: "7px 14px", borderRadius: 6,
+              background: "transparent", color: "var(--color-grey)",
+              border: "0.5px solid var(--color-border)",
+              fontSize: 12, fontFamily: "inherit", cursor: "pointer",
+            }}>
+            Cancel
+          </button>
+          <button onClick={save} disabled={saving}
+            style={{
+              padding: "7px 14px", borderRadius: 6,
+              background: "var(--color-sage)", color: "white",
+              border: "none", fontSize: 12, fontWeight: 500,
+              fontFamily: "inherit",
+              cursor: saving ? "wait" : "pointer", opacity: saving ? 0.7 : 1,
+            }}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </>
+      }
+    >
         {/* Body */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "14px 18px" }}>
+        <div style={{ padding: "14px 18px" }}>
           {/* Built-ins */}
           <p style={SECTION_LABEL_STYLE}>Built-in</p>
           <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 16 }}>
@@ -263,38 +261,7 @@ export default function CustomizeCategoriesModal({ initial, onClose, onSaved }: 
           </div>
         </div>
 
-        {/* Footer */}
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "flex-end",
-          gap: 8,
-          padding: "12px 18px",
-          borderTop: "0.5px solid var(--color-border)",
-          background: "var(--color-warm-white)",
-        }}>
-          {error && (
-            <span style={{ flex: 1, fontSize: 11, color: "var(--color-red-orange)" }}>{error}</span>
-          )}
-          <button onClick={onClose}
-            style={{
-              padding: "7px 14px", borderRadius: 6,
-              background: "transparent", color: "var(--color-grey)",
-              border: "0.5px solid var(--color-border)",
-              fontSize: 12, fontFamily: "inherit", cursor: "pointer",
-            }}>
-            Cancel
-          </button>
-          <button onClick={save} disabled={saving}
-            style={{
-              padding: "7px 14px", borderRadius: 6,
-              background: "var(--color-sage)", color: "white",
-              border: "none", fontSize: 12, fontWeight: 500,
-              fontFamily: "inherit",
-              cursor: saving ? "wait" : "pointer", opacity: saving ? 0.7 : 1,
-            }}>
-            {saving ? "Saving…" : "Save"}
-          </button>
-        </div>
-      </div>
+    </Modal>
 
       <ConfirmDialog
         open={!!confirmDelete}
@@ -308,7 +275,7 @@ export default function CustomizeCategoriesModal({ initial, onClose, onSaved }: 
         }}
         onCancel={() => setConfirmDelete(null)}
       />
-    </div>
+    </>
   );
 }
 

@@ -72,7 +72,7 @@ export default function AshInlineChat({
   const starter = `Help me draft my ${title}. Ask me one question at a time, and once you have enough, write a polished version I can use.`;
 
   return (
-    <div style={{ border: "0.5px solid rgba(61,107,79,0.25)", borderRadius: 12, overflow: "hidden", background: "var(--color-warm-white)", display: "flex", flexDirection: "column" }}>
+    <div style={{ border: "0.5px solid rgba(var(--color-green-deep-rgb),0.25)", borderRadius: 12, overflow: "hidden", background: "var(--color-warm-white)", display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 13px", background: "linear-gradient(135deg, #7a9a55 0%, #5a7a38 60%, #3a5228 100%)" }}>
         <img src="/Ash-Logomak.svg" alt="" style={{ width: 18, height: 18, filter: "brightness(0) invert(1)", opacity: 0.95 }} />
         <span style={{ fontSize: 12, fontWeight: 700, color: "white" }}>Work on this with Ash</span>

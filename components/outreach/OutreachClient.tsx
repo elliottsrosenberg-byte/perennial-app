@@ -15,6 +15,7 @@ import NewContactModal from "@/components/network/NewContactModal";
 import ContactDetailPanel from "@/components/network/ContactDetailPanel";
 import { Plus, MoreHorizontal } from "lucide-react";
 import Button from "@/components/ui/Button";
+import Modal from "@/components/ui/Modal";
 import OutreachIntroModal from "@/components/tour/outreach/OutreachIntroModal";
 import OutreachTooltipTour from "@/components/tour/outreach/OutreachTooltipTour";
 import OutreachOptionsMenu from "./OutreachOptionsMenu";
@@ -399,12 +400,12 @@ function OutreachClientInner({ initialPipelines, initialTargets, initialContacts
             style={{
               padding: "7px 20px", fontSize: 12, fontWeight: 500,
               borderRadius: 8, border: "none", cursor: "pointer",
-              background: "#b8860b", color: "white",
+              background: "var(--color-gold)", color: "white",
               fontFamily: "inherit",
               transition: "background 0.12s ease",
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "#a07800")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "#b8860b")}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-amber-deep)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-gold)")}
           >
             + New lead
           </button>
@@ -434,7 +435,7 @@ function OutreachClientInner({ initialPipelines, initialTargets, initialContacts
         <NavItem
           label="Leads"
           count={leads.length}
-          dot="#b8860b"
+          dot="var(--color-gold)"
           active={activeSection === "leads"}
           onClick={() => switchSection("leads")}
         />
@@ -588,20 +589,15 @@ function OutreachClientInner({ initialPipelines, initialTargets, initialContacts
         </div>
       )}
       {showNewTarget && pipelines.length === 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "rgba(31,33,26,0.5)" }}
-          onClick={() => setShowNewTarget(false)}>
-          <div className="rounded-2xl px-8 py-6 text-center"
-            style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}>
-            <p className="text-[14px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>No pipelines yet</p>
-            <p className="text-[12px] mb-4" style={{ color: "var(--color-grey)" }}>Create a pipeline first to add targets.</p>
-            <button onClick={() => { setShowNewTarget(false); setShowNewPipeline(true); }}
-              className="px-4 py-2 text-[13px] font-medium rounded-lg text-white"
-              style={{ background: "var(--color-charcoal)" }}>
-              Create pipeline
-            </button>
-          </div>
-        </div>
+        <Modal onClose={() => setShowNewTarget(false)} size="sm" bodyStyle={{ padding: "24px 32px", textAlign: "center" }}>
+          <p className="text-[14px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>No pipelines yet</p>
+          <p className="text-[12px] mb-4" style={{ color: "var(--color-grey)" }}>Create a pipeline first to add targets.</p>
+          <button onClick={() => { setShowNewTarget(false); setShowNewPipeline(true); }}
+            className="px-4 py-2 text-[13px] font-medium rounded-lg text-white"
+            style={{ background: "var(--color-charcoal)" }}>
+            Create pipeline
+          </button>
+        </Modal>
       )}
       {showNewLead && (
         <NewContactModal
@@ -670,7 +666,7 @@ function NavItem({ label, count, dot, active, onClick, suggestedPill }: {
           style={{
             fontSize: 8, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em",
             padding: "1px 5px", borderRadius: 9999,
-            background: "rgba(125,148,86,0.16)", color: "#5a7040",
+            background: "rgba(125,148,86,0.16)", color: "var(--color-sage-deep)",
             border: "0.5px solid rgba(125,148,86,0.35)",
             flexShrink: 0,
           }}>
@@ -695,27 +691,15 @@ function ArchivePipelineConfirm({
   onConfirm: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(31,33,26,0.5)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
-      <div className="w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden"
-        style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}>
-        <div className="px-6 py-5">
-          <p className="text-[14px] font-semibold mb-2" style={{ color: "var(--color-charcoal)" }}>
-            Archive “{pipelineName}”?
-          </p>
-          <p className="text-[12px]" style={{ color: "var(--color-grey)", lineHeight: 1.55 }}>
-            The pipeline disappears from your sidebar.
-            {targetCount > 0
-              ? ` Its ${targetCount} target${targetCount === 1 ? "" : "s"} stay intact — you can restore the pipeline later from settings.`
-              : " You can restore it later from settings."}
-          </p>
-        </div>
-        <div className="flex items-center justify-end gap-2 px-6 py-4"
-          style={{ borderTop: "0.5px solid var(--color-border)" }}>
+    <Modal
+      onClose={onCancel}
+      size="sm"
+      bodyStyle={{ padding: 0 }}
+      footer={
+        <>
           <button type="button" onClick={onCancel}
             className="px-4 py-2 text-[13px] rounded-lg"
-            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
+            style={{ color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
             Cancel
@@ -725,9 +709,21 @@ function ArchivePipelineConfirm({
             style={{ background: "var(--color-red-orange)", border: "none" }}>
             Archive
           </button>
-        </div>
+        </>
+      }
+    >
+      <div className="px-6 py-5">
+        <p className="text-[14px] font-semibold mb-2" style={{ color: "var(--color-charcoal)" }}>
+          Archive “{pipelineName}”?
+        </p>
+        <p className="text-[12px]" style={{ color: "var(--color-grey)", lineHeight: 1.55 }}>
+          The pipeline disappears from your sidebar.
+          {targetCount > 0
+            ? ` Its ${targetCount} target${targetCount === 1 ? "" : "s"} stay intact — you can restore the pipeline later from settings.`
+            : " You can restore it later from settings."}
+        </p>
       </div>
-    </div>
+    </Modal>
   );
 }
 

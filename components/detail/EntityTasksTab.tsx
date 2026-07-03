@@ -163,7 +163,7 @@ function EntityTaskRow({
         display: "flex", alignItems: "center", gap: 9, padding: "8px 16px",
         borderBottom: "0.5px solid var(--color-border)",
         background: highlighted
-          ? "rgba(155,163,122,0.18)"
+          ? "rgba(var(--color-sage-rgb),0.18)"
           : hovered && !task.completed
             ? "rgba(0,0,0,0.015)"
             : "transparent",
@@ -345,7 +345,7 @@ export default function EntityTasksTab({
           <button
             onClick={() => setShowCompleted(v => !v)}
             style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--color-grey)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
-            onMouseEnter={e => e.currentTarget.style.color = "#6b6860"}
+            onMouseEnter={e => e.currentTarget.style.color = "var(--color-text-secondary)"}
             onMouseLeave={e => e.currentTarget.style.color = "var(--color-grey)"}
           >
             <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"

@@ -24,17 +24,17 @@ const SIZES: Record<ButtonSize, React.CSSProperties> = {
 const BASE: Record<ButtonVariant, React.CSSProperties> = {
   primary:   { background: "var(--color-sage)",     color: "white",                         border: "none" },
   dark:      { background: "var(--color-charcoal)", color: "var(--color-warm-white)",        border: "none" },
-  secondary: { background: "transparent",           color: "var(--color-text-secondary)",    border: "1px solid rgba(31,33,26,0.22)" },
+  secondary: { background: "transparent",           color: "var(--color-text-secondary)",    border: "1px solid rgba(var(--color-charcoal-rgb),0.22)" },
   ghost:     { background: "transparent",           color: "var(--color-text-tertiary)",     border: "none" },
-  danger:    { background: "transparent",           color: "var(--color-red-orange)",        border: "0.5px solid rgba(220,62,13,0.35)" },
+  danger:    { background: "transparent",           color: "var(--color-red-orange)",        border: "0.5px solid rgba(var(--color-red-rgb),0.35)" },
 };
 
 const HOVER_BG: Record<ButtonVariant, string> = {
   primary:   "var(--color-sage-hover)",
-  dark:      "rgba(31,33,26,0.82)",
+  dark:      "rgba(var(--color-charcoal-rgb),0.82)",
   secondary: "var(--color-surface-sunken)",
   ghost:     "var(--color-surface-sunken)",
-  danger:    "rgba(220,62,13,0.08)",
+  danger:    "rgba(var(--color-red-rgb),0.08)",
 };
 
 export default function Button({

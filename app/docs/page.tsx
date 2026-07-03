@@ -79,10 +79,10 @@ type StatusState = "live" | "progress" | "stub" | "planned";
 
 function Status({ state }: { state: StatusState }) {
   const cfg: Record<StatusState, { label: string; bg: string; color: string }> = {
-    live:     { label: "Live",        bg: "rgba(141,208,71,0.15)", color: "#3d6b4f"                   },
-    progress: { label: "In progress", bg: "rgba(232,197,71,0.18)", color: "#a07800"                   },
-    stub:     { label: "Preview",     bg: "rgba(184,134,11,0.12)", color: "#b8860b"                   },
-    planned:  { label: "Planned",     bg: "rgba(31,33,26,0.07)",   color: "var(--color-text-tertiary)" },
+    live:     { label: "Live",        bg: "rgba(var(--color-green-rgb),0.15)", color: "var(--color-green-deep)"                   },
+    progress: { label: "In progress", bg: "rgba(var(--color-amber-rgb),0.18)", color: "var(--color-amber-deep)"                   },
+    stub:     { label: "Preview",     bg: "rgba(var(--color-gold-rgb),0.12)", color: "var(--color-gold)"                   },
+    planned:  { label: "Planned",     bg: "rgba(var(--color-charcoal-rgb),0.07)",   color: "var(--color-text-tertiary)" },
   };
   const c = cfg[state];
   return (
@@ -153,8 +153,8 @@ function Tag({ children }: { children: React.ReactNode }) {
 
 function ToolKind({ kind }: { kind: "read" | "write" }) {
   const cfg = kind === "read"
-    ? { label: "Read",  bg: "rgba(37,99,171,0.10)",  color: "var(--color-blue)"   }
-    : { label: "Write", bg: "rgba(232,133,13,0.12)", color: "var(--color-orange)" };
+    ? { label: "Read",  bg: "rgba(var(--color-blue-rgb),0.10)",  color: "var(--color-blue)"   }
+    : { label: "Write", bg: "rgba(var(--color-orange-rgb),0.12)", color: "var(--color-orange)" };
   return (
     <span style={{
       fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 9999,
@@ -1227,7 +1227,7 @@ export default function DocsPage() {
           </Sub>
 
           <Sub title="Gmail testing mode — what it means for you">
-            <Card style={{ background: "rgba(232,197,71,0.06)", border: "0.5px solid rgba(232,197,71,0.25)" }}>
+            <Card style={{ background: "rgba(var(--color-amber-rgb),0.06)", border: "0.5px solid rgba(var(--color-amber-rgb),0.25)" }}>
               <p style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.7 }}>
                 Gmail (gmail.readonly) is a Google &ldquo;restricted&rdquo; scope, which means it requires both standard verification and an annual third-party security audit. Calendar and Contacts are &ldquo;sensitive&rdquo; scopes which need only standard verification. We&apos;re shipping Calendar + Contacts at beta, and Gmail will follow once the audit is complete. If you&apos;re an invited tester, you may see an &ldquo;unverified app&rdquo; warning during the Gmail consent — that&apos;s expected. Non-testers won&apos;t see the Gmail option until full approval.
               </p>

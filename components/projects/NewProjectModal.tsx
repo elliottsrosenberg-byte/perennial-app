@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Project } from "@/types/database";
-import { X } from "lucide-react";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
 import Button from "@/components/ui/Button";
+import Modal from "@/components/ui/Modal";
 import { useProjectOptions } from "@/lib/projects/options";
 
 interface Props {
@@ -126,40 +126,22 @@ export default function NewProjectModal({ onClose, onCreated, initialStatus }: P
   }
 
   return (
-    <div
-      style={{
-        position: "fixed", inset: 0, zIndex: 50,
-        display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
-        background: "rgba(31,33,26,0.45)", backdropFilter: "blur(4px)",
-      }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    <Modal
+      onClose={onClose}
+      maxWidth={520}
+      title="New project"
+      bodyStyle={{ padding: 0 }}
+      footer={
+        <>
+          <Button variant="secondary" size="md" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" size="md" disabled={loading || !title.trim()} onClick={() => handleSubmit()}>
+            {loading ? "Creating…" : "Create project"}
+          </Button>
+        </>
+      }
     >
-      <div style={{
-        width: "100%", maxWidth: 520, borderRadius: 16,
-        background: "var(--color-surface-raised)",
-        border: "0.5px solid var(--color-border)",
-        boxShadow: "var(--shadow-overlay)",
-        overflow: "hidden",
-      }}>
-        {/* Header */}
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "16px 20px", borderBottom: "0.5px solid var(--color-border)",
-        }}>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)" }}>New project</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{ width: 28, height: 28, borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-tertiary)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-surface-sunken)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-          >
-            <X size={14} />
-          </button>
-        </div>
-
         {/* Form */}
-        <form onSubmit={handleSubmit} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 16, maxHeight: "70vh", overflowY: "auto" }}>
+        <form onSubmit={handleSubmit} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 16 }}>
 
           {/* Title */}
           <div>
@@ -259,18 +241,6 @@ export default function NewProjectModal({ onClose, onCreated, initialStatus }: P
 
           {error && <p style={{ fontSize: 12, color: "var(--color-red-orange)" }}>{error}</p>}
         </form>
-
-        {/* Footer */}
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8,
-          padding: "14px 20px", borderTop: "0.5px solid var(--color-border)",
-        }}>
-          <Button variant="secondary" size="md" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" size="md" disabled={loading || !title.trim()} onClick={() => handleSubmit()}>
-            {loading ? "Creating…" : "Create project"}
-          </Button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

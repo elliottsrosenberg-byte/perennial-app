@@ -27,6 +27,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Note } from "@/types/database";
 import { X, Upload, FileText, Check } from "lucide-react";
 import Button from "@/components/ui/Button";
+import Modal from "@/components/ui/Modal";
 import { uploadEditorImage } from "@/lib/uploads/editor-image";
 
 type Step = "file" | "parsing" | "preview" | "importing" | "done";
@@ -388,23 +389,12 @@ export default function ImportNoteModal({ onClose, onImported }: Props) {
   // ─── Render ──────────────────────────────────────────────────────────────
 
   return (
-    <div
-      style={{
-        position: "fixed", inset: 0, zIndex: 50,
-        display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
-        background: "rgba(31,33,26,0.45)", backdropFilter: "blur(4px)",
-      }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div style={{
-        width: "100%", maxWidth: 560, borderRadius: 16,
-        background: "var(--color-surface-raised)",
-        border: "0.5px solid var(--color-border)",
-        boxShadow: "var(--shadow-overlay)",
-        overflow: "hidden",
-        display: "flex", flexDirection: "column",
-        maxHeight: "82vh",
-      }}>
+    <Modal
+      onClose={onClose}
+      maxWidth={560}
+      bodyStyle={{ padding: "16px 18px 18px" }}
+      header={
+        <>
         {/* Header */}
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -456,9 +446,33 @@ export default function ImportNoteModal({ onClose, onImported }: Props) {
             );
           })}
         </div>
+        </>
+      }
+      footer={
+        <div className="flex flex-1 items-center justify-between">
+          {step === "file"      && <span />}
+          {step === "parsing"   && <span />}
+          {step === "preview"   && <Button variant="ghost" size="sm" onClick={() => { setStep("file"); setBodyHtml(""); setTitle(""); }}>← Back</Button>}
+          {(step === "importing" || step === "done") && <span />}
 
+          {step === "file" && (
+            <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
+          )}
+          {step === "parsing" && (
+            <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          )}
+          {step === "preview" && (
+            <Button variant="primary" size="sm" onClick={runImport}>
+              Import as note
+            </Button>
+          )}
+          {step === "done" && (
+            <Button variant="primary" size="sm" onClick={onClose}>Done</Button>
+          )}
+        </div>
+      }
+    >
         {/* Body */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 18px" }}>
 
           {/* ── Step 1: File ── */}
           {step === "file" && (
@@ -513,8 +527,8 @@ export default function ImportNoteModal({ onClose, onImported }: Props) {
 
               <div style={{
                 marginTop: 16, padding: "12px 14px", borderRadius: 10,
-                background: "rgba(155,163,122,0.08)",
-                border: "0.5px solid rgba(155,163,122,0.20)",
+                background: "rgba(var(--color-sage-rgb),0.08)",
+                border: "0.5px solid rgba(var(--color-sage-rgb),0.20)",
               }}>
                 <p style={{ fontSize: 11, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 4 }}>
                   What gets imported
@@ -652,7 +666,7 @@ export default function ImportNoteModal({ onClose, onImported }: Props) {
             <div style={{ padding: "20px 0", textAlign: "center" }}>
               <div style={{
                 width: 44, height: 44, borderRadius: "50%",
-                background: "rgba(155,163,122,0.16)",
+                background: "rgba(var(--color-sage-rgb),0.16)",
                 margin: "0 auto 12px",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 color: "var(--color-sage)",
@@ -667,35 +681,6 @@ export default function ImportNoteModal({ onClose, onImported }: Props) {
               </p>
             </div>
           )}
-        </div>
-
-        {/* Footer */}
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "12px 18px", borderTop: "0.5px solid var(--color-border)",
-          flexShrink: 0,
-        }}>
-          {step === "file"      && <span />}
-          {step === "parsing"   && <span />}
-          {step === "preview"   && <Button variant="ghost" size="sm" onClick={() => { setStep("file"); setBodyHtml(""); setTitle(""); }}>← Back</Button>}
-          {(step === "importing" || step === "done") && <span />}
-
-          {step === "file" && (
-            <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
-          )}
-          {step === "parsing" && (
-            <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
-          )}
-          {step === "preview" && (
-            <Button variant="primary" size="sm" onClick={runImport}>
-              Import as note
-            </Button>
-          )}
-          {step === "done" && (
-            <Button variant="primary" size="sm" onClick={onClose}>Done</Button>
-          )}
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

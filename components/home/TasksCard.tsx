@@ -18,9 +18,9 @@ function dueBadge(iso: string | null) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const target = new Date(iso); target.setHours(0, 0, 0, 0);
   const days = Math.round((target.getTime() - today.getTime()) / 86400000);
-  if (days < 0)  return { label: `${Math.abs(days)}d ago`, color: "var(--color-red-orange)", bg: "rgba(220,62,13,0.10)" };
-  if (days === 0) return { label: "Today",                 color: "#a07800",                 bg: "rgba(232,197,71,0.15)" };
-  if (days === 1) return { label: "Tomorrow",              color: "#a07800",                 bg: "rgba(232,197,71,0.15)" };
+  if (days < 0)  return { label: `${Math.abs(days)}d ago`, color: "var(--color-red-orange)", bg: "rgba(var(--color-red-rgb),0.10)" };
+  if (days === 0) return { label: "Today",                 color: "var(--color-amber-deep)", bg: "rgba(var(--color-amber-rgb),0.15)" };
+  if (days === 1) return { label: "Tomorrow",              color: "var(--color-amber-deep)", bg: "rgba(var(--color-amber-rgb),0.15)" };
   if (days < 7)  return { label: `In ${days}d`,            color: "var(--color-grey)",       bg: "var(--color-cream)" };
   const m = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][target.getMonth()];
   return { label: `${m} ${target.getDate()}`, color: "var(--color-grey)", bg: "var(--color-cream)" };
@@ -128,7 +128,7 @@ export default function TasksCard({ initialTasks }: { initialTasks: HomeTask[] }
                 key={t.id}
                 onClick={() => toggleDone(t.id)}
                 className="flex items-center gap-2 px-[14px] py-[9px] text-left transition-colors"
-                style={{ borderBottom: "0.5px solid var(--color-border)", background: t.completed ? "rgba(141,208,71,0.06)" : "transparent" }}
+                style={{ borderBottom: "0.5px solid var(--color-border)", background: t.completed ? "rgba(var(--color-green-rgb),0.06)" : "transparent" }}
                 onMouseEnter={(e) => { if (!t.completed) e.currentTarget.style.background = "var(--color-cream)"; }}
                 onMouseLeave={(e) => { if (!t.completed) e.currentTarget.style.background = "transparent"; }}
               >
