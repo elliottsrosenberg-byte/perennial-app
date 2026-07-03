@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import Button from "@/components/ui/Button";
+import Toggle from "@/components/ui/Toggle";
+import Checkbox from "@/components/ui/Checkbox";
 import {
   // Navigation
   LayoutDashboard, Layers, Users, Send, FileText, Calendar, Receipt, Globe, FolderOpen, Settings, Palette, Compass,
@@ -159,112 +162,6 @@ const TAG_COLORS = [
   { label: "residency", bg: "rgba(220,62,13,0.10)",   color: "#dc3e0d" },
   { label: "award",     bg: "rgba(232,133,13,0.10)",  color: "#c06200" },
 ];
-
-// ─── Shared primitives (to be extracted to components/ui/) ──────────────────────
-
-function DSButton({
-  children,
-  variant = "primary",
-  size = "md",
-  disabled = false,
-}: {
-  children: React.ReactNode;
-  variant?: "primary" | "dark" | "secondary" | "ghost" | "danger";
-  size?: "sm" | "md" | "lg";
-  disabled?: boolean;
-}) {
-  const [hov, setHov] = useState(false);
-
-  const SIZES = {
-    sm: { padding: "5px 14px",  fontSize: 11, borderRadius: 6 },
-    md: { padding: "7px 20px",  fontSize: 12, borderRadius: 8 },
-    lg: { padding: "9px 24px",  fontSize: 13, borderRadius: 8 },
-  };
-  const BASE: Record<string, React.CSSProperties> = {
-    primary:   { background: "var(--color-sage)",     color: "white",                         border: "none" },
-    dark:      { background: "var(--color-charcoal)", color: "var(--color-warm-white)",        border: "none" },
-    secondary: { background: "transparent",           color: "var(--color-text-secondary)",    border: "1px solid rgba(31,33,26,0.22)" },
-    ghost:     { background: "transparent",           color: "var(--color-text-tertiary)",     border: "none" },
-    danger:    { background: "transparent",           color: "var(--color-red-orange)",        border: "0.5px solid rgba(220,62,13,0.35)" },
-  };
-  const HOVER_BG: Record<string, string> = {
-    primary:   "var(--color-sage-hover)",
-    dark:      "rgba(31,33,26,0.82)",
-    secondary: "var(--color-surface-sunken)",
-    ghost:     "var(--color-surface-sunken)",
-    danger:    "rgba(220,62,13,0.08)",
-  };
-
-  return (
-    <button
-      disabled={disabled}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        ...SIZES[size],
-        ...BASE[variant],
-        background: hov && !disabled ? HOVER_BG[variant] : BASE[variant].background,
-        fontFamily: "inherit",
-        fontWeight: 500,
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.40 : 1,
-        transition: "background 0.12s ease, opacity 0.12s ease",
-        outline: "none",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function DSToggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onChange}
-      style={{
-        position: "relative", width: 36, height: 20,
-        borderRadius: 9999, border: "none", cursor: "pointer",
-        background: checked ? "var(--color-sage)" : "rgba(31,33,26,0.18)",
-        transition: "background 0.15s ease", padding: 0, flexShrink: 0,
-      }}
-    >
-      <span
-        style={{
-          position: "absolute", top: 2,
-          left: checked ? "calc(100% - 18px)" : 2,
-          width: 16, height: 16, borderRadius: "50%",
-          background: "white", transition: "left 0.15s ease",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
-        }}
-      />
-    </button>
-  );
-}
-
-function DSCheckbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
-  return (
-    <div
-      onClick={onChange}
-      style={{
-        width: 16, height: 16, borderRadius: 4, cursor: "pointer",
-        background: checked ? "var(--color-sage)" : "transparent",
-        border: checked ? "1.5px solid var(--color-sage)" : "1.5px solid rgba(31,33,26,0.25)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        transition: "all 0.12s ease", flexShrink: 0,
-      }}
-    >
-      {checked && (
-        <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
-          <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      )}
-    </div>
-  );
-}
 
 // ─── Section wrapper ───────────────────────────────────────────────────────────
 
@@ -750,23 +647,23 @@ function ButtonsSection() {
           {VARIANTS.map((v) => (
             <div key={v.key}>
               <div style={{ marginBottom: 10 }}>
-                <DSButton variant={v.key}>{v.label}</DSButton>
+                <Button variant={v.key}>{v.label}</Button>
               </div>
               <p style={{ fontSize: 10, color: "var(--color-text-tertiary)", lineHeight: 1.55 }}>{v.note}</p>
             </div>
           ))}
         </div>
         <div style={{ marginTop: 12 }}>
-          <DSButton variant="primary" disabled>Disabled — any variant at opacity 0.4</DSButton>
+          <Button variant="primary" disabled>Disabled — any variant at opacity 0.4</Button>
         </div>
       </SubSection>
 
       <SubSection title="Sizes">
         {(["primary","secondary","dark"] as const).map((v) => (
           <Row key={v} label={v}>
-            <DSButton variant={v} size="sm">Small</DSButton>
-            <DSButton variant={v} size="md">Medium</DSButton>
-            <DSButton variant={v} size="lg">Large</DSButton>
+            <Button variant={v} size="sm">Small</Button>
+            <Button variant={v} size="md">Medium</Button>
+            <Button variant={v} size="lg">Large</Button>
           </Row>
         ))}
       </SubSection>
@@ -1211,7 +1108,7 @@ function InputsSection() {
                     <p style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-primary)" }}>{t.label}</p>
                     <p style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>{t.sub}</p>
                   </div>
-                  <DSToggle checked={t.val} onChange={t.set} />
+                  <Toggle checked={t.val} onChange={t.set} />
                 </div>
               ))}
             </div>
@@ -1224,7 +1121,7 @@ function InputsSection() {
                 { label: "Mark as billable",       val: ch2, set: () => setCh2(v => !v) },
               ].map((c) => (
                 <div key={c.label} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={c.set}>
-                  <DSCheckbox checked={c.val} onChange={c.set} />
+                  <Checkbox checked={c.val} onChange={c.set} />
                   <span style={{ fontSize: 12, color: "var(--color-text-primary)" }}>{c.label}</span>
                 </div>
               ))}
@@ -1461,7 +1358,7 @@ function TablesSection() {
               onMouseLeave={(e) => { if (!isSel) e.currentTarget.style.background = "var(--color-surface-raised)"; }}
               onClick={() => setSelected((s) => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; })}
             >
-              <DSCheckbox checked={isSel} onChange={() => {}} />
+              <Checkbox checked={isSel} onChange={() => {}} />
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px 8px 0" }}>
                 <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--color-surface-sunken)", border: "0.5px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600, color: "var(--color-text-tertiary)", flexShrink: 0 }}>
                   {r.name.split(" ").map(n => n[0]).join("")}
@@ -1522,8 +1419,8 @@ function ModalsSection() {
             </div>
             {/* Footer */}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, padding: "12px 20px 16px", borderTop: "0.5px solid var(--color-border)" }}>
-              <DSButton variant="secondary" size="sm">Cancel</DSButton>
-              <DSButton variant="primary" size="sm">Create project</DSButton>
+              <Button variant="secondary" size="sm">Cancel</Button>
+              <Button variant="primary" size="sm">Create project</Button>
             </div>
           </div>
         </div>
@@ -1624,7 +1521,7 @@ function EmptyStatesSection() {
           <p style={{ fontSize: 12, color: "var(--color-text-tertiary)", lineHeight: 1.6, marginBottom: 20, maxWidth: 240 }}>
             Projects are the core of your studio. Add your first to start tracking work, time, and value.
           </p>
-          <DSButton variant="primary" size="md">+ New project</DSButton>
+          <Button variant="primary" size="md">+ New project</Button>
         </div>
 
         {/* List-level (inline in a table/list) */}
