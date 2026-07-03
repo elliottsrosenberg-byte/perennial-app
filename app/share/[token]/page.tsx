@@ -75,9 +75,9 @@ export default async function SharedNotePage({ params }: { params: Promise<{ tok
         {/* Header */}
         <header style={{ borderBottom: "0.5px solid #d6d8cf", background: "var(--color-surface-raised)", padding: "12px 0" }}>
           <div className="share-head-inner">
-            <span style={{ fontFamily: "'Newsreader', serif", fontSize: 18, fontWeight: 500, color: "var(--color-text-primary)", letterSpacing: "-0.02em" }}>
+            <a href="https://app.perennial.design" target="_blank" rel="noreferrer" style={{ fontFamily: "'Newsreader', serif", fontSize: 18, fontWeight: 500, color: "var(--color-text-primary)", letterSpacing: "-0.02em", textDecoration: "none" }}>
               Perennial
-            </span>
+            </a>
             <a href="/login" style={{ fontSize: 12, color: "var(--color-text-tertiary)", textDecoration: "none" }}>
               Sign in →
             </a>
@@ -107,7 +107,7 @@ export default async function SharedNotePage({ params }: { params: Promise<{ tok
         <footer style={{ borderTop: "0.5px solid #d6d8cf", padding: "20px 0", textAlign: "center" }}>
           <p style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
             Shared from{" "}
-            <a href="/login" style={{ color: "var(--color-sage)", textDecoration: "none" }}>Perennial</a>
+            <a href="https://app.perennial.design" target="_blank" rel="noreferrer" style={{ color: "var(--color-sage)", textDecoration: "none" }}>Perennial</a>
             {" "}— workspace for independent designers
           </p>
         </footer>
