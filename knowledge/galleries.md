@@ -1,19 +1,19 @@
-# Gallery relationships
+# Evaluating gallery relationships
 
 category: galleries
 
-## Commission and economics
+## Reading a commission split
 
-Most galleries take 40–60% commission on sold work. The split pays for collector access, sales labor, exhibition costs, installation, and credibility. Evaluate a gallery by what it actually delivers into your market, not just the headline percentage.
+Most galleries take **40–60%**. The number alone doesn't tell you if a deal is good — what matters is what the gallery delivers for it: which collectors it reaches, how it sells, what it invests in the maker's career. Help a maker weigh the split against the reach, not treat a percentage as inherently fair or unfair. A higher cut from a gallery that builds their market can beat a lower cut from one that doesn't.
 
-## Exclusivity terms
+## Exclusivity — the terms to weigh
 
-Exclusivity terms vary widely. Some galleries demand geographic exclusivity (they are your only representation in a region), others category exclusivity (only they sell your lighting, say). Read exclusivity carefully — it can block you from direct sales, other galleries, or fairs in ways that cost more than the commission.
+Exclusivity varies widely: geographic (only representation in a region), category (only your lighting, say), or channel (blocks direct sales). It can be worth granting for a gallery that truly commits — or costly if it locks the maker out of direct sales, other galleries, or fairs. The reasoning to surface: what is the maker giving up, and is the gallery's commitment worth that constraint? Exclusivity should come with matching investment from the gallery.
 
-## Applications and open calls
+## Whether to pursue a gallery at all
 
-Applications are competitive and relationship-driven. Open calls happen year-round. The strongest applications include a coherent body of work, an artist statement, a clear pricing structure, and evidence of prior exhibition or press. Building a relationship with the gallery — studio visits, an introduction, showing up to their openings — before you formally apply dramatically improves acceptance rates.
+Not every maker needs gallery representation, and it's not automatically a step up. It's a fit question: does the maker want the reach and credibility enough to give up margin and some control? Present it as a choice with tradeoffs, not a milestone everyone should chase.
 
-## Building the relationship before applying
+## How acceptance actually works
 
-Galleries invest in designers they trust and expect to work with for years. Cold applications succeed far less often than warm ones. Cultivate the relationship first: follow the gallery, meet the people, understand their program and roster, and apply when there's genuine fit — not as a first contact.
+Gallery relationships are competitive and relationship-driven. Cold applications succeed far less often than warm ones. Strong applications tend to show a coherent body of work, a clear artist statement, a pricing structure, and prior exhibition or press. The higher-leverage move is usually building the relationship first — studio visits, an introduction, showing up — and applying when there's genuine fit, rather than treating the application as first contact.

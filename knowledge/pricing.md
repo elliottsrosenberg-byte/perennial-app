@@ -1,23 +1,23 @@
-# Pricing fundamentals
+# Thinking about pricing
 
 category: pricing
 
-## Why independent designers underprice
+## Start from cost, then weigh the market
 
-Many independent designers chronically underprice their work. The most common cause is failing to account for the full cost of a piece — especially unbilled design and development time — and anchoring to what feels comfortable to charge rather than what the work actually costs to produce and sustain.
+Two lenses, usually combined: **cost-plus** (what does this actually cost me to make and sustain?) and **market** (what does comparable work sell for, and what will this audience pay?). Cost-plus sets a floor you shouldn't go below; the market sets a ceiling and a reality check. Help a maker use both rather than pricing on gut or on what feels comfortable to charge.
 
-## The minimum viable price
+## The floor most makers miss
 
-The minimum viable price must cover, at least: materials and fabrication costs, design and development time (often 40–100+ hours on complex pieces), studio overhead, and a margin for business reinvestment. A price that covers materials and a little labor but nothing else is a loss disguised as a sale.
+A sustainable price has to cover more than materials. The full cost includes materials and fabrication, **design and development time** (often 40–100+ hours on complex pieces), studio overhead, and a margin for reinvestment. Underpricing almost always traces back to leaving out the unbilled time and overhead. The useful move is to make those hidden costs visible, then let the maker decide where to price above the floor.
 
-## Edition pricing
+## Selling through a gallery changes the math
 
-Edition pricing should consider production cost per unit, perceived value, the gallery margin if sold through a gallery (40–60%), and comparable work in the market. If a piece will sell through a gallery, price so that the designer's 40–60% share still covers costs plus margin — don't set the retail price and then discover the net doesn't work.
+If a piece sells through a gallery taking 40–60%, the maker only keeps 40–60% of retail — so retail has to be set so that the *net* still clears the cost floor plus margin. A common mistake is pricing for direct sale and then discovering the gallery net doesn't work. Reason backward from what the maker needs to keep.
 
-## Commission pricing
+## Deposits and structure are choices, not rules
 
-Commission work requires clear scope, milestone payments (a 30–50% deposit is standard), a defined number of revision rounds, intellectual-property terms, and installation/delivery specifications. Underscoping is the main way commissions lose money: unlimited revisions and vague deliverables turn a profitable job into an unpaid one.
+On commissions, an upfront deposit (commonly around **30–50%**) plus milestone payments is a widely used structure because it funds materials and reduces risk — but the exact split is a negotiation that depends on the client, the project length, and the maker's cash position. Present deposit size and milestone timing as levers to choose, not a fixed rule.
 
-## Sanity-checking a price
+## Sanity-checking a number
 
-Work backward from cost, not forward from what feels sellable: total the materials, hours at a real rate, and overhead; add margin; then compare to comparable market work. If the honest number feels too high, the problem is usually the cost structure or the market fit — not the price.
+When a price feels wrong, work backward: total the materials, the hours at a real rate, and overhead; add margin; then compare to comparable market work. If the honest number feels too high for the market, the issue is usually the cost structure or the market fit — surface that tradeoff rather than just discounting.
