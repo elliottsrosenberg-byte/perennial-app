@@ -133,6 +133,7 @@ export interface AshContext {
   staleContacts:       Array<{ first_name: string; last_name: string; last_contacted_at: string | null; organization_name: string | null }>;
   openTasks:           Array<{ title: string; due_date: string | null; priority: string | null; project: string | null }>;
   billableHoursThisMonth: number;
+  preferences:            Array<{ kind: string; content: string; weight: number }>;
 }
 
 export function buildDynamicContext(ctx: AshContext): string {
@@ -156,6 +157,14 @@ export function buildDynamicContext(ctx: AshContext): string {
   if (ctx.urgentNeeds)    lines.push(`**Urgent on their plate (user's own words):** ${ctx.urgentNeeds}`);
   if (ctx.perennialGoals.length > 0)    lines.push(`**Goals from Perennial:** ${ctx.perennialGoals.map(g => ({ projects: "project tracking", invoicing: "professional invoicing", time: "time tracking & profitability", contacts: "relationship management", outreach: "gallery outreach", presence: "opportunities & visibility", learn: "learning how to run a studio", ash: "AI-assisted decisions" }[g] ?? g)).join(", ")}`);
   if (ctx.hourlyRate)   lines.push(`**Default hourly rate:** ${ctx.currency} ${ctx.hourlyRate}/hr`);
+
+  // Learned preferences (always honored)
+  if (ctx.preferences.length > 0) {
+    lines.push(`\n**What you've learned about how this user works** — honor these; a higher ×N means it's been expressed more consistently:`);
+    for (const p of ctx.preferences) {
+      lines.push(`- (${p.kind} ×${p.weight}) ${p.content}`);
+    }
+  }
 
   // Projects
   if (ctx.projects.length > 0) {
