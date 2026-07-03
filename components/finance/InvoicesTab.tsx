@@ -264,7 +264,7 @@ function stripeFor(status: string, overdue: boolean): string {
 const LINE_GRID = "1fr 70px 80px 90px 46px";
 
 const SOURCE_STYLE: Record<string, { bg: string; color: string }> = {
-  time:    { bg: "rgba(61,107,79,0.10)",  color: "var(--color-sage)" },
+  time:    { bg: "rgba(var(--color-green-deep-rgb),0.10)",  color: "var(--color-sage)" },
   expense: { bg: "rgba(220,153,13,0.10)", color: "var(--color-dark-orange)" },
   manual:  { bg: "rgba(var(--color-charcoal-rgb),0.06)",   color: "var(--color-grey)" },
 };

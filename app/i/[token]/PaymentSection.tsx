@@ -67,7 +67,7 @@ export default function PaymentSection({
 
   if (redirectStatus === "succeeded") {
     return (
-      <div style={{ background: "rgba(61,107,79,0.12)", color: "var(--color-green-deep)", padding: "12px 14px", borderRadius: 8, fontSize: 12, lineHeight: 1.55, fontWeight: 500 }}>
+      <div style={{ background: "rgba(var(--color-green-deep-rgb),0.12)", color: "var(--color-green-deep)", padding: "12px 14px", borderRadius: 8, fontSize: 12, lineHeight: 1.55, fontWeight: 500 }}>
         Payment received — thank you.
       </div>
     );
@@ -112,7 +112,7 @@ function PaidChip() {
   return (
     <div
       style={{
-        background: "rgba(61,107,79,0.12)", color: "var(--color-green-deep)",
+        background: "rgba(var(--color-green-deep-rgb),0.12)", color: "var(--color-green-deep)",
         padding: "10px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
       }}
     >

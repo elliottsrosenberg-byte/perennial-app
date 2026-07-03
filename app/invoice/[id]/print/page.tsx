@@ -172,7 +172,7 @@ export default async function InvoicePrintPage({ params, searchParams }: { param
           font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
           margin-left: 12px; vertical-align: middle;
         }
-        .status-paid    { background: rgba(61,107,79,0.12);  color: #3d6b4f; }
+        .status-paid    { background: rgba(var(--color-green-deep-rgb),0.12);  color: #3d6b4f; }
         .status-sent    { background: rgba(37,99,171,0.1);   color: #2563ab; }
         .status-saved   { background: rgba(184,134,11,0.12); color: #b8860b; }
         .status-draft   { background: rgba(31,33,26,0.07);   color: #9a9690; }

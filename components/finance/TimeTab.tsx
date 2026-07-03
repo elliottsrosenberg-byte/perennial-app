@@ -126,7 +126,7 @@ function StartTimerBar({ activeTimer, timerSeconds, projects, onStartTimer, onSt
       </div>
       <button type="button" onClick={() => setBillable(v => !v)}
         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] shrink-0 transition-colors"
-        style={{ background: billableOn ? "rgba(61,107,79,0.08)" : "transparent", color: billableOn ? "var(--color-sage)" : "var(--color-grey)", border: `0.5px solid ${billableOn ? "rgba(61,107,79,0.2)" : "var(--color-border)"}` }}>
+        style={{ background: billableOn ? "rgba(var(--color-green-deep-rgb),0.08)" : "transparent", color: billableOn ? "var(--color-sage)" : "var(--color-grey)", border: `0.5px solid ${billableOn ? "rgba(var(--color-green-deep-rgb),0.2)" : "var(--color-border)"}` }}>
         {billableOn ? "Billable" : "Internal"}
       </button>
       <button onClick={handleStart}
@@ -245,8 +245,8 @@ export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projec
         <button onClick={() => setBillableOnly((v) => !v)}
           className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg transition-colors"
           style={{
-            background: billableOnly ? "rgba(61,107,79,0.1)" : "var(--color-warm-white)",
-            border: `0.5px solid ${billableOnly ? "rgba(61,107,79,0.3)" : "var(--color-border)"}`,
+            background: billableOnly ? "rgba(var(--color-green-deep-rgb),0.1)" : "var(--color-warm-white)",
+            border: `0.5px solid ${billableOnly ? "rgba(var(--color-green-deep-rgb),0.3)" : "var(--color-border)"}`,
             color: billableOnly ? "var(--color-sage)" : "var(--color-grey)",
           }}>
           Billable only
@@ -342,7 +342,7 @@ export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projec
                   <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>{e.project?.title ?? "No project"}</p>
                 </div>
                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded"
-                  style={{ background: e.billable ? "rgba(61,107,79,0.1)" : "rgba(var(--color-charcoal-rgb),0.07)", color: e.billable ? "var(--color-sage)" : "var(--color-grey)" }}>
+                  style={{ background: e.billable ? "rgba(var(--color-green-deep-rgb),0.1)" : "rgba(var(--color-charcoal-rgb),0.07)", color: e.billable ? "var(--color-sage)" : "var(--color-grey)" }}>
                   {e.billable ? "BILLABLE" : "INTERNAL"}
                 </span>
                 <span className="text-[12px] font-medium tabular-nums w-14 text-right" style={{ color: "var(--color-charcoal)" }}>

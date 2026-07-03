@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  :root{
+    --charcoal:#1f211a;
+    --sage:#9BA37A;
+    --sage-text:#4a5630;
+    --warm-white:#f9faf4;
+    --cream:#eff0e7;
+    --grey:#6b6860;
+    --ochre:#c8772f;
+    --line:#dcdfcf;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  body{font-family:'GT America','Helvetica Neue',Arial,sans-serif;color:var(--charcoal);background:#fff;
+       font-weight:400;line-height:1.5;-webkit-font-smoothing:antialiased;}
+
+  @page{size:8.5in 11in;margin:0;}
+  .page{position:relative;width:8.5in;height:11in;overflow:hidden;page-break-after:always;
+        background:var(--warm-white);padding:0.85in 0.9in;}
+  .page:last-child{page-break-after:auto;}
+
+  /* type */
+  h1{font-weight:700;font-size:43px;line-height:1.04;letter-spacing:-0.018em;}
+  h2{font-weight:700;font-size:22px;line-height:1.12;letter-spacing:-0.01em;}
+  h3{font-weight:600;font-size:13.5px;letter-spacing:-0.005em;}
+  p{font-size:11.4px;line-height:1.62;color:#2c2e26;}
+  .lead{font-size:13px;line-height:1.66;color:#34362d;}
+  .kicker{font-size:9.5px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:var(--sage-text);}
+  .meta{font-size:10px;color:var(--grey);letter-spacing:0.01em;}
+  .accent{color:var(--ochre);}
+  a{color:inherit;text-decoration:none;}
+
+  .rule{height:1px;background:var(--line);border:0;}
+  .dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--ochre);vertical-align:middle;}
+
+  /* ---------- COVER ---------- */
+  .cover{background:var(--warm-white);display:flex;flex-direction:column;}
+  .cover .botanical{position:absolute;right:-1.1in;top:-0.4in;width:6.2in;height:11in;
+        opacity:0.5;mix-blend-mode:multiply;object-fit:cover;}
+  .cover .botanical2{position:absolute;left:-2.0in;bottom:-1.2in;width:4.2in;height:8in;
+        opacity:0.32;mix-blend-mode:multiply;transform:scaleX(-1);object-fit:cover;}
+  .logo{height:26px;width:auto;}
+  .cover-top{display:flex;justify-content:space-between;align-items:center;position:relative;z-index:2;}
+  .cover-mid{margin-top:auto;margin-bottom:auto;position:relative;z-index:2;max-width:6.0in;}
+  .cover h1{font-size:52px;}
+  .cover-sub{margin-top:22px;font-size:15px;line-height:1.5;color:#3a3c32;max-width:4.7in;font-weight:400;}
+  .cover-foot{position:relative;z-index:2;display:flex;gap:40px;flex-wrap:wrap;}
+  .cover-foot .col span{display:block;}
+  .cover-foot .lbl{font-size:9px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:var(--sage-text);margin-bottom:5px;}
+  .cover-foot .val{font-size:11.5px;color:var(--charcoal);font-weight:500;}
+
+  /* ---------- CONTENT ---------- */
+  .section + .section{margin-top:26px;}
+  .section h2{margin-bottom:9px;}
+  .section .kicker{margin-bottom:7px;}
+  .two-col{column-count:2;column-gap:30px;}
+  .pagehead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:30px;}
+  .pagehead .logo-sm{height:17px;opacity:0.92;}
+  .pagehead .pg{font-size:9.5px;letter-spacing:0.16em;color:var(--grey);text-transform:uppercase;}
+
+  .pullquote{border-left:2px solid var(--ochre);padding:4px 0 4px 18px;margin:20px 0;
+       font-size:16px;line-height:1.42;font-weight:500;color:var(--sage-text);letter-spacing:-0.01em;}
+
+  .modgrid{display:grid;grid-template-columns:1fr 1fr;gap:11px 26px;margin-top:6px;}
+  .mod{display:flex;gap:10px;align-items:baseline;}
+  .mod .mname{font-size:11.4px;font-weight:600;color:var(--charcoal);white-space:nowrap;}
+  .mod .mdesc{font-size:10.6px;color:var(--grey);line-height:1.4;}
+
+  .decisions{display:flex;flex-direction:column;gap:15px;}
+  .decision{display:flex;gap:14px;}
+  .decision .num{font-size:13px;font-weight:700;color:var(--ochre);width:20px;flex:none;padding-top:1px;}
+  .decision h3{margin-bottom:3px;}
+  .decision p{font-size:11px;}
+
+  /* screenshot frames */
+  .shotwrap{margin-top:5px;}
+  .frame{border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#fff;
+       box-shadow:0 10px 26px rgba(31,33,26,0.10),0 2px 6px rgba(31,33,26,0.06);}
+  .frame .bar{height:22px;background:var(--cream);border-bottom:1px solid var(--line);
+       display:flex;align-items:center;padding:0 9px;gap:5px;}
+  .frame .bar i{width:7px;height:7px;border-radius:50%;background:#cfd2c2;display:inline-block;}
+  .frame .bar .url{margin-left:9px;font-size:8px;color:var(--grey);letter-spacing:0.02em;}
+  .frame img{display:block;width:100%;}
+  .cap{font-size:9.6px;color:var(--grey);margin-top:7px;line-height:1.4;}
+  .cap b{color:var(--charcoal);font-weight:600;}
+
+  .gallery{display:flex;flex-direction:column;gap:17px;}
+  .grow{display:flex;gap:17px;}
+  .grow .cell{flex:1;min-width:0;}
+  .note-strip{font-size:9.4px;color:var(--grey);background:var(--cream);border-radius:6px;
+       padding:7px 11px;display:inline-block;margin-bottom:18px;}
+
+  .footer{position:absolute;left:0.9in;right:0.9in;bottom:0.5in;display:flex;justify-content:space-between;
+       align-items:center;font-size:8.6px;color:var(--grey);letter-spacing:0.04em;}
+  .footer .rule{flex:1;margin:0 14px;}
+</style>
+</head>
+<body>
+
+<!-- ========================= PAGE 1 — COVER ========================= -->
+<section class="page cover">
+  <img class="botanical"  src="../public/botanicals/Botanical%20Illustrations-6.png">
+  <img class="botanical2" src="../public/botanicals/Botanical%20Illustrations-3.png">
+
+  <div class="cover-top">
+    <img class="logo" src="logotype-charcoal.svg" alt="Perennial">
+    <span class="meta">Case study · 2026</span>
+  </div>
+
+  <div class="cover-mid">
+    <span class="kicker">Product design &amp; full-stack engineering</span>
+    <h1 style="margin-top:18px;">Building a studio-<br>management platform,<br><span class="accent">solo.</span></h1>
+    <p class="cover-sub">One connected workspace for the business behind an independent design practice — clients, projects, invoicing, banking, and outreach, designed and built end&#8209;to&#8209;end by one person.</p>
+  </div>
+
+  <div class="cover-foot">
+    <div class="col"><span class="lbl">Product</span><span class="val">Perennial</span></div>
+    <div class="col"><span class="lbl">Live at</span><span class="val accent">app.perennial.design</span></div>
+    <div class="col"><span class="lbl">Role</span><span class="val">Solo — design &amp; engineering</span></div>
+    <div class="col"><span class="lbl">By</span><span class="val">Elliott Rosenberg</span></div>
+  </div>
+</section>
+
+<!-- ========================= PAGE 2 — SUMMARY / PROBLEM ========================= -->
+<section class="page">
+  <div class="pagehead">
+    <img class="logo-sm" src="logotype-charcoal.svg">
+    <span class="pg">Overview</span>
+  </div>
+
+  <div class="section">
+    <span class="kicker">Summary</span>
+    <h2>The business around creative work is admin chaos. I built the system that joins it up.</h2>
+    <p class="lead" style="margin-top:12px;">Independent designers run their practice out of a dozen disconnected tools — a notes app for projects, a spreadsheet for clients, email for everything else, and a separate invoicing service that doesn&rsquo;t know about any of it. I designed and built <b>Perennial</b> to replace that sprawl with a single, connected workspace, and shipped it on my own — from the Postgres schema to the front end.</p>
+  </div>
+
+  <div class="pullquote">The work is creative. The business around it is a pile of tabs that don&rsquo;t talk to each other.</div>
+
+  <div class="section">
+    <span class="kicker">The problem</span>
+    <h2>Too heavy, or too loose. Nothing shaped for a studio.</h2>
+    <div class="two-col" style="margin-top:11px;">
+      <p>I ran into this firsthand running Perennial, and heard the same thing from <b>more than a dozen independent designers</b> I spoke with: the craft is the easy part — it&rsquo;s the operations that quietly eats the week.</p>
+      <p style="margin-top:0;">The existing options are either too heavy — Salesforce and its kind are built for sales orgs — or too loose, like Notion, which hands you a blank canvas and makes you build the system yourself. Nothing was shaped for how a small studio actually runs: a few clients, a couple of projects at a time, invoices that need to go out, and a reputation to keep building.</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <span class="kicker">My role</span>
+    <h2>Everything — concept to deployment.</h2>
+    <p style="margin-top:10px;">Product strategy, the interviews, interaction and visual design, and full-stack engineering. The front end is <b>Next.js (App Router) and React with TypeScript</b>; the back end is <b>Postgres on Supabase</b> with row-level security, file storage, and a secrets vault. <b>Stripe Connect</b> handles payments, <b>Plaid</b> feeds in real bank transactions, and an <b>Anthropic-powered assistant</b> is woven through the app. It deploys continuously to Vercel. One person, every layer.</p>
+  </div>
+
+  <div class="footer"><span>Perennial — Case study</span><hr class="rule"><span>app.perennial.design</span></div>
+</section>
+
+<!-- ========================= PAGE 3 — WHAT I BUILT + HERO ========================= -->
+<section class="page">
+  <div class="pagehead">
+    <img class="logo-sm" src="logotype-charcoal.svg">
+    <span class="pg">What I built</span>
+  </div>
+
+  <div class="section" style="margin-bottom:18px;">
+    <span class="kicker">What I built</span>
+    <h2>One data model, not four apps bolted together.</h2>
+    <p style="margin-top:9px;max-width:6.3in;">Perennial is organized so every piece knows about the others. A client connects to their projects; projects roll up time and expenses; time and expenses become invoices; invoices get paid through Stripe and reconcile against the real bank feed. The studio owner sees the whole picture in one view instead of reconciling four tools by hand.</p>
+  </div>
+
+  <div class="shotwrap">
+    <div class="frame">
+      <div class="bar"><i></i><i></i><i></i><span class="url">app.perennial.design</span></div>
+      <img src="screenshots/home.png">
+    </div>
+    <p class="cap"><b>The Home dashboard</b> — what&rsquo;s due, what&rsquo;s owed, and what needs attention, pulled live from every module: notes, tasks, the calendar, finance totals, the project board, and the network. <span style="color:#9a968f">Shown with sample studio data.</span></p>
+  </div>
+
+  <div class="modgrid" style="margin-top:20px;">
+    <div class="mod"><span class="mname">Home</span><span class="mdesc">— one dashboard of due, owed &amp; at-risk</span></div>
+    <div class="mod"><span class="mname">Projects &amp; Tasks</span><span class="mdesc">— the work, with timelines &amp; notes</span></div>
+    <div class="mod"><span class="mname">Network</span><span class="mdesc">— a CRM for clients &amp; leads</span></div>
+    <div class="mod"><span class="mname">Outreach</span><span class="mdesc">— pipelines for press &amp; new business</span></div>
+    <div class="mod"><span class="mname">Finance</span><span class="mdesc">— time, Stripe invoicing &amp; bank feeds</span></div>
+    <div class="mod"><span class="mname">Presence</span><span class="mdesc">— web, social, press &amp; opportunities</span></div>
+    <div class="mod"><span class="mname">Resources</span><span class="mdesc">— a central index of studio files</span></div>
+    <div class="mod"><span class="mname">Ash (AI)</span><span class="mdesc">— an assistant with full studio context</span></div>
+  </div>
+
+  <div class="footer"><span>Perennial — Case study</span><hr class="rule"><span>app.perennial.design</span></div>
+</section>
+
+<!-- ========================= PAGE 4 — SCREENS: MONEY ========================= -->
+<section class="page">
+  <div class="pagehead">
+    <img class="logo-sm" src="logotype-charcoal.svg">
+    <span class="pg">The product · money</span>
+  </div>
+  <span class="note-strip">Screens shown with sample studio data — a fictional brand &amp; web practice.</span>
+
+  <div class="gallery">
+    <div class="cell">
+      <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="url">/finance · invoices</span></div>
+        <img src="screenshots/invoices.png"></div>
+      <p class="cap"><b>Invoicing on Stripe Connect.</b> Every invoice carries its client, project, and status; payments land directly in the studio&rsquo;s own Stripe account, and outstanding vs. collected is always current.</p>
+    </div>
+    <div class="grow">
+      <div class="cell">
+        <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="url">/finance · banking</span></div>
+          <img src="screenshots/banking.png"></div>
+        <p class="cap"><b>Bank feed via Plaid.</b> Real transactions, auto-categorized — and matched back to the invoices that produced them.</p>
+      </div>
+      <div class="cell">
+        <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="url">/finance · overview</span></div>
+          <img src="screenshots/finance-overview.png"></div>
+        <p class="cap"><b>Finance overview.</b> Billable hours, outstanding, and collected — one honest picture of the money.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer"><span>Perennial — Case study</span><hr class="rule"><span>app.perennial.design</span></div>
+</section>
+
+<!-- ========================= PAGE 5 — SCREENS: WORK & RELATIONSHIPS ========================= -->
+<section class="page">
+  <div class="pagehead">
+    <img class="logo-sm" src="logotype-charcoal.svg">
+    <span class="pg">The product · work &amp; relationships</span>
+  </div>
+
+  <div class="gallery">
+    <div class="grow">
+      <div class="cell">
+        <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="url">/projects</span></div>
+          <img src="screenshots/projects.png"></div>
+        <p class="cap"><b>Projects.</b> The studio&rsquo;s active work, by status, type, and priority.</p>
+      </div>
+      <div class="cell">
+        <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="url">/outreach</span></div>
+          <img src="screenshots/outreach.png"></div>
+        <p class="cap"><b>Outreach.</b> Visual pipelines for chasing press, stockists, and new business.</p>
+      </div>
+    </div>
+    <div class="grow">
+      <div class="cell">
+        <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="url">/network</span></div>
+          <img src="screenshots/network.png"></div>
+        <p class="cap"><b>Network.</b> A CRM for clients, leads, and the people around the practice.</p>
+      </div>
+      <div class="cell">
+        <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="url">Ash · AI assistant</span></div>
+          <img src="screenshots/ash.png"></div>
+        <p class="cap"><b>Ash.</b> An assistant that already has full context on the studio&rsquo;s own data.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer"><span>Perennial — Case study</span><hr class="rule"><span>app.perennial.design</span></div>
+</section>
+
+<!-- ========================= PAGE 6 — DECISIONS / WHERE IT STANDS ========================= -->
+<section class="page">
+  <div class="pagehead">
+    <img class="logo-sm" src="logotype-charcoal.svg">
+    <span class="pg">Decisions &amp; where it stands</span>
+  </div>
+
+  <div class="section">
+    <span class="kicker">Decisions I&rsquo;m proud of</span>
+    <h2 style="margin-bottom:16px;">The calls that shaped it.</h2>
+    <div class="decisions">
+      <div class="decision">
+        <span class="num">01</span>
+        <div><h3>One connected data model — not four synced apps.</h3>
+        <p>Most tools in this space bolt invoicing onto a CRM onto a project tracker. I modeled the studio once — clients, projects, money, and reputation as a single graph — so the dashboard shows one true picture instead of four that disagree.</p></div>
+      </div>
+      <div class="decision">
+        <span class="num">02</span>
+        <div><h3>Multi-tenant-ready on day one.</h3>
+        <p>Even as a single-person product in private testing, every table is scoped with row-level security, so each account&rsquo;s data is isolated by default. More work up front — but going from one studio to many becomes a switch, not a rewrite.</p></div>
+      </div>
+      <div class="decision">
+        <span class="num">03</span>
+        <div><h3>Shipped narrow, on purpose.</h3>
+        <p>Rather than chase feature parity with the incumbents, I kept the first version deliberately focused and coherent — and gave it an assistant that understands the whole workspace, instead of just adding more buttons.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="rule" style="margin:24px 0;">
+
+  <div class="section" style="margin-top:0;">
+    <span class="kicker">Where it stands</span>
+    <h2>Live, in private testing.</h2>
+    <p style="margin-top:9px;max-width:6.3in;">Perennial is live at <b class="accent">app.perennial.design</b> and usable end to end — but still rough. Accounts are open, and I&rsquo;m actively fixing bugs and smoothing edges with the first handful of people trying it. Next: hardening the experience, onboarding early studios for real, and pricing.</p>
+  </div>
+
+  <div class="section">
+    <span class="kicker">What it demonstrates</span>
+    <p class="lead" style="margin-top:8px;max-width:6.3in;">I can take a real problem, scope a product around it, make the calls, and ship the whole thing myself across design and engineering. The same instinct shows up in everything I do: <b>find the disconnected mess, design the system that joins it, and build it end to end.</b></p>
+  </div>
+
+  <div class="footer"><span>Elliott Rosenberg · elliott@perennial.design</span><hr class="rule"><span>app.perennial.design</span></div>
+</section>
+
+</body>
+</html>

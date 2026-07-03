@@ -60,7 +60,7 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }>
   draft:   { bg: "rgba(var(--color-blue-rgb),0.12)",  color: "var(--color-blue)",                 label: "Draft"   },
   saved:   { bg: "rgba(var(--color-blue-rgb),0.12)",  color: "var(--color-blue)",                 label: "Saved"   },
   sent:    { bg: "rgba(224,168,46,0.18)", color: "#9a6a00",                 label: "Sent"    },
-  paid:    { bg: "rgba(61,107,79,0.1)",   color: "var(--color-sage)",       label: "Paid"    },
+  paid:    { bg: "rgba(var(--color-green-deep-rgb),0.1)",   color: "var(--color-sage)",       label: "Paid"    },
   overdue: { bg: "rgba(var(--color-red-rgb),0.1)",   color: "var(--color-red-orange)", label: "Overdue" },
   voided:  { bg: "rgba(var(--color-charcoal-rgb),0.07)",   color: "var(--color-grey)",       label: "Void"    },
 };
@@ -217,7 +217,7 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
           {/* Active timer */}
           {activeTimer && (
             <div className="flex items-center gap-2.5 px-4 py-2.5"
-              style={{ background: "rgba(61,107,79,0.06)", borderBottom: "0.5px solid rgba(61,107,79,0.15)" }}>
+              style={{ background: "rgba(var(--color-green-deep-rgb),0.06)", borderBottom: "0.5px solid rgba(var(--color-green-deep-rgb),0.15)" }}>
               <div className="w-2 h-2 rounded-full shrink-0 animate-pulse" style={{ background: "var(--color-sage)" }} />
               <span className="text-[12px] font-medium flex-1 truncate" style={{ color: "var(--color-sage)" }}>
                 {activeTimer.project?.title ?? "No project"}{activeTimer.description ? ` · ${activeTimer.description}` : ""}
@@ -239,7 +239,7 @@ export default function OverviewTab({ timeEntries, activeTimer, timerSeconds, ex
                 <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>{e.project?.title ?? "No project"}</p>
               </div>
               <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded"
-                style={{ background: e.billable ? "rgba(61,107,79,0.1)" : "rgba(var(--color-charcoal-rgb),0.07)", color: e.billable ? "var(--color-sage)" : "var(--color-grey)" }}>
+                style={{ background: e.billable ? "rgba(var(--color-green-deep-rgb),0.1)" : "rgba(var(--color-charcoal-rgb),0.07)", color: e.billable ? "var(--color-sage)" : "var(--color-grey)" }}>
                 {e.billable ? "BILLABLE" : "INTERNAL"}
               </span>
               <span className="text-[12px] font-medium tabular-nums w-12 text-right" style={{ color: "var(--color-charcoal)" }}>
