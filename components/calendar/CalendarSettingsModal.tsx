@@ -6,8 +6,9 @@
 // notifications, keyboard shortcuts) is tracked as a deferred TODO and
 // will hang off this shell.
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { X, Cable, Video, Clock, Bell, Keyboard, SlidersHorizontal } from "lucide-react";
+import Modal from "@/components/ui/Modal";
 
 interface Props {
   onClose: () => void;
@@ -32,44 +33,16 @@ const TABS: Tab[] = [
 ];
 
 export default function CalendarSettingsModal({ onClose }: Props) {
-  const cardRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("general");
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
   const tab = TABS.find(t => t.key === activeTab) ?? TABS[0];
 
   return (
-    <div
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
-        position: "fixed", inset: 0, zIndex: 90,
-        background: "rgba(31,33,26,0.45)", backdropFilter: "blur(4px)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 32,
-      }}
-    >
-      <div
-        ref={cardRef}
-        role="dialog"
-        aria-modal={true}
-        style={{
-          width: "100%", maxWidth: 960,
-          height: "100%", maxHeight: "calc(100vh - 64px)",
-          background: "var(--color-off-white)",
-          border:     "0.5px solid var(--color-border)",
-          borderRadius: 14,
-          boxShadow: "0 16px 48px rgba(0,0,0,0.28)",
-          fontFamily: "inherit",
-          display: "flex", flexDirection: "column",
-          overflow: "hidden",
-        }}
-      >
-        {/* Header */}
+    <Modal
+      onClose={onClose}
+      maxWidth={960}
+      bodyStyle={{ padding: 0, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: "80vh" }}
+      header={
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "14px 20px",
@@ -108,9 +81,10 @@ export default function CalendarSettingsModal({ onClose }: Props) {
             <X size={15} />
           </button>
         </div>
-
-        {/* Body: left sidebar + right content */}
-        <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
+      }
+    >
+      {/* Body: left sidebar + right content */}
+      <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
           {/* Sidebar */}
           <div style={{
             width: 220, flexShrink: 0,
@@ -197,7 +171,6 @@ export default function CalendarSettingsModal({ onClose }: Props) {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
