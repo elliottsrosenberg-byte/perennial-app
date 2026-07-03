@@ -6,6 +6,8 @@ import Button from "@/components/ui/Button";
 import Toggle from "@/components/ui/Toggle";
 import Checkbox from "@/components/ui/Checkbox";
 import Badge, { type BadgeTone } from "@/components/ui/Badge";
+import Modal from "@/components/ui/Modal";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import {
   // Navigation
   LayoutDashboard, Layers, Users, Send, FileText, Calendar, Receipt, Globe, FolderOpen, Settings, Palette, Compass,
@@ -1372,8 +1374,54 @@ function TablesSection() {
 // ─── Modals ───────────────────────────────────────────────────────────────────
 
 function ModalsSection() {
+  const [formOpen, setFormOpen]       = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   return (
-    <Section id="modals" title="Modals" description="Centered dialog for creation, editing, and confirmation. Max-width 480px standard.">
+    <Section id="modals" title="Modals" description="Centered dialog for creation, editing, and confirmation. Built on the shared Modal shell (scrim · Esc · scroll-lock · animation).">
+      {/* Live demos — the real Modal + ConfirmDialog primitives */}
+      <SubSection title="Live">
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Button variant="primary" onClick={() => setFormOpen(true)}>Open form modal</Button>
+          <Button variant="danger" onClick={() => setConfirmOpen(true)}>Open confirm dialog</Button>
+        </div>
+        <Modal
+          open={formOpen}
+          onClose={() => setFormOpen(false)}
+          title="New project"
+          size="lg"
+          footer={
+            <>
+              <Button variant="secondary" size="sm" onClick={() => setFormOpen(false)}>Cancel</Button>
+              <Button variant="primary" size="sm" onClick={() => setFormOpen(false)}>Create project</Button>
+            </>
+          }
+        >
+          {[
+            { label: "Title", placeholder: "e.g. Brass Table Lamp" },
+            { label: "Type", placeholder: "Select type…" },
+            { label: "Due date", placeholder: "Pick a date…" },
+          ].map((f) => (
+            <div key={f.label} style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-tertiary)", marginBottom: 6 }}>
+                {f.label}
+              </label>
+              <div style={{ width: "100%", padding: "8px 12px", fontSize: 12, background: "var(--color-surface-sunken)", border: "0.5px solid var(--color-border)", borderRadius: 8, color: "var(--color-text-tertiary)" }}>
+                {f.placeholder}
+              </div>
+            </div>
+          ))}
+        </Modal>
+        <ConfirmDialog
+          open={confirmOpen}
+          tone="danger"
+          title="Delete project?"
+          body="This permanently removes the project and all its tasks. This can't be undone."
+          confirmLabel="Delete"
+          onConfirm={() => setConfirmOpen(false)}
+          onCancel={() => setConfirmOpen(false)}
+        />
+      </SubSection>
+
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
         {/* Full modal mockup */}
         <div style={{ flex: 2, background: "var(--color-surface-sunken)", borderRadius: 16, padding: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1414,10 +1462,12 @@ function ModalsSection() {
         <div style={{ flex: 1 }}>
           <SubSection title="Anatomy">
             {[
-              { part: "Container", spec: "bg: surface-raised · radius-xl · shadow-lg · border" },
-              { part: "Header",    spec: "14px semibold · close button · border-bottom" },
-              { part: "Body",      spec: "20px padding · form fields with 16px gap" },
-              { part: "Footer",    spec: "border-top · flex end · gap-2 buttons" },
+              { part: "Container", spec: "bg: surface-raised · radius-xl · shadow-overlay · border" },
+              { part: "Scrim",     spec: "charcoal 45% · blur(4px) · click-outside + Esc to close" },
+              { part: "Sizes",     spec: "sm 380 · md 460 · lg 512 · xl 640" },
+              { part: "Header",    spec: "display 16px · close button · border-bottom (via title prop)" },
+              { part: "Body",      spec: "scrollable · max-height 90vh · 20px padding" },
+              { part: "Footer",    spec: "border-top · flex end · gap-2 buttons (via footer prop)" },
             ].map((a) => (
               <div key={a.part} style={{ padding: "10px 0", borderBottom: "0.5px solid var(--color-border)" }}>
                 <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 2 }}>{a.part}</p>
