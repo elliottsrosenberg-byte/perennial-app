@@ -251,7 +251,7 @@ export default function NewPipelineModal({ onClose, onCreated }: Props) {
         <>
           <button type="button" onClick={onClose}
             className="px-4 py-2 text-[13px] rounded-lg transition-colors"
-            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
+            style={{ color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
             Cancel
@@ -314,7 +314,7 @@ export default function NewPipelineModal({ onClose, onCreated }: Props) {
                     className="px-3 py-1.5 rounded-lg text-[12px] transition-colors"
                     style={{
                       background: template === key ? color + "18" : "var(--color-cream)",
-                      color: template === key ? color : "#6b6860",
+                      color: template === key ? color : "var(--color-text-secondary)",
                       border: `0.5px solid ${template === key ? color + "55" : "var(--color-border)"}`,
                       fontWeight: template === key ? 500 : 400,
                     }}>
@@ -442,7 +442,7 @@ export default function NewPipelineModal({ onClose, onCreated }: Props) {
                 />
                 <button type="button" onClick={addStage} disabled={!newStage.trim()}
                   className="px-2.5 py-1.5 rounded-lg text-[12px] flex items-center gap-1 disabled:opacity-40"
-                  style={{ background: "var(--color-cream)", color: "#6b6860", border: "0.5px solid var(--color-border)" }}>
+                  style={{ background: "var(--color-cream)", color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}>
                   <Plus size={12} />
                   Add
                 </button>
@@ -481,8 +481,8 @@ function StageRow({ stage, color, dragHandleProps, onNameChange, onToggleOutcome
         onClick={() => onToggleOutcome(stage.id)}
         className="shrink-0 text-[10px] px-2 py-0.5 rounded-full font-medium transition-colors"
         style={{
-          background: stage.is_outcome ? "rgba(31,33,26,0.10)" : color + "18",
-          color:      stage.is_outcome ? "#6b6860" : color,
+          background: stage.is_outcome ? "rgba(var(--color-charcoal-rgb),0.10)" : color + "18",
+          color:      stage.is_outcome ? "var(--color-text-secondary)" : color,
           border:     `0.5px solid ${stage.is_outcome ? "var(--color-border)" : color + "44"}`,
           whiteSpace: "nowrap",
         }}

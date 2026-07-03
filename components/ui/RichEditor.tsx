@@ -644,7 +644,7 @@ export function InlineAshPopover({
           <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
             <div style={{
               width: 18, height: 18, borderRadius: 99, flexShrink: 0,
-              background: "rgba(155,163,122,0.18)",
+              background: "rgba(var(--color-sage-rgb),0.18)",
               display: "flex", alignItems: "center", justifyContent: "center",
               color: "var(--color-sage)", marginTop: 1,
             }}>

@@ -234,9 +234,9 @@ export default async function InvoicePrintPage({ params, searchParams }: { param
           <div>
             <div className="dates-row">
               <div className="date-item"><span className="date-key">Issued</span><span className="date-val">{fmtDate(inv.issued_at)}</span></div>
-              {inv.due_at && <div className="date-item"><span className="date-key">Due</span><span className="date-val" style={{ color: isOverdue ? "#dc3e0d" : undefined }}>{fmtDate(inv.due_at)}</span></div>}
+              {inv.due_at && <div className="date-item"><span className="date-key">Due</span><span className="date-val" style={{ color: isOverdue ? "var(--color-red-orange)" : undefined }}>{fmtDate(inv.due_at)}</span></div>}
               {inv.payment_terms && <div className="date-item"><span className="date-key">Terms</span><span className="date-val">{inv.payment_terms}</span></div>}
-              {inv.paid_at && <div className="date-item"><span className="date-key">Paid</span><span className="date-val" style={{ color: "#3d6b4f" }}>{fmtDate(inv.paid_at)}</span></div>}
+              {inv.paid_at && <div className="date-item"><span className="date-key">Paid</span><span className="date-val" style={{ color: "var(--color-green-deep)" }}>{fmtDate(inv.paid_at)}</span></div>}
             </div>
           </div>
         </div>
@@ -255,7 +255,7 @@ export default async function InvoicePrintPage({ params, searchParams }: { param
           </thead>
           <tbody>
             {(inv.line_items ?? []).length === 0 ? (
-              <tr><td colSpan={4} style={{ color: "#9a9690", fontStyle: "italic", paddingTop: 16 }}>No line items added.</td></tr>
+              <tr><td colSpan={4} style={{ color: "var(--color-text-tertiary)", fontStyle: "italic", paddingTop: 16 }}>No line items added.</td></tr>
             ) : (inv.line_items ?? []).map((li) => (
               <tr key={li.id}>
                 <td>
@@ -303,7 +303,7 @@ export default async function InvoicePrintPage({ params, searchParams }: { param
             <div className="footer-label">Attachments</div>
             {(inv.attachments ?? []).map((a) => (
               <div key={a.id} className="footer-val">
-                <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ color: "#3d6b4f" }}>{a.name}</a>
+                <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-green-deep)" }}>{a.name}</a>
               </div>
             ))}
           </div>

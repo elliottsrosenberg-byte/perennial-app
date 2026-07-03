@@ -439,8 +439,8 @@ export default function ImportContactsModal({ onClose, onImported }: Props) {
 
               <div style={{
                 marginTop: 16, padding: "12px 14px", borderRadius: 10,
-                background: "rgba(155,163,122,0.08)",
-                border: "0.5px solid rgba(155,163,122,0.20)",
+                background: "rgba(var(--color-sage-rgb),0.08)",
+                border: "0.5px solid rgba(var(--color-sage-rgb),0.20)",
               }}>
                 <p style={{ fontSize: 11, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 4 }}>
                   Export tips
@@ -533,8 +533,8 @@ export default function ImportContactsModal({ onClose, onImported }: Props) {
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div style={{
                 padding: "12px 14px", borderRadius: 10,
-                background: "rgba(155,163,122,0.08)",
-                border: "0.5px solid rgba(155,163,122,0.20)",
+                background: "rgba(var(--color-sage-rgb),0.08)",
+                border: "0.5px solid rgba(var(--color-sage-rgb),0.20)",
               }}>
                 <p style={{ fontSize: 11.5, lineHeight: 1.6, color: "var(--color-text-primary)" }}>
                   <strong>{validRowCount}</strong> contact{validRowCount === 1 ? "" : "s"} will be imported.
@@ -567,7 +567,7 @@ export default function ImportContactsModal({ onClose, onImported }: Props) {
                           {(p.first_name || p.last_name) ? `${p.first_name} ${p.last_name}`.trim() : <em style={{ color: "var(--color-red-orange)" }}>Missing name — will skip</em>}
                         </span>
                         {p.is_lead && (
-                          <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 99, background: "rgba(184,134,11,0.12)", color: "#b8860b", fontWeight: 600 }}>
+                          <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 99, background: "rgba(var(--color-gold-rgb),0.12)", color: "var(--color-gold)", fontWeight: 600 }}>
                             Lead
                           </span>
                         )}
@@ -582,7 +582,7 @@ export default function ImportContactsModal({ onClose, onImported }: Props) {
                       {p.tags.length > 0 && (
                         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 5 }}>
                           {p.tags.slice(0, 5).map(t => (
-                            <span key={t} style={{ fontSize: 9, padding: "1px 6px", borderRadius: 99, background: "var(--color-cream)", color: "#6b6860", fontWeight: 500, border: "0.5px solid var(--color-border)" }}>{t}</span>
+                            <span key={t} style={{ fontSize: 9, padding: "1px 6px", borderRadius: 99, background: "var(--color-cream)", color: "var(--color-text-secondary)", fontWeight: 500, border: "0.5px solid var(--color-border)" }}>{t}</span>
                           ))}
                         </div>
                       )}
@@ -614,7 +614,7 @@ export default function ImportContactsModal({ onClose, onImported }: Props) {
             <div style={{ padding: "20px 0", textAlign: "center" }}>
               <div style={{
                 width: 44, height: 44, borderRadius: "50%",
-                background: "rgba(155,163,122,0.16)",
+                background: "rgba(var(--color-sage-rgb),0.16)",
                 margin: "0 auto 12px",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 color: "var(--color-sage)",

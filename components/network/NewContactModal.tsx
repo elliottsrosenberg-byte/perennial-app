@@ -155,7 +155,7 @@ export default function NewContactModal({ onClose, onCreated, isLead = false }: 
             <div style={{ display: "flex", gap: 2, background: "var(--color-cream)", borderRadius: 8, padding: 2 }}>
               {(["contact", "lead"] as const).map(t => (
                 <button key={t} type="button" onClick={() => setType(t)}
-                  style={{ padding: "4px 14px", borderRadius: 6, fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer", fontFamily: "inherit", background: type === t ? (t === "contact" ? "var(--color-sage)" : "#b8860b") : "transparent", color: type === t ? "white" : "#9a9690", transition: "all 0.1s ease" }}>
+                  style={{ padding: "4px 14px", borderRadius: 6, fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer", fontFamily: "inherit", background: type === t ? (t === "contact" ? "var(--color-sage)" : "var(--color-gold)") : "transparent", color: type === t ? "white" : "var(--color-grey)", transition: "all 0.1s ease" }}>
                   {t.charAt(0).toUpperCase() + t.slice(1)}
                 </button>
               ))}
@@ -182,7 +182,7 @@ export default function NewContactModal({ onClose, onCreated, isLead = false }: 
           <button
             type="button" onClick={onClose}
             className="px-4 py-2 text-[13px] rounded-lg transition-colors"
-            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
+            style={{ color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
           >
@@ -323,9 +323,9 @@ export default function NewContactModal({ onClose, onCreated, isLead = false }: 
                   <button
                     key={t} type="button" onClick={() => addTag(t)}
                     className="px-2 py-0.5 rounded-full text-[11px] transition-colors"
-                    style={{ background: "var(--color-cream)", color: "#6b6860", border: "0.5px solid var(--color-border)" }}
+                    style={{ background: "var(--color-cream)", color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-sage)", e.currentTarget.style.color = "white")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-cream)", e.currentTarget.style.color = "#6b6860")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-cream)", e.currentTarget.style.color = "var(--color-text-secondary)")}
                   >
                     + {t}
                   </button>

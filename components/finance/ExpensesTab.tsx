@@ -119,7 +119,7 @@ export default function ExpensesTab({ expenses, projects, onExpenseDeleted, onEx
         </div>
         <div className="ml-auto text-[11px]" style={{ color: "var(--color-grey)" }}>
           Total: <strong style={{ color: "var(--color-charcoal)" }}>{fmtCurrency(total)}</strong>
-          {unattached > 0 && <span style={{ color: "#b8860b" }}> · {fmtCurrency(unattached)} unattached</span>}
+          {unattached > 0 && <span style={{ color: "var(--color-gold)" }}> · {fmtCurrency(unattached)} unattached</span>}
         </div>
       </div>
 
@@ -128,7 +128,7 @@ export default function ExpensesTab({ expenses, projects, onExpenseDeleted, onEx
         <div className="flex-1 rounded-xl overflow-hidden" style={{ background: "var(--color-warm-white)", border: "0.5px solid var(--color-border)" }}>
           {/* Column headers */}
           <div className="grid px-4 py-2 text-[9px] font-semibold uppercase tracking-wider"
-            style={{ gridTemplateColumns: "28px 1fr 120px 64px 16px 72px 24px", gap: "0.625rem", background: "rgba(31,33,26,0.04)", borderBottom: "0.5px solid var(--color-border)", color: "var(--color-grey)" }}>
+            style={{ gridTemplateColumns: "28px 1fr 120px 64px 16px 72px 24px", gap: "0.625rem", background: "rgba(var(--color-charcoal-rgb),0.04)", borderBottom: "0.5px solid var(--color-border)", color: "var(--color-grey)" }}>
             <div />
             <div>Description</div>
             <div>Project</div>
@@ -145,7 +145,7 @@ export default function ExpensesTab({ expenses, projects, onExpenseDeleted, onEx
                 role={onExpenseEdit ? "button" : undefined}
                 tabIndex={onExpenseEdit ? 0 : undefined}
                 onKeyDown={onExpenseEdit ? (ev) => { if (ev.key === "Enter") onExpenseEdit(e); } : undefined}
-                onMouseEnter={onExpenseEdit ? ev => ev.currentTarget.style.background = "rgba(31,33,26,0.025)" : undefined}
+                onMouseEnter={onExpenseEdit ? ev => ev.currentTarget.style.background = "rgba(var(--color-charcoal-rgb),0.025)" : undefined}
                 onMouseLeave={onExpenseEdit ? ev => ev.currentTarget.style.background = "transparent" : undefined}
                 style={{ gridTemplateColumns: "28px 1fr 120px 64px 16px 72px 24px", gap: "0.625rem", borderBottom: "0.5px solid var(--color-border)", cursor: onExpenseEdit ? "pointer" : "default" }}>
                 <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-semibold shrink-0"
@@ -156,7 +156,7 @@ export default function ExpensesTab({ expenses, projects, onExpenseDeleted, onEx
                 </div>
                 {e.project?.title ? (
                   <span className="text-[10px] px-1.5 py-0.5 rounded truncate"
-                    style={{ background: "rgba(31,33,26,0.07)", color: "var(--color-grey)" }}>{e.project.title}</span>
+                    style={{ background: "rgba(var(--color-charcoal-rgb),0.07)", color: "var(--color-grey)" }}>{e.project.title}</span>
                 ) : (
                   <span className="text-[10px] italic" style={{ color: "var(--color-grey)" }}>Unattached</span>
                 )}
@@ -213,7 +213,7 @@ export default function ExpensesTab({ expenses, projects, onExpenseDeleted, onEx
                 return (
                   <div key={cat} className="flex items-center gap-2">
                     <span className="text-[11px] w-20 shrink-0" style={{ color: "var(--color-grey)" }}>{cfg.label}</span>
-                    <div className="flex-1 rounded-full overflow-hidden" style={{ height: 5, background: "rgba(31,33,26,0.07)" }}>
+                    <div className="flex-1 rounded-full overflow-hidden" style={{ height: 5, background: "rgba(var(--color-charcoal-rgb),0.07)" }}>
                       <div style={{ width: `${(amt / maxCatAmt) * 100}%`, height: "100%", background: cfg.color, opacity: 0.7, borderRadius: 3 }} />
                     </div>
                     <span className="text-[11px] font-semibold tabular-nums w-12 text-right" style={{ color: "var(--color-charcoal)" }}>
@@ -234,8 +234,8 @@ export default function ExpensesTab({ expenses, projects, onExpenseDeleted, onEx
             <div className="p-4 flex flex-col gap-2">
               {byProject.map((p) => (
                 <div key={p.name} className="flex items-center justify-between">
-                  <span className="text-[11px] truncate flex-1" style={{ color: p.name === "Unattached" ? "#b8860b" : "var(--color-grey)" }}>{p.name}</span>
-                  <span className="text-[11px] font-semibold tabular-nums" style={{ color: p.name === "Unattached" ? "#b8860b" : "var(--color-charcoal)" }}>
+                  <span className="text-[11px] truncate flex-1" style={{ color: p.name === "Unattached" ? "var(--color-gold)" : "var(--color-grey)" }}>{p.name}</span>
+                  <span className="text-[11px] font-semibold tabular-nums" style={{ color: p.name === "Unattached" ? "var(--color-gold)" : "var(--color-charcoal)" }}>
                     {fmtCurrency(p.total)}
                   </span>
                 </div>
@@ -247,8 +247,8 @@ export default function ExpensesTab({ expenses, projects, onExpenseDeleted, onEx
           {/* Unattached warning */}
           {unattached > 0 && (
             <div className="rounded-lg p-3 text-[11px]"
-              style={{ background: "rgba(184,134,11,0.1)", border: "0.5px solid rgba(184,134,11,0.2)", color: "#6b6860", lineHeight: 1.5 }}>
-              <strong style={{ color: "#b8860b" }}>{fmtCurrency(unattached)} unattached.</strong>{" "}
+              style={{ background: "rgba(var(--color-gold-rgb),0.1)", border: "0.5px solid rgba(var(--color-gold-rgb),0.2)", color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+              <strong style={{ color: "var(--color-gold)" }}>{fmtCurrency(unattached)} unattached.</strong>{" "}
               Attach these to a project to include them in your next invoice.
             </div>
           )}

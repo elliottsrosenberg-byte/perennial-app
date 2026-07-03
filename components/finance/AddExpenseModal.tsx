@@ -164,7 +164,7 @@ export default function AddExpenseModal({ projects, onClose, onCreated, expense,
         <>
           <button type="button" onClick={onClose}
             className="px-4 py-2 text-[13px] rounded-lg"
-            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
+            style={{ color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>Cancel</button>
           <button onClick={handleSubmit as unknown as React.MouseEventHandler}

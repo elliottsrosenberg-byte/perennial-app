@@ -160,7 +160,7 @@ export default async function HomePage() {
             <Link
               href="/projects?new=1"
               className="px-[13px] py-[5px] text-[11px] font-medium rounded-md transition-colors inline-flex items-center leading-none"
-              style={{ background: "transparent", color: "#6b6860", border: "0.5px solid var(--color-border)" }}
+              style={{ background: "transparent", color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}
             >
               + New project
             </Link>

@@ -88,7 +88,7 @@ export default function EmptyState({
                 <span style={{ fontSize: 10, color: "var(--color-sage)", fontWeight: 700, flexShrink: 0, marginTop: 1 }}>
                   {i + 1}
                 </span>
-                <p style={{ fontSize: 11, lineHeight: 1.55, color: "#6b6860", margin: 0 }}>{tip}</p>
+                <p style={{ fontSize: 11, lineHeight: 1.55, color: "var(--color-text-secondary)", margin: 0 }}>{tip}</p>
               </div>
             ))}
           </div>

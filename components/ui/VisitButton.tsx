@@ -22,17 +22,17 @@ export default function VisitButton({ href, label = "Visit", ariaLabel }: Props)
         fontSize: 10, fontWeight: 600, fontFamily: "inherit",
         padding: "3px 9px",
         borderRadius: 999,
-        background: "rgba(155,163,122,0.16)",
+        background: "rgba(var(--color-sage-rgb),0.16)",
         color: "var(--color-sage-text)",
-        border: "0.5px solid rgba(155,163,122,0.32)",
+        border: "0.5px solid rgba(var(--color-sage-rgb),0.32)",
         textDecoration: "none",
         transition: "background 0.12s ease, color 0.12s ease",
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.background = "rgba(155,163,122,0.28)";
+        e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.28)";
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.background = "rgba(155,163,122,0.16)";
+        e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.16)";
       }}
     >
       {label}
