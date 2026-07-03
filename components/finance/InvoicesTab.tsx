@@ -234,11 +234,11 @@ function fmtCurrency(n: number) {
 
 function fmtHours(mins: number) { return `${(mins / 60).toFixed(1)}h`; }
 
-// Status palette: draft & saved blue, sent yellow, paid green, voided grey,
+// Status palette: draft & saved orange, sent yellow, paid green, voided grey,
 // overdue red (shown as an extra tag, never replacing the real status).
 const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  draft:   { bg: "var(--color-blue)",                  color: "white",   label: "Draft"   },
-  saved:   { bg: "var(--color-blue)",                  color: "white",   label: "Saved"   },
+  draft:   { bg: "var(--color-orange)",                color: "white",   label: "Draft"   },
+  saved:   { bg: "var(--color-orange)",                color: "white",   label: "Saved"   },
   sent:    { bg: "var(--color-amber-solid)",                  color: "#1f211a", label: "Sent"    },
   paid:    { bg: "var(--color-sage)",        color: "white",   label: "Paid"    },
   overdue: { bg: "var(--color-red-orange)",  color: "white",   label: "Overdue" },
@@ -247,7 +247,7 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }>
 
 // Status → Badge tone (solid variant). The menu swatch still reads STATUS_STYLE.
 const STATUS_TONE: Record<string, BadgeTone> = {
-  draft: "blue", saved: "blue", sent: "yellow", paid: "sage", overdue: "red", voided: "grey",
+  draft: "orange", saved: "orange", sent: "yellow", paid: "sage", overdue: "red", voided: "grey",
 };
 
 // Left-stripe color per status for the list rows.
@@ -255,7 +255,7 @@ function stripeFor(status: string, overdue: boolean): string {
   if (overdue) return "var(--color-red-orange)";
   if (status === "paid")                          return "var(--color-sage)";
   if (status === "sent")                          return "var(--color-amber-solid)";
-  if (status === "draft" || status === "saved")   return "var(--color-blue)";
+  if (status === "draft" || status === "saved")   return "var(--color-orange)";
   if (status === "voided")                        return "var(--color-grey)";
   return "var(--color-border)";
 }
