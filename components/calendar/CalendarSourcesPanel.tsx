@@ -177,7 +177,7 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
     setCalendars((prev) => prev.map((c) => (c.id === cal.id ? { ...c, visible: nextVisible } : c)));
     // Broadcast the optimistic patch immediately so the main grid's
     // calendarsById updates in lock-step — waiting for the PATCH round
-    // trip leaves chips with stale colour for a beat.
+    // trip leaves chips with stale color for a beat.
     window.dispatchEvent(new CustomEvent("calendar:row-changed", { detail: { id: cal.id, patch: { visible: nextVisible } } }));
     try {
       const res = await fetch("/api/integrations/calendar/calendars", {
@@ -566,8 +566,8 @@ function CalendarRow({
         {cal.name}
       </span>
 
-      {/* Default-calendar marker — small ring around the colour dot's
-          inverse. Unimposing: same colour as the calendar's, so it reads
+      {/* Default-calendar marker — small ring around the color dot's
+          inverse. Unimposing: same color as the calendar's, so it reads
           as "this row is highlighted" rather than a separate icon. */}
       {isDefault && (
         <span
@@ -684,7 +684,7 @@ function RowMenu({
         overflow: "hidden",
         padding: 6,
       }}>
-        {/* Colour swatches */}
+        {/* Color swatches */}
         <div style={{ padding: "6px 8px" }}>
           <p style={{ fontSize: 9.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-tertiary)", marginBottom: 6 }}>
             Color

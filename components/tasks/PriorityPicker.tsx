@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 
 // ─── Shared task priority palette ───────────────────────────────────────────
-// Single source of truth for the priority dot colours + labels used across the
+// Single source of truth for the priority dot colors + labels used across the
 // Tasks page and the project detail panel.
 
 export const PRIORITY_DOT: Record<string, string> = {

@@ -368,7 +368,7 @@ function SwatchPicker({ value, onChange }: { value: string; onChange: (c: string
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        aria-label="Change colour"
+        aria-label="Change color"
         style={{
           width: 16, height: 16, borderRadius: 99,
           background: value,

@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Design-system guardrail: flags hardcoded colour literals that should be
+// Design-system guardrail: flags hardcoded color literals that should be
 // design tokens. Run on a single file path (the Claude Code post-edit hook
 // passes the edited file). Prints violations to stderr and exits 2 so the
 // finding is surfaced back to the agent; exits 0 when clean.
 //
 //   node scripts/check-design-tokens.mjs <file.tsx>
 //
-// The rule: colour VALUES come from app/globals.css tokens
+// The rule: color VALUES come from app/globals.css tokens
 // (var(--color-*), rgba(var(--color-*-rgb), α)) — never a raw hex/rgba.
 // See docs/architecture/design-system.md and .design-sync/.
 
@@ -63,11 +63,11 @@ for (let i = 0; i < lines.length; i++) {
 if (!hits.length) process.exit(0);
 
 const rel = file.replace(process.cwd() + '/', '');
-console.error(`\n⚠️  Design-system check — ${rel}: ${hits.length} hardcoded colour(s).`);
+console.error(`\n⚠️  Design-system check — ${rel}: ${hits.length} hardcoded color(s).`);
 console.error(`   Use app/globals.css tokens instead: var(--color-*) for solids, rgba(var(--color-*-rgb), α) for tints.`);
 for (const h of hits.slice(0, 20)) {
   console.error(`   L${h.ln}: ${h.tok}`);
 }
 if (hits.length > 20) console.error(`   …and ${hits.length - 20} more.`);
-console.error(`   If a value is a genuine one-off (brand/provider colour, contrast anchor), it's fine — otherwise tokenize it.`);
+console.error(`   If a value is a genuine one-off (brand/provider color, contrast anchor), it's fine — otherwise tokenize it.`);
 process.exit(2);

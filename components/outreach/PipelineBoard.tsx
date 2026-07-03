@@ -22,7 +22,7 @@ const ETHER_BG           = "rgba(83, 134, 196, 0.06)";
 const ETHER_BG_HOVER     = "rgba(83, 134, 196, 0.16)";
 const ETHER_BLUE         = "#5386c4";
 
-// Distinct follow-up colour. Intentionally NOT sage (overloaded with "healthy
+// Distinct follow-up color. Intentionally NOT sage (overloaded with "healthy
 // project" semantics) and NOT amber/red-orange (already used for lead/stale
 // states). A warm copper signals "outreach touch" without echoing any other
 // surface in the app.
@@ -132,7 +132,7 @@ function TargetCard({
   const [actType,   setActType]   = useState<ContactActivityType>("email");
   const [note,      setNote]      = useState("");
   const [logging,   setLogging]   = useState(false);
-  // Brief flash after a successful log — drives a copper colour + check icon
+  // Brief flash after a successful log — drives a copper color + check icon
   // and the "compressed to 80%" treatment kicks in via `isFollowedUp` once
   // the parent marks it.
   const [justLogged, setJustLogged] = useState(false);

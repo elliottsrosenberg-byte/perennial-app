@@ -22,7 +22,7 @@ const PRACTICE_OPTIONS = [
   "Video", "Graphic design", "Websites", "Software", "Client-based work",
 ];
 
-// Stable key + colour per practice option so the Projects board can default
+// Stable key + color per practice option so the Projects board can default
 // to a list of types that mirrors how the user describes their work. Order
 // here is the canonical order; the user's selection order determines which
 // types appear first on their board.

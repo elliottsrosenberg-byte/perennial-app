@@ -1813,7 +1813,7 @@ interface RowProps {
   onAttachReceipt:  (file: File) => void;
   onRemoveReceipt:  () => void;
   /** When `customId` is provided the row chip renders the custom's
-   *  label/colour; `category` is the built-in we route persistence to. */
+   *  label/color; `category` is the built-in we route persistence to. */
   onSetManualCategory: (c: string | null, customId?: string | null) => void;
   /** Open the Customize-categories modal from the row picker. */
   onCustomize:      () => void;
@@ -1840,7 +1840,7 @@ function TransactionRow({
   // One taxonomy resolves the chip: a custom category (manual_custom_id)
   // wins, then a canonical override key (manual_category), then Plaid's
   // auto-detected primary. Each branch carries its own brand palette so
-  // the row chip and the picker pill read the same colour.
+  // the row chip and the picker pill read the same color.
   const customMatch = findCustom(customs, tx.manual_custom_id);
   const canonical   = canonicalByKey(tx.manual_category) ?? categoryFor(primary);
   const displayCat  = customMatch
@@ -1990,14 +1990,14 @@ function TransactionRow({
 
 // ── Category picker chip ────────────────────────────────────────────────────
 // Click the chip → 2-col pill grid anchored under it, listing built-in
-// + user-defined custom categories as colour-coded buttons. Personal sits
+// + user-defined custom categories as color-coded buttons. Personal sits
 // below a divider as a quieter ghost pill so its destructive-ish
 // "hide this from the books" meaning stays visually distinct. "Auto
 // (Plaid)" clears any override and falls back to the Plaid mapping.
 // Closes on outside click or Escape.
 //
 // Visual contract: each pill matches the row chip's vocabulary (tinted
-// bg + full-colour fg + icon) so the connection between picker and chip
+// bg + full-color fg + icon) so the connection between picker and chip
 // is obvious. Built-ins re-use the Plaid display palette so the same
 // label reads the same in either surface; customs use the user's
 // chosen swatch (tintForColor for bg, full hex for fg).

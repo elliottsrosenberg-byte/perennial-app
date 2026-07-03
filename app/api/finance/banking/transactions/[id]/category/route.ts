@@ -32,7 +32,7 @@ export async function PATCH(
     /** A canonical category key (see CANONICAL_CATEGORIES) or null to clear. */
     manual_category?:   string | null;
     /** Optional UUID of a custom category from profiles.custom_categories.
-     *  When provided, the row's chip renders the custom label/colour.
+     *  When provided, the row's chip renders the custom label/color.
      *  Pass null to clear. */
     manual_custom_id?:  string | null;
   } | null;
