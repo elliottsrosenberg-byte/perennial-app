@@ -4,6 +4,30 @@ Maintained by the weekly documentation agent. Each entry covers the prior week's
 
 ---
 
+## 2026-07-03 (week of 2026-06-26)
+
+### Features
+- `892e644` Design system: new `components/ui/Modal.tsx` shared dialog shell — 4 sizes (sm/md/lg/xl; widths 380/460/512/640px), `title?`/`header?`/`footer?` slots, Escape-to-close; `ConfirmDialog` refactored onto it; ~25 modals adopted across the refactor waves this week
+- `1d665d3` Design system: new `components/ui/Card.tsx` surface-container primitive — 3 variants (raised/flat/sunken), 4 padding sizes, `interactive` hover-lift prop; `--radius-lg` radius
+- `1efa772` Design system: `components/ui/Badge.tsx` rewritten — 3 variants (status/tag/solid), 11 tones (sage + 10 palette colors) via new `lib/ui/palette.ts`; adopted for invoice status pills (`InvoicesTab.tsx`, solid variant)
+- `1efa772` Design system: new `lib/ui/palette.ts` — canonical 10-color user palette (Green/Grey/Brown/Orange/Yellow/Olive/Blue/Purple/Rose/Red) for tags, calendar colors, pipelines, and project accents
+- `f0bb6b1` Design sync: add `.design-sync/` directory (27 files: config, previews, `tokens.css`) linking the design system to Claude Design; `AshMark` SVG inlined as data URI in `components/ui/AshMark.tsx`
+- `f4fa73e` Design system: add `scripts/check-design-tokens.mjs` PostToolUse hook enforcing no raw hex/rgba in styles; design-token rules added to `AGENTS.md`
+
+### Infra
+- `4e545db` `0d3a8c9` `f2e235c` `164816d` `b773dd2` `f35e366` Color tokenization waves 1–3 — sweep across all modules replacing raw hex/rgba with `var(--color-*)` tokens; new `--color-green-deep-rgb` and `--color-grey-rgb` rgb-triplet tint helpers added to `globals.css`
+- `5fad80f` Invoice Draft/Saved status color changed to orange; blue retired as an invoice status color
+- `2ea758b` Badge adoption: invoice status pills migrated to `Badge` solid variant (`InvoicesTab.tsx`)
+- `cc3c4bd` Unified accent/status/palette into one 10-color set; `/design` showcase refactored to use real `components/ui/` primitives
+- `761d3dd` `98356ec` `f0d941c` `363ca16` `be96d26` `a27eaba` `07f3392` `5d2e753` Modal adoption wave — ~25 modals refactored from bespoke dialog markup onto shared `Modal` shell
+- `ab2b232` US spelling normalization (colour→color) across codebase and docs
+
+### Docs
+- This run: `design-system.md` — update Badge primitive row (3 variants/11 tones/2 importers); add Card and Modal rows to Section 3 table; note `Modal` in adoption summary; add `--color-green-deep` and rgb-triplet tint helpers to token tables; update Section 7.9 and backlog item 7
+- This run: `change-playbook.md` — update Badge adoption map (no longer dead, 2 importers); add Card and Modal rows to Section 2a; update Section 2b Badge claim and table row
+
+---
+
 ## 2026-06-26 (week of 2026-06-19)
 
 ### Features

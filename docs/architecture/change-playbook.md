@@ -69,7 +69,9 @@ The core problem: **primitives exist but are bypassed.** Before restyling, decid
 | Primitive | File | Adoption | Hold-outs you must also touch |
 |---|---|---|---|
 | `Button` | `components/ui/Button.tsx` | only **7** files (ProjectsClient, ImportContactsModal, ImportNoteModal, NotesClient, NewProjectModal, FinanceClient, OutreachClient) | most other screens hand-roll `<button>` with inline styles |
-| `Badge` | `components/ui/Badge.tsx` | **ZERO importers — dead** | ~29 files hand-roll pill/chip markup inline |
+| `Badge` | `components/ui/Badge.tsx` | **2 importers** (InvoicesTab solid variant, design showcase); rewritten with 3 variants + 11 tones via `lib/ui/palette.ts` | ~29 files still hand-roll pill/chip markup inline |
+| `Card` | `components/ui/Card.tsx` | **1 file** (design showcase only) — new primitive, not yet adopted in feature screens | — |
+| `Modal` | `components/ui/Modal.tsx` | **~25 files** — well-adopted dialog shell; `ConfirmDialog` builds on it | — |
 | `Select` | `components/ui/Select.tsx` | 14 files (mostly finance) | ~18 native `<select>` (see 2c) |
 | `DatePicker` | `components/ui/DatePicker.tsx` | 9 files | ~10 native `<input type=date/datetime-local>` (see 2c) |
 | `Checkbox` | `components/ui/Checkbox.tsx` | 1 file | 7 native `<input type=checkbox>` (see 2c) |
@@ -81,13 +83,13 @@ The core problem: **primitives exist but are bypassed.** Before restyling, decid
 
 ### 2b. Chips / tags / status pills — the biggest inline mess
 
-`Badge` has **zero importers**. Chip rendering is hand-styled inline per module with per-module color maps. To restyle chips app-wide you must touch every map:
+`Badge` has **2 importers** (InvoicesTab invoice-status solid pills, `app/design/page.tsx`). Chip rendering is still hand-styled inline across ~29 files. To restyle chips app-wide you must touch every map:
 
 | File | What |
 |---|---|
 | `components/projects/ProjectDetailPanel.tsx:12` | `chipBg` / `optionTagStyle` |
 | `components/network/ContactDetailPanel.tsx:16` | `TAG_COLORS` / `tagStyle`; `:31` `STATUS_CONFIG`; `:38` `LEAD_STAGE_CONFIG` |
-| `components/ui/Badge.tsx` | the dead primitive (8 variants, hardcoded bg/color pairs) |
+| `components/ui/Badge.tsx` | 3 variants / 11 tones via `lib/ui/palette.ts`; 2 active importers |
 
 The shared convention everywhere is a soft `rgba(…, 0.10–0.18)` background. **Fix:** adopt `Badge` for chips (or delete it) and add a shared `chipStyle(color)` util. Until then, restyling a chip = editing each inline map above plus the ~29 hand-rolled sites.
 
