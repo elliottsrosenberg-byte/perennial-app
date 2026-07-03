@@ -23,16 +23,16 @@ function chipBg(color: string): string {
     const b = parseInt(hex.slice(4, 6), 16);
     if (!Number.isNaN(r)) return `rgba(${r},${g},${b},0.12)`;
   }
-  if (color === "var(--color-sage)")        return "rgba(155,163,122,0.16)";
-  if (color === "var(--color-warm-yellow)") return "rgba(232,197,71,0.15)";
-  if (color === "var(--color-red-orange)")  return "rgba(220,62,13,0.10)";
-  if (color === "var(--color-green)")       return "rgba(141,208,71,0.12)";
+  if (color === "var(--color-sage)")        return "rgba(var(--color-sage-rgb),0.16)";
+  if (color === "var(--color-warm-yellow)") return "rgba(var(--color-amber-rgb),0.15)";
+  if (color === "var(--color-red-orange)")  return "rgba(var(--color-red-rgb),0.10)";
+  if (color === "var(--color-green)")       return "rgba(var(--color-green-rgb),0.12)";
   if (color === "var(--color-grey)")        return "rgba(154,150,144,0.14)";
-  return "rgba(31,33,26,0.06)";
+  return "rgba(var(--color-charcoal-rgb),0.06)";
 }
 
 function optionTagStyle(opt: ProjectOption): { bg: string; color: string } {
-  return { bg: chipBg(opt.color), color: opt.color === "var(--color-grey)" ? "#6b6860" : opt.color };
+  return { bg: chipBg(opt.color), color: opt.color === "var(--color-grey)" ? "var(--color-text-secondary)" : opt.color };
 }
 import { useEditor, EditorContent } from "@tiptap/react";
 import { getRichExtensions, RichToolbar, InlineAshPopover, SelectionBubble, submitInlineAsh } from "@/components/ui/RichEditor";
@@ -174,14 +174,14 @@ function EditableField({ label, display, editDefault, inputType = "text", placeh
           onChange={e => setDraft(e.target.value)}
           onBlur={() => commit()} onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") cancel(); }}
           className="text-[11px] text-right bg-transparent focus:outline-none"
-          style={{ color: "#6b6860", borderBottom: "1px solid var(--color-sage)", maxWidth: "130px", minWidth: "60px" }}
+          style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-sage)", maxWidth: "130px", minWidth: "60px" }}
           placeholder={placeholder}
         />
       ) : (
         <div className="flex items-center gap-1.5 cursor-text" onClick={() => setEditing(true)}>
           <span
             className="text-[11px] font-medium text-right"
-            style={{ color: alert ? "var(--color-red-orange)" : display === "—" ? "var(--color-grey)" : "#6b6860", fontWeight: display === "—" ? 400 : 500 }}
+            style={{ color: alert ? "var(--color-red-orange)" : display === "—" ? "var(--color-grey)" : "var(--color-text-secondary)", fontWeight: display === "—" ? 400 : 500 }}
           >
             {display}
           </span>
@@ -246,12 +246,12 @@ function EditableDescription({ value, onSave }: { value: string | null; onSave: 
           ref={ref} value={draft} onChange={e => setDraft(e.target.value)}
           onBlur={commit} rows={3} placeholder="Add a description…"
           className="w-full text-[11px] leading-relaxed bg-transparent focus:outline-none resize-none"
-          style={{ color: "#6b6860", border: "0.5px solid var(--color-sage)", borderRadius: "6px", padding: "5px 7px" }}
+          style={{ color: "var(--color-text-secondary)", border: "0.5px solid var(--color-sage)", borderRadius: "6px", padding: "5px 7px" }}
         />
       ) : (
         <div onClick={() => setEditing(true)} className="cursor-text">
           {value
-            ? <p className="text-[11px] leading-relaxed" style={{ color: "#6b6860" }}>{value}</p>
+            ? <p className="text-[11px] leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>{value}</p>
             : <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>Add a description…</p>
           }
         </div>
@@ -302,7 +302,7 @@ function CanvasEditor({
       scheduleSave(html);
     },
     editorProps: {
-      attributes: { style: "outline: none; min-height: 300px; font-size: 14px; line-height: 1.8; color: #6b6860;" },
+      attributes: { style: "outline: none; min-height: 300px; font-size: 14px; line-height: 1.8; color: var(--color-text-secondary);" },
     },
   }, [projectId]);
 
@@ -390,7 +390,7 @@ function CanvasEditor({
 // ── ContactsTab ───────────────────────────────────────────────────────────────
 
 const STATUS_DOT: Record<string, string> = {
-  active: "var(--color-sage)", lead: "#b8860b", inactive: "var(--color-grey)",
+  active: "var(--color-sage)", lead: "var(--color-gold)", inactive: "var(--color-grey)",
 };
 
 function ContactsTab({ projectId }: { projectId: string }) {
@@ -504,11 +504,11 @@ function ContactsTab({ projectId }: { projectId: string }) {
                     width: "100%", display: "flex", alignItems: "center", gap: 9,
                     padding: "7px 10px", borderRadius: 7,
                     border: "0.5px dashed var(--color-sage)",
-                    background: "rgba(155,163,122,0.06)",
+                    background: "rgba(var(--color-sage-rgb),0.06)",
                     cursor: "pointer", fontFamily: "inherit",
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = "rgba(155,163,122,0.12)"}
-                  onMouseLeave={e => e.currentTarget.style.background = "rgba(155,163,122,0.06)"}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.12)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.06)"}
                 >
                   <div style={{
                     width: 26, height: 26, borderRadius: "50%",
@@ -534,7 +534,7 @@ function ContactsTab({ projectId }: { projectId: string }) {
           <button
             onClick={() => setShowSearch(true)}
             style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--color-grey)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
-            onMouseEnter={e => e.currentTarget.style.color = "#6b6860"}
+            onMouseEnter={e => e.currentTarget.style.color = "var(--color-text-secondary)"}
             onMouseLeave={e => e.currentTarget.style.color = "var(--color-grey)"}
           >
             <Plus size={13} strokeWidth={2} />
@@ -833,7 +833,7 @@ export default function ProjectDetailPanel({
   const priorityStyle = optionTagStyle(resolve("priority", localProject.priority));
   const typeStyle     = localProject.type
     ? optionTagStyle(resolve("type", localProject.type))
-    : { bg: "var(--color-cream)", color: "#6b6860" };
+    : { bg: "var(--color-cream)", color: "var(--color-text-secondary)" };
   const statusOptions   = projectOptions.status.map(o => ({ value: o.key, label: o.label }));
   const typeOptions     = projectOptions.type.map(o => ({ value: o.key, label: o.label }));
   const priorityOptions = projectOptions.priority.map(o => ({ value: o.key, label: o.label }));
@@ -922,19 +922,19 @@ export default function ProjectDetailPanel({
                 {financeData.hours > 0 && (
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: "0.5px solid var(--color-border)" }}>
                     <span style={{ fontSize: 11, color: "var(--color-grey)" }}>Time logged</span>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: "#6b6860" }}>{financeData.hours}h</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)" }}>{financeData.hours}h</span>
                   </div>
                 )}
                 {localProject.type === "client_project" && financeData.billableAmount > 0 && (
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: "0.5px solid var(--color-border)" }}>
                     <span style={{ fontSize: 11, color: "var(--color-grey)" }}>Billable</span>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: "#6b6860" }}>${financeData.billableAmount.toLocaleString()}</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)" }}>${financeData.billableAmount.toLocaleString()}</span>
                   </div>
                 )}
                 {financeData.invoiceCount > 0 && (
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
                     <span style={{ fontSize: 11, color: "var(--color-grey)" }}>Invoiced</span>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: "#6b6860" }}>{financeData.invoiceCount} · ${financeData.invoiceTotal.toLocaleString()}</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)" }}>{financeData.invoiceCount} · ${financeData.invoiceTotal.toLocaleString()}</span>
                   </div>
                 )}
                 <button
@@ -959,14 +959,14 @@ export default function ProjectDetailPanel({
                     onClick={() => setActiveTab(item.key)}
                     style={{
                       width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 8px",
-                      borderRadius: 7, border: "none", background: active ? "rgba(155,163,122,0.12)" : "transparent",
+                      borderRadius: 7, border: "none", background: active ? "rgba(var(--color-sage-rgb),0.12)" : "transparent",
                       cursor: "pointer", fontFamily: "inherit", transition: "background 0.1s ease", marginBottom: 1,
                     }}
                     onMouseEnter={e => { if (!active) e.currentTarget.style.background = "rgba(0,0,0,0.04)"; }}
                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = "transparent"; }}
                   >
-                    <span style={{ color: active ? "#5a7040" : "var(--color-grey)" }}>{item.icon}</span>
-                    <span style={{ fontSize: 12, flex: 1, textAlign: "left", color: active ? "#5a7040" : "var(--color-grey)", fontWeight: active ? 500 : 400 }}>{item.label}</span>
+                    <span style={{ color: active ? "var(--color-sage-deep)" : "var(--color-grey)" }}>{item.icon}</span>
+                    <span style={{ fontSize: 12, flex: 1, textAlign: "left", color: active ? "var(--color-sage-deep)" : "var(--color-grey)", fontWeight: active ? 500 : 400 }}>{item.label}</span>
                     {item.count !== undefined && item.count > 0 && (
                       <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>{item.count}</span>
                     )}
@@ -997,7 +997,7 @@ export default function ProjectDetailPanel({
                     borderRadius: 7, border: "none", background: "transparent",
                     cursor: "pointer", fontFamily: "inherit", color: "var(--color-red-orange)",
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = "rgba(220,62,13,0.07)"}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(var(--color-red-rgb),0.07)"}
                   onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                 >
                   <Trash2 size={13} strokeWidth={1.75} />
