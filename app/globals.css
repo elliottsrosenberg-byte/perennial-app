@@ -88,12 +88,43 @@
   --text-3xl:  22px;
   --text-4xl:  28px;
   --text-5xl:  36px;
+
+  /* ── Extended Accent Palette ──────────────────────────────────────────────
+     Fixed brand accents used by status pills / Badge tones and scattered
+     inline colours. These do NOT flip in dark mode (they read as tints on
+     surfaces of either mode). Swap these values to re-skin the accent system. */
+  --color-gold:         #b8860b;   /* leads / awards */
+  --color-purple:       #6d4fa3;   /* press */
+  --color-teal:         #148c8c;   /* events */
+  --color-green-deep:   #3d6b4f;   /* text on green tint (complete/paid) */
+  --color-green-solid:  #5a9e2f;   /* filled green chip */
+  --color-amber-deep:   #a07800;   /* text on amber tint (on-hold) */
+  --color-amber-solid:  #e0a82e;   /* filled amber chip */
+  --color-orange-deep:  #c06200;   /* text on orange tint */
+  --color-orange-solid: #e0850d;   /* filled orange chip */
+  --color-sage-deep:    #5a7040;   /* deep sage text on sage tint */
 }
 
 /* ─── Base ───────────────────────────────────────────────────────────────────── */
 :root {
   --background: #f9faf4;
   --foreground: #1f211a;
+
+  /* ── Tint bases (rgb triplets) ────────────────────────────────────────────
+     For tinted fills: rgba(var(--color-sage-rgb), 0.16). Changing a base here
+     re-skins every tint derived from it. Fixed across light/dark. */
+  --color-charcoal-rgb: 31,33,26;
+  --color-sage-rgb:     155,163,122;
+  --color-green-rgb:    141,208,71;
+  --color-amber-rgb:    232,197,71;
+  --color-orange-rgb:   232,133,13;
+  --color-red-rgb:      220,62,13;
+  --color-blue-rgb:     37,99,171;
+  --color-gold-rgb:       184,134,11;
+  --color-purple-rgb:     109,79,163;
+  --color-teal-rgb:       20,140,140;
+  --color-green-deep-rgb: 61,107,79;
+  --color-grey-rgb:       154,150,144;
 
   /* Sidebar interaction tokens — light mode (sage bg) */
   --sidebar-text:        rgba(255,255,255,0.75);

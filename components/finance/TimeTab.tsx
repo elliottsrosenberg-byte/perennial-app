@@ -90,9 +90,9 @@ function StartTimerBar({ activeTimer, timerSeconds, projects, onStartTimer, onSt
         </span>
         <button onClick={onStopTimer}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium shrink-0 transition-colors"
-          style={{ background: "rgba(220,62,13,0.08)", color: "var(--color-red-orange)", border: "0.5px solid rgba(220,62,13,0.2)" }}
-          onMouseEnter={e => e.currentTarget.style.background = "rgba(220,62,13,0.14)"}
-          onMouseLeave={e => e.currentTarget.style.background = "rgba(220,62,13,0.08)"}>
+          style={{ background: "rgba(var(--color-red-rgb),0.08)", color: "var(--color-red-orange)", border: "0.5px solid rgba(var(--color-red-rgb),0.2)" }}
+          onMouseEnter={e => e.currentTarget.style.background = "rgba(var(--color-red-rgb),0.14)"}
+          onMouseLeave={e => e.currentTarget.style.background = "rgba(var(--color-red-rgb),0.08)"}>
           <svg width="9" height="9" viewBox="0 0 9 9" fill="currentColor"><rect width="9" height="9" rx="2"/></svg>
           Stop
         </button>
@@ -126,7 +126,7 @@ function StartTimerBar({ activeTimer, timerSeconds, projects, onStartTimer, onSt
       </div>
       <button type="button" onClick={() => setBillable(v => !v)}
         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] shrink-0 transition-colors"
-        style={{ background: billableOn ? "rgba(61,107,79,0.08)" : "transparent", color: billableOn ? "var(--color-sage)" : "var(--color-grey)", border: `0.5px solid ${billableOn ? "rgba(61,107,79,0.2)" : "var(--color-border)"}` }}>
+        style={{ background: billableOn ? "rgba(var(--color-green-deep-rgb),0.08)" : "transparent", color: billableOn ? "var(--color-sage)" : "var(--color-grey)", border: `0.5px solid ${billableOn ? "rgba(var(--color-green-deep-rgb),0.2)" : "var(--color-border)"}` }}>
         {billableOn ? "Billable" : "Internal"}
       </button>
       <button onClick={handleStart}
@@ -245,8 +245,8 @@ export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projec
         <button onClick={() => setBillableOnly((v) => !v)}
           className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg transition-colors"
           style={{
-            background: billableOnly ? "rgba(61,107,79,0.1)" : "var(--color-warm-white)",
-            border: `0.5px solid ${billableOnly ? "rgba(61,107,79,0.3)" : "var(--color-border)"}`,
+            background: billableOnly ? "rgba(var(--color-green-deep-rgb),0.1)" : "var(--color-warm-white)",
+            border: `0.5px solid ${billableOnly ? "rgba(var(--color-green-deep-rgb),0.3)" : "var(--color-border)"}`,
             color: billableOnly ? "var(--color-sage)" : "var(--color-grey)",
           }}>
           Billable only
@@ -322,7 +322,7 @@ export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projec
 
         {grouped.map(([date, entries]) => (
           <div key={date}>
-            <div className="px-4 py-2" style={{ background: "rgba(31,33,26,0.04)", borderBottom: "0.5px solid var(--color-border)", borderTop: "0.5px solid var(--color-border)" }}>
+            <div className="px-4 py-2" style={{ background: "rgba(var(--color-charcoal-rgb),0.04)", borderBottom: "0.5px solid var(--color-border)", borderTop: "0.5px solid var(--color-border)" }}>
               <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-grey)" }}>
                 {fmtGroupDate(date)} · {fmtDuration(entries.reduce((s, e) => s + e.duration_minutes, 0))}
               </span>
@@ -333,7 +333,7 @@ export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projec
                 role={onEntryEdit ? "button" : undefined}
                 tabIndex={onEntryEdit ? 0 : undefined}
                 onKeyDown={onEntryEdit ? (ev) => { if (ev.key === "Enter") onEntryEdit(e); } : undefined}
-                onMouseEnter={onEntryEdit ? ev => ev.currentTarget.style.background = "rgba(31,33,26,0.025)" : undefined}
+                onMouseEnter={onEntryEdit ? ev => ev.currentTarget.style.background = "rgba(var(--color-charcoal-rgb),0.025)" : undefined}
                 onMouseLeave={onEntryEdit ? ev => ev.currentTarget.style.background = "transparent" : undefined}
                 style={{ borderBottom: "0.5px solid var(--color-border)", cursor: onEntryEdit ? "pointer" : "default" }}>
                 <div className="w-2 h-2 rounded-full shrink-0" style={{ background: projectColor(e.project_id) }} />
@@ -342,7 +342,7 @@ export default function TimeTab({ timeEntries, activeTimer, timerSeconds, projec
                   <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>{e.project?.title ?? "No project"}</p>
                 </div>
                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded"
-                  style={{ background: e.billable ? "rgba(61,107,79,0.1)" : "rgba(31,33,26,0.07)", color: e.billable ? "var(--color-sage)" : "var(--color-grey)" }}>
+                  style={{ background: e.billable ? "rgba(var(--color-green-deep-rgb),0.1)" : "rgba(var(--color-charcoal-rgb),0.07)", color: e.billable ? "var(--color-sage)" : "var(--color-grey)" }}>
                   {e.billable ? "BILLABLE" : "INTERNAL"}
                 </span>
                 <span className="text-[12px] font-medium tabular-nums w-14 text-right" style={{ color: "var(--color-charcoal)" }}>

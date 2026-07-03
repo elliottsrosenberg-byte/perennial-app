@@ -338,7 +338,7 @@ function ProjectsBoard({ initialProjects }: Props) {
                           overflowY:  "hidden",
                           paddingBottom: 4, // tiny breathing room for shadow
                           borderRadius: 10,
-                          background: snapshot.isDraggingOver ? "rgba(155,163,122,0.06)" : "transparent",
+                          background: snapshot.isDraggingOver ? "rgba(var(--color-sage-rgb),0.06)" : "transparent",
                           border:     snapshot.isDraggingOver ? "1px dashed var(--color-sage)" : "1px solid transparent",
                           transition: "background 0.15s ease, border 0.15s ease",
                         }}

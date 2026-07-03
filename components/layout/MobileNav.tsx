@@ -101,7 +101,7 @@ export default function MobileNav() {
           aria-hidden
           style={{
             position: "fixed", inset: 0, zIndex: 90,
-            background: "rgba(31,33,26,0.45)",
+            background: "rgba(var(--color-charcoal-rgb),0.45)",
             backdropFilter: "blur(2px)",
           }}
         />

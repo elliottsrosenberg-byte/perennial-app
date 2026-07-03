@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<style>
+  :root{--ink:#1a1a1a;--soft:#3c3a38;--grey:#6f6d69;--faint:#a8a6a2;--frameline:#dcdbd7;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  body{font-family:'GT America','Helvetica Neue',Arial,sans-serif;color:var(--ink);background:#fff;font-weight:300;-webkit-font-smoothing:antialiased;}
+  @page{size:13.333in 7.5in;margin:0;}
+  .slide{position:relative;width:13.333in;height:7.5in;background:#fff;overflow:hidden;padding:0.5in 0.7in;page-break-after:always;display:flex;flex-direction:column;}
+  .slide:last-child{page-break-after:auto;}
+  .tagchip{position:absolute;top:0.34in;left:0.7in;font-size:9px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:var(--faint);}
+  .hd{display:flex;justify-content:space-between;align-items:baseline;}
+  .hd .lbl{font-weight:700;font-size:11.5px;letter-spacing:0.15em;text-transform:uppercase;}
+  .hd .rt{font-weight:300;font-size:10px;color:var(--faint);font-style:italic;}
+  .rule{height:1.2px;background:var(--ink);margin-top:6px;}
+  .cap{margin:0.2in auto 0;max-width:10in;font-weight:300;font-size:13px;line-height:1.45;color:var(--soft);text-align:center;}
+
+  /* A · wordmark */
+  .center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;}
+  .center .logo{height:38px;margin-bottom:30px;}
+  .center .tag{font-style:italic;font-size:16px;color:var(--grey);}
+  .center .crule{height:1.2px;width:2.4in;background:var(--ink);margin:30px auto;}
+  .center .url{font-weight:700;font-size:14px;}
+  .center .by{font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);margin-top:10px;}
+
+  /* B · sign-in duo */
+  .duo{display:flex;gap:0.5in;flex:1;align-items:center;justify-content:center;padding-top:0.2in;}
+  .duo .cell{flex:1;display:flex;flex-direction:column;align-items:center;}
+  .duo img{max-width:100%;max-height:4.4in;border:1px solid var(--frameline);border-radius:7px;box-shadow:0 9px 24px rgba(20,20,18,0.09);}
+  .duo .lab{font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--grey);margin-top:10px;font-weight:600;}
+
+  /* C · statement */
+  .stmt{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;}
+  .stmt h1{font-size:40px;font-weight:700;letter-spacing:-0.02em;line-height:1.12;max-width:9.5in;}
+  .stmt .url{margin-top:34px;font-weight:700;font-size:14px;}
+  .stmt .wm{margin-top:8px;font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--faint);}
+</style></head><body>
+
+<!-- A -->
+<section class="slide">
+  <div class="tagchip">Option A · Wordmark close</div>
+  <div class="center">
+    <img class="logo" src="logotype-charcoal.svg">
+    <div class="tag">Studio-management software for designers and makers.</div>
+    <div class="crule"></div>
+    <div class="url">app.perennial.design</div>
+    <div class="by">Designed &amp; built end to end by Elliott Rosenberg</div>
+  </div>
+</section>
+
+<!-- B -->
+<section class="slide">
+  <div class="tagchip">Option B · Light &amp; dark (sign-in)</div>
+  <div class="hd" style="margin-top:0.18in;"><span class="lbl">One interface, two modes</span><span class="rt">theming</span></div>
+  <div class="rule"></div>
+  <div class="duo">
+    <div class="cell"><img src="screenshots/login-light.png"><div class="lab">Light</div></div>
+    <div class="cell"><img src="screenshots/login-dark.png"><div class="lab">Dark</div></div>
+  </div>
+  <div class="cap">Built from one set of design tokens, the interface carries a considered light and dark mode. <span style="color:#a8a6a2">(Shown on the sign-in screen — in-app dark mode is still being wired up.)</span></div>
+</section>
+
+<!-- C -->
+<section class="slide">
+  <div class="tagchip">Option C · Statement close</div>
+  <div class="stmt">
+    <h1>Software that lets makers<br>spend more time making.</h1>
+    <div class="url">app.perennial.design</div>
+    <div class="wm">Perennial · Designed &amp; built by Elliott Rosenberg</div>
+  </div>
+</section>
+
+</body></html>

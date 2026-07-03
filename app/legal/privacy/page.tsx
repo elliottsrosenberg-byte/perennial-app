@@ -49,7 +49,7 @@ export default function PrivacyPolicyPage() {
       {/* ── Top bar ────────────────────────────────────────────────────── */}
       <header
         style={{
-          borderBottom: "0.5px solid rgba(31,33,26,0.12)",
+          borderBottom: "0.5px solid rgba(var(--color-charcoal-rgb),0.12)",
           background: "#f5f1e9",
         }}
       >
@@ -73,7 +73,7 @@ export default function PrivacyPolicyPage() {
               style={{ height: "auto" }}
             />
           </Link>
-          <nav style={{ display: "flex", gap: 18, fontSize: 12, color: "#6b6860" }}>
+          <nav style={{ display: "flex", gap: 18, fontSize: 12, color: "var(--color-text-secondary)" }}>
             <Link href="/legal/terms" style={{ color: "inherit", textDecoration: "none" }}>
               Terms
             </Link>
@@ -161,7 +161,7 @@ export default function PrivacyPolicyPage() {
           or a social platform — we receive the data those services share with us
           under the OAuth scopes (or app-specific password) you authorize. The
           specific Google user data we access is described in detail in{" "}
-          <a href="#section-google" style={{ color: "#3d6b4f" }}>
+          <a href="#section-google" style={{ color: "var(--color-green-deep)" }}>
             Section 4
           </a>
           .
@@ -365,7 +365,7 @@ export default function PrivacyPolicyPage() {
             href="https://developers.google.com/terms/api-services-user-data-policy"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: "#3d6b4f" }}
+            style={{ color: "var(--color-green-deep)" }}
           >
             Google API Services User Data Policy
           </a>
@@ -408,7 +408,7 @@ export default function PrivacyPolicyPage() {
             href="https://myaccount.google.com/permissions"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: "#3d6b4f" }}
+            style={{ color: "var(--color-green-deep)" }}
           >
             myaccount.google.com/permissions
           </a>
@@ -470,7 +470,7 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             <strong>Request deletion of specific data</strong> by emailing{" "}
-            <a href="mailto:privacy@perennial.design" style={{ color: "#3d6b4f" }}>
+            <a href="mailto:privacy@perennial.design" style={{ color: "var(--color-green-deep)" }}>
               privacy@perennial.design
             </a>
             . We will respond within 30 days.
@@ -491,7 +491,7 @@ export default function PrivacyPolicyPage() {
           may include the right to access, correct, port, restrict, or delete
           your personal information, and the right not to be subject to solely
           automated decision-making. To exercise any of these rights, email{" "}
-          <a href="mailto:privacy@perennial.design" style={{ color: "#3d6b4f" }}>
+          <a href="mailto:privacy@perennial.design" style={{ color: "var(--color-green-deep)" }}>
             privacy@perennial.design
           </a>
           . We will not discriminate against you for exercising your rights.
@@ -509,7 +509,7 @@ export default function PrivacyPolicyPage() {
           do not knowingly collect information from children under 16. If you
           believe a child has provided us with personal information, please
           contact us at{" "}
-          <a href="mailto:privacy@perennial.design" style={{ color: "#3d6b4f" }}>
+          <a href="mailto:privacy@perennial.design" style={{ color: "var(--color-green-deep)" }}>
             privacy@perennial.design
           </a>{" "}
           and we will delete it.
@@ -543,7 +543,7 @@ export default function PrivacyPolicyPage() {
         </p>
         <p style={BODY}>
           <strong>Email:</strong>{" "}
-          <a href="mailto:privacy@perennial.design" style={{ color: "#3d6b4f" }}>
+          <a href="mailto:privacy@perennial.design" style={{ color: "var(--color-green-deep)" }}>
             privacy@perennial.design
           </a>
           <br />
@@ -555,7 +555,7 @@ export default function PrivacyPolicyPage() {
       {/* ── Footer ─────────────────────────────────────────────────────── */}
       <footer
         style={{
-          borderTop: "0.5px solid rgba(31,33,26,0.12)",
+          borderTop: "0.5px solid rgba(var(--color-charcoal-rgb),0.12)",
           padding: "24px",
           textAlign: "center",
         }}

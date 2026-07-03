@@ -174,14 +174,14 @@ function InlineLinkPicker({
     return (
       <button type="button" key={key} onClick={onToggle} style={{
         width: "100%", textAlign: "left", padding: "7px 10px", borderRadius: 6, fontSize: 12,
-        background: selected ? "rgba(155,163,122,0.12)" : "transparent", border: "none",
-        color: selected ? "#5a7040" : "var(--color-text-secondary)", fontWeight: selected ? 600 : 400,
+        background: selected ? "rgba(var(--color-sage-rgb),0.12)" : "transparent", border: "none",
+        color: selected ? "var(--color-sage-deep)" : "var(--color-text-secondary)", fontWeight: selected ? 600 : 400,
         cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 8,
       }}
       onMouseEnter={e => { if (!selected) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
       onMouseLeave={e => { if (!selected) e.currentTarget.style.background = "transparent"; }}
       >
-        {selected ? <svg width="9" height="7" viewBox="0 0 10 8" fill="none"><path d="M1 4l2.5 2.5L9 1" stroke="#5a7040" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        {selected ? <svg width="9" height="7" viewBox="0 0 10 8" fill="none"><path d="M1 4l2.5 2.5L9 1" stroke="var(--color-sage-deep)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   : <div style={{ width: 9 }} />}
         {label}
       </button>
@@ -196,9 +196,9 @@ function InlineLinkPicker({
         style={{
           display: "flex", alignItems: "center", gap: 5, fontSize: 11,
           padding: "3px 8px", borderRadius: 9999,
-          border: `0.5px solid ${open ? "var(--color-border-strong)" : hasLinks ? "rgba(155,163,122,0.3)" : "var(--color-border)"}`,
-          background: hasLinks ? "rgba(155,163,122,0.12)" : "transparent",
-          color: hasLinks ? "#5a7040" : "var(--color-text-tertiary)",
+          border: `0.5px solid ${open ? "var(--color-border-strong)" : hasLinks ? "rgba(var(--color-sage-rgb),0.3)" : "var(--color-border)"}`,
+          background: hasLinks ? "rgba(var(--color-sage-rgb),0.12)" : "transparent",
+          color: hasLinks ? "var(--color-sage-deep)" : "var(--color-text-tertiary)",
           cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", maxWidth: 220,
           transition: "all 0.1s ease",
         }}
@@ -331,7 +331,7 @@ function SuggestTasksModal({
               <div key={i} style={{
                 display: "flex", alignItems: "flex-start", gap: 10, padding: "8px",
                 borderRadius: 8, marginBottom: 2,
-                background: item.selected ? "rgba(155,163,122,0.06)" : "transparent",
+                background: item.selected ? "rgba(var(--color-sage-rgb),0.06)" : "transparent",
                 borderBottom: "0.5px solid var(--color-border)",
               }}>
                 {/* Checkbox */}
@@ -953,7 +953,7 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
           width: "100%", textAlign: "left", padding: "10px 14px",
           borderBottom: "0.5px solid var(--color-border)",
           borderLeft: `3px solid ${active ? "var(--color-sage)" : "transparent"}`,
-          background: active ? "rgba(155,163,122,0.10)" : hovered ? "rgba(239,240,231,0.5)" : "transparent",
+          background: active ? "rgba(var(--color-sage-rgb),0.10)" : hovered ? "rgba(239,240,231,0.5)" : "transparent",
           cursor: "pointer", fontFamily: "inherit",
           transition: "background 0.08s ease", userSelect: "none",
         }}
@@ -991,12 +991,12 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
                   title="Confirm delete"
                   style={{
                     width: 22, height: 22, borderRadius: 5, border: "none",
-                    background: "rgba(155,163,122,0.15)", color: "var(--color-sage-text)",
+                    background: "rgba(var(--color-sage-rgb),0.15)", color: "var(--color-sage-text)",
                     cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: 13,
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = "rgba(155,163,122,0.28)"}
-                  onMouseLeave={e => e.currentTarget.style.background = "rgba(155,163,122,0.15)"}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.28)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.15)"}
                 >
                   <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l2.5 2.5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </button>
@@ -1025,7 +1025,7 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
                     background: "var(--color-surface-sunken)", color: "var(--color-text-tertiary)",
                     cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(220,62,13,0.08)"; e.currentTarget.style.color = "var(--color-red-orange)"; }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(var(--color-red-rgb),0.08)"; e.currentTarget.style.color = "var(--color-red-orange)"; }}
                   onMouseLeave={e => { e.currentTarget.style.background = "var(--color-surface-sunken)"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}
                 >
                   <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
@@ -1071,7 +1071,7 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
             width: "100%", textAlign: "left", display: "flex", flexDirection: "column", gap: 4, minHeight: 56,
             padding: "9px 10px", borderRadius: 9, cursor: "pointer", fontFamily: "inherit",
             border: active ? "1px solid var(--color-sage)" : "0.5px solid var(--color-border)",
-            background: active ? "rgba(155,163,122,0.12)" : "var(--color-off-white)",
+            background: active ? "rgba(var(--color-sage-rgb),0.12)" : "var(--color-off-white)",
             boxShadow: active ? "0 0 0 2px var(--color-focus-ring)" : "none",
           }}
           onMouseEnter={e => { if (!active) e.currentTarget.style.background = "var(--color-cream)"; }}
@@ -1115,7 +1115,7 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
       <div ref={ref} style={{ position: "relative" }}>
         <button onClick={e => { e.stopPropagation(); setOpen(o => !o); }} title="Add to folder"
           style={{ width: 22, height: 22, borderRadius: 5, border: "none", background: "var(--color-surface-sunken)", color: "var(--color-text-tertiary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-          onMouseEnter={e => { e.currentTarget.style.background = "rgba(155,163,122,0.15)"; e.currentTarget.style.color = "var(--color-sage-text)"; }}
+          onMouseEnter={e => { e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.15)"; e.currentTarget.style.color = "var(--color-sage-text)"; }}
           onMouseLeave={e => { e.currentTarget.style.background = "var(--color-surface-sunken)"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}>
           <FolderPlus size={11} strokeWidth={1.75} />
         </button>
@@ -1178,9 +1178,9 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
               <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>Delete?</span>
               <button
                 onClick={() => deleteNote(selectedNote.id)}
-                style={{ width: 22, height: 22, borderRadius: 5, border: "none", background: "rgba(220,62,13,0.1)", color: "var(--color-red-orange)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-                onMouseEnter={e => e.currentTarget.style.background = "rgba(220,62,13,0.2)"}
-                onMouseLeave={e => e.currentTarget.style.background = "rgba(220,62,13,0.1)"}
+                style={{ width: 22, height: 22, borderRadius: 5, border: "none", background: "rgba(var(--color-red-rgb),0.1)", color: "var(--color-red-orange)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(var(--color-red-rgb),0.2)"}
+                onMouseLeave={e => e.currentTarget.style.background = "rgba(var(--color-red-rgb),0.1)"}
               >
                 <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l2.5 2.5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>
@@ -1207,9 +1207,9 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
               </button>
               <button
                 onClick={() => togglePin(selectedNote.id, !selectedNote.pinned)}
-                style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", fontSize: 11, borderRadius: 6, border: "0.5px solid var(--color-border)", color: selectedNote.pinned ? "var(--color-sage)" : "var(--color-text-secondary)", background: selectedNote.pinned ? "rgba(155,163,122,0.10)" : "transparent", cursor: "pointer", fontFamily: "inherit" }}
+                style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", fontSize: 11, borderRadius: 6, border: "0.5px solid var(--color-border)", color: selectedNote.pinned ? "var(--color-sage)" : "var(--color-text-secondary)", background: selectedNote.pinned ? "rgba(var(--color-sage-rgb),0.10)" : "transparent", cursor: "pointer", fontFamily: "inherit" }}
                 onMouseEnter={e => e.currentTarget.style.background = "var(--color-surface-sunken)"}
-                onMouseLeave={e => e.currentTarget.style.background = selectedNote.pinned ? "rgba(155,163,122,0.10)" : "transparent"}
+                onMouseLeave={e => e.currentTarget.style.background = selectedNote.pinned ? "rgba(var(--color-sage-rgb),0.10)" : "transparent"}
               >
                 <Pin size={11} strokeWidth={1.75} />
                 {selectedNote.pinned ? "Pinned" : "Pin"}
@@ -1250,7 +1250,7 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
                 <div style={{ padding: "6px 4px" }}>
                   <div style={{ padding: "4px 10px 6px", fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-tertiary)", display: "flex", alignItems: "center", gap: 6 }}>
                     Share
-                    {selectedNote.share_token && <span style={{ color: "var(--color-sage-text)", background: "rgba(155,163,122,0.15)", padding: "1px 5px", borderRadius: 3 }}>Active</span>}
+                    {selectedNote.share_token && <span style={{ color: "var(--color-sage-text)", background: "rgba(var(--color-sage-rgb),0.15)", padding: "1px 5px", borderRadius: 3 }}>Active</span>}
                   </div>
                   <button onClick={handleGetLink} style={{ width: "100%", textAlign: "left", padding: "7px 10px", borderRadius: 6, border: "none", background: "transparent", fontSize: 12, color: "var(--color-text-primary)", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 8 }}
                     onMouseEnter={e => e.currentTarget.style.background = "var(--color-surface-sunken)"}
@@ -1261,7 +1261,7 @@ export default function NotesClient({ initialNotes, projects, initialFolders = [
                   </button>
                   {selectedNote.share_token && (
                     <button onClick={handleRevokeLink} style={{ width: "100%", textAlign: "left", padding: "7px 10px", borderRadius: 6, border: "none", background: "transparent", fontSize: 12, color: "var(--color-text-tertiary)", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 8 }}
-                      onMouseEnter={e => { e.currentTarget.style.background = "rgba(220,62,13,0.06)"; e.currentTarget.style.color = "var(--color-red-orange)"; }}
+                      onMouseEnter={e => { e.currentTarget.style.background = "rgba(var(--color-red-rgb),0.06)"; e.currentTarget.style.color = "var(--color-red-orange)"; }}
                       onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}
                     >
                       <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M10 6L6 10M6 6l4 4"/></svg>

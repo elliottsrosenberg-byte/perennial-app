@@ -143,7 +143,7 @@ export default function ResetPasswordPage() {
           <div style={{
             background: "var(--color-off-white)", borderRadius: 20,
             border: "0.5px solid var(--color-border)",
-            boxShadow: "0 8px 40px rgba(31,33,26,0.10), 0 1px 4px rgba(31,33,26,0.06)",
+            boxShadow: "0 8px 40px rgba(var(--color-charcoal-rgb),0.10), 0 1px 4px rgba(var(--color-charcoal-rgb),0.06)",
             padding: "40px 44px",
           }}>
             {verifying ? (
@@ -188,7 +188,7 @@ export default function ResetPasswordPage() {
                     minLength={8}
                     placeholder="Min 8 characters"
                     style={{ ...inputStyle, padding: "11px 42px 11px 14px" }}
-                    onFocus={(e) => { e.target.style.borderColor = "var(--color-sage)"; e.target.style.boxShadow = "0 0 0 3px rgba(155,163,122,0.18)"; }}
+                    onFocus={(e) => { e.target.style.borderColor = "var(--color-sage)"; e.target.style.boxShadow = "0 0 0 3px rgba(var(--color-sage-rgb),0.18)"; }}
                     onBlur={(e) => { e.target.style.borderColor = "var(--color-border)"; e.target.style.boxShadow = "none"; }}
                   />
                   <PasswordToggle visible={showPassword} onToggle={() => setShowPassword((s) => !s)} />
@@ -208,7 +208,7 @@ export default function ResetPasswordPage() {
                     required
                     placeholder="••••••••"
                     style={{ ...inputStyle, padding: "11px 42px 11px 14px" }}
-                    onFocus={(e) => { e.target.style.borderColor = "var(--color-sage)"; e.target.style.boxShadow = "0 0 0 3px rgba(155,163,122,0.18)"; }}
+                    onFocus={(e) => { e.target.style.borderColor = "var(--color-sage)"; e.target.style.boxShadow = "0 0 0 3px rgba(var(--color-sage-rgb),0.18)"; }}
                     onBlur={(e) => { e.target.style.borderColor = "var(--color-border)"; e.target.style.boxShadow = "none"; }}
                   />
                   <PasswordToggle visible={showConfirm} onToggle={() => setShowConfirm((s) => !s)} />

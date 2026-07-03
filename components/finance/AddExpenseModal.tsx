@@ -7,6 +7,7 @@ import { X, Paperclip } from "lucide-react";
 import Select from "@/components/ui/Select";
 import Checkbox from "@/components/ui/Checkbox";
 import DatePicker from "@/components/ui/DatePicker";
+import Modal from "@/components/ui/Modal";
 
 interface ExpensePrefill {
   description?: string;
@@ -154,19 +155,27 @@ export default function AddExpenseModal({ projects, onClose, onCreated, expense,
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(31,33,26,0.5)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden"
-        style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}>
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-          <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>{isEdit ? "Edit expense" : "Add expense"}</h2>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg"
-            style={{ color: "var(--color-grey)" }}
+    <Modal
+      onClose={onClose}
+      size="sm"
+      title={isEdit ? "Edit expense" : "Add expense"}
+      bodyStyle={{ padding: 0 }}
+      footer={
+        <>
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-[13px] rounded-lg"
+            style={{ color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}><X size={14} /></button>
-        </div>
-
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>Cancel</button>
+          <button onClick={handleSubmit as unknown as React.MouseEventHandler}
+            disabled={loading || !description.trim() || !amount}
+            className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50"
+            style={{ background: "var(--color-sage)" }}>
+            {loading ? "Saving…" : isEdit ? "Save changes" : "Add expense"}
+          </button>
+        </>
+      }
+    >
         <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
           <div>
             <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Description *</label>
@@ -257,21 +266,6 @@ export default function AddExpenseModal({ projects, onClose, onCreated, expense,
 
           {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
         </form>
-
-        <div className="flex items-center justify-end gap-2 px-5 py-4" style={{ borderTop: "0.5px solid var(--color-border)" }}>
-          <button type="button" onClick={onClose}
-            className="px-4 py-2 text-[13px] rounded-lg"
-            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>Cancel</button>
-          <button onClick={handleSubmit as unknown as React.MouseEventHandler}
-            disabled={loading || !description.trim() || !amount}
-            className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50"
-            style={{ background: "var(--color-sage)" }}>
-            {loading ? "Saving…" : isEdit ? "Save changes" : "Add expense"}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

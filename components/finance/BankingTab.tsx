@@ -150,7 +150,7 @@ const CARD_STYLE: React.CSSProperties = {
   background:   "var(--color-off-white)",
   border:       "0.5px solid var(--color-border)",
   borderRadius: 12,
-  boxShadow:    "0 2px 8px rgba(31,33,26,0.04)",
+  boxShadow:    "0 2px 8px rgba(var(--color-charcoal-rgb),0.04)",
 };
 const SECTION_HEADER_STYLE: React.CSSProperties = {
   fontFamily: "var(--font-display)",
@@ -967,11 +967,11 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
               className="flex items-center justify-center rounded transition-colors"
               style={{
                 width: 28, height: 28,
-                background: headerMenuOpen ? "rgba(31,33,26,0.06)" : "transparent",
+                background: headerMenuOpen ? "rgba(var(--color-charcoal-rgb),0.06)" : "transparent",
                 color: "var(--color-grey)",
                 border: "none", cursor: "pointer",
               }}
-              onMouseEnter={(e) => { if (!headerMenuOpen) e.currentTarget.style.background = "rgba(31,33,26,0.04)"; }}
+              onMouseEnter={(e) => { if (!headerMenuOpen) e.currentTarget.style.background = "rgba(var(--color-charcoal-rgb),0.04)"; }}
               onMouseLeave={(e) => { if (!headerMenuOpen) e.currentTarget.style.background = "transparent"; }}
             >
               <MoreHorizontal size={14} />
@@ -1007,7 +1007,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                 cursor:        "pointer",
                 fontFamily:    "inherit",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(31,33,26,0.04)"; e.currentTarget.style.color = "var(--color-charcoal)"; }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(var(--color-charcoal-rgb),0.04)"; e.currentTarget.style.color = "var(--color-charcoal)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-grey)"; }}
             >
               <Plus size={12} strokeWidth={1.75} />
@@ -1018,7 +1018,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
 
         {error && (
           <div className="px-4 py-3 rounded-lg text-[12px] shrink-0 flex items-start gap-3"
-            style={{ background: "rgba(220,62,13,0.07)", color: "var(--color-red-orange)", border: "0.5px solid rgba(220,62,13,0.2)" }}>
+            style={{ background: "rgba(var(--color-red-rgb),0.07)", color: "var(--color-red-orange)", border: "0.5px solid rgba(var(--color-red-rgb),0.2)" }}>
             <span className="flex-1">{error}</span>
             <button onClick={() => setError(null)} style={{ color: "var(--color-red-orange)" }}>
               <X size={12} />
@@ -1093,7 +1093,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                 onMouseEnter={(e) => {
                   if (connecting || !scriptReady) return;
                   e.currentTarget.style.borderColor = "var(--color-sage)";
-                  e.currentTarget.style.background  = "rgba(155,163,122,0.06)";
+                  e.currentTarget.style.background  = "rgba(var(--color-sage-rgb),0.06)";
                   e.currentTarget.style.color       = "var(--color-sage)";
                 }}
                 onMouseLeave={(e) => {
@@ -1116,7 +1116,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
             <div className="grid grid-cols-5 gap-3 shrink-0">
               {[
                 { label: "Total cash",     value: fmtCurrency(totalCash,     { dp: 0 }), color: "var(--color-sage)"     },
-                { label: "Total credit",   value: fmtCurrency(totalCredit,   { dp: 0 }), color: "#b8860b" },
+                { label: "Total credit",   value: fmtCurrency(totalCredit,   { dp: 0 }), color: "var(--color-gold)" },
                 { label: "In this month",  value: "+" + fmtCurrency(kpis.in_this_month,  { dp: 0 }), color: "var(--color-sage)" },
                 { label: "Out this month", value: "−" + fmtCurrency(kpis.out_this_month, { dp: 0 }), color: "var(--color-charcoal)" },
                 {
@@ -1146,8 +1146,8 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                     <div key={row.id}
                       className="flex items-center gap-3 px-4 py-2.5 rounded-lg"
                       style={{
-                        background: "rgba(155,163,122,0.10)",
-                        border:     "0.5px solid rgba(155,163,122,0.35)",
+                        background: "rgba(var(--color-sage-rgb),0.10)",
+                        border:     "0.5px solid rgba(var(--color-sage-rgb),0.35)",
                       }}>
                       <span className="inline-flex items-center justify-center shrink-0"
                         style={{
@@ -1275,7 +1275,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                   position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
                   zIndex: 60, padding: "9px 12px 9px 18px", borderRadius: 999,
                   background: "var(--color-sage)", color: "white",
-                  boxShadow: "0 10px 30px rgba(31,33,26,0.30)",
+                  boxShadow: "0 10px 30px rgba(var(--color-charcoal-rgb),0.30)",
                 }}>
                 <span className="text-[12px] font-semibold">{selectedIds.size} selected</span>
 
@@ -1299,7 +1299,7 @@ export default function BankingTab({ projects, onExpenseCreated, onExpenseUpdate
                           width: 248, maxHeight: 300, overflowY: "auto",
                           display: "grid", gridTemplateColumns: "1fr", gap: 4,
                           background: "var(--color-off-white)", border: "0.5px solid var(--color-border)",
-                          borderRadius: 12, boxShadow: "0 -12px 28px rgba(31,33,26,0.18)", padding: 10,
+                          borderRadius: 12, boxShadow: "0 -12px 28px rgba(var(--color-charcoal-rgb),0.18)", padding: 10,
                         }}>
                         {CANONICAL_CATEGORIES.map((opt) => (
                           <PillButton key={opt.key} active={false} bg={opt.bg} fg={opt.fg}
@@ -1625,7 +1625,7 @@ function AccountCard({ acct, syncing, onSync, onDisconnect }: AccountCardProps) 
           top: 6, right: 6,
           width: 18, height: 18,
           color: "var(--color-grey)",
-          background: menuOpen ? "rgba(31,33,26,0.06)" : "transparent",
+          background: menuOpen ? "rgba(var(--color-charcoal-rgb),0.06)" : "transparent",
           opacity: menuOpen ? 1 : undefined,
         }}>
         <MoreHorizontal size={11} />
@@ -1640,7 +1640,7 @@ function AccountCard({ acct, syncing, onSync, onDisconnect }: AccountCardProps) 
         {acct.last_four ? <span style={{ color: "var(--color-grey)" }}> ••{acct.last_four}</span> : null}
       </p>
       <p className="text-[14px] font-semibold tabular-nums" style={{
-        color: acct.type === "credit" && (acct.balance_current ?? 0) < 0 ? "#b8860b" : "var(--color-charcoal)",
+        color: acct.type === "credit" && (acct.balance_current ?? 0) < 0 ? "var(--color-gold)" : "var(--color-charcoal)",
         fontFamily: "var(--font-display)",
       }}>
         {acct.balance_available !== null
@@ -1707,7 +1707,7 @@ function FilterPills<T extends string>({ value, options, onChange, counts }: {
           <button key={o.value} type="button" onClick={() => onChange(o.value)}
             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] transition-colors"
             style={{
-              background: active ? "var(--color-charcoal)" : "rgba(31,33,26,0.06)",
+              background: active ? "var(--color-charcoal)" : "rgba(var(--color-charcoal-rgb),0.06)",
               color:      active ? "white" : "var(--color-grey)",
               border:     "none",
               fontWeight: active ? 600 : 400,
@@ -1718,7 +1718,7 @@ function FilterPills<T extends string>({ value, options, onChange, counts }: {
               <span className="tabular-nums" style={{
                 fontSize: 10, fontWeight: 600, lineHeight: 1,
                 padding: "1.5px 5px", borderRadius: 999,
-                background: active ? "rgba(255,255,255,0.18)" : "rgba(31,33,26,0.07)",
+                background: active ? "rgba(255,255,255,0.18)" : "rgba(var(--color-charcoal-rgb),0.07)",
                 color:      active ? "white" : "var(--color-grey)",
               }}>
                 {count}
@@ -1852,9 +1852,9 @@ function TransactionRow({
   // category — but for `is_personal` rows we still want a pill that says
   // "Personal". Logged / Matched continue to override the chip.
   let stateChip: { label: string; bg: string; fg: string } | null = null;
-  if (tx.is_personal)             stateChip = { label: "Personal",  bg: "rgba(31,33,26,0.06)",    fg: "var(--color-grey)" };
-  else if (tx.linked_expense_id)  stateChip = { label: "Logged",    bg: "rgba(155,163,122,0.14)", fg: "var(--color-sage)" };
-  else if (tx.matched_invoice_id) stateChip = { label: "Matched",   bg: "rgba(155,163,122,0.14)", fg: "var(--color-sage)" };
+  if (tx.is_personal)             stateChip = { label: "Personal",  bg: "rgba(var(--color-charcoal-rgb),0.06)",    fg: "var(--color-grey)" };
+  else if (tx.linked_expense_id)  stateChip = { label: "Logged",    bg: "rgba(var(--color-sage-rgb),0.14)", fg: "var(--color-sage)" };
+  else if (tx.matched_invoice_id) stateChip = { label: "Matched",   bg: "rgba(var(--color-sage-rgb),0.14)", fg: "var(--color-sage)" };
 
   // A debit that hasn't been handled yet can be logged in one click from
   // the row. Credits route to invoice-matching instead, so they don't get
@@ -1877,7 +1877,7 @@ function TransactionRow({
           cursor: "pointer",
         }}
         onClick={onToggleExpand}
-        onMouseEnter={(e) => { if (!expanded) e.currentTarget.style.background = "rgba(31,33,26,0.025)"; }}
+        onMouseEnter={(e) => { if (!expanded) e.currentTarget.style.background = "rgba(var(--color-charcoal-rgb),0.025)"; }}
         onMouseLeave={(e) => { if (!expanded) e.currentTarget.style.background = "transparent"; }}
       >
         {/* Checkbox */}
@@ -1904,7 +1904,7 @@ function TransactionRow({
               </span>
             ) : null}
             {pending && (
-              <span className="ml-2 text-[10px] font-normal" style={{ color: "#b8860b" }}>
+              <span className="ml-2 text-[10px] font-normal" style={{ color: "var(--color-gold)" }}>
                 • Pending
               </span>
             )}
@@ -2067,7 +2067,7 @@ function CategoryPickerChip({
             background:   "var(--color-off-white)",
             border:       "0.5px solid var(--color-border)",
             borderRadius: 12,
-            boxShadow:    "0 12px 28px rgba(31,33,26,0.14)",
+            boxShadow:    "0 12px 28px rgba(var(--color-charcoal-rgb),0.14)",
             padding:      "10px 10px 8px",
             fontFamily:   "inherit",
           }}>
@@ -2160,7 +2160,7 @@ function CategoryPickerChip({
               fontSize: 11.5,
               cursor: "pointer",
               border: "0.5px solid var(--color-border)",
-              background: tx.is_personal ? "rgba(155,163,122,0.10)" : "transparent",
+              background: tx.is_personal ? "rgba(var(--color-sage-rgb),0.10)" : "transparent",
               color: tx.is_personal ? "var(--color-sage)" : "var(--color-grey)",
               fontWeight: tx.is_personal ? 600 : 500,
               boxSizing: "border-box",
@@ -2455,7 +2455,7 @@ function ExpandedRow({
                 style={{
                   minHeight:  96,
                   border:     `0.5px dashed ${dragOver ? "var(--color-sage)" : "var(--color-border)"}`,
-                  background: dragOver ? "rgba(155,163,122,0.08)" : "transparent",
+                  background: dragOver ? "rgba(var(--color-sage-rgb),0.08)" : "transparent",
                   color:      "var(--color-grey)",
                   cursor:     "pointer",
                   fontFamily: "inherit",
@@ -2568,8 +2568,8 @@ function ExpandedRow({
             type="button"
             onClick={() => tx.linked_expense_id && onDeleteLinkedExpense(tx.linked_expense_id)}
             className="px-3 py-1.5 text-[11px] transition-colors"
-            style={{ color: "var(--color-red-orange)", border: "0.5px solid rgba(220,62,13,0.25)", borderRadius: 999, background: "transparent", cursor: "pointer" }}
-            onMouseEnter={(e) => e.currentTarget.style.background = "rgba(220,62,13,0.06)"}
+            style={{ color: "var(--color-red-orange)", border: "0.5px solid rgba(var(--color-red-rgb),0.25)", borderRadius: 999, background: "transparent", cursor: "pointer" }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "rgba(var(--color-red-rgb),0.06)"}
             onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
             Delete expense + unlink
           </button>

@@ -2,6 +2,13 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import Button from "@/components/ui/Button";
+import Toggle from "@/components/ui/Toggle";
+import Checkbox from "@/components/ui/Checkbox";
+import Badge, { type BadgeTone } from "@/components/ui/Badge";
+import Modal from "@/components/ui/Modal";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import Card from "@/components/ui/Card";
 import {
   // Navigation
   LayoutDashboard, Layers, Users, Send, FileText, Calendar, Receipt, Globe, FolderOpen, Settings, Palette, Compass,
@@ -133,138 +140,33 @@ const SHADOW_SCALE = [
 ];
 
 // ─── Badge data ────────────────────────────────────────────────────────────────
-const STATUS_BADGES = [
-  { label: "Complete",    bg: "rgba(141,208,71,0.15)",  color: "#3d6b4f"                   },
-  { label: "In Progress", bg: "rgba(155,163,122,0.18)", color: "var(--color-sage)"         },
-  { label: "Planning",    bg: "rgba(31,33,26,0.07)",    color: "var(--color-text-tertiary)" },
-  { label: "On Hold",     bg: "rgba(232,197,71,0.18)",  color: "#a07800"                   },
-  { label: "Overdue",     bg: "rgba(220,62,13,0.12)",   color: "var(--color-red-orange)"   },
-  { label: "Draft",       bg: "rgba(31,33,26,0.07)",    color: "var(--color-text-tertiary)" },
-  { label: "Sent",        bg: "rgba(37,99,171,0.12)",   color: "#2563ab"                   },
-  { label: "Paid",        bg: "rgba(141,208,71,0.15)",  color: "#3d6b4f"                   },
-  { label: "Active",      bg: "rgba(155,163,122,0.18)", color: "#5a7040"                   },
-  { label: "Lead",        bg: "rgba(184,134,11,0.12)",  color: "#b8860b"                   },
-  { label: "Inactive",    bg: "rgba(31,33,26,0.07)",    color: "var(--color-text-tertiary)" },
-  { label: "Beta",        bg: "rgba(141,208,71,0.12)",  color: "#3d6b4f"                   },
-  { label: "Soon",        bg: "rgba(155,163,122,0.15)", color: "var(--color-sage)"         },
+// Labels mapped to their Badge tone — the primitive owns the actual colour.
+const STATUS_BADGES: { label: string; tone: BadgeTone }[] = [
+  { label: "Complete",    tone: "green"   },
+  { label: "In Progress", tone: "sage"    },
+  { label: "Planning",    tone: "neutral" },
+  { label: "On Hold",     tone: "amber"   },
+  { label: "Overdue",     tone: "red"     },
+  { label: "Draft",       tone: "neutral" },
+  { label: "Sent",        tone: "blue"    },
+  { label: "Paid",        tone: "green"   },
+  { label: "Active",      tone: "sage"    },
+  { label: "Lead",        tone: "gold"    },
+  { label: "Inactive",    tone: "neutral" },
+  { label: "Beta",        tone: "green"   },
+  { label: "Soon",        tone: "sage"    },
 ];
 
-const TAG_COLORS = [
-  { label: "gallery",   bg: "rgba(37,99,171,0.10)",   color: "#2563ab" },
-  { label: "client",    bg: "rgba(61,107,79,0.10)",   color: "#3d6b4f" },
-  { label: "supplier",  bg: "rgba(184,134,11,0.10)",  color: "#b8860b" },
-  { label: "press",     bg: "rgba(109,79,163,0.10)",  color: "#6d4fa3" },
-  { label: "lead",      bg: "rgba(154,150,144,0.10)", color: "#6b6860" },
-  { label: "event",     bg: "rgba(20,140,140,0.10)",  color: "#148c8c" },
-  { label: "residency", bg: "rgba(220,62,13,0.10)",   color: "#dc3e0d" },
-  { label: "award",     bg: "rgba(232,133,13,0.10)",  color: "#c06200" },
+const TAG_COLORS: { label: string; tone: BadgeTone }[] = [
+  { label: "gallery",   tone: "blue"    },
+  { label: "client",    tone: "green"   },
+  { label: "supplier",  tone: "gold"    },
+  { label: "press",     tone: "purple"  },
+  { label: "lead",      tone: "neutral" },
+  { label: "event",     tone: "teal"    },
+  { label: "residency", tone: "red"     },
+  { label: "award",     tone: "orange"  },
 ];
-
-// ─── Shared primitives (to be extracted to components/ui/) ──────────────────────
-
-function DSButton({
-  children,
-  variant = "primary",
-  size = "md",
-  disabled = false,
-}: {
-  children: React.ReactNode;
-  variant?: "primary" | "dark" | "secondary" | "ghost" | "danger";
-  size?: "sm" | "md" | "lg";
-  disabled?: boolean;
-}) {
-  const [hov, setHov] = useState(false);
-
-  const SIZES = {
-    sm: { padding: "5px 14px",  fontSize: 11, borderRadius: 6 },
-    md: { padding: "7px 20px",  fontSize: 12, borderRadius: 8 },
-    lg: { padding: "9px 24px",  fontSize: 13, borderRadius: 8 },
-  };
-  const BASE: Record<string, React.CSSProperties> = {
-    primary:   { background: "var(--color-sage)",     color: "white",                         border: "none" },
-    dark:      { background: "var(--color-charcoal)", color: "var(--color-warm-white)",        border: "none" },
-    secondary: { background: "transparent",           color: "var(--color-text-secondary)",    border: "1px solid rgba(31,33,26,0.22)" },
-    ghost:     { background: "transparent",           color: "var(--color-text-tertiary)",     border: "none" },
-    danger:    { background: "transparent",           color: "var(--color-red-orange)",        border: "0.5px solid rgba(220,62,13,0.35)" },
-  };
-  const HOVER_BG: Record<string, string> = {
-    primary:   "var(--color-sage-hover)",
-    dark:      "rgba(31,33,26,0.82)",
-    secondary: "var(--color-surface-sunken)",
-    ghost:     "var(--color-surface-sunken)",
-    danger:    "rgba(220,62,13,0.08)",
-  };
-
-  return (
-    <button
-      disabled={disabled}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        ...SIZES[size],
-        ...BASE[variant],
-        background: hov && !disabled ? HOVER_BG[variant] : BASE[variant].background,
-        fontFamily: "inherit",
-        fontWeight: 500,
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.40 : 1,
-        transition: "background 0.12s ease, opacity 0.12s ease",
-        outline: "none",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function DSToggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onChange}
-      style={{
-        position: "relative", width: 36, height: 20,
-        borderRadius: 9999, border: "none", cursor: "pointer",
-        background: checked ? "var(--color-sage)" : "rgba(31,33,26,0.18)",
-        transition: "background 0.15s ease", padding: 0, flexShrink: 0,
-      }}
-    >
-      <span
-        style={{
-          position: "absolute", top: 2,
-          left: checked ? "calc(100% - 18px)" : 2,
-          width: 16, height: 16, borderRadius: "50%",
-          background: "white", transition: "left 0.15s ease",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
-        }}
-      />
-    </button>
-  );
-}
-
-function DSCheckbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
-  return (
-    <div
-      onClick={onChange}
-      style={{
-        width: 16, height: 16, borderRadius: 4, cursor: "pointer",
-        background: checked ? "var(--color-sage)" : "transparent",
-        border: checked ? "1.5px solid var(--color-sage)" : "1.5px solid rgba(31,33,26,0.25)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        transition: "all 0.12s ease", flexShrink: 0,
-      }}
-    >
-      {checked && (
-        <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
-          <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      )}
-    </div>
-  );
-}
 
 // ─── Section wrapper ───────────────────────────────────────────────────────────
 
@@ -750,23 +652,23 @@ function ButtonsSection() {
           {VARIANTS.map((v) => (
             <div key={v.key}>
               <div style={{ marginBottom: 10 }}>
-                <DSButton variant={v.key}>{v.label}</DSButton>
+                <Button variant={v.key}>{v.label}</Button>
               </div>
               <p style={{ fontSize: 10, color: "var(--color-text-tertiary)", lineHeight: 1.55 }}>{v.note}</p>
             </div>
           ))}
         </div>
         <div style={{ marginTop: 12 }}>
-          <DSButton variant="primary" disabled>Disabled — any variant at opacity 0.4</DSButton>
+          <Button variant="primary" disabled>Disabled — any variant at opacity 0.4</Button>
         </div>
       </SubSection>
 
       <SubSection title="Sizes">
         {(["primary","secondary","dark"] as const).map((v) => (
           <Row key={v} label={v}>
-            <DSButton variant={v} size="sm">Small</DSButton>
-            <DSButton variant={v} size="md">Medium</DSButton>
-            <DSButton variant={v} size="lg">Large</DSButton>
+            <Button variant={v} size="sm">Small</Button>
+            <Button variant={v} size="md">Medium</Button>
+            <Button variant={v} size="lg">Large</Button>
           </Row>
         ))}
       </SubSection>
@@ -782,16 +684,7 @@ function BadgesSection() {
       <SubSection title="Status Badges">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {STATUS_BADGES.map((b) => (
-            <span
-              key={b.label}
-              style={{
-                fontSize: 10, fontWeight: 700, padding: "3px 8px",
-                borderRadius: 9999, background: b.bg, color: b.color,
-                textTransform: "uppercase", letterSpacing: "0.04em",
-              }}
-            >
-              {b.label}
-            </span>
+            <Badge key={b.label} tone={b.tone} variant="status">{b.label}</Badge>
           ))}
         </div>
       </SubSection>
@@ -799,15 +692,19 @@ function BadgesSection() {
       <SubSection title="Contact Tags">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {TAG_COLORS.map((t) => (
-            <span
-              key={t.label}
-              style={{
-                fontSize: 11, fontWeight: 500, padding: "3px 10px",
-                borderRadius: 9999, background: t.bg, color: t.color,
-              }}
-            >
-              {t.label}
-            </span>
+            <Badge key={t.label} tone={t.tone} variant="tag">{t.label}</Badge>
+          ))}
+        </div>
+      </SubSection>
+
+      <SubSection title="Solid Status (high-emphasis)">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {([
+            { label: "Draft", tone: "blue" }, { label: "Sent", tone: "amber" },
+            { label: "Paid", tone: "sage" }, { label: "Overdue", tone: "red" },
+            { label: "Void", tone: "neutral" },
+          ] as { label: string; tone: BadgeTone }[]).map((b) => (
+            <Badge key={b.label} tone={b.tone} variant="solid">{b.label}</Badge>
           ))}
         </div>
       </SubSection>
@@ -1211,7 +1108,7 @@ function InputsSection() {
                     <p style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-primary)" }}>{t.label}</p>
                     <p style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>{t.sub}</p>
                   </div>
-                  <DSToggle checked={t.val} onChange={t.set} />
+                  <Toggle checked={t.val} onChange={t.set} />
                 </div>
               ))}
             </div>
@@ -1224,7 +1121,7 @@ function InputsSection() {
                 { label: "Mark as billable",       val: ch2, set: () => setCh2(v => !v) },
               ].map((c) => (
                 <div key={c.label} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={c.set}>
-                  <DSCheckbox checked={c.val} onChange={c.set} />
+                  <Checkbox checked={c.val} onChange={c.set} />
                   <span style={{ fontSize: 12, color: "var(--color-text-primary)" }}>{c.label}</span>
                 </div>
               ))}
@@ -1350,10 +1247,11 @@ function FilterTabsSection() {
 
 function CardsSection() {
   return (
-    <Section id="cards" title="Cards" description="Card pattern used across the home dashboard, project grid, and detail panels.">
+    <Section id="cards" title="Cards" description="Card surface used across the home dashboard, project grid, and detail panels. One Card primitive, three variants.">
+      <SubSection title="In context">
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
         {/* Standard card */}
-        <div style={{ background: "var(--color-surface-raised)", borderRadius: 14, boxShadow: "var(--shadow-card)", overflow: "hidden" }}>
+        <Card padding="none">
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: "0.5px solid var(--color-border)" }}>
             <span style={{ fontSize: 12, fontWeight: 600, flex: 1, color: "var(--color-text-primary)" }}>Standard Card</span>
             <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 9999, background: "var(--color-surface-sunken)", border: "0.5px solid var(--color-border)", color: "var(--color-text-tertiary)" }}>
@@ -1366,13 +1264,13 @@ function CardsSection() {
               <span style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>{r.split(" · ")[1]}</span>
             </div>
           ))}
-        </div>
+        </Card>
 
         {/* Project card */}
-        <div style={{ background: "var(--color-surface-raised)", borderRadius: 14, boxShadow: "var(--shadow-card)", padding: "14px 16px" }}>
+        <Card interactive style={{ padding: "14px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 9999, background: "rgba(37,99,171,0.10)", color: "#2563ab" }}>Client</span>
-            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 9999, background: "rgba(141,208,71,0.15)", color: "#3d6b4f" }}>In Progress</span>
+            <Badge tone="blue" variant="status">Client</Badge>
+            <Badge tone="green" variant="status">In Progress</Badge>
           </div>
           <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 4 }}>Foster Apartment</p>
           <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginBottom: 12 }}>Interior furniture spec · 3 pieces</p>
@@ -1383,10 +1281,10 @@ function CardsSection() {
             <span>3 of 5 tasks</span>
             <span style={{ color: "#a07800" }}>Due May 14</span>
           </div>
-        </div>
+        </Card>
 
         {/* Home dashboard stat card */}
-        <div style={{ background: "var(--color-surface-raised)", borderRadius: 14, boxShadow: "var(--shadow-card)", overflow: "hidden" }}>
+        <Card padding="none">
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: "0.5px solid var(--color-border)" }}>
             <span style={{ fontSize: 12, fontWeight: 600, flex: 1, color: "var(--color-text-primary)" }}>Needs attention</span>
             <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 9999, background: "var(--color-surface-sunken)", border: "0.5px solid var(--color-border)", color: "var(--color-text-tertiary)" }}>3</span>
@@ -1407,8 +1305,24 @@ function CardsSection() {
               <span style={{ fontSize: 10, fontWeight: 500, color: c.color, flexShrink: 0 }}>{c.ago}</span>
             </div>
           ))}
-        </div>
+        </Card>
       </div>
+      </SubSection>
+
+      <SubSection title="Variants">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+          {([
+            { v: "raised", label: "Raised", note: "surface-raised · shadow-card" },
+            { v: "flat",   label: "Flat",   note: "surface-raised · border · no shadow" },
+            { v: "sunken", label: "Sunken", note: "surface-sunken · border" },
+          ] as const).map((c) => (
+            <Card key={c.v} variant={c.v} padding="lg">
+              <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 4 }}>{c.label}</p>
+              <p style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>{c.note}</p>
+            </Card>
+          ))}
+        </div>
+      </SubSection>
     </Section>
   );
 }
@@ -1461,7 +1375,7 @@ function TablesSection() {
               onMouseLeave={(e) => { if (!isSel) e.currentTarget.style.background = "var(--color-surface-raised)"; }}
               onClick={() => setSelected((s) => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; })}
             >
-              <DSCheckbox checked={isSel} onChange={() => {}} />
+              <Checkbox checked={isSel} onChange={() => {}} />
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px 8px 0" }}>
                 <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--color-surface-sunken)", border: "0.5px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600, color: "var(--color-text-tertiary)", flexShrink: 0 }}>
                   {r.name.split(" ").map(n => n[0]).join("")}
@@ -1490,8 +1404,54 @@ function TablesSection() {
 // ─── Modals ───────────────────────────────────────────────────────────────────
 
 function ModalsSection() {
+  const [formOpen, setFormOpen]       = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   return (
-    <Section id="modals" title="Modals" description="Centered dialog for creation, editing, and confirmation. Max-width 480px standard.">
+    <Section id="modals" title="Modals" description="Centered dialog for creation, editing, and confirmation. Built on the shared Modal shell (scrim · Esc · scroll-lock · animation).">
+      {/* Live demos — the real Modal + ConfirmDialog primitives */}
+      <SubSection title="Live">
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Button variant="primary" onClick={() => setFormOpen(true)}>Open form modal</Button>
+          <Button variant="danger" onClick={() => setConfirmOpen(true)}>Open confirm dialog</Button>
+        </div>
+        <Modal
+          open={formOpen}
+          onClose={() => setFormOpen(false)}
+          title="New project"
+          size="lg"
+          footer={
+            <>
+              <Button variant="secondary" size="sm" onClick={() => setFormOpen(false)}>Cancel</Button>
+              <Button variant="primary" size="sm" onClick={() => setFormOpen(false)}>Create project</Button>
+            </>
+          }
+        >
+          {[
+            { label: "Title", placeholder: "e.g. Brass Table Lamp" },
+            { label: "Type", placeholder: "Select type…" },
+            { label: "Due date", placeholder: "Pick a date…" },
+          ].map((f) => (
+            <div key={f.label} style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-tertiary)", marginBottom: 6 }}>
+                {f.label}
+              </label>
+              <div style={{ width: "100%", padding: "8px 12px", fontSize: 12, background: "var(--color-surface-sunken)", border: "0.5px solid var(--color-border)", borderRadius: 8, color: "var(--color-text-tertiary)" }}>
+                {f.placeholder}
+              </div>
+            </div>
+          ))}
+        </Modal>
+        <ConfirmDialog
+          open={confirmOpen}
+          tone="danger"
+          title="Delete project?"
+          body="This permanently removes the project and all its tasks. This can't be undone."
+          confirmLabel="Delete"
+          onConfirm={() => setConfirmOpen(false)}
+          onCancel={() => setConfirmOpen(false)}
+        />
+      </SubSection>
+
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
         {/* Full modal mockup */}
         <div style={{ flex: 2, background: "var(--color-surface-sunken)", borderRadius: 16, padding: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1522,8 +1482,8 @@ function ModalsSection() {
             </div>
             {/* Footer */}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, padding: "12px 20px 16px", borderTop: "0.5px solid var(--color-border)" }}>
-              <DSButton variant="secondary" size="sm">Cancel</DSButton>
-              <DSButton variant="primary" size="sm">Create project</DSButton>
+              <Button variant="secondary" size="sm">Cancel</Button>
+              <Button variant="primary" size="sm">Create project</Button>
             </div>
           </div>
         </div>
@@ -1532,10 +1492,12 @@ function ModalsSection() {
         <div style={{ flex: 1 }}>
           <SubSection title="Anatomy">
             {[
-              { part: "Container", spec: "bg: surface-raised · radius-xl · shadow-lg · border" },
-              { part: "Header",    spec: "14px semibold · close button · border-bottom" },
-              { part: "Body",      spec: "20px padding · form fields with 16px gap" },
-              { part: "Footer",    spec: "border-top · flex end · gap-2 buttons" },
+              { part: "Container", spec: "bg: surface-raised · radius-xl · shadow-overlay · border" },
+              { part: "Scrim",     spec: "charcoal 45% · blur(4px) · click-outside + Esc to close" },
+              { part: "Sizes",     spec: "sm 380 · md 460 · lg 512 · xl 640" },
+              { part: "Header",    spec: "display 16px · close button · border-bottom (via title prop)" },
+              { part: "Body",      spec: "scrollable · max-height 90vh · 20px padding" },
+              { part: "Footer",    spec: "border-top · flex end · gap-2 buttons (via footer prop)" },
             ].map((a) => (
               <div key={a.part} style={{ padding: "10px 0", borderBottom: "0.5px solid var(--color-border)" }}>
                 <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 2 }}>{a.part}</p>
@@ -1624,7 +1586,7 @@ function EmptyStatesSection() {
           <p style={{ fontSize: 12, color: "var(--color-text-tertiary)", lineHeight: 1.6, marginBottom: 20, maxWidth: 240 }}>
             Projects are the core of your studio. Add your first to start tracking work, time, and value.
           </p>
-          <DSButton variant="primary" size="md">+ New project</DSButton>
+          <Button variant="primary" size="md">+ New project</Button>
         </div>
 
         {/* List-level (inline in a table/list) */}

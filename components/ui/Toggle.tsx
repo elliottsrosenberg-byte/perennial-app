@@ -18,7 +18,7 @@ export default function Toggle({ checked, onChange, disabled = false }: TogglePr
         borderRadius: 9999,
         border:     "none",
         cursor:     disabled ? "not-allowed" : "pointer",
-        background: checked ? "var(--color-sage)" : "rgba(31,33,26,0.18)",
+        background: checked ? "var(--color-sage)" : "rgba(var(--color-charcoal-rgb),0.18)",
         transition: "background 0.15s ease",
         padding:    0,
         flexShrink: 0,

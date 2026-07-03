@@ -30,7 +30,7 @@ function tagStyle(tag: string): { bg: string; color: string } {
 const STATUS_CONFIG: Record<ContactStatus, { dot: string; label: string }> = {
   active:        { dot: "var(--color-sage)", label: "Active"        },
   inactive:      { dot: "var(--color-grey)", label: "Inactive"      },
-  former_client: { dot: "#6d4fa3",          label: "Former client" },
+  former_client: { dot: "var(--color-purple)", label: "Former client" },
 };
 
 function initials(c: Contact) {
@@ -50,7 +50,7 @@ function lastContactedDisplay(date: string | null): { label: string; color: stri
   if (days === 0) return { label: "Today",        color: "var(--color-sage)" };
   if (days < 7)  return { label: `${days}d ago`,  color: "var(--color-sage)" };
   if (days < 14) return { label: `${Math.floor(days / 7)}w ago`, color: "var(--color-charcoal)" };
-  if (days < 60) return { label: `${Math.floor(days / 7)}w ago`, color: "#b8860b" };
+  if (days < 60) return { label: `${Math.floor(days / 7)}w ago`, color: "var(--color-gold)" };
   return { label: `${Math.floor(days / 30)}mo ago`, color: "var(--color-red-orange)" };
 }
 
@@ -338,10 +338,10 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
   const isLeads = view === "leads";
   const isOrgs  = view === "organizations";
   const accent = isLeads
-    ? { primary: "#b8860b", primaryHover: "#a07800", tint: "rgba(184,134,11,0.10)", ring: "rgba(184,134,11,0.32)" }
+    ? { primary: "var(--color-gold)", primaryHover: "var(--color-amber-deep)", tint: "rgba(var(--color-gold-rgb),0.10)", ring: "rgba(var(--color-gold-rgb),0.32)" }
     : isOrgs
-      ? { primary: "#2563ab", primaryHover: "#1f4f8b", tint: "rgba(37,99,171,0.10)", ring: "rgba(37,99,171,0.32)" }
-      : { primary: "var(--color-sage)", primaryHover: "var(--color-sage-hover)", tint: "rgba(155,163,122,0.10)", ring: "rgba(155,163,122,0.32)" };
+      ? { primary: "var(--color-blue)", primaryHover: "#1f4f8b", tint: "rgba(var(--color-blue-rgb),0.10)", ring: "rgba(var(--color-blue-rgb),0.32)" }
+      : { primary: "var(--color-sage)", primaryHover: "var(--color-sage-hover)", tint: "rgba(var(--color-sage-rgb),0.10)", ring: "rgba(var(--color-sage-rgb),0.32)" };
 
   function openDetail(contact: Contact) {
     setOpenContact(contact);
@@ -438,9 +438,9 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
           {(["contacts", "leads", "organizations"] as const).map((v) => {
             const active = view === v;
             const tint = v === "leads"
-              ? "#b8860b"
+              ? "var(--color-gold)"
               : v === "organizations"
-                ? "#2563ab"
+                ? "var(--color-blue)"
                 : "var(--color-sage)";
             return (
               <button
@@ -611,7 +611,7 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
           style={{ borderBottom: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
           <button onClick={() => setOrgTagFilter(null)}
             className="px-2.5 py-0.5 rounded-full text-[10px] font-medium shrink-0"
-            style={{ background: orgTagFilter === null ? "#2563ab" : "transparent", color: orgTagFilter === null ? "white" : "var(--color-text-tertiary)", border: `0.5px solid ${orgTagFilter === null ? "#2563ab" : "var(--color-border)"}` }}>
+            style={{ background: orgTagFilter === null ? "var(--color-blue)" : "transparent", color: orgTagFilter === null ? "white" : "var(--color-text-tertiary)", border: `0.5px solid ${orgTagFilter === null ? "var(--color-blue)" : "var(--color-border)"}` }}>
             All
           </button>
           {allOrgTags.map(tag => {
@@ -632,9 +632,9 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
           <button onClick={() => setStageFilter(null)}
             className="px-2.5 py-0.5 rounded-full text-[10px] font-medium shrink-0"
             style={{
-              background: stageFilter === null ? "#b8860b" : "transparent",
+              background: stageFilter === null ? "var(--color-gold)" : "transparent",
               color: stageFilter === null ? "white" : "var(--color-text-tertiary)",
-              border: `0.5px solid ${stageFilter === null ? "#b8860b" : "var(--color-border)"}`,
+              border: `0.5px solid ${stageFilter === null ? "var(--color-gold)" : "var(--color-border)"}`,
             }}>
             All
           </button>
@@ -647,9 +647,9 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
                 onClick={() => setStageFilter(active ? null : stage)}
                 className="px-2.5 py-0.5 rounded-full text-[10px] font-medium shrink-0 flex items-center gap-1.5"
                 style={{
-                  background: active ? "#b8860b" : "transparent",
-                  color: active ? "white" : "#a07800",
-                  border: `0.5px solid ${active ? "#b8860b" : "rgba(184,134,11,0.32)"}`,
+                  background: active ? "var(--color-gold)" : "transparent",
+                  color: active ? "white" : "var(--color-amber-deep)",
+                  border: `0.5px solid ${active ? "var(--color-gold)" : "rgba(var(--color-gold-rgb),0.32)"}`,
                 }}
               >
                 {LEAD_STAGE_LABELS[stage]}
@@ -663,7 +663,7 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
           style={{ borderBottom: "0.5px solid var(--color-border)", background: "var(--color-off-white)" }}>
           <button onClick={() => setTagFilter(null)}
             className="px-2.5 py-0.5 rounded-full text-[10px] font-medium shrink-0"
-            style={{ background: tagFilter === null ? "var(--color-charcoal)" : "transparent", color: tagFilter === null ? "white" : "#6b6860", border: "0.5px solid var(--color-border)" }}>
+            style={{ background: tagFilter === null ? "var(--color-charcoal)" : "transparent", color: tagFilter === null ? "white" : "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}>
             All
           </button>
           {allTags.map(tag => {
@@ -764,7 +764,7 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
             <div key={o.id} className="group grid items-center px-6 cursor-pointer transition-colors"
               style={{
                 gridTemplateColumns: ORG_GRID, borderBottom: "0.5px solid var(--color-border)",
-                background: isSelected ? "rgba(37,99,171,0.06)" : "var(--color-off-white)", minHeight: "48px",
+                background: isSelected ? "rgba(var(--color-blue-rgb),0.06)" : "var(--color-off-white)", minHeight: "48px",
                 opacity: o.archived ? 0.6 : 1,
               }}
               onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = "var(--color-warm-white)"; }}
@@ -777,7 +777,7 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
 
               <div className="flex items-center gap-2.5 py-2.5 pr-4">
                 <div className="w-[30px] h-[30px] rounded-md flex items-center justify-center text-[11px] font-semibold shrink-0"
-                  style={{ background: "rgba(37,99,171,0.10)", border: "0.5px solid var(--color-border)", color: "#2563ab", overflow: "hidden" }}>
+                  style={{ background: "rgba(var(--color-blue-rgb),0.10)", border: "0.5px solid var(--color-border)", color: "var(--color-blue)", overflow: "hidden" }}>
                   {o.avatar_url
                     ? <img src={o.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     : orgInitials(o)}
@@ -790,16 +790,16 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
                 </div>
               </div>
 
-              <div className="text-[12px] pr-4" style={{ color: "#6b6860" }}>
+              <div className="text-[12px] pr-4" style={{ color: "var(--color-text-secondary)" }}>
                 {o.location ?? <span style={{ color: "var(--color-grey)" }}>—</span>}
               </div>
 
-              <div className="text-[12px] pr-4" style={{ color: "#6b6860" }}>
+              <div className="text-[12px] pr-4" style={{ color: "var(--color-text-secondary)" }}>
                 {o.website
                   ? <a href={o.website.startsWith("http") ? o.website : `https://${o.website}`}
                        target="_blank" rel="noreferrer"
                        onClick={(e) => e.stopPropagation()}
-                       style={{ color: "#2563ab", textDecoration: "none" }}>
+                       style={{ color: "var(--color-blue)", textDecoration: "none" }}>
                       {o.website.replace(/^https?:\/\//, "")}
                     </a>
                   : <span style={{ color: "var(--color-grey)" }}>—</span>}
@@ -827,7 +827,7 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
               data-tour-target={idx === 0 ? "contacts.first-row" : undefined}
               style={{
                 gridTemplateColumns: GRID, borderBottom: "0.5px solid var(--color-border)",
-                background: isSelected ? "rgba(61,107,79,0.06)" : "var(--color-off-white)", minHeight: "48px",
+                background: isSelected ? "rgba(var(--color-green-deep-rgb),0.06)" : "var(--color-off-white)", minHeight: "48px",
                 opacity: c.archived ? 0.6 : 1,
               }}
               onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = "var(--color-warm-white)"; }}
@@ -840,7 +840,7 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
 
               <div className="flex items-center gap-2.5 py-2.5 pr-4">
                 <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0"
-                  style={{ background: c.is_lead ? "rgba(184,134,11,0.10)" : "var(--color-cream)", border: "0.5px solid var(--color-border)", color: c.is_lead ? "#b8860b" : "#6b6860", overflow: "hidden" }}>
+                  style={{ background: c.is_lead ? "rgba(var(--color-gold-rgb),0.10)" : "var(--color-cream)", border: "0.5px solid var(--color-border)", color: c.is_lead ? "var(--color-gold)" : "var(--color-text-secondary)", overflow: "hidden" }}>
                   {c.avatar_url
                     ? <img src={c.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     : initials(c)}
@@ -857,10 +857,10 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
 
               <div className="pr-4">
                 {c.organization?.name
-                  ? <><div className="text-[12px]" style={{ color: "#6b6860" }}>{c.organization.name}</div>
+                  ? <><div className="text-[12px]" style={{ color: "var(--color-text-secondary)" }}>{c.organization.name}</div>
                       {c.title && <div className="text-[11px]" style={{ color: "var(--color-grey)" }}>{c.title}</div>}</>
                   : c.title
-                    ? <div className="text-[12px]" style={{ color: "#6b6860" }}>{c.title}</div>
+                    ? <div className="text-[12px]" style={{ color: "var(--color-text-secondary)" }}>{c.title}</div>
                     : <span className="text-[12px]" style={{ color: "var(--color-grey)" }}>—</span>
                 }
               </div>
@@ -873,8 +873,8 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
               </div>
 
               <div className="flex items-center gap-1.5 pr-4">
-                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: c.archived ? "var(--color-grey)" : isLeads ? "#b8860b" : status.dot }} />
-                <span className="text-[11px]" style={{ color: "#6b6860" }}>
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: c.archived ? "var(--color-grey)" : isLeads ? "var(--color-gold)" : status.dot }} />
+                <span className="text-[11px]" style={{ color: "var(--color-text-secondary)" }}>
                   {c.archived ? "Archived" : isLeads ? stageLabel : status.label}
                 </span>
               </div>
@@ -886,9 +886,9 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
                     onClick={(e) => { e.stopPropagation(); handleRestore(c.id); }}
                     className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
                     style={{
-                      background: "rgba(155,163,122,0.16)",
+                      background: "rgba(var(--color-sage-rgb),0.16)",
                       color: "var(--color-sage-text)",
-                      border: "0.5px solid rgba(155,163,122,0.36)",
+                      border: "0.5px solid rgba(var(--color-sage-rgb),0.36)",
                       cursor: "pointer", fontFamily: "inherit",
                     }}
                   >
@@ -912,7 +912,7 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
           </span>
           <button className="px-2.5 py-1.5 rounded-lg text-[12px]"
             style={{ color: "rgba(255,255,255,0.7)" }}
-            onMouseEnter={e => { e.currentTarget.style.background = "rgba(184,134,11,0.25)"; e.currentTarget.style.color = "#f5d478"; }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(var(--color-gold-rgb),0.25)"; e.currentTarget.style.color = "#f5d478"; }}
             onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; }}
             onClick={() => setConfirmBulkArchive(true)}>Archive</button>
           <button className="px-2.5 py-1.5 rounded-lg text-[12px] ml-1" style={{ color: "rgba(255,255,255,0.5)" }}
@@ -987,7 +987,7 @@ function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => voi
   return (
     <div onClick={e => { e.stopPropagation(); onChange(); }}
       className="w-[15px] h-[15px] rounded flex items-center justify-center cursor-pointer shrink-0"
-      style={{ background: checked ? "var(--color-sage)" : "transparent", border: checked ? "1.5px solid var(--color-sage)" : "1.5px solid rgba(31,33,26,0.2)" }}>
+      style={{ background: checked ? "var(--color-sage)" : "transparent", border: checked ? "1.5px solid var(--color-sage)" : "1.5px solid rgba(var(--color-charcoal-rgb),0.2)" }}>
       {checked && <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
     </div>
   );

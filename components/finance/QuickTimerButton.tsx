@@ -104,7 +104,7 @@ export default function QuickTimerButton({ initialTimer, projects }: Props) {
   if (timer) {
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 7, background: "rgba(155,163,122,0.12)", border: "0.5px solid rgba(155,163,122,0.3)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 7, background: "rgba(var(--color-sage-rgb),0.12)", border: "0.5px solid rgba(var(--color-sage-rgb),0.3)" }}>
           <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-sage)", display: "inline-block", flexShrink: 0 }} />
           <span style={{ fontSize: 11, color: "var(--color-sage)", fontWeight: 500, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {timer.description || timer.project?.title || "Timer"}
@@ -115,9 +115,9 @@ export default function QuickTimerButton({ initialTimer, projects }: Props) {
         </div>
         <button
           onClick={stop} disabled={loading}
-          style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 7, background: "rgba(220,62,13,0.08)", border: "0.5px solid rgba(220,62,13,0.25)", color: "var(--color-red-orange)", cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 500 }}
-          onMouseEnter={e => e.currentTarget.style.background = "rgba(220,62,13,0.14)"}
-          onMouseLeave={e => e.currentTarget.style.background = "rgba(220,62,13,0.08)"}
+          style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 7, background: "rgba(var(--color-red-rgb),0.08)", border: "0.5px solid rgba(var(--color-red-rgb),0.25)", color: "var(--color-red-orange)", cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 500 }}
+          onMouseEnter={e => e.currentTarget.style.background = "rgba(var(--color-red-rgb),0.14)"}
+          onMouseLeave={e => e.currentTarget.style.background = "rgba(var(--color-red-rgb),0.08)"}
         >
           <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><rect width="8" height="8" rx="1.5"/></svg>
           Stop
@@ -135,7 +135,7 @@ export default function QuickTimerButton({ initialTimer, projects }: Props) {
           display: "flex", alignItems: "center", gap: 5, padding: "5px 12px",
           borderRadius: 6, border: "0.5px solid var(--color-border)",
           background: open ? "var(--color-cream)" : "transparent",
-          color: "#6b6860", cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 500,
+          color: "var(--color-text-secondary)", cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 500,
           transition: "background 0.1s ease",
         }}
         onMouseEnter={e => { if (!open) e.currentTarget.style.background = "var(--color-cream)"; }}
@@ -149,7 +149,7 @@ export default function QuickTimerButton({ initialTimer, projects }: Props) {
         <div style={{
           position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 100,
           background: "var(--color-off-white)", border: "0.5px solid var(--color-border)",
-          borderRadius: 12, boxShadow: "0 8px 32px rgba(31,33,26,0.18)",
+          borderRadius: 12, boxShadow: "0 8px 32px rgba(var(--color-charcoal-rgb),0.18)",
           padding: "20px", width: 280,
         }}>
           <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 14 }}>New time entry</p>
@@ -183,7 +183,7 @@ export default function QuickTimerButton({ initialTimer, projects }: Props) {
               </button>
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={() => setOpen(false)}
-                  style={{ padding: "6px 12px", borderRadius: 6, border: "0.5px solid var(--color-border)", background: "transparent", color: "#6b6860", cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}
+                  style={{ padding: "6px 12px", borderRadius: 6, border: "0.5px solid var(--color-border)", background: "transparent", color: "var(--color-text-secondary)", cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}
                   onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
                   onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                   Cancel

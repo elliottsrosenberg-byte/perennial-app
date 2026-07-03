@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Contact, ContactStatus, LeadStage } from "@/types/database";
 import { X } from "lucide-react";
 import Select from "@/components/ui/Select";
+import Modal from "@/components/ui/Modal";
 
 interface Props {
   onClose:   () => void;
@@ -143,23 +144,18 @@ export default function NewContactModal({ onClose, onCreated, isLead = false }: 
   );
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(31,33,26,0.5)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div
-        className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden"
-        style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}
-      >
-        {/* Header */}
+    <Modal
+      onClose={onClose}
+      size="lg"
+      bodyStyle={{ padding: 0 }}
+      header={
         <div style={{ borderBottom: "0.5px solid var(--color-border)" }}>
           <div className="flex items-center justify-between px-6 pt-4 pb-2">
             {/* Type toggle */}
             <div style={{ display: "flex", gap: 2, background: "var(--color-cream)", borderRadius: 8, padding: 2 }}>
               {(["contact", "lead"] as const).map(t => (
                 <button key={t} type="button" onClick={() => setType(t)}
-                  style={{ padding: "4px 14px", borderRadius: 6, fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer", fontFamily: "inherit", background: type === t ? (t === "contact" ? "var(--color-sage)" : "#b8860b") : "transparent", color: type === t ? "white" : "#9a9690", transition: "all 0.1s ease" }}>
+                  style={{ padding: "4px 14px", borderRadius: 6, fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer", fontFamily: "inherit", background: type === t ? (t === "contact" ? "var(--color-sage)" : "var(--color-gold)") : "transparent", color: type === t ? "white" : "var(--color-grey)", transition: "all 0.1s ease" }}>
                   {t.charAt(0).toUpperCase() + t.slice(1)}
                 </button>
               ))}
@@ -180,9 +176,31 @@ export default function NewContactModal({ onClose, onCreated, isLead = false }: 
               : "A person you want to pursue. Leads live in Outreach with a stage; convert them to a contact once the relationship starts."}
           </p>
         </div>
-
+      }
+      footer={
+        <>
+          <button
+            type="button" onClick={onClose}
+            className="px-4 py-2 text-[13px] rounded-lg transition-colors"
+            style={{ color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit as unknown as React.MouseEventHandler}
+            disabled={loading || !firstName.trim() || !lastName.trim()}
+            className="px-4 py-2 text-[13px] font-medium rounded-lg text-white transition-opacity disabled:opacity-50"
+            style={{ background: "var(--color-sage)" }}
+          >
+            {loading ? "Creating…" : "Create contact"}
+          </button>
+        </>
+      }
+    >
         {/* Form */}
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4 max-h-[68vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
           {/* Name */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -305,9 +323,9 @@ export default function NewContactModal({ onClose, onCreated, isLead = false }: 
                   <button
                     key={t} type="button" onClick={() => addTag(t)}
                     className="px-2 py-0.5 rounded-full text-[11px] transition-colors"
-                    style={{ background: "var(--color-cream)", color: "#6b6860", border: "0.5px solid var(--color-border)" }}
+                    style={{ background: "var(--color-cream)", color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-sage)", e.currentTarget.style.color = "white")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-cream)", e.currentTarget.style.color = "#6b6860")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-cream)", e.currentTarget.style.color = "var(--color-text-secondary)")}
                   >
                     + {t}
                   </button>
@@ -318,31 +336,6 @@ export default function NewContactModal({ onClose, onCreated, isLead = false }: 
 
           {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
         </form>
-
-        {/* Footer */}
-        <div
-          className="flex items-center justify-end gap-2 px-6 py-4"
-          style={{ borderTop: "0.5px solid var(--color-border)" }}
-        >
-          <button
-            type="button" onClick={onClose}
-            className="px-4 py-2 text-[13px] rounded-lg transition-colors"
-            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit as unknown as React.MouseEventHandler}
-            disabled={loading || !firstName.trim() || !lastName.trim()}
-            className="px-4 py-2 text-[13px] font-medium rounded-lg text-white transition-opacity disabled:opacity-50"
-            style={{ background: "var(--color-sage)" }}
-          >
-            {loading ? "Creating…" : "Create contact"}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

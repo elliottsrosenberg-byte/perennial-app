@@ -2,10 +2,11 @@
 
 import { useRef, useState } from "react";
 import type { BankAccount, BankTransaction } from "@/types/database";
-import { X, Paperclip, Trash2 } from "lucide-react";
+import { Paperclip, Trash2 } from "lucide-react";
 import Select from "@/components/ui/Select";
 import Checkbox from "@/components/ui/Checkbox";
 import DatePicker from "@/components/ui/DatePicker";
+import Modal from "@/components/ui/Modal";
 import { uploadReceipt } from "@/lib/uploads/receipt";
 import { CANONICAL_CATEGORIES } from "./plaidCategoryDisplay";
 
@@ -115,20 +116,35 @@ export default function ManualTransactionModal({ today, accounts, onClose, onCre
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(31,33,26,0.5)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      {/* overflow visible so the date picker dropdown isn't clipped */}
-      <div className="w-full max-w-sm rounded-2xl shadow-2xl"
-        style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}>
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-          <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>Add transaction</h2>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg"
-            style={{ color: "var(--color-grey)" }}
+    <Modal
+      onClose={onClose}
+      size="sm"
+      title="Add transaction"
+      bodyStyle={{ padding: 0 }}
+      footer={
+        <>
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-[13px] rounded-lg"
+            style={{ color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}><X size={14} /></button>
-        </div>
-
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>Cancel</button>
+          <button type="button" onClick={() => submit(false)}
+            disabled={loading || !name.trim() || !amount}
+            className="px-4 py-2 text-[13px] font-medium rounded-lg disabled:opacity-50"
+            style={{ background: isDebit ? "var(--color-cream)" : "var(--color-sage)", color: isDebit ? "var(--color-charcoal)" : "white", border: isDebit ? "0.5px solid var(--color-border)" : "none" }}>
+            {loading ? "Adding…" : "Add"}
+          </button>
+          {isDebit && (
+            <button type="button" onClick={() => submit(true)}
+              disabled={loading || !name.trim() || !amount}
+              className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50"
+              style={{ background: "var(--color-sage)" }}>
+              {loading ? "…" : "Add + Log"}
+            </button>
+          )}
+        </>
+      }
+    >
         <form onSubmit={(e) => { e.preventDefault(); submit(false); }} className="px-5 py-4 space-y-4">
           <div className="flex rounded-lg overflow-hidden" style={{ border: "0.5px solid var(--color-border)" }}>
             {seg("debit", "Money out (expense)")}
@@ -225,29 +241,6 @@ export default function ManualTransactionModal({ today, accounts, onClose, onCre
 
           {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
         </form>
-
-        <div className="flex items-center justify-end gap-2 px-5 py-4" style={{ borderTop: "0.5px solid var(--color-border)" }}>
-          <button type="button" onClick={onClose}
-            className="px-4 py-2 text-[13px] rounded-lg"
-            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>Cancel</button>
-          <button type="button" onClick={() => submit(false)}
-            disabled={loading || !name.trim() || !amount}
-            className="px-4 py-2 text-[13px] font-medium rounded-lg disabled:opacity-50"
-            style={{ background: isDebit ? "var(--color-cream)" : "var(--color-sage)", color: isDebit ? "var(--color-charcoal)" : "white", border: isDebit ? "0.5px solid var(--color-border)" : "none" }}>
-            {loading ? "Adding…" : "Add"}
-          </button>
-          {isDebit && (
-            <button type="button" onClick={() => submit(true)}
-              disabled={loading || !name.trim() || !amount}
-              className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50"
-              style={{ background: "var(--color-sage)" }}>
-              {loading ? "…" : "Add + Log"}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

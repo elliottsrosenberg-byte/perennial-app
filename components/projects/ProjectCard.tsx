@@ -45,12 +45,12 @@ function chipBackground(color: string): string {
     const b = parseInt(hex.slice(4, 6), 16);
     if (!Number.isNaN(r)) return `rgba(${r},${g},${b},0.12)`;
   }
-  if (color === "var(--color-sage)")        return "rgba(155,163,122,0.14)";
-  if (color === "var(--color-warm-yellow)") return "rgba(232,197,71,0.15)";
-  if (color === "var(--color-red-orange)")  return "rgba(220,62,13,0.10)";
-  if (color === "var(--color-green)")       return "rgba(141,208,71,0.12)";
-  if (color === "var(--color-grey)")        return "rgba(154,150,144,0.14)";
-  return "rgba(31,33,26,0.06)";
+  if (color === "var(--color-sage)")        return "rgba(var(--color-sage-rgb),0.14)";
+  if (color === "var(--color-warm-yellow)") return "rgba(var(--color-amber-rgb),0.15)";
+  if (color === "var(--color-red-orange)")  return "rgba(var(--color-red-rgb),0.10)";
+  if (color === "var(--color-green)")       return "rgba(var(--color-green-rgb),0.12)";
+  if (color === "var(--color-grey)")        return "rgba(var(--color-grey-rgb),0.14)";
+  return "rgba(var(--color-charcoal-rgb),0.06)";
 }
 
 function TypeSpecificProps({ project }: { project: Project }) {
@@ -78,7 +78,7 @@ function TypeSpecificProps({ project }: { project: Project }) {
       {rows.map((r) => (
         <div key={r.label} className="flex items-center justify-between gap-2">
           <span className="text-[11px]" style={{ color: "var(--color-grey)" }}>{r.label}</span>
-          <span className="text-[11px] font-medium text-right" style={{ color: "#6b6860" }}>{r.value}</span>
+          <span className="text-[11px] font-medium text-right" style={{ color: "var(--color-text-secondary)" }}>{r.value}</span>
         </div>
       ))}
     </div>
@@ -118,14 +118,14 @@ export default function ProjectCard({ project, onClick, isDragging }: Props) {
       (new Date(project.due_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
     );
     if (daysLeft < 0) {
-      dueBadge = { label: "Overdue", bg: "rgba(220,62,13,0.10)", color: "var(--color-red-orange)" };
+      dueBadge = { label: "Overdue", bg: "rgba(var(--color-red-rgb),0.10)", color: "var(--color-red-orange)" };
     } else if (daysLeft <= 14) {
-      dueBadge = { label: `Due ${formatDate(project.due_date)}`, bg: "rgba(232,197,71,0.15)", color: "#a07800" };
+      dueBadge = { label: `Due ${formatDate(project.due_date)}`, bg: "rgba(var(--color-amber-rgb),0.15)", color: "var(--color-amber-deep)" };
     } else {
-      dueBadge = { label: `Due ${formatDate(project.due_date)}`, bg: "var(--color-cream)", color: "#6b6860" };
+      dueBadge = { label: `Due ${formatDate(project.due_date)}`, bg: "var(--color-cream)", color: "var(--color-text-secondary)" };
     }
   } else if (project.status === "on_hold") {
-    dueBadge = { label: statusOption.label, bg: "rgba(232,197,71,0.15)", color: "#a07800" };
+    dueBadge = { label: statusOption.label, bg: "rgba(var(--color-amber-rgb),0.15)", color: "var(--color-amber-deep)" };
   }
 
   return (
@@ -213,7 +213,7 @@ export default function ProjectCard({ project, onClick, isDragging }: Props) {
             <span className="text-[11px]" style={{ color: "var(--color-grey)" }}>
               {timeActive(project.start_date)}{" "}
               {!project.due_date && (
-                <strong style={{ color: "#6b6860", fontWeight: 500 }}>· no due date</strong>
+                <strong style={{ color: "var(--color-text-secondary)", fontWeight: 500 }}>· no due date</strong>
               )}
             </span>
           </div>

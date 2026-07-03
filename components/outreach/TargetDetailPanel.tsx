@@ -74,7 +74,7 @@ function EntityCanvasEditor({
     }),
     content: initialHtml ?? "",
     onUpdate({ editor }) { scheduleSave(editor.getHTML()); },
-    editorProps: { attributes: { style: "outline: none; min-height: 300px; font-size: 14px; line-height: 1.8; color: #6b6860;" } },
+    editorProps: { attributes: { style: "outline: none; min-height: 300px; font-size: 14px; line-height: 1.8; color: var(--color-text-secondary);" } },
   }, [entityId]);
 
   useEffect(() => {
@@ -611,7 +611,7 @@ function LinkedPeople({ target, onChange }: { target: OutreachTarget; onChange: 
           background: "var(--color-off-white)",
           border: "0.5px solid var(--color-border)",
         }}>
-          <div style={{ width: 22, height: 22, borderRadius: 99, background: "var(--color-cream)", color: "#6b6860", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <div style={{ width: 22, height: 22, borderRadius: 99, background: "var(--color-cream)", color: "var(--color-text-secondary)", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             {(c.first_name[0] ?? "") + (c.last_name[0] ?? "")}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -972,7 +972,7 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
                   <button key={s.id} onClick={() => changeStage(s.id)} style={{
                     fontSize: 11, padding: "3px 10px", borderRadius: 9999,
                     background: target.stage_id === s.id ? pipeline.color : "var(--color-cream)",
-                    color: target.stage_id === s.id ? "white" : "#6b6860",
+                    color: target.stage_id === s.id ? "white" : "var(--color-text-secondary)",
                     border: `0.5px solid ${target.stage_id === s.id ? pipeline.color : "var(--color-border)"}`,
                     cursor: "pointer", fontFamily: "inherit", fontWeight: target.stage_id === s.id ? 600 : 400,
                   }}>
@@ -987,9 +987,9 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
                     {outcomeStages.map(s => (
                       <button key={s.id} onClick={() => changeStage(s.id)} style={{
                         fontSize: 11, padding: "3px 10px", borderRadius: 9999,
-                        background: target.stage_id === s.id ? "rgba(31,33,26,0.12)" : "var(--color-cream)",
-                        color: target.stage_id === s.id ? "var(--color-charcoal)" : "#6b6860",
-                        border: `0.5px solid ${target.stage_id === s.id ? "rgba(31,33,26,0.25)" : "var(--color-border)"}`,
+                        background: target.stage_id === s.id ? "rgba(var(--color-charcoal-rgb),0.12)" : "var(--color-cream)",
+                        color: target.stage_id === s.id ? "var(--color-charcoal)" : "var(--color-text-secondary)",
+                        border: `0.5px solid ${target.stage_id === s.id ? "rgba(var(--color-charcoal-rgb),0.25)" : "var(--color-border)"}`,
                         cursor: "pointer", fontFamily: "inherit", fontWeight: target.stage_id === s.id ? 600 : 400,
                       }}>
                         {s.name}
@@ -1008,7 +1008,7 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
               <DateField label="Deadline" value={target.results_deadline} onSave={v => saveField({ results_deadline: v })} />
               <div style={{ display: "flex", alignItems: "center", padding: "4px 0" }}>
                 <span style={{ fontSize: 11, color: "var(--color-grey)", width: 80, flexShrink: 0 }}>Touched</span>
-                <span style={{ fontSize: 12, color: stale > 14 ? "#b8860b" : "#6b6860" }}>
+                <span style={{ fontSize: 12, color: stale > 14 ? "var(--color-gold)" : "var(--color-text-secondary)" }}>
                   {fmtDate(target.last_touched_at)}
                 </span>
               </div>
@@ -1032,7 +1032,7 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
                   style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", borderRadius: 7, border: "0.5px solid var(--color-border)", background: "var(--color-off-white)", cursor: "pointer", fontFamily: "inherit", marginBottom: 6 }}
                   onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
                   onMouseLeave={e => e.currentTarget.style.background = "var(--color-off-white)"}>
-                  <UserCheck size={12} strokeWidth={1.75} style={{ color: "#3d6b4f" }} />
+                  <UserCheck size={12} strokeWidth={1.75} style={{ color: "var(--color-green-deep)" }} />
                   <span style={{ fontSize: 11.5, color: "var(--color-charcoal)" }}>Convert to contact</span>
                 </button>
               )}
@@ -1060,7 +1060,7 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
                   />
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 8 }}>
                     <button onClick={() => setPromoteOpen(false)}
-                      style={{ padding: "4px 10px", fontSize: 11, background: "transparent", color: "#6b6860", border: "0.5px solid var(--color-border)", borderRadius: 6, cursor: "pointer", fontFamily: "inherit" }}>
+                      style={{ padding: "4px 10px", fontSize: 11, background: "transparent", color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)", borderRadius: 6, cursor: "pointer", fontFamily: "inherit" }}>
                       Cancel
                     </button>
                     <button onClick={promoteToProject} disabled={!promoteTitle.trim() || promoting}
@@ -1080,13 +1080,13 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
                 return (
                   <button key={item.key} onClick={() => setActiveTab(item.key)} style={{
                     width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 8px",
-                    borderRadius: 7, border: "none", background: active ? "rgba(155,163,122,0.12)" : "transparent",
+                    borderRadius: 7, border: "none", background: active ? "rgba(var(--color-sage-rgb),0.12)" : "transparent",
                     cursor: "pointer", fontFamily: "inherit", marginBottom: 1,
                   }}
                   onMouseEnter={e => { if (!active) e.currentTarget.style.background = "rgba(0,0,0,0.04)"; }}
                   onMouseLeave={e => { if (!active) e.currentTarget.style.background = "transparent"; }}>
-                    <span style={{ color: active ? "#5a7040" : "var(--color-grey)" }}>{item.icon}</span>
-                    <span style={{ fontSize: 12, flex: 1, textAlign: "left", color: active ? "#5a7040" : "var(--color-grey)", fontWeight: active ? 500 : 400 }}>{item.label}</span>
+                    <span style={{ color: active ? "var(--color-sage-deep)" : "var(--color-grey)" }}>{item.icon}</span>
+                    <span style={{ fontSize: 12, flex: 1, textAlign: "left", color: active ? "var(--color-sage-deep)" : "var(--color-grey)", fontWeight: active ? 500 : 400 }}>{item.label}</span>
                   </button>
                 );
               })}
@@ -1110,11 +1110,11 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
                   <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px" }}>
                     <span style={{ fontSize: 12, color: "var(--color-charcoal)", flex: 1 }}>Delete this target?</span>
                     <button onClick={handleDelete} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, background: "var(--color-red-orange)", color: "white", border: "none", cursor: "pointer", fontFamily: "inherit" }}>Delete</button>
-                    <button onClick={() => setConfirmDelete(false)} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, background: "transparent", color: "#6b6860", border: "0.5px solid var(--color-border)", cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+                    <button onClick={() => setConfirmDelete(false)} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, background: "transparent", color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)", cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
                   </div>
                 ) : (
                   <button onClick={() => setConfirmDelete(true)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit", color: "var(--color-red-orange)" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "rgba(220,62,13,0.07)"}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(var(--color-red-rgb),0.07)"}
                     onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                     <Trash2 size={13} strokeWidth={1.75} />
                     <span style={{ fontSize: 12 }}>Delete target</span>

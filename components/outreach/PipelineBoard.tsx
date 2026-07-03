@@ -92,13 +92,13 @@ function deadlineBadge(iso: string | null): { label: string; color: string; bg: 
     return {
       label: `${Math.abs(days)}d overdue`,
       color: "var(--color-red-orange)",
-      bg:    "rgba(220,62,13,0.10)",
+      bg:    "rgba(var(--color-red-rgb),0.10)",
     };
   }
   if (days <= 14) {
-    if (days === 0) return { label: "Due today",  color: "#b8860b", bg: "rgba(184,134,11,0.12)" };
-    if (days === 1) return { label: "Due tomorrow", color: "#b8860b", bg: "rgba(184,134,11,0.12)" };
-    return { label: `${days}d left`, color: "#b8860b", bg: "rgba(184,134,11,0.12)" };
+    if (days === 0) return { label: "Due today",  color: "var(--color-gold)", bg: "rgba(var(--color-gold-rgb),0.12)" };
+    if (days === 1) return { label: "Due tomorrow", color: "var(--color-gold)", bg: "rgba(var(--color-gold-rgb),0.12)" };
+    return { label: `${days}d left`, color: "var(--color-gold)", bg: "rgba(var(--color-gold-rgb),0.12)" };
   }
   return null;
 }
@@ -219,7 +219,7 @@ function TargetCard({
           background: isDragging ? "var(--color-cream)" : showLogged ? "rgba(201,122,74,0.05)" : "var(--color-warm-white)",
           border: `0.5px solid ${showLogged ? "rgba(201,122,74,0.40)" : "var(--color-border)"}`,
           boxShadow: isDragging
-            ? "0 8px 24px rgba(31,33,26,0.18)"
+            ? "0 8px 24px rgba(var(--color-charcoal-rgb),0.18)"
             : cardHov ? "0 2px 8px rgba(0,0,0,0.06)" : "none",
           cursor: open ? "default" : "pointer",
           transition: "background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease",
@@ -342,7 +342,7 @@ function TargetCard({
                   padding: "3px 9px", borderRadius: 9999,
                   fontSize: 10, fontWeight: 500,
                   background: actType === t.key ? FOLLOWUP_COPPER : "var(--color-cream)",
-                  color:      actType === t.key ? "white" : "#6b6860",
+                  color:      actType === t.key ? "white" : "var(--color-text-secondary)",
                   border: `0.5px solid ${actType === t.key ? FOLLOWUP_COPPER : "var(--color-border)"}`,
                   cursor: "pointer", fontFamily: "inherit",
                 }}>
@@ -375,7 +375,7 @@ function TargetCard({
               style={{
                 padding: "4px 10px", fontSize: 11,
                 background: "transparent",
-                color: "#6b6860",
+                color: "var(--color-text-secondary)",
                 border: "0.5px solid var(--color-border)",
                 borderRadius: 6, cursor: "pointer", fontFamily: "inherit",
               }}>
@@ -461,10 +461,10 @@ function DroppableColumn({
               borderRadius: 10,
               padding: snapshot.isDraggingOver ? "6px" : "0",
               background: snapshot.isDraggingOver
-                ? isOutcome ? "rgba(31,33,26,0.05)" : pipelineColor + "10"
+                ? isOutcome ? "rgba(var(--color-charcoal-rgb),0.05)" : pipelineColor + "10"
                 : "transparent",
               border: snapshot.isDraggingOver
-                ? `1px dashed ${isOutcome ? "rgba(31,33,26,0.2)" : pipelineColor + "55"}`
+                ? `1px dashed ${isOutcome ? "rgba(var(--color-charcoal-rgb),0.2)" : pipelineColor + "55"}`
                 : "1px solid transparent",
               transition: "background 0.15s ease, border 0.15s ease, padding 0.15s ease",
             }}
@@ -569,7 +569,7 @@ function StageColumnHeader({
       style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, position: "relative" }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0 }}>
-        <div style={{ width: 6, height: 6, borderRadius: "50%", background: isOutcome ? "rgba(31,33,26,0.25)" : pipelineColor, flexShrink: 0 }} />
+        <div style={{ width: 6, height: 6, borderRadius: "50%", background: isOutcome ? "rgba(var(--color-charcoal-rgb),0.25)" : pipelineColor, flexShrink: 0 }} />
         {editing ? (
           <input
             value={draft}
@@ -675,7 +675,7 @@ function StageColumnHeader({
 
       {confirming && (
         <div
-          style={{ position: "fixed", inset: 0, zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(31,33,26,0.5)", padding: 16 }}
+          style={{ position: "fixed", inset: 0, zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(var(--color-charcoal-rgb),0.5)", padding: 16 }}
           onClick={(e) => { if (e.target === e.currentTarget) setConfirming(false); }}
         >
           <div style={{ width: "100%", maxWidth: 380, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 14, padding: "20px 22px" }}>
@@ -702,7 +702,7 @@ function StageColumnHeader({
               <button
                 type="button"
                 onClick={() => setConfirming(false)}
-                style={{ padding: "8px 14px", fontSize: 13, borderRadius: 8, color: "#6b6860", border: "0.5px solid var(--color-border)", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}
+                style={{ padding: "8px 14px", fontSize: 13, borderRadius: 8, color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}
               >
                 Cancel
               </button>

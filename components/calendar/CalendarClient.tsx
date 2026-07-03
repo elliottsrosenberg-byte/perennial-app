@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, Plus, CheckSquare, MoreHorizontal, CalendarC
 import { tagsForPractices } from "@/lib/opportunities/disciplines";
 import DatePicker from "@/components/ui/DatePicker";
 import EmptyState from "@/components/ui/EmptyState";
+import Modal from "@/components/ui/Modal";
 import CalendarOptionsMenu from "./CalendarOptionsMenu";
 import CalendarSettingsModal from "./CalendarSettingsModal";
 import CalendarSourcesPanel from "./CalendarSourcesPanel";
@@ -46,7 +47,7 @@ const DAY_MIN_PX        = 96; // floor so chips stay legible on tiny screens
 
 // Sat + Sun get a subtle grey tint so the work-week reads first. Stays
 // soft enough that an event chip on a weekend doesn't get visually muted.
-const WEEKEND_BG = "rgba(31,33,26,0.035)";
+const WEEKEND_BG = "rgba(var(--color-charcoal-rgb),0.035)";
 function isWeekend(d: Date): boolean { const g = d.getDay(); return g === 0 || g === 6; }
 // Continuous-pan month view: render a long vertical strip of weeks.
 const MONTH_WEEKS_BEFORE = 6;
@@ -63,9 +64,9 @@ const DOW_SHORT   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 // priority chips used in TasksClient so the visual language is
 // consistent across modules.
 const PRIORITY_PALETTE: Record<string, { bg: string; fg: string; border: string }> = {
-  high:     { bg: "rgba(220,62,13,0.10)",  fg: "var(--color-red-orange)", border: "rgba(220,62,13,0.28)" },
+  high:     { bg: "rgba(var(--color-red-rgb),0.10)",  fg: "var(--color-red-orange)", border: "rgba(var(--color-red-rgb),0.28)" },
   medium:   { bg: "rgba(160,120,0,0.12)",  fg: "#7a5a00",                border: "rgba(160,120,0,0.28)" },
-  low:      { bg: "rgba(155,163,122,0.14)",fg: "var(--color-sage-text)",                border: "rgba(155,163,122,0.28)" },
+  low:      { bg: "rgba(var(--color-sage-rgb),0.14)",fg: "var(--color-sage-text)",                border: "rgba(var(--color-sage-rgb),0.28)" },
   _default: { bg: "rgba(120,120,120,0.10)",fg: "#5a564f",                border: "rgba(120,120,120,0.22)" },
 };
 
@@ -244,8 +245,8 @@ function getDueBadge(due: string): { text: string; color: string } {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
   if (diff < 0)   return { text: "Overdue",   color: "var(--color-red-orange)" };
-  if (diff === 0) return { text: "Today",     color: "#a07800"                 };
-  if (diff === 1) return { text: "Tomorrow",  color: "#6b6860"                 };
+  if (diff === 0) return { text: "Today",     color: "var(--color-amber-deep)"  };
+  if (diff === 1) return { text: "Tomorrow",  color: "var(--color-text-secondary)"                 };
   return { text: fmtDate(d, { month: "short", day: "numeric" }), color: "var(--color-grey)" };
 }
 
@@ -276,7 +277,7 @@ function ProjectPicker({
         onClick={() => setOpen(v => !v)}
         className="text-[11px] font-medium rounded-full px-[9px] py-[3px] transition-colors"
         style={linked ? {
-          background: "rgba(155,163,122,0.14)", color: "#5a7040", border: "0.5px solid rgba(155,163,122,0.25)",
+          background: "rgba(var(--color-sage-rgb),0.14)", color: "var(--color-sage-deep)", border: "0.5px solid rgba(var(--color-sage-rgb),0.25)",
         } : {
           background: "transparent", color: "var(--color-grey)", border: "0.5px dashed var(--color-border)",
         }}
@@ -296,7 +297,7 @@ function ProjectPicker({
           >No project</button>
           {projects.map(p => (
             <button key={p.id} className="w-full text-left px-4 py-[8px] text-[12px] transition-colors"
-              style={{ color: "#6b6860", fontWeight: p.id === projectId ? 600 : 400 }}
+              style={{ color: "var(--color-text-secondary)", fontWeight: p.id === projectId ? 600 : 400 }}
               onClick={() => { onChange(p.id); setOpen(false); }}
               onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
               onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
@@ -464,25 +465,26 @@ function NewTaskModal({ projects, contacts, defaultDate, onClose, onCreate }: {
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: "rgba(31,33,26,0.35)", backdropFilter: "blur(4px)" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div
-        className="rounded-2xl p-6 flex flex-col gap-4"
-        style={{ width: "380px", background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 40px rgba(0,0,0,0.15)" }}
-      >
-        <div className="flex items-center justify-between">
-          <h3 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>New task</h3>
+    <Modal
+      onClose={onClose}
+      title="New task"
+      size="sm"
+      footer={
+        <>
           <button onClick={onClose}
-            className="w-6 h-6 flex items-center justify-center rounded text-[18px] leading-none transition-colors"
-            style={{ color: "var(--color-grey)" }}
+            className="px-3 py-[6px] text-[12px] rounded-lg transition-colors"
+            style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
             onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
             onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-          >×</button>
-        </div>
-
+          >Cancel</button>
+          <button onClick={submit} disabled={!title.trim()}
+            className="px-4 py-[6px] text-[12px] font-medium rounded-lg text-white transition-opacity"
+            style={{ background: "var(--color-sage)", opacity: title.trim() ? 1 : 0.5 }}
+          >Add task</button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
         <input
           ref={inputRef}
           value={title}
@@ -516,21 +518,8 @@ function NewTaskModal({ projects, contacts, defaultDate, onClose, onCreate }: {
           <label className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--color-grey)" }}>Contact</label>
           <ContactPicker contactId={contactId} contacts={contacts} onChange={setContactId} />
         </div>
-
-        <div className="flex justify-end gap-2 mt-1">
-          <button onClick={onClose}
-            className="px-3 py-[6px] text-[12px] rounded-lg transition-colors"
-            style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
-            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-          >Cancel</button>
-          <button onClick={submit} disabled={!title.trim()}
-            className="px-4 py-[6px] text-[12px] font-medium rounded-lg text-white transition-opacity"
-            style={{ background: "var(--color-sage)", opacity: title.trim() ? 1 : 0.5 }}
-          >Add task</button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -561,7 +550,7 @@ function ContactPicker({
         onClick={() => setOpen(v => !v)}
         className="text-[11px] font-medium rounded-full px-[9px] py-[3px] transition-colors"
         style={linked ? {
-          background: "rgba(37,99,171,0.10)", color: "#2563ab", border: "0.5px solid rgba(37,99,171,0.25)",
+          background: "rgba(var(--color-blue-rgb),0.10)", color: "var(--color-blue)", border: "0.5px solid rgba(var(--color-blue-rgb),0.25)",
         } : {
           background: "transparent", color: "var(--color-grey)", border: "0.5px dashed var(--color-border)",
         }}
@@ -581,7 +570,7 @@ function ContactPicker({
           >No contact</button>
           {contacts.map(c => (
             <button key={c.id} className="w-full text-left px-4 py-[8px] text-[12px] transition-colors"
-              style={{ color: "#6b6860", fontWeight: c.id === contactId ? 600 : 400 }}
+              style={{ color: "var(--color-text-secondary)", fontWeight: c.id === contactId ? 600 : 400 }}
               onClick={() => { onChange(c.id); setOpen(false); }}
               onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
               onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
@@ -825,9 +814,9 @@ function MonthGrid({
                   <div
                     key={`p-${p.id}`}
                     style={{
-                      background: "rgba(155,163,122,0.14)",
-                      color: "#5a7040",
-                      border: "0.5px solid rgba(155,163,122,0.25)",
+                      background: "rgba(var(--color-sage-rgb),0.14)",
+                      color: "var(--color-sage-deep)",
+                      border: "0.5px solid rgba(var(--color-sage-rgb),0.25)",
                       borderRadius: 4,
                       padding: "1px 6px",
                       fontSize: 10, fontWeight: 500,
@@ -978,12 +967,12 @@ interface Props {
 // Soft palette per opportunity category. Stays close to Presence's catColor
 // while leaning paler so a week of fairs doesn't overpower personal events.
 const OPP_PALETTE: Record<string, { bg: string; fg: string; border: string }> = {
-  fair:       { bg: "rgba(109,79,163,0.10)", fg: "#6d4fa3", border: "rgba(109,79,163,0.30)" },
-  openCall:   { bg: "rgba(184,134,11,0.10)", fg: "#b8860b", border: "rgba(184,134,11,0.30)" },
-  grant:      { bg: "rgba(61,107,79,0.10)",  fg: "#3d6b4f", border: "rgba(61,107,79,0.30)" },
-  award:      { bg: "rgba(220,62,13,0.10)",  fg: "var(--color-red-orange)", border: "rgba(220,62,13,0.28)" },
-  residency:  { bg: "rgba(20,140,140,0.10)", fg: "#148c8c", border: "rgba(20,140,140,0.30)" },
-  _default:   { bg: "rgba(155,163,122,0.12)",fg: "#5a7040", border: "rgba(155,163,122,0.28)" },
+  fair:       { bg: "rgba(var(--color-purple-rgb),0.10)", fg: "var(--color-purple)", border: "rgba(var(--color-purple-rgb),0.30)" },
+  openCall:   { bg: "rgba(var(--color-gold-rgb),0.10)", fg: "var(--color-gold)", border: "rgba(var(--color-gold-rgb),0.30)" },
+  grant:      { bg: "rgba(var(--color-green-deep-rgb),0.10)",  fg: "var(--color-green-deep)", border: "rgba(var(--color-green-deep-rgb),0.30)" },
+  award:      { bg: "rgba(var(--color-red-rgb),0.10)",  fg: "var(--color-red-orange)", border: "rgba(var(--color-red-rgb),0.28)" },
+  residency:  { bg: "rgba(var(--color-teal-rgb),0.10)", fg: "var(--color-teal)", border: "rgba(var(--color-teal-rgb),0.30)" },
+  _default:   { bg: "rgba(var(--color-sage-rgb),0.12)",fg: "var(--color-sage-deep)", border: "rgba(var(--color-sage-rgb),0.28)" },
 };
 function oppPalette(category: string) {
   return OPP_PALETTE[category] ?? OPP_PALETTE._default;
@@ -2344,7 +2333,7 @@ export default function CalendarClient({
             onClick={openNewTask}
             className="w-full text-[11px] py-[7px] rounded-lg transition-colors"
             style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)", background: "transparent" }}
-            onMouseEnter={e => { e.currentTarget.style.background = "var(--color-off-white)"; e.currentTarget.style.color = "#6b6860"; }}
+            onMouseEnter={e => { e.currentTarget.style.background = "var(--color-off-white)"; e.currentTarget.style.color = "var(--color-text-secondary)"; }}
             onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-grey)"; }}
           >
             + New task
@@ -2581,8 +2570,8 @@ export default function CalendarClient({
                     onClick={(e) => openQuickTask(e, t)}
                     className="flex items-center gap-1.5 px-2.5 py-[4px] rounded-full shrink-0 transition-colors"
                     style={{
-                      background: overdue ? "rgba(220,62,13,0.10)" : "rgba(155,163,122,0.14)",
-                      border: `0.5px solid ${overdue ? "rgba(220,62,13,0.28)" : "rgba(155,163,122,0.28)"}`,
+                      background: overdue ? "rgba(var(--color-red-rgb),0.10)" : "rgba(var(--color-sage-rgb),0.14)",
+                      border: `0.5px solid ${overdue ? "rgba(var(--color-red-rgb),0.28)" : "rgba(var(--color-sage-rgb),0.28)"}`,
                       color: overdue ? "var(--color-red-orange)" : "var(--color-sage-text)",
                       cursor: "pointer", fontFamily: "inherit",
                       opacity: t.completed ? 0.45 : 1,
@@ -2593,7 +2582,7 @@ export default function CalendarClient({
                       className="flex items-center justify-center"
                       style={{
                         width: 12, height: 12, borderRadius: 3,
-                        border: t.completed ? "none" : `1.5px solid ${overdue ? "var(--color-red-orange)" : "rgba(155,163,122,0.5)"}`,
+                        border: t.completed ? "none" : `1.5px solid ${overdue ? "var(--color-red-orange)" : "rgba(var(--color-sage-rgb),0.5)"}`,
                         background: t.completed ? "var(--color-sage)" : "transparent",
                       }}
                     >
@@ -2688,7 +2677,7 @@ export default function CalendarClient({
             {visiblePanDays.map((day, i) => {
               const today = isToday(day);
               const wknd  = isWeekend(day);
-              const restBg = today ? "rgba(155,163,122,0.07)" : (wknd ? WEEKEND_BG : "transparent");
+              const restBg = today ? "rgba(var(--color-sage-rgb),0.07)" : (wknd ? WEEKEND_BG : "transparent");
               return (
                 <div
                   key={i}
@@ -2789,7 +2778,7 @@ export default function CalendarClient({
                     borderLeft: "0.5px solid var(--color-border-strong)",
                     padding: "3px 3px", display: "flex", flexDirection: "column", gap: 2,
                     background: taskDrag
-                      ? "rgba(155,163,122,0.04)"
+                      ? "rgba(var(--color-sage-rgb),0.04)"
                       : (isWeekend(day) ? WEEKEND_BG : "transparent"),
                     cursor: "pointer",
                   }}
@@ -3035,7 +3024,7 @@ export default function CalendarClient({
                     >
                       {dayProjects.map(p => (
                         <div key={p.id} className="text-[10px] font-medium px-[6px] py-[1px] rounded truncate"
-                          style={{ background: "rgba(155,163,122,0.14)", color: "#5a7040", border: "0.5px solid rgba(155,163,122,0.25)" }}
+                          style={{ background: "rgba(var(--color-sage-rgb),0.14)", color: "var(--color-sage-deep)", border: "0.5px solid rgba(var(--color-sage-rgb),0.25)" }}
                         >{p.title} due</div>
                       ))}
                     </div>
@@ -3294,7 +3283,7 @@ export default function CalendarClient({
                       position: "relative",
                       height: `${GRID_HEIGHT}px`,
                       background: today
-                        ? "rgba(155,163,122,0.05)"
+                        ? "rgba(var(--color-sage-rgb),0.05)"
                         : (isWeekend(day) ? WEEKEND_BG : "transparent"),
                       cursor: "crosshair",
                       userSelect: dragCreate ? "none" : "auto",
@@ -3748,7 +3737,7 @@ export default function CalendarClient({
                   style={{
                     display: "flex", alignItems: "center", gap: 8,
                     padding: "6px 8px",
-                    borderLeft: "2.5px solid #5a7040",
+                    borderLeft: "2.5px solid var(--color-sage-deep)",
                     borderRadius: 4,
                   }}
                 >
