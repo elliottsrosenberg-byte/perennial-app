@@ -35,17 +35,20 @@ export type BadgeTone =
 
 export type BadgeVariant = "status" | "tag" | "solid";
 
+// All colour flows from globals.css tokens so Badge re-skins with the theme.
+// `rgb` is a tint base (rgba(rgb, alpha)); solidText stays a fixed contrast
+// anchor (white, or ink on the light amber fill).
 const TONES: Record<BadgeTone, { rgb: string; text: string; solid: string; solidText: string }> = {
-  sage:    { rgb: "155,163,122", text: "var(--color-sage-text)",     solid: "var(--color-sage)",       solidText: "#fff"     },
-  green:   { rgb: "141,208,71",  text: "#3d6b4f",                    solid: "#5a9e2f",                 solidText: "#fff"     },
-  amber:   { rgb: "232,197,71",  text: "#a07800",                    solid: "#e0a82e",                 solidText: "#1f211a"  },
-  orange:  { rgb: "232,133,13",  text: "#c06200",                    solid: "#e0850d",                 solidText: "#fff"     },
-  red:     { rgb: "220,62,13",   text: "var(--color-red-orange)",    solid: "var(--color-red-orange)", solidText: "#fff"     },
-  blue:    { rgb: "37,99,171",   text: "#2563ab",                    solid: "#2563ab",                 solidText: "#fff"     },
-  gold:    { rgb: "184,134,11",  text: "#b8860b",                    solid: "#b8860b",                 solidText: "#fff"     },
-  purple:  { rgb: "109,79,163",  text: "#6d4fa3",                    solid: "#6d4fa3",                 solidText: "#fff"     },
-  teal:    { rgb: "20,140,140",  text: "#148c8c",                    solid: "#148c8c",                 solidText: "#fff"     },
-  neutral: { rgb: "31,33,26",    text: "var(--color-text-tertiary)", solid: "var(--color-grey)",       solidText: "#fff"     },
+  sage:    { rgb: "var(--color-sage-rgb)",     text: "var(--color-sage-text)",     solid: "var(--color-sage)",        solidText: "#fff"     },
+  green:   { rgb: "var(--color-green-rgb)",    text: "var(--color-green-deep)",    solid: "var(--color-green-solid)", solidText: "#fff"     },
+  amber:   { rgb: "var(--color-amber-rgb)",    text: "var(--color-amber-deep)",    solid: "var(--color-amber-solid)", solidText: "#1f211a"  },
+  orange:  { rgb: "var(--color-orange-rgb)",   text: "var(--color-orange-deep)",   solid: "var(--color-orange-solid)",solidText: "#fff"     },
+  red:     { rgb: "var(--color-red-rgb)",      text: "var(--color-red-orange)",    solid: "var(--color-red-orange)",  solidText: "#fff"     },
+  blue:    { rgb: "var(--color-blue-rgb)",     text: "var(--color-blue)",          solid: "var(--color-blue)",        solidText: "#fff"     },
+  gold:    { rgb: "var(--color-gold-rgb)",     text: "var(--color-gold)",          solid: "var(--color-gold)",        solidText: "#fff"     },
+  purple:  { rgb: "var(--color-purple-rgb)",   text: "var(--color-purple)",        solid: "var(--color-purple)",      solidText: "#fff"     },
+  teal:    { rgb: "var(--color-teal-rgb)",     text: "var(--color-teal)",          solid: "var(--color-teal)",        solidText: "#fff"     },
+  neutral: { rgb: "var(--color-charcoal-rgb)", text: "var(--color-text-tertiary)", solid: "var(--color-grey)",        solidText: "#fff"     },
 };
 
 interface BadgeProps {
