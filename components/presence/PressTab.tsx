@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { PressMention, PressType, PressStats } from "@/types/database";
-import { Plus, X, ExternalLink, Trash2, ChevronDown, Newspaper, ArrowRight } from "lucide-react";
+import { Plus, ExternalLink, Trash2, ChevronDown, Newspaper, ArrowRight } from "lucide-react";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
+import Modal from "@/components/ui/Modal";
 import { fmtDateShortBlank as fmtDate } from "@/lib/format/date";
 
 const TYPE_META: Record<PressType, { label: string; color: string; bg: string }> = {
@@ -326,13 +327,20 @@ function LogCoverageModal({ onClose, onCreated }: { onClose: () => void; onCreat
   const contactOpts = [{ value: "", label: "No contact" }, ...contacts.map((c) => ({ value: c.id, label: `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "Unnamed" }))];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 py-10" style={{ background: "rgba(31,33,26,0.5)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-lg rounded-2xl shadow-2xl" style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}>
-        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-          <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>Log coverage</h2>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg" style={{ color: "var(--color-grey)" }}><X size={14} /></button>
-        </div>
+    <Modal
+      onClose={onClose}
+      title="Log coverage"
+      size="lg"
+      bodyStyle={{ padding: 0 }}
+      footer={
+        <>
+          <button onClick={onClose} className="px-4 py-2 text-[13px] rounded-lg" style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}>Cancel</button>
+          <button onClick={save} disabled={saving || !publication.trim()} className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50" style={{ background: "var(--color-sage)" }}>
+            {saving ? "Saving…" : "Log coverage"}
+          </button>
+        </>
+      }
+    >
         <div className="px-6 py-5 space-y-4">
           <div className="flex gap-3">
             <div className="flex-1">
@@ -396,13 +404,6 @@ function LogCoverageModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
           {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
         </div>
-        <div className="flex items-center justify-end gap-2 px-6 py-4" style={{ borderTop: "0.5px solid var(--color-border)" }}>
-          <button onClick={onClose} className="px-4 py-2 text-[13px] rounded-lg" style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}>Cancel</button>
-          <button onClick={save} disabled={saving || !publication.trim()} className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50" style={{ background: "var(--color-sage)" }}>
-            {saving ? "Saving…" : "Log coverage"}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

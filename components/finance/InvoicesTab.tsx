@@ -10,6 +10,7 @@ import Menu from "@/components/ui/Menu";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
+import Modal from "@/components/ui/Modal";
 import { formatInvoiceNumber, paymentMethodLabel } from "@/lib/invoices/format";
 import { buildInvoiceEmailHtml } from "@/lib/invoices/email-template";
 import { fmtDateShort as fmtDate } from "@/lib/format/date";
@@ -99,11 +100,11 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
   const lineItems = invoice.line_items ?? [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
-      style={{ background: "rgba(31,33,26,0.5)" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full rounded-2xl overflow-hidden flex flex-col"
-        style={{ maxWidth: 1160, height: "92vh", background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+    <Modal
+      onClose={onClose}
+      maxWidth={1160}
+      bodyStyle={{ padding: 0, display: "flex", flexDirection: "column", minHeight: "80vh" }}
+      header={
         <div className="flex items-center justify-between px-5 py-4 shrink-0" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
           <div>
             <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>Send invoice</h2>
@@ -116,6 +117,25 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
             <X size={14} />
           </button>
         </div>
+      }
+      footer={!sent ? (
+        <>
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-[12px] rounded-lg"
+            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
+            onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
+            onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+            Cancel
+          </button>
+          <button onClick={handleSend} disabled={loading || !to.trim()}
+            className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-medium rounded-lg text-white disabled:opacity-50"
+            style={{ background: "var(--color-sage)" }}>
+            <Send size={11} />
+            {loading ? "Sending…" : "Send invoice"}
+          </button>
+        </>
+      ) : undefined}
+    >
         {sent ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center px-5">
             <p className="text-[28px] mb-2">✓</p>
@@ -169,25 +189,7 @@ function SendInvoiceModal({ invoice, invoicePrefix, onClose, onSent }: {
             </div>
           </div>
         )}
-        {!sent && (
-          <div className="flex items-center justify-end gap-2 px-5 py-3 shrink-0" style={{ borderTop: "0.5px solid var(--color-border)" }}>
-            <button type="button" onClick={onClose}
-              className="px-4 py-2 text-[12px] rounded-lg"
-              style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-              onMouseEnter={e => e.currentTarget.style.background = "var(--color-cream)"}
-              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-              Cancel
-            </button>
-            <button onClick={handleSend} disabled={loading || !to.trim()}
-              className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-medium rounded-lg text-white disabled:opacity-50"
-              style={{ background: "var(--color-sage)" }}>
-              <Send size={11} />
-              {loading ? "Sending…" : "Send invoice"}
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 
