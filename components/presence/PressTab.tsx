@@ -10,13 +10,13 @@ import Modal from "@/components/ui/Modal";
 import { fmtDateShortBlank as fmtDate } from "@/lib/format/date";
 
 const TYPE_META: Record<PressType, { label: string; color: string; bg: string }> = {
-  feature:   { label: "Feature",   color: "var(--color-sage)", bg: "rgba(155,163,122,0.14)" },
+  feature:   { label: "Feature",   color: "var(--color-sage)", bg: "rgba(var(--color-sage-rgb),0.14)" },
   interview: { label: "Interview", color: "#7f6f9c",           bg: "rgba(173,163,192,0.20)" },
   social:    { label: "Social",    color: "#c13584",           bg: "rgba(193,53,132,0.12)" },
-  award:     { label: "Award",     color: "#a37f12",           bg: "rgba(232,197,71,0.18)" },
-  roundup:   { label: "Round-up",  color: "#2563ab",           bg: "rgba(37,99,171,0.12)" },
-  mention:   { label: "Mention",   color: "var(--color-grey)", bg: "rgba(31,33,26,0.06)" },
-  other:     { label: "Other",     color: "var(--color-grey)", bg: "rgba(31,33,26,0.06)" },
+  award:     { label: "Award",     color: "#a37f12",           bg: "rgba(var(--color-amber-rgb),0.18)" },
+  roundup:   { label: "Round-up",  color: "var(--color-blue)",           bg: "rgba(var(--color-blue-rgb),0.12)" },
+  mention:   { label: "Mention",   color: "var(--color-grey)", bg: "rgba(var(--color-charcoal-rgb),0.06)" },
+  other:     { label: "Other",     color: "var(--color-grey)", bg: "rgba(var(--color-charcoal-rgb),0.06)" },
 };
 const TYPE_ORDER: PressType[] = ["feature", "interview", "social", "award", "roundup", "mention", "other"];
 
@@ -38,7 +38,7 @@ function fmtStat(n: number): string {
 
 const cardStyle: React.CSSProperties = {
   background: "var(--color-off-white)", border: "0.5px solid var(--color-border)",
-  borderRadius: 12, boxShadow: "0 2px 8px rgba(31,33,26,0.04)",
+  borderRadius: 12, boxShadow: "0 2px 8px rgba(var(--color-charcoal-rgb),0.04)",
 };
 const titleStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 600, color: "var(--color-charcoal)",
@@ -334,7 +334,7 @@ function LogCoverageModal({ onClose, onCreated }: { onClose: () => void; onCreat
       bodyStyle={{ padding: 0 }}
       footer={
         <>
-          <button onClick={onClose} className="px-4 py-2 text-[13px] rounded-lg" style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}>Cancel</button>
+          <button onClick={onClose} className="px-4 py-2 text-[13px] rounded-lg" style={{ color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}>Cancel</button>
           <button onClick={save} disabled={saving || !publication.trim()} className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50" style={{ background: "var(--color-sage)" }}>
             {saving ? "Saving…" : "Log coverage"}
           </button>

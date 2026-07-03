@@ -122,7 +122,7 @@ export default function SidebarTimerBadge({ expanded }: Props) {
           cursor: loading ? "wait" : "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 500,
           transition: "background 0.1s ease",
         }}
-        onMouseEnter={e => e.currentTarget.style.background = "rgba(220,62,13,0.08)"}
+        onMouseEnter={e => e.currentTarget.style.background = "rgba(var(--color-red-rgb),0.08)"}
         onMouseLeave={e => e.currentTarget.style.background = "var(--color-cream)"}
       >
         <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><rect width="8" height="8" rx="1.5"/></svg>

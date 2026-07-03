@@ -16,9 +16,9 @@ interface Suggestion {
 
 const CATS = ["fair", "openCall", "award", "grant", "residency", "festival"];
 const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
-  published: { bg: "rgba(155,163,122,0.16)", fg: "var(--color-sage)" },
-  draft:     { bg: "rgba(232,197,71,0.18)",  fg: "#a37f12" },
-  archived:  { bg: "rgba(31,33,26,0.07)",    fg: "var(--color-grey)" },
+  published: { bg: "rgba(var(--color-sage-rgb),0.16)", fg: "var(--color-sage)" },
+  draft:     { bg: "rgba(var(--color-amber-rgb),0.18)",  fg: "#a37f12" },
+  archived:  { bg: "rgba(var(--color-charcoal-rgb),0.07)",    fg: "var(--color-grey)" },
 };
 
 const card: React.CSSProperties = { background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 12 };
@@ -107,7 +107,7 @@ export default function AdminClient() {
               {(["all", "published", "draft", "archived"] as const).map((s) => (
                 <button key={s} onClick={() => setStatusFilter(s)}
                   style={{ padding: "4px 11px", borderRadius: 20, fontSize: 11, cursor: "pointer", border: "none", textTransform: "capitalize",
-                    background: statusFilter === s ? "var(--color-charcoal)" : "rgba(31,33,26,0.06)",
+                    background: statusFilter === s ? "var(--color-charcoal)" : "rgba(var(--color-charcoal-rgb),0.06)",
                     color: statusFilter === s ? "white" : "var(--color-grey)", fontWeight: statusFilter === s ? 600 : 400, fontFamily: "inherit" }}>
                   {s} {counts[s]}
                 </button>
@@ -198,7 +198,7 @@ function EditModal({ opp, onClose, onSave }: { opp: Opportunity | null; onClose:
       bodyStyle={{ padding: 0 }}
       footer={
         <>
-          <button onClick={onClose} className="px-4 py-2 text-[13px] rounded-lg" style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}>Cancel</button>
+          <button onClick={onClose} className="px-4 py-2 text-[13px] rounded-lg" style={{ color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}>Cancel</button>
           <button onClick={submit} disabled={saving || !f.title.trim()} className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50" style={{ background: "var(--color-sage)" }}>{saving ? "Saving…" : "Save"}</button>
         </>
       }

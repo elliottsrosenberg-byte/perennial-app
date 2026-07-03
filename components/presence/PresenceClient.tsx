@@ -181,11 +181,11 @@ function ConnectIntegrationModal({ provider, onClose, onConnected }: {
 
 // ─── Accent palette (wireframe colours, not in design tokens) ─────────────────
 const C = {
-  accent:  "#3d6b4f", accentL:  "rgba(61,107,79,0.09)",
-  blue:    "#2563ab", blueL:    "rgba(37,99,171,0.09)",
-  purple:  "#6d4fa3", purpleL:  "rgba(109,79,163,0.09)",
-  amber:   "#b8860b", amberL:   "rgba(184,134,11,0.10)",
-  teal:    "#148c8c", tealL:    "rgba(20,140,140,0.09)",
+  accent:  "var(--color-green-deep)", accentL:  "rgba(61,107,79,0.09)",
+  blue:    "var(--color-blue)", blueL:    "rgba(var(--color-blue-rgb),0.09)",
+  purple:  "var(--color-purple)", purpleL:    "rgba(var(--color-purple-rgb),0.09)",
+  amber:   "var(--color-gold)", amberL:   "rgba(var(--color-gold-rgb),0.10)",
+  teal:    "var(--color-teal)", tealL:    "rgba(var(--color-teal-rgb),0.09)",
   red:     "#c0392b", redL:     "rgba(192,57,43,0.09)",
 };
 
@@ -268,11 +268,11 @@ function lifecycleStatus(o: Opportunity): Lifecycle | null {
   const dl = parseDate(o.application_deadline);
   const sd = parseDate(o.start_date);
   const ed = parseDate(o.end_date);
-  const RED = "var(--color-red-orange)", REDBG = "rgba(220,62,13,0.10)";
+  const RED = "var(--color-red-orange)", REDBG = "rgba(var(--color-red-rgb),0.10)";
   const AMBER = "#b3760a", AMBERBG = "rgba(232,168,46,0.20)";
-  const SAGE = "var(--color-sage)", SAGEBG = "rgba(155,163,122,0.16)";
-  const BLUE = "#2563ab", BLUEBG = "rgba(37,99,171,0.12)";
-  const GREY = "var(--color-grey)", GREYBG = "rgba(31,33,26,0.07)";
+  const SAGE = "var(--color-sage)", SAGEBG = "rgba(var(--color-sage-rgb),0.16)";
+  const BLUE = "var(--color-blue)", BLUEBG = "rgba(var(--color-blue-rgb),0.12)";
+  const GREY = "var(--color-grey)", GREYBG = "rgba(var(--color-charcoal-rgb),0.07)";
 
   if (sd && ed && sd <= now && ed >= now) return { label: "Happening now", color: SAGE, bg: SAGEBG, open: false, rank: 0 };
 
@@ -371,7 +371,7 @@ function HelpTip({ text }: { text: string }) {
       onMouseEnter={onEnter}
       onMouseLeave={() => setShow(false)}>
       <span className="flex items-center justify-center rounded-full shrink-0"
-        style={{ width: 14, height: 14, background: "var(--color-cream)", border: "0.5px solid rgba(31,33,26,0.13)", color: "var(--color-grey)", fontSize: 9, fontWeight: 700, cursor: "default" }}>?</span>
+        style={{ width: 14, height: 14, background: "var(--color-cream)", border: "0.5px solid rgba(var(--color-charcoal-rgb),0.13)", color: "var(--color-grey)", fontSize: 9, fontWeight: 700, cursor: "default" }}>?</span>
       {show && (
         <span role="tooltip"
           style={{
@@ -381,7 +381,7 @@ function HelpTip({ text }: { text: string }) {
             background: "var(--color-charcoal)", color: "white",
             fontSize: 11, lineHeight: 1.5, fontWeight: 400,
             letterSpacing: "normal", textTransform: "none",
-            boxShadow: "0 8px 24px rgba(31,33,26,0.25)", pointerEvents: "none",
+            boxShadow: "0 8px 24px rgba(var(--color-charcoal-rgb),0.25)", pointerEvents: "none",
           }}>
           {text}
           {/* pointer toward the "?" — flips with the popup */}
@@ -438,12 +438,12 @@ function StatCard({ label, value, sub, subUp = false, detail, helpText, askAsh, 
 
 function AshCard({ text, buttonLabel = "Draft with Ash" }: { text: string; buttonLabel?: string }) {
   return (
-    <div className="rounded-xl p-4" style={{ background: "rgba(155,163,122,0.1)", border: "0.5px solid rgba(155,163,122,0.25)" }}>
+    <div className="rounded-xl p-4" style={{ background: "rgba(var(--color-sage-rgb),0.1)", border: "0.5px solid rgba(var(--color-sage-rgb),0.25)" }}>
       <div className="flex items-center gap-2 mb-2">
         <img src="/Ash-Logomak.svg" alt="" style={{ width: 18, height: 18, filter: "none", opacity: 0.8 }} />
         <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-sage)" }}>Ash</span>
       </div>
-      <p style={{ fontSize: 11, color: "#5a7040", lineHeight: 1.5, marginBottom: 10 }}>{text}</p>
+      <p style={{ fontSize: 11, color: "var(--color-sage-deep)", lineHeight: 1.5, marginBottom: 10 }}>{text}</p>
       <button onClick={() => openAsh(text)} className="rounded" style={{ background: "var(--color-sage)", color: "white", border: "none", fontSize: 10, padding: "4px 10px", cursor: "pointer", fontFamily: "inherit" }}>{buttonLabel}</button>
     </div>
   );
@@ -1220,7 +1220,7 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
                 cursor: disabled ? "not-allowed" : "pointer",
                 opacity: disabled ? 0.45 : 1,
                 borderBottom: active ? "2px solid var(--color-sage)" : "2px solid transparent",
-                borderRight:"0.5px solid rgba(31,33,26,0.07)",
+                borderRight:"0.5px solid rgba(var(--color-charcoal-rgb),0.07)",
                 borderTop:"none",
                 borderLeft:"none",
                 background:"transparent",
@@ -1272,9 +1272,9 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
                   display: "flex", alignItems: "flex-start", gap: 10,
                   padding: "10px 12px",
                   borderRadius: 10,
-                  background: "rgba(220,62,13,0.07)",
+                  background: "rgba(var(--color-red-rgb),0.07)",
                   color: "var(--color-red-orange)",
-                  border: "0.5px solid rgba(220,62,13,0.2)",
+                  border: "0.5px solid rgba(var(--color-red-rgb),0.2)",
                   fontSize: 11.5,
                   lineHeight: 1.45,
                 }}>
@@ -1287,7 +1287,7 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
                       display: "block",
                       fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
                       fontSize: 10.5,
-                      background: "rgba(220,62,13,0.06)",
+                      background: "rgba(var(--color-red-rgb),0.06)",
                       padding: "5px 7px",
                       borderRadius: 5,
                       whiteSpace: "pre-wrap",
@@ -1305,7 +1305,7 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
                     flexShrink: 0,
                     padding: "5px 10px",
                     borderRadius: 6,
-                    border: "0.5px solid rgba(220,62,13,0.35)",
+                    border: "0.5px solid rgba(var(--color-red-rgb),0.35)",
                     background: "transparent",
                     color: "var(--color-red-orange)",
                     fontSize: 11,
@@ -1389,7 +1389,7 @@ function SocialsTab({ instagram, onConnect, onDisconnect, onRefreshed }: {
                 <p style={{ fontSize:12, color:"var(--color-grey)", lineHeight:1.55, maxWidth:380 }}>
                   Drafting, scheduling, and publishing posts from Perennial isn&apos;t live yet. When it ships, drafts and your queue will appear here.
                 </p>
-                <button onClick={() => openAsh("I want to plan my next Instagram post — help me think through the caption and a couple of angles.")} style={{ marginTop:4, padding:"6px 14px", borderRadius:6, border:"0.5px solid rgba(155,163,122,0.4)", background:"rgba(155,163,122,0.1)", color:"#5a7040", fontSize:11, cursor:"pointer", fontFamily:"inherit" }}>
+                <button onClick={() => openAsh("I want to plan my next Instagram post — help me think through the caption and a couple of angles.")} style={{ marginTop:4, padding:"6px 14px", borderRadius:6, border:"0.5px solid rgba(var(--color-sage-rgb),0.4)", background:"rgba(var(--color-sage-rgb),0.1)", color:"var(--color-sage-deep)", fontSize:11, cursor:"pointer", fontFamily:"inherit" }}>
                   Brainstorm a post with Ash
                 </button>
               </div>
@@ -1571,10 +1571,10 @@ const MIN_ROW_H = 96;
 
 // More opaque colors for calendar bars
 const calBg: Record<string, string> = {
-  fair:      "rgba(37,99,171,0.18)",
-  openCall:  "rgba(20,140,140,0.18)",
-  grant:     "rgba(109,79,163,0.18)",
-  award:     "rgba(184,134,11,0.20)",
+  fair:      "rgba(var(--color-blue-rgb),0.18)",
+  openCall:  "rgba(var(--color-teal-rgb),0.18)",
+  grant:     "rgba(var(--color-purple-rgb),0.18)",
+  award:     "rgba(var(--color-gold-rgb),0.20)",
   residency: "rgba(61,107,79,0.18)",
 };
 
@@ -1616,7 +1616,7 @@ function MonthCalendar({ opps, onSelect }: { opps: Opportunity[]; onSelect: (id:
             const { dark } = catColor(cat);
             return <div key={cat} className="flex items-center gap-1" style={{ fontSize:10, color:"var(--color-grey)" }}><div style={{ width:10, height:10, borderRadius:2, background:calBg[cat] ?? calBg.fair, border:`1.5px solid ${dark}` }} />{label}</div>;
           })}
-          <div className="flex items-center gap-1" style={{ fontSize:10, color:"var(--color-grey)" }}><div style={{ width:10, height:10, borderRadius:2, background:"rgba(220,62,13,0.10)", border:"0.5px dashed var(--color-red-orange)" }} />⚑ Deadlines</div>
+          <div className="flex items-center gap-1" style={{ fontSize:10, color:"var(--color-grey)" }}><div style={{ width:10, height:10, borderRadius:2, background:"rgba(var(--color-red-rgb),0.10)", border:"0.5px dashed var(--color-red-orange)" }} />⚑ Deadlines</div>
         </div>
       </div>
 
@@ -1658,7 +1658,7 @@ function MonthCalendar({ opps, onSelect }: { opps: Opportunity[]; onSelect: (id:
                 if (we.lane >= MAX_LANES) return null;
                 const { dark } = catColor(we.event.category);
                 const isDeadline = we.event.kind === "deadline";
-                const bg = isDeadline ? "rgba(220,62,13,0.10)" : (calBg[we.event.category] ?? calBg.fair);
+                const bg = isDeadline ? "rgba(var(--color-red-rgb),0.10)" : (calBg[we.event.category] ?? calBg.fair);
                 const fg = isDeadline ? "var(--color-red-orange)" : dark;
                 const leftPct = (we.startCol / 7) * 100;
                 const widthPct = (we.span / 7) * 100;
@@ -1837,7 +1837,7 @@ function OppDetail({ opp, onClose, onDismiss, onStatusChange }: {
           <div style={{ fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em", color:"var(--color-grey)", marginBottom:8 }}>My status</div>
           <div className="flex flex-wrap gap-2">
             {(["saved","attending","exhibiting","applied"] as const).map(s => (
-              <button key={s} onClick={() => setStatus(s)} style={{ padding:"4px 10px", borderRadius:20, fontSize:11, cursor:"pointer", border:`0.5px solid ${opp.user_status===s?dark:"rgba(31,33,26,0.13)"}`, background:opp.user_status===s?light:"transparent", color:opp.user_status===s?dark:"var(--color-grey)", fontFamily:"inherit", textTransform:"capitalize" }}>{s}</button>
+              <button key={s} onClick={() => setStatus(s)} style={{ padding:"4px 10px", borderRadius:20, fontSize:11, cursor:"pointer", border:`0.5px solid ${opp.user_status===s?dark:"rgba(var(--color-charcoal-rgb),0.13)"}`, background:opp.user_status===s?light:"transparent", color:opp.user_status===s?dark:"var(--color-grey)", fontFamily:"inherit", textTransform:"capitalize" }}>{s}</button>
             ))}
           </div>
         </div>
@@ -1847,7 +1847,7 @@ function OppDetail({ opp, onClose, onDismiss, onStatusChange }: {
       <div style={{ borderTop:"0.5px solid var(--color-border)", padding:"12px 16px" }}>
         <button
           onClick={handleDismiss}
-          style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:6, border:"0.5px solid rgba(31,33,26,0.13)", background:"transparent", color:"var(--color-grey)", fontSize:11, cursor:"pointer", fontFamily:"inherit" }}
+          style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:6, border:"0.5px solid rgba(var(--color-charcoal-rgb),0.13)", background:"transparent", color:"var(--color-grey)", fontSize:11, cursor:"pointer", fontFamily:"inherit" }}
         >
           <IcEyeOff /> Not interested — hide from feed
         </button>
@@ -1894,13 +1894,13 @@ function OppCard({
 
   const ghostBtn: React.CSSProperties = {
     padding:"5px 11px", borderRadius:6, fontSize:11, fontFamily:"inherit",
-    border:"0.5px solid rgba(31,33,26,0.13)", background:"transparent",
+    border:"0.5px solid rgba(var(--color-charcoal-rgb),0.13)", background:"transparent",
     color:"var(--color-grey)", cursor:"pointer",
   };
   const sageOutlineBtn: React.CSSProperties = {
     padding:"5px 11px", borderRadius:6, fontSize:11, fontFamily:"inherit", fontWeight:500,
-    border:"0.5px solid rgba(155,163,122,0.5)", background:"rgba(155,163,122,0.08)",
-    color:"#5a7040", cursor:"pointer",
+    border:"0.5px solid rgba(var(--color-sage-rgb),0.5)", background:"rgba(var(--color-sage-rgb),0.08)",
+    color:"var(--color-sage-deep)", cursor:"pointer",
   };
   const sageFilledBtn: React.CSSProperties = {
     padding:"5px 11px", borderRadius:6, fontSize:11, fontFamily:"inherit", fontWeight:500,
@@ -1914,8 +1914,8 @@ function OppCard({
       style={{
         background: selected ? "var(--color-warm-white)" : "var(--color-off-white)",
         borderRadius:12,
-        boxShadow: selected ? "0 4px 16px rgba(31,33,26,0.10)" : "0 2px 8px rgba(31,33,26,0.04)",
-        outline: active ? "1.5px solid var(--color-sage)" : "0.5px solid rgba(31,33,26,0.08)",
+        boxShadow: selected ? "0 4px 16px rgba(var(--color-charcoal-rgb),0.10)" : "0 2px 8px rgba(var(--color-charcoal-rgb),0.04)",
+        outline: active ? "1.5px solid var(--color-sage)" : "0.5px solid rgba(var(--color-charcoal-rgb),0.08)",
         outlineOffset: 0,
         padding:"14px 16px",
         display:"flex", flexDirection:"column", gap:10,
@@ -1925,7 +1925,7 @@ function OppCard({
         <div className="flex items-start gap-2">
           <h3 style={{ flex:1, fontSize:14, fontWeight:650, lineHeight:1.3, fontFamily:"var(--font-display)", color:"var(--color-charcoal)", margin:0 }}>{opp.title}</h3>
           {recommended && !status && (
-            <span title="Matches your disciplines" style={{ fontSize:9, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.03em", padding:"2px 7px", borderRadius:999, background:"rgba(155,163,122,0.16)", color:"#5a7040", whiteSpace:"nowrap" }}>✦ For you</span>
+            <span title="Matches your disciplines" style={{ fontSize:9, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.03em", padding:"2px 7px", borderRadius:999, background:"rgba(var(--color-sage-rgb),0.16)", color:"var(--color-sage-deep)", whiteSpace:"nowrap" }}>✦ For you</span>
           )}
           {status && <StatusBadge status={status} />}
         </div>
@@ -2034,18 +2034,18 @@ function DisciplineFilter({ options, selected, onChange, recommendedTags }: {
           fontSize:11.5, fontWeight:500, fontFamily:"inherit", cursor:"pointer",
           padding:"5px 26px 5px 11px", borderRadius:999, position:"relative",
           border:"0.5px solid var(--color-border)",
-          background: selected.length ? "rgba(155,163,122,0.12)" : "var(--color-off-white)",
-          color: selected.length ? "#5a7040" : "var(--color-charcoal)", outline:"none",
+          background: selected.length ? "rgba(var(--color-sage-rgb),0.12)" : "var(--color-off-white)",
+          color: selected.length ? "var(--color-sage-deep)" : "var(--color-charcoal)", outline:"none",
         }}>
         {label}
         <ChevronDown size={13} style={{ position:"absolute", right:9, top:"50%", transform:"translateY(-50%)", color:"var(--color-grey)", pointerEvents:"none" }} />
       </button>
       {open && (
-        <div role="menu" style={{ position:"absolute", top:"calc(100% + 6px)", right:0, zIndex:40, width:200, maxHeight:320, overflowY:"auto", background:"var(--color-off-white)", border:"0.5px solid var(--color-border)", borderRadius:12, boxShadow:"0 12px 28px rgba(31,33,26,0.16)", padding:6 }}>
+        <div role="menu" style={{ position:"absolute", top:"calc(100% + 6px)", right:0, zIndex:40, width:200, maxHeight:320, overflowY:"auto", background:"var(--color-off-white)", border:"0.5px solid var(--color-border)", borderRadius:12, boxShadow:"0 12px 28px rgba(var(--color-charcoal-rgb),0.16)", padding:6 }}>
           {recPresent.length > 0 && (
             <>
               <button type="button" onClick={() => onChange(forYouOn ? [] : recPresent)}
-                style={{ all:"unset", display:"flex", alignItems:"center", gap:8, width:"100%", boxSizing:"border-box", padding:"7px 10px", borderRadius:8, fontSize:12, cursor:"pointer", color:"#5a7040", fontWeight:600, background: forYouOn ? "rgba(155,163,122,0.14)" : "transparent" }}>
+                style={{ all:"unset", display:"flex", alignItems:"center", gap:8, width:"100%", boxSizing:"border-box", padding:"7px 10px", borderRadius:8, fontSize:12, cursor:"pointer", color:"var(--color-sage-deep)", fontWeight:600, background: forYouOn ? "rgba(var(--color-sage-rgb),0.14)" : "transparent" }}>
                 ✦ For you
               </button>
               <div style={{ height:"0.5px", background:"var(--color-border)", margin:"5px 4px" }} />
@@ -2124,7 +2124,7 @@ function SuggestListingModal({ onClose }: { onClose: () => void }) {
       bodyStyle={{ padding: 0 }}
       footer={done ? undefined : (
         <>
-          <button onClick={onClose} className="px-4 py-2 text-[13px] rounded-lg" style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}>Cancel</button>
+          <button onClick={onClose} className="px-4 py-2 text-[13px] rounded-lg" style={{ color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border)" }}>Cancel</button>
           <button onClick={submit} disabled={saving || !title.trim()} className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50" style={{ background: "var(--color-sage)" }}>
             {saving ? "Sending…" : "Send suggestion"}
           </button>
@@ -2318,7 +2318,7 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId, recommendedTags = 
         {/* View toggle — list vs calendar. */}
         <div className="flex shrink-0" style={{ background:"var(--color-cream)", border:"0.5px solid var(--color-border)", borderRadius:6 }}>
           {(["list","calendar"] as OppView[]).map((v,i) => (
-            <button key={v} onClick={() => setView(v)} title={v === "list" ? "Card view" : "Calendar view"} style={{ padding:"4px 10px", background:view===v?"var(--color-off-white)":"transparent", border:view===v?"0.5px solid rgba(31,33,26,0.13)":"none", borderRadius:5, color:view===v?"var(--color-charcoal)":"var(--color-grey)", cursor:"pointer", display:"flex", alignItems:"center", boxShadow:view===v?"0 1px 3px rgba(0,0,0,0.06)":"none", borderRight:i===0?"0.5px solid var(--color-border)":undefined }}>
+            <button key={v} onClick={() => setView(v)} title={v === "list" ? "Card view" : "Calendar view"} style={{ padding:"4px 10px", background:view===v?"var(--color-off-white)":"transparent", border:view===v?"0.5px solid rgba(var(--color-charcoal-rgb),0.13)":"none", borderRadius:5, color:view===v?"var(--color-charcoal)":"var(--color-grey)", cursor:"pointer", display:"flex", alignItems:"center", boxShadow:view===v?"0 1px 3px rgba(0,0,0,0.06)":"none", borderRight:i===0?"0.5px solid var(--color-border)":undefined }}>
               {v === "list" ? <IcList /> : <IcCalSm />}
             </button>
           ))}
@@ -2343,8 +2343,8 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId, recommendedTags = 
             style={{
               display:"inline-flex", alignItems:"center", gap:4, padding:"4px 11px", borderRadius:20, fontSize:11, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap",
               fontWeight: savedOnly ? 600 : 500,
-              background: savedOnly ? "var(--color-sage)" : "rgba(155,163,122,0.12)",
-              color: savedOnly ? "white" : "#5a7040", border:"none",
+              background: savedOnly ? "var(--color-sage)" : "rgba(var(--color-sage-rgb),0.12)",
+              color: savedOnly ? "white" : "var(--color-sage-deep)", border:"none",
             }}>
             ★ Saved{savedCount > 0 ? ` ${savedCount}` : ""}
           </button>
@@ -2357,7 +2357,7 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId, recommendedTags = 
               <button key={key} type="button" onClick={() => setFilter(key)}
                 style={{
                   padding:"4px 11px", borderRadius:20, fontSize:11, cursor:"pointer",
-                  background: active ? "var(--color-charcoal)" : "rgba(31,33,26,0.06)",
+                  background: active ? "var(--color-charcoal)" : "rgba(var(--color-charcoal-rgb),0.06)",
                   color: active ? "var(--color-off-white)" : "var(--color-grey)",
                   border:"none", fontWeight: active ? 600 : 400,
                   fontFamily:"inherit", whiteSpace:"nowrap",
@@ -2412,9 +2412,9 @@ function OpportunitiesTab({ opps: initialOpps, deepLinkOppId, recommendedTags = 
                 </p>
                 <button
                   onClick={() => openAsh("What opportunities — art fairs, open calls, grants, residencies — should I be aware of as an independent designer right now?")}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 18px", fontSize: 12, fontWeight: 500, borderRadius: 8, background: "rgba(155,163,122,0.1)", color: "#5a7040", border: "0.5px solid rgba(155,163,122,0.3)", cursor: "pointer", fontFamily: "inherit" }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(155,163,122,0.18)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "rgba(155,163,122,0.1)")}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 18px", fontSize: 12, fontWeight: 500, borderRadius: 8, background: "rgba(var(--color-sage-rgb),0.1)", color: "var(--color-sage-deep)", border: "0.5px solid rgba(var(--color-sage-rgb),0.3)", cursor: "pointer", fontFamily: "inherit" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.18)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.1)")}
                 >
                   Ask Ash about opportunities →
                 </button>
@@ -2555,8 +2555,8 @@ export default function PresenceClient({ initialOpportunities, practiceTypes = [
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <header className="flex items-stretch shrink-0" style={{ height:44, borderBottom:"0.5px solid rgba(31,33,26,0.18)", background:"var(--color-off-white)" }}>
-        <div className="flex items-center gap-3 shrink-0" style={{ padding:"0 20px", borderRight:"0.5px solid rgba(31,33,26,0.13)" }}>
+      <header className="flex items-stretch shrink-0" style={{ height:44, borderBottom:"0.5px solid rgba(var(--color-charcoal-rgb),0.18)", background:"var(--color-off-white)" }}>
+        <div className="flex items-center gap-3 shrink-0" style={{ padding:"0 20px", borderRight:"0.5px solid rgba(var(--color-charcoal-rgb),0.13)" }}>
           <span style={{ fontSize:14, fontWeight:650, color:"var(--color-charcoal)" }}>Presence</span>
           <span style={{ fontSize:11, color:"var(--color-grey)" }}>{period}</span>
         </div>
@@ -2566,7 +2566,7 @@ export default function PresenceClient({ initialOpportunities, practiceTypes = [
               key={t.key}
               onClick={() => setTab(t.key)}
               data-tour-target={t.key === "opportunities" ? "presence.tab-opportunities" : undefined}
-              style={{ padding:"0 18px", fontSize:12, color:tab===t.key?"var(--color-charcoal)":"var(--color-grey)", cursor:"pointer", borderBottom:tab===t.key?"2px solid var(--color-sage)":"2px solid transparent", borderRight:"0.5px solid rgba(31,33,26,0.07)", borderTop:"none", borderLeft:"none", background:"transparent", fontWeight:tab===t.key?600:400, whiteSpace:"nowrap", fontFamily:"inherit" }}
+              style={{ padding:"0 18px", fontSize:12, color:tab===t.key?"var(--color-charcoal)":"var(--color-grey)", cursor:"pointer", borderBottom:tab===t.key?"2px solid var(--color-sage)":"2px solid transparent", borderRight:"0.5px solid rgba(var(--color-charcoal-rgb),0.07)", borderTop:"none", borderLeft:"none", background:"transparent", fontWeight:tab===t.key?600:400, whiteSpace:"nowrap", fontFamily:"inherit" }}
             >{t.label}</button>
           ))}
         </div>

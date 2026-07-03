@@ -19,7 +19,7 @@ export default function MobileDesktopNotice() {
         style={{
           width: 60, height: 60, borderRadius: 18, marginBottom: 22,
           display: "flex", alignItems: "center", justifyContent: "center",
-          background: "rgba(155,163,122,0.12)",
+          background: "rgba(var(--color-sage-rgb),0.12)",
         }}
       >
         <Monitor size={28} strokeWidth={1.5} style={{ color: "var(--color-sage)" }} />

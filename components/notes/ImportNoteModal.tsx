@@ -527,8 +527,8 @@ export default function ImportNoteModal({ onClose, onImported }: Props) {
 
               <div style={{
                 marginTop: 16, padding: "12px 14px", borderRadius: 10,
-                background: "rgba(155,163,122,0.08)",
-                border: "0.5px solid rgba(155,163,122,0.20)",
+                background: "rgba(var(--color-sage-rgb),0.08)",
+                border: "0.5px solid rgba(var(--color-sage-rgb),0.20)",
               }}>
                 <p style={{ fontSize: 11, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 4 }}>
                   What gets imported
@@ -666,7 +666,7 @@ export default function ImportNoteModal({ onClose, onImported }: Props) {
             <div style={{ padding: "20px 0", textAlign: "center" }}>
               <div style={{
                 width: 44, height: 44, borderRadius: "50%",
-                background: "rgba(155,163,122,0.16)",
+                background: "rgba(var(--color-sage-rgb),0.16)",
                 margin: "0 auto 12px",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 color: "var(--color-sage)",
