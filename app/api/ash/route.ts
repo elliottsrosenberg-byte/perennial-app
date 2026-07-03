@@ -94,12 +94,13 @@ export async function POST(req: Request) {
           for (let turn = 0; turn < 5; turn++) {
             const stream = anthropic.messages.stream({
               model:      "claude-sonnet-5",
-              max_tokens: 2048,
-              // Sonnet 5 runs adaptive thinking when `thinking` is omitted; keep
-              // Ash snappy by leaving it off. To trade latency for deeper reasoning,
-              // switch to { type: "adaptive" } and raise max_tokens (~4096) so the
-              // answer isn't truncated by thinking spend.
-              thinking:   { type: "disabled" },
+              // Streaming, so a large ceiling is safe; leaves room for adaptive
+              // thinking + the tool loop + the answer without truncation.
+              max_tokens: 8192,
+              // Adaptive thinking: Sonnet 5 decides when a question needs real
+              // reasoning and thinks only then — simple lookups stay fast, while
+              // nuanced advice (pricing tradeoffs, strategy) gets deliberate reasoning.
+              thinking:   { type: "adaptive" },
               system:     systemBlocks as Anthropic.TextBlockParam[],
               tools,
               messages,
