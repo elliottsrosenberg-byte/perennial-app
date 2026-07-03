@@ -75,6 +75,7 @@ returns table (
 )
 language sql
 stable
+set search_path = public
 as $$
   select
     kb.id,
