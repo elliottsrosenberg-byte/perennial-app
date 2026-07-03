@@ -8,6 +8,7 @@ import Checkbox from "@/components/ui/Checkbox";
 import Badge, { type BadgeTone } from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import Card from "@/components/ui/Card";
 import {
   // Navigation
   LayoutDashboard, Layers, Users, Send, FileText, Calendar, Receipt, Globe, FolderOpen, Settings, Palette, Compass,
@@ -1234,10 +1235,11 @@ function FilterTabsSection() {
 
 function CardsSection() {
   return (
-    <Section id="cards" title="Cards" description="Card pattern used across the home dashboard, project grid, and detail panels.">
+    <Section id="cards" title="Cards" description="Card surface used across the home dashboard, project grid, and detail panels. One Card primitive, three variants.">
+      <SubSection title="In context">
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
         {/* Standard card */}
-        <div style={{ background: "var(--color-surface-raised)", borderRadius: 14, boxShadow: "var(--shadow-card)", overflow: "hidden" }}>
+        <Card padding="none">
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: "0.5px solid var(--color-border)" }}>
             <span style={{ fontSize: 12, fontWeight: 600, flex: 1, color: "var(--color-text-primary)" }}>Standard Card</span>
             <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 9999, background: "var(--color-surface-sunken)", border: "0.5px solid var(--color-border)", color: "var(--color-text-tertiary)" }}>
@@ -1250,13 +1252,13 @@ function CardsSection() {
               <span style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>{r.split(" · ")[1]}</span>
             </div>
           ))}
-        </div>
+        </Card>
 
         {/* Project card */}
-        <div style={{ background: "var(--color-surface-raised)", borderRadius: 14, boxShadow: "var(--shadow-card)", padding: "14px 16px" }}>
+        <Card interactive style={{ padding: "14px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 9999, background: "rgba(37,99,171,0.10)", color: "#2563ab" }}>Client</span>
-            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 9999, background: "rgba(141,208,71,0.15)", color: "#3d6b4f" }}>In Progress</span>
+            <Badge tone="blue" variant="status">Client</Badge>
+            <Badge tone="green" variant="status">In Progress</Badge>
           </div>
           <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 4 }}>Foster Apartment</p>
           <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginBottom: 12 }}>Interior furniture spec · 3 pieces</p>
@@ -1267,10 +1269,10 @@ function CardsSection() {
             <span>3 of 5 tasks</span>
             <span style={{ color: "#a07800" }}>Due May 14</span>
           </div>
-        </div>
+        </Card>
 
         {/* Home dashboard stat card */}
-        <div style={{ background: "var(--color-surface-raised)", borderRadius: 14, boxShadow: "var(--shadow-card)", overflow: "hidden" }}>
+        <Card padding="none">
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: "0.5px solid var(--color-border)" }}>
             <span style={{ fontSize: 12, fontWeight: 600, flex: 1, color: "var(--color-text-primary)" }}>Needs attention</span>
             <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 9999, background: "var(--color-surface-sunken)", border: "0.5px solid var(--color-border)", color: "var(--color-text-tertiary)" }}>3</span>
@@ -1291,8 +1293,24 @@ function CardsSection() {
               <span style={{ fontSize: 10, fontWeight: 500, color: c.color, flexShrink: 0 }}>{c.ago}</span>
             </div>
           ))}
-        </div>
+        </Card>
       </div>
+      </SubSection>
+
+      <SubSection title="Variants">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+          {([
+            { v: "raised", label: "Raised", note: "surface-raised · shadow-card" },
+            { v: "flat",   label: "Flat",   note: "surface-raised · border · no shadow" },
+            { v: "sunken", label: "Sunken", note: "surface-sunken · border" },
+          ] as const).map((c) => (
+            <Card key={c.v} variant={c.v} padding="lg">
+              <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 4 }}>{c.label}</p>
+              <p style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>{c.note}</p>
+            </Card>
+          ))}
+        </div>
+      </SubSection>
     </Section>
   );
 }
