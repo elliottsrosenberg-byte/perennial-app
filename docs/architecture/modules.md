@@ -417,7 +417,7 @@ This document is a module-by-module architecture reference for the Perennial app
 - Org panel fires `outreach:open-target` to jump into Outreach
 
 ### Known TODOs / mocked
-- `NetworkOptionsMenu.tsx:109-126` — tag manager is a placeholder ("Rename, recolour, prune — coming soon")
+- `NetworkOptionsMenu.tsx:109-126` — tag manager is a placeholder ("Rename, recolor, prune — coming soon")
 - `OrganizationDetailPanel.tsx:1176` — TODO: "Projects involving this org" section (projects→orgs link not yet surfaced)
 - `ImportContactsModal.tsx:260` — sets `lead_stage:'identified'` on import, but the `LeadStage` enum uses `'new'` (likely stale stage value mismatch)
 - ContactDetailPanel `ContactFilesTab` uses public `contact-files` bucket with `getPublicUrl` (no signed URLs)
@@ -785,7 +785,7 @@ This document is a module-by-module architecture reference for the Perennial app
 - `components/projects/ProjectCard.tsx` — card UI; timeline bar, task progress, type-specific props (client vs object), due badge; reads `useProjectOptions().resolve` for status/type/priority colors
 - `components/projects/ProjectDetailPanel.tsx` — 2156-line scrim/detail panel with 5 workspace tabs (Canvas/Tasks/Contacts/Notes/Files), left rail of project properties + Ash module, finance cross-module fetch, settings/delete. Inline sub-components: CanvasEditor, ProjectTasksTab, NotesTab, FilesTab, ContactsTab, CustomSelect, DatePillField, EditableField/Title/Description, InlineNoteEditor, TaskDatePicker, TaskPriorityPicker
 - `components/projects/NewProjectModal.tsx` — centered modal (maxWidth 520); type/status/priority Selects, dates, type-specific fields; inserts into `projects` then `onCreated`
-- `components/projects/OptionsMenu.tsx` — 340px dropdown to rename/recolour/reorder/add/delete status/type/priority options; HTML5 drag reorder; delete gated by in-use count; persists to `profiles.project_options`
+- `components/projects/OptionsMenu.tsx` — 340px dropdown to rename/recolor/reorder/add/delete status/type/priority options; HTML5 drag reorder; delete gated by in-use count; persists to `profiles.project_options`
 - `lib/projects/options.tsx` — `ProjectOptionsContext`: fetches `profiles.project_options` once per page mount, exposes options/resolve/setDimension; `DEFAULT_PROJECT_OPTIONS` + `OPTION_PALETTE` + `slugifyOptionKey`
 - `components/tour/projects/ProjectsIntroModal.tsx` + `ProjectsTooltipTour.tsx` — onboarding
 

@@ -1,7 +1,7 @@
 "use client";
 
 // Project options editor — surfaces Status / Type / Priority lists and lets
-// the user rename, recolour, reorder, add, or delete. Persists to
+// the user rename, recolor, reorder, add, or delete. Persists to
 // profiles.project_options via the ProjectOptionsContext.
 //
 // Reorder uses native HTML5 drag-and-drop on each row's grip handle (kept
@@ -109,7 +109,7 @@ export default function OptionsMenu({ onClose }: { onClose: () => void }) {
           color: "var(--color-text-tertiary)",
           marginTop: 8,
         }}>
-          Drag the grip to reorder. Click a swatch to change its colour.
+          Drag the grip to reorder. Click a swatch to change its color.
           Renaming keeps existing projects pointing at the same option — only
           the label changes.
         </p>
@@ -136,7 +136,7 @@ function DimensionEditor({
   function rename(i: number, label: string) {
     onChange(items.map((it, idx) => idx === i ? { ...it, label } : it));
   }
-  function recolour(i: number, color: string) {
+  function recolor(i: number, color: string) {
     onChange(items.map((it, idx) => idx === i ? { ...it, color } : it));
   }
   function remove(i: number) {
@@ -193,7 +193,7 @@ function DimensionEditor({
             option={it}
             inUseCount={counts[it.key] ?? 0}
             onRename={(l) => rename(i, l)}
-            onRecolour={(c) => recolour(i, c)}
+            onRecolor={(c) => recolor(i, c)}
             onRemove={() => remove(i)}
             onDragStart={() => onDragStart(i)}
             onDragOver={onDragOver}
@@ -237,13 +237,13 @@ function DimensionEditor({
 
 function OptionRow({
   option, inUseCount,
-  onRename, onRecolour, onRemove,
+  onRename, onRecolor, onRemove,
   onDragStart, onDragOver, onDrop,
 }: {
   option:     ProjectOption;
   inUseCount: number;
   onRename:   (label: string) => void;
-  onRecolour: (color: string) => void;
+  onRecolor: (color: string) => void;
   onRemove:   () => void;
   onDragStart: () => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -308,8 +308,8 @@ function OptionRow({
         <button
           type="button"
           onClick={() => setPaletteOpen((v) => !v)}
-          aria-label="Change colour"
-          title="Change colour"
+          aria-label="Change color"
+          title="Change color"
           style={{
             width: 12, height: 12, borderRadius: 99,
             background: option.color,
@@ -336,7 +336,7 @@ function OptionRow({
               <button
                 key={p.value}
                 type="button"
-                onClick={() => { onRecolour(p.value); setPaletteOpen(false); }}
+                onClick={() => { onRecolor(p.value); setPaletteOpen(false); }}
                 title={p.name}
                 aria-label={p.name}
                 style={{

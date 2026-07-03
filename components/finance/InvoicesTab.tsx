@@ -247,7 +247,7 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }>
 
 // Status → Badge tone (solid variant). The menu swatch still reads STATUS_STYLE.
 const STATUS_TONE: Record<string, BadgeTone> = {
-  draft: "blue", saved: "blue", sent: "amber", paid: "sage", overdue: "red", voided: "neutral",
+  draft: "blue", saved: "blue", sent: "yellow", paid: "sage", overdue: "red", voided: "grey",
 };
 
 // Left-stripe color per status for the list rows.

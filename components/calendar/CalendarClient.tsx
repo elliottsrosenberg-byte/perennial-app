@@ -866,7 +866,7 @@ interface CalEvent {
   location: string | null;
   htmlLink: string | null;
   colorId: string | null;
-  // Parent calendar's colour, resolved server-side. Lets chips paint with
+  // Parent calendar's color, resolved server-side. Lets chips paint with
   // the right tint immediately instead of waiting on the /calendars fetch.
   color?: string | null;
   source?: "google" | "microsoft";
@@ -1030,9 +1030,9 @@ export default function CalendarClient({
   const [openEvent,       setOpenEvent]       = useState<CalEvent | null>(null);
   const [openEventAnchor, setOpenEventAnchor] = useState<DOMRect | null>(null);
   const [eventsLoading,   setEventsLoading]   = useState(false);
-  // Map of user_calendars.id → row, used to colour event chips by the
+  // Map of user_calendars.id → row, used to color event chips by the
   // calendar the user chose in the left rail rather than by the per-event
-  // Google colorId. Refreshes on `calendar:refresh-events` so a colour
+  // Google colorId. Refreshes on `calendar:refresh-events` so a color
   // change in the sources panel reflects on the grid immediately.
   const [calendarsById,   setCalendarsById]   = useState<Record<string, UserCalendar>>({});
   const [defaultCalendarId, setDefaultCalendarId] = useState<string | null>(null);
@@ -1737,8 +1737,8 @@ export default function CalendarClient({
     return () => { cancelled = true; };
   }, [fetchRange, viewMode, anyConnected, refreshNonce]);
 
-  // Fetch the user_calendars list so we can colour each event chip by the
-  // calendar's chosen colour. Re-fetches on `calendar:refresh-events`
+  // Fetch the user_calendars list so we can color each event chip by the
+  // calendar's chosen color. Re-fetches on `calendar:refresh-events`
   // (dispatched after sources panel toggles, account connects, etc.).
   useEffect(() => {
     let cancelled = false;
@@ -1755,7 +1755,7 @@ export default function CalendarClient({
         .catch(() => {});
     }
     load();
-    // Listen for granular calendar-row mutations so colour / visibility
+    // Listen for granular calendar-row mutations so color / visibility
     // changes apply immediately instead of waiting for the full re-fetch.
     function onRowChanged(e: Event) {
       const detail = (e as CustomEvent<{ id: string; patch: Partial<UserCalendar> }>).detail;
@@ -1784,18 +1784,18 @@ export default function CalendarClient({
   }, []);
 
   // Color the new-event drag ghost (and the EventCard submit button) with
-  // the user's default-calendar colour so the in-progress creation visibly
+  // the user's default-calendar color so the in-progress creation visibly
   // matches the chip it'll become once submitted.
   const defaultCalColor = defaultCalendarId && calendarsById[defaultCalendarId]?.color
     ? (calendarsById[defaultCalendarId]!.color as string)
     : "var(--color-sage)";
 
-  // Per-event colour: prefer the user_calendars colour the user picked in
+  // Per-event color: prefer the user_calendars color the user picked in
   // the left rail; fall back to the per-event Google colorId; final
   // fallback is the provider's default tint.
   function eventColor(e: CalEvent): string {
-    // Prefer the live calendarsById colour (reflects an in-session recolour
-    // before events refetch); then the colour the server stamped on the
+    // Prefer the live calendarsById color (reflects an in-session recolor
+    // before events refetch); then the color the server stamped on the
     // event; then the per-event Google colorId; finally the provider tint.
     const cal = e.calendarId ? calendarsById[e.calendarId] : null;
     if (cal?.color) return cal.color;
@@ -3160,7 +3160,7 @@ export default function CalendarClient({
 
                 {/* In-flight all-day drag ghost — spans the cells the
                     user has dragged across, in the default-calendar
-                    colour. Visible whether the drag is active or has
+                    color. Visible whether the drag is active or has
                     just landed (the create card is still open). */}
                 {allDayDrag && (allDayDrag.startIdx !== allDayDrag.currentIdx || !allDayDrag.active === false) && (() => {
                   // Only show the ghost once the user has actually moved
