@@ -221,6 +221,8 @@ export default async function PublicInvoicePage({
           max-width: 1080px; margin: 24px auto 0; text-align: center;
           font-size: 11px; color: #9a9690;
         }
+        .pi-foot a { color: inherit; text-decoration: none; transition: color 0.15s; }
+        .pi-foot a:hover { color: #6b6860; }
 
         /* Phones: this page is client-facing (clients pay invoices on mobile),
            so it must stay usable. Tighten fixed paddings, stack the header and
@@ -397,7 +399,9 @@ export default async function PublicInvoicePage({
           )}
         </div>
 
-        <p className="pi-foot">Powered by Perennial</p>
+        <p className="pi-foot">
+          <a href="https://app.perennial.design" target="_blank" rel="noreferrer">Powered by Perennial</a>
+        </p>
       </div>
     </>
   );
