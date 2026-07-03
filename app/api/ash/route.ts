@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { buildAshContext } from "@/lib/ash/context";
 import { STATIC_SYSTEM_PROMPT, buildDynamicContext } from "@/lib/ash/system-prompt";
-import { ANTHROPIC_TOOLS, executeTool } from "@/lib/ash/tools";
+import { ANTHROPIC_TOOLS, executeTool, buildCapabilitiesManifest } from "@/lib/ash/tools";
 
 export const runtime    = "nodejs";
 export const maxDuration = 60;
@@ -56,6 +56,7 @@ export async function POST(req: Request) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const systemBlocks: any[] = [
       { type: "text", text: STATIC_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
+      { type: "text", text: buildCapabilitiesManifest(), cache_control: { type: "ephemeral" } },
       { type: "text", text: buildDynamicContext(context) },
     ];
 
