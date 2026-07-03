@@ -1,0 +1,48 @@
+{
+  "pkg": "perennial-app",
+  "globalName": "PerennialDS",
+  "shape": "package",
+  "projectId": "cee98ece-77dc-4faa-807c-1e34b3067020",
+  "srcDir": "components/ui",
+  "tsconfig": "tsconfig.json",
+  "cssEntry": ".design-sync/tokens.css",
+  "readmeHeader": ".design-sync/conventions.md",
+  "guidelinesGlob": [],
+  "componentSrcMap": {
+    "RichEditor": null,
+    "RichToolbar": null,
+    "SelectionBubble": null,
+    "InlineAshPopover": null,
+    "InlineAsh": null,
+    "ToggleBlock": null,
+    "ImageUploadPlaceholder": null,
+    "EditorContent": null
+  },
+  "dtsPropsFor": {
+    "Button": "children: React.ReactNode; variant?: \"primary\" | \"dark\" | \"secondary\" | \"ghost\" | \"danger\"; size?: \"sm\" | \"md\" | \"lg\"; disabled?: boolean; onClick?: () => void; type?: \"button\" | \"submit\" | \"reset\"; fullWidth?: boolean;",
+    "Badge": "children: React.ReactNode; tone?: \"sage\" | \"green\" | \"amber\" | \"orange\" | \"red\" | \"blue\" | \"gold\" | \"purple\" | \"teal\" | \"neutral\"; variant?: \"status\" | \"tag\" | \"solid\";",
+    "Card": "children: React.ReactNode; variant?: \"raised\" | \"flat\" | \"sunken\"; padding?: \"none\" | \"sm\" | \"md\" | \"lg\" | number; interactive?: boolean; onClick?: () => void; style?: React.CSSProperties;",
+    "Modal": "onClose: () => void; children: React.ReactNode; open?: boolean; title?: string; header?: React.ReactNode; footer?: React.ReactNode; size?: \"sm\" | \"md\" | \"lg\" | \"xl\"; maxWidth?: number; bodyStyle?: React.CSSProperties; closeOnBackdrop?: boolean; closeOnEsc?: boolean; ariaLabel?: string;",
+    "ConfirmDialog": "open: boolean; title: string; body: string; confirmLabel?: string; cancelLabel?: string; tone?: \"danger\" | \"primary\"; onConfirm: () => void; onCancel: () => void;",
+    "Select": "value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; placeholder?: string; disabled?: boolean;",
+    "Toggle": "checked: boolean; onChange: () => void; disabled?: boolean;",
+    "Checkbox": "checked: boolean; onChange: () => void; disabled?: boolean;",
+    "NumberStepper": "value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; prefix?: string; suffix?: string; disabled?: boolean;",
+    "DatePicker": "value: Date | null; onChange: (d: Date) => void; placeholder?: string; disabled?: boolean;",
+    "DatePillField": "value: Date | null; onChange: (d: Date) => void; onClear?: () => void; alert?: boolean;",
+    "FilterTabs": "tabs: { key: string; label: string; count?: number }[]; active: string; onSelect: (key: string) => void; showCount?: boolean;",
+    "Menu": "items: ({ label: string; icon?: React.ElementType; onClick?: () => void; href?: string; danger?: boolean; disabled?: boolean; external?: boolean; badge?: string } | \"divider\")[]; onClose: () => void; style?: React.CSSProperties;",
+    "EmptyState": "icon: React.ReactNode; heading: string; body: string; action?: { label: string; onClick: () => void; background?: string; backgroundHover?: string }; secondaryAction?: { label: string; onClick: () => void; icon?: React.ReactNode }; ashPrompt?: string; tips?: string[];",
+    "EditableField": "label: string; value: string | null; onSave: (v: string | null) => void; placeholder?: string; labelWidth?: number; openWhenEmpty?: boolean; isLink?: boolean; multiline?: boolean;",
+    "DetailPanelShell": "maximized: boolean; onClose: () => void; children: React.ReactNode; panelStyle?: React.CSSProperties;",
+    "VisitButton": "href: string; label?: string; ariaLabel?: string;",
+    "AshMark": "size?: number; variant?: \"on-dark\" | \"on-light\"; animate?: boolean;",
+    "AshPromptsModule": "headline?: string; primaryPrompt?: { label: string; message: string }; prompts: { label: string; message: string }[]; context?: Record<string, unknown>; placeholder?: string;",
+    "CanvasAshHint": "",
+    "MonthGrid": "selected: Date | null; onSelect: (d: Date) => void;"
+  },
+  "overrides": {
+    "Modal": { "cardMode": "single", "primaryStory": "Default" },
+    "ConfirmDialog": { "cardMode": "single", "primaryStory": "Danger" }
+  }
+}
