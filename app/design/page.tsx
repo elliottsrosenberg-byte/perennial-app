@@ -697,6 +697,18 @@ function BadgesSection() {
         </div>
       </SubSection>
 
+      <SubSection title="Solid Status (high-emphasis)">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {([
+            { label: "Draft", tone: "blue" }, { label: "Sent", tone: "amber" },
+            { label: "Paid", tone: "sage" }, { label: "Overdue", tone: "red" },
+            { label: "Void", tone: "neutral" },
+          ] as { label: string; tone: BadgeTone }[]).map((b) => (
+            <Badge key={b.label} tone={b.tone} variant="solid">{b.label}</Badge>
+          ))}
+        </div>
+      </SubSection>
+
       <SubSection title="Count & Label Indicators">
         <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
           {[3, 12, 99].map((n) => (
