@@ -12,6 +12,7 @@ import { MoreHorizontal, Plus, ChevronDown } from "lucide-react";
 import { detectHostingPlatform, guideFor } from "@/lib/presence/detectHostingPlatform";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
+import Modal from "@/components/ui/Modal";
 
 function openAsh(message: string) {
   window.dispatchEvent(new CustomEvent("open-ash", { detail: { message } }));
@@ -2116,68 +2117,66 @@ function SuggestListingModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(31,33,26,0.5)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-sm rounded-2xl shadow-2xl" style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}>
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-          <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>Suggest a listing</h2>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg" style={{ color: "var(--color-grey)" }}><IcX /></button>
+    <Modal
+      onClose={onClose}
+      title="Suggest a listing"
+      size="sm"
+      bodyStyle={{ padding: 0 }}
+      footer={done ? undefined : (
+        <>
+          <button onClick={onClose} className="px-4 py-2 text-[13px] rounded-lg" style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}>Cancel</button>
+          <button onClick={submit} disabled={saving || !title.trim()} className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50" style={{ background: "var(--color-sage)" }}>
+            {saving ? "Sending…" : "Send suggestion"}
+          </button>
+        </>
+      )}
+    >
+      {done ? (
+        <div className="px-5 py-8" style={{ textAlign: "center" }}>
+          <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 6 }}>Thanks — sent to the team</p>
+          <p style={{ fontSize: 12, color: "var(--color-grey)", lineHeight: 1.6, marginBottom: 16 }}>
+            We&apos;ll review your suggestion and add it to the Perennial feed if it&apos;s a fit.
+          </p>
+          <button onClick={onClose} className="px-4 py-2 text-[13px] font-medium rounded-lg text-white" style={{ background: "var(--color-sage)" }}>Done</button>
         </div>
-        {done ? (
-          <div className="px-5 py-8" style={{ textAlign: "center" }}>
-            <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 6 }}>Thanks — sent to the team</p>
-            <p style={{ fontSize: 12, color: "var(--color-grey)", lineHeight: 1.6, marginBottom: 16 }}>
-              We&apos;ll review your suggestion and add it to the Perennial feed if it&apos;s a fit.
-            </p>
-            <button onClick={onClose} className="px-4 py-2 text-[13px] font-medium rounded-lg text-white" style={{ background: "var(--color-sage)" }}>Done</button>
+      ) : (
+        <div className="px-5 py-4 space-y-4">
+          <div>
+            <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Name *</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Salone del Mobile" className={inputCls} style={inputStyle} autoFocus />
           </div>
-        ) : (
-          <>
-            <div className="px-5 py-4 space-y-4">
-              <div>
-                <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Name *</label>
-                <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Salone del Mobile" className={inputCls} style={inputStyle} autoFocus />
-              </div>
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Type</label>
-                  <Select value={category} onChange={setCategory} options={CATS} />
-                </div>
-                <div className="flex-1">
-                  <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Date</label>
-                  <DatePicker
-                    value={startDate ? new Date(startDate + "T12:00:00") : null}
-                    onChange={(d) => {
-                      const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const day = String(d.getDate()).padStart(2, "0");
-                      setStart(`${y}-${m}-${day}`);
-                    }}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Location</label>
-                <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="City, Country" className={inputCls} style={inputStyle} />
-              </div>
-              <div>
-                <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Link</label>
-                <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" className={inputCls} style={inputStyle} />
-              </div>
-              <div>
-                <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Why it&apos;s worth listing</label>
-                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="A line on deadlines, who it's for, etc." className={`${inputCls} resize-none`} style={inputStyle} />
-              </div>
-              {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Type</label>
+              <Select value={category} onChange={setCategory} options={CATS} />
             </div>
-            <div className="flex items-center justify-end gap-2 px-5 py-4" style={{ borderTop: "0.5px solid var(--color-border)" }}>
-              <button onClick={onClose} className="px-4 py-2 text-[13px] rounded-lg" style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}>Cancel</button>
-              <button onClick={submit} disabled={saving || !title.trim()} className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50" style={{ background: "var(--color-sage)" }}>
-                {saving ? "Sending…" : "Send suggestion"}
-              </button>
+            <div className="flex-1">
+              <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Date</label>
+              <DatePicker
+                value={startDate ? new Date(startDate + "T12:00:00") : null}
+                onChange={(d) => {
+                  const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const day = String(d.getDate()).padStart(2, "0");
+                  setStart(`${y}-${m}-${day}`);
+                }}
+              />
             </div>
-          </>
-        )}
-      </div>
-    </div>
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Location</label>
+            <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="City, Country" className={inputCls} style={inputStyle} />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Link</label>
+            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" className={inputCls} style={inputStyle} />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--color-charcoal)" }}>Why it&apos;s worth listing</label>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="A line on deadlines, who it's for, etc." className={`${inputCls} resize-none`} style={inputStyle} />
+          </div>
+          {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
+        </div>
+      )}
+    </Modal>
   );
 }
 

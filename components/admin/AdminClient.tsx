@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Opportunity } from "@/types/database";
-import { Plus, X, Pencil, Eye, EyeOff, Archive, Check, ExternalLink } from "lucide-react";
+import { Plus, Pencil, Eye, EyeOff, Archive, Check, ExternalLink } from "lucide-react";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
+import Modal from "@/components/ui/Modal";
 
 interface Suggestion {
   id: string; title: string; category: string | null; event_type: string | null;
@@ -190,13 +191,19 @@ function EditModal({ opp, onClose, onSave }: { opp: Opportunity | null; onClose:
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(31,33,26,0.5)" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-md rounded-2xl shadow-2xl" style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", maxHeight: "90vh", overflowY: "auto" }}>
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-          <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>{opp ? "Edit listing" : "Add listing"}</h2>
-          <button onClick={onClose} style={{ ...iconBtn }}><X size={15} /></button>
-        </div>
-        <div className="px-5 py-4 space-y-3">
+    <Modal
+      onClose={onClose}
+      title={opp ? "Edit listing" : "Add listing"}
+      size="md"
+      bodyStyle={{ padding: 0 }}
+      footer={
+        <>
+          <button onClick={onClose} className="px-4 py-2 text-[13px] rounded-lg" style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}>Cancel</button>
+          <button onClick={submit} disabled={saving || !f.title.trim()} className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50" style={{ background: "var(--color-sage)" }}>{saving ? "Saving…" : "Save"}</button>
+        </>
+      }
+    >
+      <div className="px-5 py-4 space-y-3">
           <Field label="Title *"><input value={f.title} onChange={(e) => set("title", e.target.value)} className={inputCls} style={inputStyle} autoFocus /></Field>
           <div className="flex gap-3">
             <Field label="Category" flex><Select value={f.category} onChange={(v) => set("category", v)} options={CATS.map((c) => ({ value: c, label: c }))} /></Field>
@@ -213,12 +220,7 @@ function EditModal({ opp, onClose, onSave }: { opp: Opportunity | null; onClose:
           <Field label="About"><textarea value={f.about ?? ""} onChange={(e) => set("about", e.target.value)} rows={3} className={`${inputCls} resize-none`} style={inputStyle} /></Field>
           <Field label="Status"><Select value={f.status} onChange={(v) => set("status", v)} options={[{ value: "published", label: "Published" }, { value: "draft", label: "Draft" }, { value: "archived", label: "Archived" }]} /></Field>
         </div>
-        <div className="flex items-center justify-end gap-2 px-5 py-4" style={{ borderTop: "0.5px solid var(--color-border)" }}>
-          <button onClick={onClose} className="px-4 py-2 text-[13px] rounded-lg" style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}>Cancel</button>
-          <button onClick={submit} disabled={saving || !f.title.trim()} className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50" style={{ background: "var(--color-sage)" }}>{saving ? "Saving…" : "Save"}</button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, Plus, CheckSquare, MoreHorizontal, CalendarC
 import { tagsForPractices } from "@/lib/opportunities/disciplines";
 import DatePicker from "@/components/ui/DatePicker";
 import EmptyState from "@/components/ui/EmptyState";
+import Modal from "@/components/ui/Modal";
 import CalendarOptionsMenu from "./CalendarOptionsMenu";
 import CalendarSettingsModal from "./CalendarSettingsModal";
 import CalendarSourcesPanel from "./CalendarSourcesPanel";
@@ -464,25 +465,26 @@ function NewTaskModal({ projects, contacts, defaultDate, onClose, onCreate }: {
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: "rgba(31,33,26,0.35)", backdropFilter: "blur(4px)" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div
-        className="rounded-2xl p-6 flex flex-col gap-4"
-        style={{ width: "380px", background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", boxShadow: "0 8px 40px rgba(0,0,0,0.15)" }}
-      >
-        <div className="flex items-center justify-between">
-          <h3 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>New task</h3>
+    <Modal
+      onClose={onClose}
+      title="New task"
+      size="sm"
+      footer={
+        <>
           <button onClick={onClose}
-            className="w-6 h-6 flex items-center justify-center rounded text-[18px] leading-none transition-colors"
-            style={{ color: "var(--color-grey)" }}
+            className="px-3 py-[6px] text-[12px] rounded-lg transition-colors"
+            style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
             onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
             onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-          >×</button>
-        </div>
-
+          >Cancel</button>
+          <button onClick={submit} disabled={!title.trim()}
+            className="px-4 py-[6px] text-[12px] font-medium rounded-lg text-white transition-opacity"
+            style={{ background: "var(--color-sage)", opacity: title.trim() ? 1 : 0.5 }}
+          >Add task</button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
         <input
           ref={inputRef}
           value={title}
@@ -516,21 +518,8 @@ function NewTaskModal({ projects, contacts, defaultDate, onClose, onCreate }: {
           <label className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--color-grey)" }}>Contact</label>
           <ContactPicker contactId={contactId} contacts={contacts} onChange={setContactId} />
         </div>
-
-        <div className="flex justify-end gap-2 mt-1">
-          <button onClick={onClose}
-            className="px-3 py-[6px] text-[12px] rounded-lg transition-colors"
-            style={{ color: "var(--color-grey)", border: "0.5px solid var(--color-border)" }}
-            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-          >Cancel</button>
-          <button onClick={submit} disabled={!title.trim()}
-            className="px-4 py-[6px] text-[12px] font-medium rounded-lg text-white transition-opacity"
-            style={{ background: "var(--color-sage)", opacity: title.trim() ? 1 : 0.5 }}
-          >Add task</button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
