@@ -141,7 +141,7 @@ const STATUS_BADGES: { label: string; tone: BadgeTone }[] = [
   { label: "On Hold",     tone: "yellow"   },
   { label: "Overdue",     tone: "red"     },
   { label: "Draft",       tone: "grey" },
-  { label: "Sent",        tone: "blue"    },
+  { label: "Sent",        tone: "yellow"  },
   { label: "Paid",        tone: "green"   },
   { label: "Active",      tone: "sage"    },
   { label: "Lead",        tone: "brown"    },
@@ -713,7 +713,7 @@ function BadgesSection() {
       <SubSection title="Solid Status (high-emphasis)">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {([
-            { label: "Draft", tone: "blue" }, { label: "Sent", tone: "yellow" },
+            { label: "Draft", tone: "orange" }, { label: "Sent", tone: "yellow" },
             { label: "Paid", tone: "sage" }, { label: "Overdue", tone: "red" },
             { label: "Void", tone: "grey" },
           ] as { label: string; tone: BadgeTone }[]).map((b) => (
