@@ -41,6 +41,8 @@ interface ModalProps {
   /** Action row, rendered in a divider-topped footer. */
   footer?:  React.ReactNode;
   size?:    ModalSize;
+  /** Exact max-width in px; overrides `size` when a modal needs a specific width. */
+  maxWidth?: number;
   /** Overrides the default body padding ("20px 22px"). */
   bodyStyle?:       React.CSSProperties;
   closeOnBackdrop?: boolean;
@@ -57,6 +59,7 @@ export default function Modal({
   header,
   footer,
   size = "md",
+  maxWidth,
   bodyStyle,
   closeOnBackdrop = true,
   closeOnEsc = true,
@@ -106,7 +109,7 @@ export default function Modal({
         onClick={(e) => e.stopPropagation()}
         style={{
           width: "100%",
-          maxWidth: MAX_WIDTH[size],
+          maxWidth: maxWidth ?? MAX_WIDTH[size],
           maxHeight: "90vh",
           display: "flex",
           flexDirection: "column",
