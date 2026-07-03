@@ -333,7 +333,7 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
 
   // ── View-driven theme tokens ────────────────────────────────────────────────
   // Sage for relationships, amber for pipeline, blue for places — the three
-  // views inherit the colour their detail panel uses so the user keeps a
+  // views inherit the color their detail panel uses so the user keeps a
   // mental map of where they are.
   const isLeads = view === "leads";
   const isOrgs  = view === "organizations";

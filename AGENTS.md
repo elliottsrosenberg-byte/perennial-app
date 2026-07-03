@@ -23,19 +23,19 @@ Much of the app was built by **cloning, not sharing** — one logical change
 often means editing the same thing in 4–13 places. Grep first; consult the
 duplication registry in `change-playbook.md`.
 
-## Design system — MANDATORY (no hardcoded colours, no cloned primitives)
+## Design system — MANDATORY (no hardcoded colors, no cloned primitives)
 
 Every design decision flows through the design system. This is enforced by a
 post-edit hook (`scripts/check-design-tokens.mjs`); don't wait for it — follow
 these rules as you write:
 
-1. **Never write a raw colour.** No `#rrggbb`, no `rgba(<numbers>)` in styles.
+1. **Never write a raw color.** No `#rrggbb`, no `rgba(<numbers>)` in styles.
    Use `app/globals.css` tokens: `var(--color-*)` for solids, and
-   `rgba(var(--color-<hue>-rgb), α)` for tints. Need a colour with no token?
+   `rgba(var(--color-<hue>-rgb), α)` for tints. Need a color with no token?
    Add the token to `globals.css` first, then reference it. The only raw
    values allowed are pure black/white contrast anchors (`rgba(0,0,0,α)`
    shadows, `rgba(255,255,255,α)` overlays, `#fff`/`#000`) and genuine
-   third-party brand colours (Stripe/Google logos) — everything else is a token.
+   third-party brand colors (Stripe/Google logos) — everything else is a token.
 2. **Reuse `components/ui/` primitives — never re-clone them.** Buttons →
    `Button`, pills/tags/status → `Badge`, any dialog → `Modal` (or
    `ConfirmDialog`), surfaces → `Card`, dropdowns → `Select`/`Menu`, toggles →
@@ -43,7 +43,7 @@ these rules as you write:
    doesn't cover a need, EXTEND the primitive (add a prop/variant) rather than
    hand-rolling a one-off. Grep `components/ui/` before building any control.
 3. **Radius/shadow/spacing/type are tokens too** — `var(--radius-*)`,
-   `var(--shadow-*)`, `var(--text-*)`, `var(--font-*)`. No magic pixel colours
+   `var(--shadow-*)`, `var(--text-*)`, `var(--font-*)`. No magic pixel colors
    or bespoke box-shadows.
 
 Why it matters: the token layer is what lets the whole app re-skin from one

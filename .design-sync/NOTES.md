@@ -5,7 +5,7 @@ Repo-specific gotchas for future re-syncs.
 - **This is a Next.js APP, not a packaged component library.** No `dist/`, no Storybook.
   The converter runs in **synth-entry mode** — esbuild bundles `components/ui/*.tsx` directly,
   resolving the `@/*` tsconfig path alias. `srcDir: components/ui`, `cssEntry: app/globals.css`.
-- **Styling is token-driven.** All colour flows from `app/globals.css` tokens (`--color-*`,
+- **Styling is token-driven.** All color flows from `app/globals.css` tokens (`--color-*`,
   `--color-*-rgb` triplets, radius/shadow/type scales). The bundle re-skins from that file.
 - **Excluded:** `RichEditor` (tiptap + Supabase upload + fetch — not a standalone-renderable
   design component; no default export).

@@ -11,7 +11,7 @@ interface Props {
   onUpdated: (pipeline: OutreachPipeline & { stages: PipelineStage[] }) => void;
 }
 
-// Same palette as NewPipelineModal so a re-coloured pipeline can land back on
+// Same palette as NewPipelineModal so a re-colored pipeline can land back on
 // the same swatch the user originally chose. Keep these in sync if you ever
 // adjust the brand palette.
 const COLORS = [
@@ -25,7 +25,7 @@ const inputStyle = {
   color: "var(--color-charcoal)",
 };
 
-// Edits the pipeline-level fields only (name, description, colour). Stage
+// Edits the pipeline-level fields only (name, description, color). Stage
 // editing is intentionally out of scope here — adding / renaming / removing
 // stages touches FK-bearing rows on outreach_targets, which we handle on the
 // board itself (column header + delete affordance) rather than smuggling it

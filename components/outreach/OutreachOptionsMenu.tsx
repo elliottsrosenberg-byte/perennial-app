@@ -74,7 +74,7 @@ export default function OutreachOptionsMenu({
               <ActionRow
                 icon={<Pencil size={13} strokeWidth={1.75} style={{ color: "var(--color-text-secondary)", flexShrink: 0 }} />}
                 title="Edit pipeline"
-                sub="Name, description, colour"
+                sub="Name, description, color"
                 onClick={() => { onClose(); onEditPipeline(); }}
               />
             )}

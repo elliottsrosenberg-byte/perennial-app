@@ -33,7 +33,7 @@ function formatDate(d: string) {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-// Convert an accent colour into a soft chip background — works for both
+// Convert an accent color into a soft chip background — works for both
 // hex strings (`#b8860b`) and our CSS variables (we fall back to a neutral
 // translucent backdrop for the variable case, since color-mix on `var(...)`
 // can be uneven across browsers).

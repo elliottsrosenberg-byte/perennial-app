@@ -33,9 +33,9 @@ interface CalendarEvent {
   location:    string | null;
   htmlLink:    string | null;
   colorId:     string | null;
-  // The parent calendar's user-chosen colour, resolved server-side from
+  // The parent calendar's user-chosen color, resolved server-side from
   // user_calendars so event chips render correctly tinted on first paint —
-  // no second round-trip to /calendars before colours appear.
+  // no second round-trip to /calendars before colors appear.
   color:       string | null;
   source:      "google" | "microsoft";
   accountName: string | null;

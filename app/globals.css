@@ -91,7 +91,7 @@
 
   /* ── Extended Accent Palette ──────────────────────────────────────────────
      Fixed brand accents used by status pills / Badge tones and scattered
-     inline colours. These do NOT flip in dark mode (they read as tints on
+     inline colors. These do NOT flip in dark mode (they read as tints on
      surfaces of either mode). Swap these values to re-skin the accent system. */
   --color-gold:         #b8860b;   /* leads / awards */
   --color-purple:       #6d4fa3;   /* press */
