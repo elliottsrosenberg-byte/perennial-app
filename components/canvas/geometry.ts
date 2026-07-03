@@ -1,0 +1,91 @@
+// Pure geometry + object-factory helpers for the canvas engine.
+
+import type {
+  CanvasObject,
+  CanvasObjectType,
+  CanvasContent,
+} from "./types";
+
+export interface Viewport {
+  /** Screen-space offset of the world origin. */
+  x: number;
+  y: number;
+  scale: number;
+}
+
+export const MIN_SCALE = 0.2;
+export const MAX_SCALE = 2.5;
+export const GRID_SIZE = 34;
+
+export function clampScale(s: number): number {
+  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
+}
+
+/** Screen (client) point → world coordinates, given the container's rect. */
+export function screenToWorld(
+  clientX: number,
+  clientY: number,
+  rect: DOMRect,
+  view: Viewport,
+): { x: number; y: number } {
+  return {
+    x: (clientX - rect.left - view.x) / view.scale,
+    y: (clientY - rect.top - view.y) / view.scale,
+  };
+}
+
+const DEFAULTS: Record<
+  CanvasObjectType,
+  { width: number; height: number; content: CanvasContent }
+> = {
+  text:      { width: 240, height: 52,  content: { text: "Text", fontSize: 16 } },
+  sticky:    { width: 220, height: 168, content: { text: "", color: "amber" } },
+  shape:     { width: 200, height: 150, content: { shape: "rect", color: "sage" } },
+  image:     { width: 280, height: 200, content: { url: "" } },
+  reference: { width: 300, height: 132, content: { title: "Untitled" } },
+};
+
+let seq = 0;
+/** Client-side id. crypto.randomUUID where available; falls back for old envs. */
+function newId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  seq += 1;
+  return `tmp-${Date.now()}-${seq}`;
+}
+
+export interface CreateObjectOptions {
+  content?: Partial<CanvasContent>;
+  width?: number;
+  height?: number;
+  rotation?: number;
+  zIndex?: number;
+  refType?: CanvasObject["refType"];
+  refId?: string | null;
+}
+
+/** Build a new object centered on a world point. */
+export function createObject(
+  type: CanvasObjectType,
+  center: { x: number; y: number },
+  zIndex: number,
+  opts: CreateObjectOptions = {},
+): CanvasObject {
+  const d = DEFAULTS[type];
+  const width = opts.width ?? d.width;
+  const height = opts.height ?? d.height;
+  return {
+    id: newId(),
+    type,
+    x: Math.round(center.x - width / 2),
+    y: Math.round(center.y - height / 2),
+    width,
+    height,
+    rotation: opts.rotation ?? 0,
+    zIndex: opts.zIndex ?? zIndex,
+    content: { ...d.content, ...(opts.content ?? {}) } as CanvasContent,
+    refType: opts.refType ?? null,
+    refId: opts.refId ?? null,
+  };
+}

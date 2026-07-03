@@ -711,3 +711,42 @@ export interface PressMention {
   stats: PressStats;
   created_at: string;
 }
+
+// ─── Canvas (spatial board — PER-70/87/88) ──────────────────────────────────────
+// A `canvas` is one board owned by a user, optionally attached to an entity.
+// `scope='home'` (entity_id null) is the user's Home board; otherwise the board
+// belongs to a project/contact/organization/lead. See supabase migration
+// 20260703120000_canvas.sql and components/canvas/.
+
+export type CanvasScope = "home" | "project" | "contact" | "organization" | "lead";
+
+export interface Canvas {
+  id:         string;
+  user_id:    string;
+  scope:      CanvasScope;
+  entity_id:  string | null;
+  title:      string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type CanvasObjectType = "text" | "sticky" | "shape" | "image" | "reference";
+export type CanvasRefType    = "project" | "task" | "contact" | "lead" | "organization";
+
+export interface CanvasObjectRow {
+  id:        string;
+  canvas_id: string;
+  user_id:   string;
+  type:      CanvasObjectType;
+  x:         number;
+  y:         number;
+  width:     number;
+  height:    number;
+  rotation:  number;
+  z_index:   number;
+  content:   Record<string, unknown>;
+  ref_type:  CanvasRefType | null;
+  ref_id:    string | null;
+  created_at: string;
+  updated_at: string;
+}
