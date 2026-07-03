@@ -11,6 +11,7 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Organization } from "@/types/database";
 import { X } from "lucide-react";
+import Modal from "@/components/ui/Modal";
 
 interface Props {
   onClose:   () => void;
@@ -66,16 +67,11 @@ export default function NewOrganizationModal({ onClose, onCreated }: Props) {
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(31,33,26,0.5)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div
-        className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
-        style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}
-      >
-        {/* Header */}
+    <Modal
+      onClose={onClose}
+      size="md"
+      bodyStyle={{ padding: 0 }}
+      header={
         <div style={{ borderBottom: "0.5px solid var(--color-border)" }}>
           <div className="flex items-center justify-between px-6 pt-4 pb-2">
             <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--color-charcoal)" }}>
@@ -95,7 +91,29 @@ export default function NewOrganizationModal({ onClose, onCreated }: Props) {
             Galleries, brands, publications, fairs — anywhere multiple people work toward a shared programme. You can flesh out tags, bio, files, and link contacts from the detail panel.
           </p>
         </div>
-
+      }
+      footer={
+        <>
+          <button
+            type="button" onClick={onClose}
+            className="px-4 py-2 text-[13px] rounded-lg transition-colors"
+            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit as unknown as React.MouseEventHandler}
+            disabled={loading || !name.trim()}
+            className="px-4 py-2 text-[13px] font-medium rounded-lg text-white transition-opacity disabled:opacity-50"
+            style={{ background: "var(--color-sage)" }}
+          >
+            {loading ? "Creating…" : "Create organization"}
+          </button>
+        </>
+      }
+    >
         {/* Form */}
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
           <div>
@@ -126,28 +144,6 @@ export default function NewOrganizationModal({ onClose, onCreated }: Props) {
 
           {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
         </form>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-6 py-4" style={{ borderTop: "0.5px solid var(--color-border)" }}>
-          <button
-            type="button" onClick={onClose}
-            className="px-4 py-2 text-[13px] rounded-lg transition-colors"
-            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit as unknown as React.MouseEventHandler}
-            disabled={loading || !name.trim()}
-            className="px-4 py-2 text-[13px] font-medium rounded-lg text-white transition-opacity disabled:opacity-50"
-            style={{ background: "var(--color-sage)" }}
-          >
-            {loading ? "Creating…" : "Create organization"}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
