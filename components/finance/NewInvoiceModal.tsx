@@ -13,6 +13,7 @@ type SelectedClient =
 import { X, AlertTriangle, Clock, Receipt, Plus, Check } from "lucide-react";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
+import Modal from "@/components/ui/Modal";
 
 interface Props {
   projects: Pick<Project, "id" | "title" | "type" | "rate">[];
@@ -356,11 +357,11 @@ export default function NewInvoiceModal({
   const hasReady = !!projectId || manualLines.length > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(31,33,26,0.5)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden"
-        style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}>
+    <Modal
+      onClose={onClose}
+      size="xl"
+      bodyStyle={{ padding: 0 }}
+      header={
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "0.5px solid var(--color-border)" }}>
           <div>
             <h2 className="text-[15px] font-semibold" style={{ color: "var(--color-charcoal)", fontFamily: "var(--font-display)" }}>New invoice</h2>
@@ -382,8 +383,32 @@ export default function NewInvoiceModal({
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}><X size={14} /></button>
         </div>
-
-        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4 max-h-[72vh] overflow-y-auto">
+      }
+      footer={
+        <>
+          <div className="text-[11px] mr-auto" style={{ color: "var(--color-grey)" }}>
+            {hasReady && (
+              <>
+                <span style={{ color: "var(--color-charcoal)", fontWeight: 600 }}>{fmtMoney(grandTotal)}</span>
+                <span> on this draft</span>
+              </>
+            )}
+          </div>
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-[13px] rounded-lg"
+            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>Cancel</button>
+          <button onClick={handleSubmit as unknown as React.MouseEventHandler}
+            disabled={loading || !clientLabel}
+            className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50"
+            style={{ background: "var(--color-charcoal)" }}>
+            {loading ? "Creating…" : "Create invoice"}
+          </button>
+        </>
+      }
+    >
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
           {/* Project — first, so the client picker below can suggest the
               contacts attached to it. */}
           <div>
@@ -566,32 +591,7 @@ export default function NewInvoiceModal({
 
           {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
         </form>
-
-        <div className="flex items-center justify-between gap-2 px-5 py-4" style={{ borderTop: "0.5px solid var(--color-border)" }}>
-          <div className="text-[11px]" style={{ color: "var(--color-grey)" }}>
-            {hasReady && (
-              <>
-                <span style={{ color: "var(--color-charcoal)", fontWeight: 600 }}>{fmtMoney(grandTotal)}</span>
-                <span> on this draft</span>
-              </>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={onClose}
-              className="px-4 py-2 text-[13px] rounded-lg"
-              style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>Cancel</button>
-            <button onClick={handleSubmit as unknown as React.MouseEventHandler}
-              disabled={loading || !clientLabel}
-              className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50"
-              style={{ background: "var(--color-charcoal)" }}>
-              {loading ? "Creating…" : "Create invoice"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
