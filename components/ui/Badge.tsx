@@ -3,16 +3,22 @@
 /**
  * Badge — the single tinted-pill primitive for the whole app.
  *
- * Two shipped shapes, one component:
- *   • variant="status" (default) — uppercase, bold, tight — project/invoice/
- *     contact STATE labels ("OVERDUE", "PAID", "ACTIVE").
+ * Three shipped shapes, one component:
+ *   • variant="status" (default) — uppercase, bold, tight, tinted — project/
+ *     contact STATE labels ("OVERDUE", "ACTIVE").
  *   • variant="tag" — lowercase, medium, softer tint — free-form labels
  *     ("gallery", "client", "press").
+ *   • variant="solid" — filled, title-case, semibold — high-emphasis state
+ *     chips that read as buttons/stamps ("Draft", "Paid", "Sent").
  *
  * Colour comes from a fixed `tone` palette (never ad-hoc rgba), so every pill
- * in the product reads as one system. Tints are derived from a single RGB per
- * tone at a variant-specific alpha, so status pills are a touch stronger than
- * tags automatically.
+ * in the product reads as one system. Tinted variants derive from a single RGB
+ * per tone at a variant-specific alpha; the solid variant uses the tone's
+ * filled colour with a readable foreground.
+ *
+ * NOTE: this is for FIXED-semantic pills only. Palette-driven tags (coloured by
+ * the user's custom palette via paletteColorForKey) must stay dynamic — don't
+ * force those onto Badge's fixed tones.
  */
 
 export type BadgeTone =
@@ -27,19 +33,19 @@ export type BadgeTone =
   | "teal"    // event
   | "neutral"; // planning / draft / inactive
 
-export type BadgeVariant = "status" | "tag";
+export type BadgeVariant = "status" | "tag" | "solid";
 
-const TONES: Record<BadgeTone, { rgb: string; text: string }> = {
-  sage:    { rgb: "155,163,122", text: "var(--color-sage-text)" },
-  green:   { rgb: "141,208,71",  text: "#3d6b4f" },
-  amber:   { rgb: "232,197,71",  text: "#a07800" },
-  orange:  { rgb: "232,133,13",  text: "#c06200" },
-  red:     { rgb: "220,62,13",   text: "var(--color-red-orange)" },
-  blue:    { rgb: "37,99,171",   text: "#2563ab" },
-  gold:    { rgb: "184,134,11",  text: "#b8860b" },
-  purple:  { rgb: "109,79,163",  text: "#6d4fa3" },
-  teal:    { rgb: "20,140,140",  text: "#148c8c" },
-  neutral: { rgb: "31,33,26",    text: "var(--color-text-tertiary)" },
+const TONES: Record<BadgeTone, { rgb: string; text: string; solid: string; solidText: string }> = {
+  sage:    { rgb: "155,163,122", text: "var(--color-sage-text)",     solid: "var(--color-sage)",       solidText: "#fff"     },
+  green:   { rgb: "141,208,71",  text: "#3d6b4f",                    solid: "#5a9e2f",                 solidText: "#fff"     },
+  amber:   { rgb: "232,197,71",  text: "#a07800",                    solid: "#e0a82e",                 solidText: "#1f211a"  },
+  orange:  { rgb: "232,133,13",  text: "#c06200",                    solid: "#e0850d",                 solidText: "#fff"     },
+  red:     { rgb: "220,62,13",   text: "var(--color-red-orange)",    solid: "var(--color-red-orange)", solidText: "#fff"     },
+  blue:    { rgb: "37,99,171",   text: "#2563ab",                    solid: "#2563ab",                 solidText: "#fff"     },
+  gold:    { rgb: "184,134,11",  text: "#b8860b",                    solid: "#b8860b",                 solidText: "#fff"     },
+  purple:  { rgb: "109,79,163",  text: "#6d4fa3",                    solid: "#6d4fa3",                 solidText: "#fff"     },
+  teal:    { rgb: "20,140,140",  text: "#148c8c",                    solid: "#148c8c",                 solidText: "#fff"     },
+  neutral: { rgb: "31,33,26",    text: "var(--color-text-tertiary)", solid: "var(--color-grey)",       solidText: "#fff"     },
 };
 
 interface BadgeProps {
@@ -55,6 +61,7 @@ export default function Badge({
 }: BadgeProps) {
   const t = TONES[tone];
   const isStatus = variant === "status";
+  const isSolid  = variant === "solid";
   // Neutral (charcoal) needs a lighter tint than the chromatic tones to stay
   // subtle; status pills sit a step stronger than tags.
   const alpha = tone === "neutral" ? 0.07 : isStatus ? 0.16 : 0.1;
@@ -64,12 +71,12 @@ export default function Badge({
       style={{
         display:        "inline-flex",
         alignItems:     "center",
-        fontSize:       isStatus ? 10 : 11,
-        fontWeight:     isStatus ? 700 : 500,
-        padding:        isStatus ? "3px 8px" : "3px 10px",
+        fontSize:       isStatus ? 10 : isSolid ? 10 : 11,
+        fontWeight:     isSolid ? 600 : isStatus ? 700 : 500,
+        padding:        isStatus ? "3px 8px" : isSolid ? "3px 9px" : "3px 10px",
         borderRadius:   9999,
-        background:     `rgba(${t.rgb},${alpha})`,
-        color:          t.text,
+        background:     isSolid ? t.solid : `rgba(${t.rgb},${alpha})`,
+        color:          isSolid ? t.solidText : t.text,
         textTransform:  isStatus ? "uppercase" : "none",
         letterSpacing:  isStatus ? "0.04em" : "normal",
         lineHeight:     1,
