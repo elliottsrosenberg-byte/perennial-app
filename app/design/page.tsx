@@ -9,6 +9,7 @@ import Badge, { type BadgeTone } from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Card from "@/components/ui/Card";
+import { PALETTE } from "@/lib/ui/palette";
 import {
   // Navigation
   LayoutDashboard, Layers, Users, Send, FileText, Calendar, Receipt, Globe, FolderOpen, Settings, Palette, Compass,
@@ -293,6 +294,26 @@ function ColorsSection() {
             </div>
           ))}
         </div>
+      </SubSection>
+
+      {/* User Palette — the 10 chosen colours for user-assignable data. A separate
+          system from the tokens above (defined in lib/ui/palette.ts). */}
+      <SubSection title="User Palette — tags · calendar · pipelines · project accents">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 16 }}>
+          {PALETTE.map((c) => (
+            <div key={c.hex}>
+              <div style={{ height: 60, borderRadius: 10, marginBottom: 10, background: c.hex, border: "0.5px solid var(--color-border)" }} />
+              <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 2 }}>{c.name}</p>
+              <p style={{ fontSize: 10, fontFamily: "monospace", color: "var(--color-text-tertiary)" }}>{c.hex}</p>
+            </div>
+          ))}
+        </div>
+        <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 14, lineHeight: 1.55, maxWidth: 620 }}>
+          Your 10 chosen colours for <strong style={{ color: "var(--color-text-secondary)" }}>user-assignable items</strong> — tag colours, calendar colours,
+          pipeline stages, project accents. This is a separate system from the design tokens above:
+          defined in <code style={{ fontFamily: "monospace", fontSize: 10 }}>lib/ui/palette.ts</code>, assigned per-item via <code style={{ fontFamily: "monospace", fontSize: 10 }}>paletteColorForKey</code>.
+          App chrome (badges, status, charts) never sources from this palette — it uses the tokens.
+        </p>
       </SubSection>
     </Section>
   );
