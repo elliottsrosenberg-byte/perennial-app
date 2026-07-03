@@ -582,12 +582,12 @@ async function search_knowledge_base(
 export const searchKnowledgeBaseTool: AshToolDefinition = {
   name: "search_knowledge_base",
   description:
-    "Search Perennial's expert knowledge base for the art/design/small-business/freelance " +
-    "world: pricing and commission norms, gallery relationships, the fair calendar, press strategy, " +
-    "selling channels, cash flow, and contracts. Call this whenever you need specific industry facts, " +
-    "benchmarks, deadlines, or best practices rather than relying on memory — especially for numbers " +
-    "(commission %, deposit %, booth costs), dates, or contract terms. Returns the most relevant " +
-    "passages with their sources.",
+    "Search Perennial's expert knowledge base for the art/design/small-business/freelance world — " +
+    "frameworks, options, and how to weigh a decision on pricing, galleries, press, selling channels, " +
+    "cash flow, and contracts. Use it to lay out the tradeoffs on nuanced questions, not to recite a " +
+    "single verdict. It also holds what's been learned about this specific user's niche. Do NOT use it " +
+    "for live dates or deadlines (use the events/opportunities tools) or for the user's own figures " +
+    "(use the finance/project tools). Returns the most relevant passages with their sources.",
   input_schema: {
     type: "object",
     properties: {
