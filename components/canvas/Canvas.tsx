@@ -15,7 +15,7 @@ import {
 } from "react";
 import { Trash2 } from "lucide-react";
 import type { CanvasObjectRow, CanvasScope } from "@/types/database";
-import { uploadEditorImage } from "@/lib/uploads/editor-image";
+import { uploadEditorImage, isUploadableImageType } from "@/lib/uploads/editor-image";
 import { useCanvas } from "./useCanvas";
 import {
   clampScale,
@@ -89,27 +89,58 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({
   );
 
   const handleUploadImage = useCallback(() => fileRef.current?.click(), []);
-  const onFilePicked = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      e.target.value = "";
-      if (!file) return;
+
+  // Upload a file and drop an image object at `center` (defaults to viewport centre).
+  const addImageFromFile = useCallback(
+    async (file: File, center?: { x: number; y: number }) => {
       try {
         const up = await uploadEditorImage(file);
         const maxW = 360;
         const ratio = up.width && up.height ? up.height / up.width : 0.66;
         const width = Math.min(maxW, up.width ?? maxW);
-        handleCreate("image", {
+        const obj = createObject("image", center ?? viewportCenterWorld(), store.topZ + 1, {
           width,
           height: Math.round(width * ratio),
           content: { url: up.url },
         });
+        store.add(obj);
+        setSelectedId(obj.id);
       } catch (err) {
         console.error("canvas image upload failed", err);
       }
     },
-    [handleCreate],
+    [store, viewportCenterWorld],
   );
+
+  const onFilePicked = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (file) addImageFromFile(file);
+    },
+    [addImageFromFile],
+  );
+
+  // Drag image files straight onto the canvas.
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      const files = Array.from(e.dataTransfer?.files ?? []).filter((f) =>
+        isUploadableImageType(f.type),
+      );
+      if (!files.length) return;
+      e.preventDefault();
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const base = screenToWorld(e.clientX, e.clientY, rect, view);
+      files.forEach((f, i) => addImageFromFile(f, { x: base.x + i * 24, y: base.y + i * 24 }));
+    },
+    [addImageFromFile, view],
+  );
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    if (Array.from(e.dataTransfer?.items ?? []).some((it) => it.kind === "file")) {
+      e.preventDefault();
+    }
+  }, []);
 
   useImperativeHandle(
     ref,
@@ -150,7 +181,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({
       if (e.ctrlKey || e.metaKey) {
         setView((v) => {
           const worldBefore = screenToWorld(e.clientX, e.clientY, rect, v);
-          const scale = clampScale(v.scale * (1 - e.deltaY * 0.0015));
+          const scale = clampScale(v.scale * (1 - e.deltaY * 0.0025));
           return {
             scale,
             x: e.clientX - rect.left - worldBefore.x * scale,
@@ -246,6 +277,8 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({
       onPointerDown={onBackgroundPointerDown}
       onPointerMove={onBackgroundPointerMove}
       onPointerUp={onBackgroundPointerUp}
+      onDrop={onDrop}
+      onDragOver={onDragOver}
     >
       {/* world layer */}
       <div

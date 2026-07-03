@@ -10,9 +10,18 @@ import type {
 
 export type { CanvasObjectType, CanvasRefType };
 
-/** Sticky-note colour keys — each maps to a design-token tint (see palette.ts).
- *  Limited to hues that ship both an `-rgb` tint and a `-deep` text token. */
-export type StickyColor = "amber" | "sage" | "orange" | "green" | "neutral";
+/** Sticky/shape colour keys — the app's 10-colour palette (see palette.ts). */
+export type StickyColor =
+  | "sage"
+  | "green"
+  | "amber"
+  | "orange"
+  | "red"
+  | "blue"
+  | "gold"
+  | "purple"
+  | "teal"
+  | "grey";
 /** Shape fill colour keys — same palette, used as solid-ish tints. */
 export type ShapeColor = StickyColor;
 
