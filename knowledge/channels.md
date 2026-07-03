@@ -1,23 +1,27 @@
-# Selling and distribution channels
+# Choosing distribution channels
 
 category: channels
 
+## The core tradeoff
+
+Every channel trades **margin** against **reach and effort**. There is no single right answer — the right mix depends on the maker's stage, how much audience they already have, their price point, and whether they most need cash now or brand-building for later. Frame channel choices as that tradeoff rather than as a ranking.
+
 ## Gallery representation
 
-Gallery representation typically takes 40–60% commission. Edition work sold through a gallery means the designer receives 40–60% of the retail price. In exchange, galleries provide collector access, credibility, installation, and sales labor. Whether the split is worth it depends on what the gallery actually delivers — a gallery that places work with serious collectors and builds a designer's market justifies a higher commission than one that simply hangs the work.
+Galleries typically take **40–60% commission**, so the maker keeps 40–60% of retail. What that buys: collector access, sales labor, credibility, and installation. It's worth more when the gallery genuinely places work with serious collectors and builds the maker's market; worth less when it mostly provides shelf space. The question to help a maker reason through isn't "is 50% too much" in the abstract — it's "what is *this* gallery delivering for its cut, and does that reach justify the margin I give up?"
 
 ## Direct studio sales
 
-Direct-to-collector sales capture the full margin but require building a collector audience yourself — mailing list, studio visits, social presence, and word of mouth. This is the highest-margin channel and the slowest to build. Most established designers run direct sales alongside gallery and fair channels rather than instead of them.
+Direct-to-collector keeps the full margin but requires building and maintaining a collector audience — mailing list, studio visits, social presence. Highest margin, slowest to build, most ongoing effort. Usually a complement to other channels rather than a sole channel, especially early on.
 
 ## Design fairs
 
-Design fairs are expensive — booth costs commonly range from $3,000 to $15,000+ before travel, shipping, and install — but provide invaluable brand building and direct collector access in a concentrated window. Treat a fair as a marketing and relationship investment, not a guaranteed sales channel; the press, gallery interest, and collector contacts often matter more than on-site sales.
+Fairs concentrate exposure and collector/press contact into a short window, but the cost and risk are real (booth, travel, shipping, install). The useful reframe: a fair is a **marketing and relationship investment**, not a reliable sales channel — the contacts, press, and gallery interest often matter more than on-site sales. Whether it pays off depends on the maker's goals and whether the fair's audience matches their work. (For which fairs exist and when, use the live opportunities feed, not memory.)
 
 ## Trade clients
 
-Trade clients — interior designers, architects, hotels, developers — buy at net pricing, typically 40–50% off retail. Volume and repeat business can offset the lower margin. Trade relationships reward reliability, lead times you can actually hit, and clear net-pricing terms.
+Trade — interior designers, architects, hotels, developers — buys at net pricing (commonly **40–50% off retail**). Lower margin, but volume, repeat business, and predictability can offset it. Trade rewards reliability and lead times the maker can actually hit; the tradeoff is margin for stability.
 
 ## E-commerce
 
-E-commerce is growing but challenging for high-value objects: collectors of five-figure pieces usually want to see the work, meet the maker, or buy through a trusted gallery. E-commerce works best for lower-price editions, multiples, and accessories that build audience and cash flow between larger commissions.
+E-commerce fits lower-price editions and multiples better than high-value one-offs, where collectors usually want to see the work or buy through a trusted gallery. Useful as an audience-building and cash-flow channel between larger commissions. The decision hinges on price point and how much the work depends on being seen in person.

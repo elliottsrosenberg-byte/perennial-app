@@ -1,27 +1,27 @@
-# Commission contracts and terms
+# Thinking about commission agreements
 
 category: contracts
 
-## Why a contract matters
+## Why it's worth writing down
 
-A clear written agreement is the difference between a profitable commission and an open-ended obligation. Most disputes with clients trace back to something that was never written down: scope, revisions, ownership, or what happens if the project changes. A contract protects the relationship as much as the money.
+Most commission disputes trace back to something never put in writing — scope, revisions, ownership, or what happens when the project changes. A written agreement protects the relationship as much as the money. The goal isn't a rigid template; it's making sure the handful of decisions below are made *explicitly* rather than assumed.
 
-## Scope and deliverables
+## Scope — the decision that matters most
 
-Define exactly what the client is buying: the piece(s), dimensions, materials, finishes, quantity, and what "done" means. Vague scope is the most common way a commission loses money — unstated expectations become unpaid work.
+Define what the client is actually buying: the piece(s), dimensions, materials, finishes, quantity, and what "done" means. Vague scope is the most common way a commission loses money, because unstated expectations quietly become unpaid work. Help a maker get specific here before anything else.
 
-## Payment structure
+## Payment structure — options to choose
 
-A 30–50% deposit is standard on commissions, with the balance tied to milestones (e.g. deposit on signing, a payment at fabrication, the remainder before delivery/installation). Milestone payments keep cash arriving during the work and reduce the risk of a large unpaid balance at the end.
+A deposit (commonly ~30–50%) plus milestone payments tied to signing, fabrication, and delivery is a widely used structure because it keeps cash arriving during the work and limits the unpaid balance at the end. The exact split is a choice that depends on project length, client, and the maker's cash needs — present it as a lever, not a fixed formula.
 
 ## Revisions
 
-Specify the number of revision rounds included and the rate for additional ones. Unlimited revisions turn a fixed-price commission into hourly work the client never agreed to pay for.
+Decide up front how many revision rounds are included and the rate for additional ones. Open-ended revisions turn a fixed price into unbudgeted hourly work. The tradeoff to weigh: enough flexibility to keep the client happy without giving away unlimited labor.
 
 ## Intellectual property
 
-State who owns the design, whether the client gets an exclusive or a one-off, and whether the designer retains the right to reproduce, edition, or exhibit the work. For editions and reproducible designs, IP terms are as important as the price.
+Clarify who owns the design, whether the client gets an exclusive or a one-off, and whether the maker keeps the right to reproduce, edition, or exhibit it. For reproducible or edition work, IP terms can matter as much as the price. This is a genuine choice with money attached — surface the options rather than defaulting.
 
 ## Delivery and installation
 
-Spell out delivery, installation, timelines, and who bears shipping and insurance. For large or site-specific work, installation logistics and responsibility should be explicit — they are a frequent source of unexpected cost.
+Spell out delivery, installation, timelines, and who bears shipping and insurance. For large or site-specific work, this is a frequent source of surprise cost, so it's worth deciding explicitly rather than leaving it to good faith.

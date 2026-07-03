@@ -1,19 +1,19 @@
-# Cash flow realities
+# Thinking about cash flow
 
 category: cash-flow
 
-## The feast-or-famine cycle
+## The problem to name
 
-Project-based income creates feast-or-famine cycles. Large payments arrive irregularly while materials, production, and overhead are due continuously. Managing the gap between income timing and expense timing is the core financial challenge of an independent practice.
+Project-based income is lumpy: large payments arrive irregularly while materials, production, and overhead are due continuously. A studio can be profitable on paper and still run out of cash in the gap. The first useful thing is to help a maker *see* their own timing — when money actually lands versus when it goes out — rather than assume profitability equals liquidity.
 
 ## The invoice-to-payment gap
 
-Invoice dates and payment dates are often 30–90 days apart, while materials and production costs are paid upfront. That gap is where studios run out of cash even when they're profitable on paper. The levers that close it: invoice early, structure deposits, and set clear payment terms.
+Invoices and payments are often **30–90 days** apart, and upfront costs are paid before any of it comes in. The levers that close the gap are all choices the maker controls: invoice earlier, take deposits, set and enforce payment terms, and stage large projects into milestones so money arrives *during* the work. Present these as options to combine based on their clients and leverage, not a mandate.
 
-## Runway
+## Runway as a goal, not a rule
 
-The goal is 3–6 months of operating expenses held as runway. Most independent designers have less. Runway is what lets you decline a bad commission, wait for a better gallery deal, or survive a slow quarter without taking on debt.
+A common target is **3–6 months** of operating expenses in reserve — enough to decline a bad commission, wait for a better gallery deal, or ride out a slow stretch. Most independent makers have less, so treat it as a direction to move toward, calibrated to their situation, rather than a pass/fail bar. What matters is that runway buys optionality.
 
-## The levers
+## Deposits and milestones (the main tools)
 
-The main tools for smoothing cash flow are: deposit structures (30–50% upfront on commissions), early invoicing, clear and enforced payment terms, and staging larger projects into milestone payments so money arrives during the work rather than only at the end.
+Deposits (often ~30–50% upfront) and milestone payments are the primary way to smooth lumpy income, because they move cash to when it's needed. The right structure depends on the client relationship and the maker's negotiating position — help them weigh how hard to push for favorable terms against the risk of friction with a client they want.
