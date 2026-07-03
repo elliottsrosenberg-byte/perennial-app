@@ -92,7 +92,7 @@ export default function Modal({
       onClick={closeOnBackdrop ? onClose : undefined}
       style={{
         position: "fixed", inset: 0, zIndex: 300,
-        background: "rgba(31,33,26,0.45)",
+        background: "rgba(var(--color-charcoal-rgb),0.45)",
         backdropFilter: "blur(4px)",
         display: "flex", alignItems: "center", justifyContent: "center",
         padding: 20,
