@@ -859,7 +859,7 @@ export default function EventCard({
                 padding: "6px 14px", fontSize: 12, fontWeight: 500, borderRadius: 7,
                 color: "white",
                 // Tint the primary action with the selected calendar's
-                // colour so the user can see exactly what the resulting
+                // color so the user can see exactly what the resulting
                 // chip will look like. Falls back to event accent (edit
                 // mode) and finally sage.
                 background: selectedCal?.color ?? color ?? "var(--color-sage)",

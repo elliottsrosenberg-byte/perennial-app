@@ -14,7 +14,7 @@ import EntityTasksTab from "@/components/detail/EntityTasksTab";
 import EntityNotesTab from "@/components/detail/EntityNotesTab";
 import EntityFilesTab from "@/components/detail/EntityFilesTab";
 
-// ── Convert a stored colour into a soft chip background ─────────────────────
+// ── Convert a stored color into a soft chip background ─────────────────────
 function chipBg(color: string): string {
   if (color.startsWith("#")) {
     const hex = color.slice(1);

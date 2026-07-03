@@ -123,7 +123,7 @@ export default function NetworkOptionsMenu({
               Manage tags
             </p>
             <p style={{ fontSize: 10.5, color: "var(--color-text-tertiary)", marginTop: 1 }}>
-              Rename, recolour, prune — coming soon
+              Rename, recolor, prune — coming soon
             </p>
           </div>
           <span style={{

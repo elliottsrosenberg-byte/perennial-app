@@ -82,8 +82,8 @@ const COLOR_GROUPS = [
       { name: "Grey",       token: "--color-grey",        hex: "#9a9690",  note: "Tertiary text, icons" },
     ],
   },
-  // Accent / status colours are NOT a separate design-system set — they draw from
-  // the 10-colour User Palette below. Sage (above) is the only brand accent.
+  // Accent / status colors are NOT a separate design-system set — they draw from
+  // the 10-color User Palette below. Sage (above) is the only brand accent.
 ];
 
 // ─── Type scale ────────────────────────────────────────────────────────────────
@@ -133,19 +133,19 @@ const SHADOW_SCALE = [
 ];
 
 // ─── Badge data ────────────────────────────────────────────────────────────────
-// Labels mapped to their Badge tone — the primitive owns the actual colour.
+// Labels mapped to their Badge tone — the primitive owns the actual color.
 const STATUS_BADGES: { label: string; tone: BadgeTone }[] = [
   { label: "Complete",    tone: "green"   },
   { label: "In Progress", tone: "sage"    },
-  { label: "Planning",    tone: "neutral" },
-  { label: "On Hold",     tone: "amber"   },
+  { label: "Planning",    tone: "grey" },
+  { label: "On Hold",     tone: "yellow"   },
   { label: "Overdue",     tone: "red"     },
-  { label: "Draft",       tone: "neutral" },
+  { label: "Draft",       tone: "grey" },
   { label: "Sent",        tone: "blue"    },
   { label: "Paid",        tone: "green"   },
   { label: "Active",      tone: "sage"    },
-  { label: "Lead",        tone: "gold"    },
-  { label: "Inactive",    tone: "neutral" },
+  { label: "Lead",        tone: "brown"    },
+  { label: "Inactive",    tone: "grey" },
   { label: "Beta",        tone: "green"   },
   { label: "Soon",        tone: "sage"    },
 ];
@@ -153,10 +153,10 @@ const STATUS_BADGES: { label: string; tone: BadgeTone }[] = [
 const TAG_COLORS: { label: string; tone: BadgeTone }[] = [
   { label: "gallery",   tone: "blue"    },
   { label: "client",    tone: "green"   },
-  { label: "supplier",  tone: "gold"    },
+  { label: "supplier",  tone: "brown"    },
   { label: "press",     tone: "purple"  },
-  { label: "lead",      tone: "neutral" },
-  { label: "event",     tone: "teal"    },
+  { label: "lead",      tone: "grey" },
+  { label: "event",     tone: "olive"    },
   { label: "residency", tone: "red"     },
   { label: "award",     tone: "orange"  },
 ];
@@ -215,7 +215,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 function ColorsSection() {
   return (
-    <Section id="colors" title="Colors" description="Sage is the brand accent; charcoal + warm neutrals are the chrome. All accent/status/tag colours draw from the one 10-colour palette below — there is no separate accent set. CSS variables are the source of truth.">
+    <Section id="colors" title="Colors" description="Sage is the brand accent; charcoal + warm neutrals are the chrome. All accent/status/tag colors draw from the one 10-color palette below — there is no separate accent set. CSS variables are the source of truth.">
       {COLOR_GROUPS.map((group) => (
         <SubSection key={group.title} title={group.title}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 16 }}>
@@ -288,9 +288,9 @@ function ColorsSection() {
         </div>
       </SubSection>
 
-      {/* User Palette — the 10 chosen colours for user-assignable data. A separate
+      {/* User Palette — the 10 chosen colors for user-assignable data. A separate
           system from the tokens above (defined in lib/ui/palette.ts). */}
-      <SubSection title="Accent · Status · Palette — the 10 colours">
+      <SubSection title="Accent · Status · Palette — the 10 colors">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 16 }}>
           {PALETTE.map((c) => (
             <div key={c.hex}>
@@ -301,8 +301,8 @@ function ColorsSection() {
           ))}
         </div>
         <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 14, lineHeight: 1.55, maxWidth: 640 }}>
-          The one palette for <strong style={{ color: "var(--color-text-secondary)" }}>every accent, status, and tag colour</strong> — statuses, tags, calendar
-          colours, pipeline stages, project accents all draw from these 10. Defined in <code style={{ fontFamily: "monospace", fontSize: 10 }}>lib/ui/palette.ts</code>;
+          The one palette for <strong style={{ color: "var(--color-text-secondary)" }}>every accent, status, and tag color</strong> — statuses, tags, calendar
+          colors, pipeline stages, project accents all draw from these 10. Defined in <code style={{ fontFamily: "monospace", fontSize: 10 }}>lib/ui/palette.ts</code>;
           assigned per-item via <code style={{ fontFamily: "monospace", fontSize: 10 }}>paletteColorForKey</code>. Only <strong style={{ color: "var(--color-text-secondary)" }}>sage</strong> (brand) and the neutral
           chrome sit outside this palette.
         </p>
@@ -713,9 +713,9 @@ function BadgesSection() {
       <SubSection title="Solid Status (high-emphasis)">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {([
-            { label: "Draft", tone: "blue" }, { label: "Sent", tone: "amber" },
+            { label: "Draft", tone: "blue" }, { label: "Sent", tone: "yellow" },
             { label: "Paid", tone: "sage" }, { label: "Overdue", tone: "red" },
-            { label: "Void", tone: "neutral" },
+            { label: "Void", tone: "grey" },
           ] as { label: string; tone: BadgeTone }[]).map((b) => (
             <Badge key={b.label} tone={b.tone} variant="solid">{b.label}</Badge>
           ))}

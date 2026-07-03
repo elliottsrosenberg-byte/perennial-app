@@ -179,7 +179,7 @@ function ConnectIntegrationModal({ provider, onClose, onConnected }: {
   );
 }
 
-// ─── Accent palette (wireframe colours, not in design tokens) ─────────────────
+// ─── Accent palette (wireframe colors, not in design tokens) ─────────────────
 const C = {
   accent:  "var(--color-green-deep)", accentL:  "rgba(var(--color-green-deep-rgb),0.09)",
   blue:    "var(--color-blue)", blueL:    "rgba(var(--color-blue-rgb),0.09)",
