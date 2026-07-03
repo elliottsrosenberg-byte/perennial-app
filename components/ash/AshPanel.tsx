@@ -217,6 +217,7 @@ export default function AshPanel({
     setIsStreaming(true);
     if (inputRef.current) inputRef.current.style.height = "auto";
 
+    let turnConvId = conversationId;
     try {
       const res = await fetch("/api/ash", {
         method:  "POST",
@@ -246,7 +247,7 @@ export default function AshPanel({
               ));
             }
             if (p.tool) setActiveTool(p.tool);
-            if (p.done && p.conversationId) setConversationId(p.conversationId);
+            if (p.done && p.conversationId) { setConversationId(p.conversationId); turnConvId = p.conversationId; }
           } catch { /* ignore */ }
         }
       }
@@ -266,6 +267,14 @@ export default function AshPanel({
       // can refetch without requiring the user to navigate away and back.
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event("ash:turn-complete"));
+      }
+      // Fire-and-forget: let Ash learn any durable preferences from this turn.
+      if (turnConvId) {
+        void fetch("/api/ash/learn", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ conversationId: turnConvId }),
+        }).catch(() => {});
       }
     }
   }, [isStreaming, conversationId, module, messages.length, onExpand]);
