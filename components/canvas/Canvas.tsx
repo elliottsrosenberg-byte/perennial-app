@@ -1,39 +1,51 @@
 "use client";
 
-// Reusable spatial canvas ("board"). Drops into Home full-page or any detail
-// panel. Infinite pan/zoom viewport + object create/move/resize/rotate/delete,
-// all persisted via useCanvas. Colours are design tokens only (AGENTS.md).
+// Reusable spatial canvas ("board"). Infinite pan/zoom viewport + a FigJam-style
+// tool/selection model: select tool (click / marquee enclose|touch), hand tool
+// (+ space to pan), multi-select, group move, option-drag duplicate, place-on-
+// click creation, keyboard shortcuts, and a right-click menu. Colours are
+// design tokens only (AGENTS.md).
 
 import {
   forwardRef,
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
 } from "react";
-import { Trash2 } from "lucide-react";
+import {
+  Trash2,
+  Copy,
+  ArrowUpToLine,
+  ArrowDownToLine,
+} from "lucide-react";
 import type { CanvasObjectRow, CanvasScope } from "@/types/database";
 import { uploadEditorImage, isUploadableImageType } from "@/lib/uploads/editor-image";
 import { useCanvas } from "./useCanvas";
 import {
   clampScale,
   createObject,
+  cloneObject,
   screenToWorld,
+  normRect,
+  objectAABB,
+  rectContains,
+  rectIntersects,
   GRID_SIZE,
   type Viewport,
 } from "./geometry";
 import type {
   CanvasObject,
   CanvasObjectType,
+  CanvasTool,
   StickyColor,
-  StickyContent,
-  ShapeContent,
 } from "./types";
 import { STICKY_COLOR_ORDER, STICKY_PALETTE } from "./palette";
 import CanvasObjectView from "./CanvasObjectView";
-import ToolDock from "./ToolDock";
+import ToolDock, { type ShapeKind } from "./ToolDock";
 
 export interface CanvasHandle {
   create: (type: CanvasObjectType) => void;
@@ -45,52 +57,80 @@ interface Props {
   initialObjects?: CanvasObjectRow[];
   scope?: CanvasScope;
   entityId?: string | null;
-  /** Hide the floating tool dock (e.g. compact detail-panel embeds). */
   hideDock?: boolean;
   style?: CSSProperties;
 }
 
-const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({
-  canvasId,
-  initialObjects,
-  scope,
-  entityId = null,
-  hideDock = false,
-  style,
-}: Props, ref) {
+const DRAG_THRESHOLD = 3;
+
+const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
+  { canvasId, initialObjects, scope, entityId = null, hideDock = false, style }: Props,
+  ref,
+) {
   const store = useCanvas({ canvasId, initialObjects, scope, entityId });
   const containerRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
   const [view, setView] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [tool, setTool] = useState<CanvasTool>("select");
+  const [stickyColor, setStickyColor] = useState<StickyColor>("amber");
+  const [shapeKind, setShapeKind] = useState<ShapeKind>("rect");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
-  const panRef = useRef<{ px: number; py: number; vx: number; vy: number } | null>(null);
+  const [spaceDown, setSpaceDown] = useState(false);
   const [panning, setPanning] = useState(false);
+  const [marquee, setMarquee] = useState<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
+  const [rubber, setRubber] = useState<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
+  const [preview, setPreview] = useState<{ x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
-  const selected = store.objects.find((o) => o.id === selectedId) ?? null;
+  // Live refs so window/keyboard handlers read current values without re-binding.
+  // Synced in an effect (not during render) per react-hooks/refs; handlers run
+  // after commit, so they always see the latest.
+  const viewRef = useRef(view);
+  const objsRef = useRef(store.objects);
+  const selRef = useRef(selectedIds);
+  useEffect(() => {
+    viewRef.current = view;
+    objsRef.current = store.objects;
+    selRef.current = selectedIds;
+  });
 
-  // ── viewport helpers ──
+  const rectOf = () => containerRef.current!.getBoundingClientRect();
+  const toWorld = useCallback((cx: number, cy: number) => {
+    return screenToWorld(cx, cy, rectOf(), viewRef.current);
+  }, []);
   const viewportCenterWorld = useCallback(() => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return { x: 0, y: 0 };
-    return screenToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2, rect, view);
-  }, [view]);
+    const r = rectOf();
+    return screenToWorld(r.left + r.width / 2, r.top + r.height / 2, r, viewRef.current);
+  }, []);
+  const nextZ = () => objsRef.current.reduce((m, o) => Math.max(m, o.zIndex), 0) + 1;
+  const minZ = () => objsRef.current.reduce((m, o) => Math.min(m, o.zIndex), 0);
 
-  // ── create ──
-  const handleCreate = useCallback(
-    (type: CanvasObjectType, extra?: Parameters<typeof createObject>[3]) => {
-      const obj = createObject(type, viewportCenterWorld(), store.topZ + 1, extra);
+  const selectOnly = useCallback((id: string) => setSelectedIds(new Set([id])), []);
+
+  // ── create / place ──
+  const placeObject = useCallback(
+    (type: CanvasObjectType, center: { x: number; y: number }, extra?: Parameters<typeof createObject>[3]) => {
+      const obj = createObject(type, center, nextZ(), extra);
       store.add(obj);
-      setSelectedId(obj.id);
+      selectOnly(obj.id);
       if (type === "text" || type === "sticky") setEditingId(obj.id);
       return obj;
     },
-    [store, viewportCenterWorld],
+    [store, selectOnly],
+  );
+
+  // Imperative create (Home chips) — drops at viewport centre.
+  const handleCreate = useCallback(
+    (type: CanvasObjectType) => {
+      const extra = type === "sticky" ? { content: { color: stickyColor, text: "" } } : undefined;
+      placeObject(type, viewportCenterWorld(), extra);
+    },
+    [placeObject, viewportCenterWorld, stickyColor],
   );
 
   const handleUploadImage = useCallback(() => fileRef.current?.click(), []);
-
-  // Upload a file and drop an image object at `center` (defaults to viewport centre).
   const addImageFromFile = useCallback(
     async (file: File, center?: { x: number; y: number }) => {
       try {
@@ -98,20 +138,17 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({
         const maxW = 360;
         const ratio = up.width && up.height ? up.height / up.width : 0.66;
         const width = Math.min(maxW, up.width ?? maxW);
-        const obj = createObject("image", center ?? viewportCenterWorld(), store.topZ + 1, {
+        placeObject("image", center ?? viewportCenterWorld(), {
           width,
           height: Math.round(width * ratio),
           content: { url: up.url },
         });
-        store.add(obj);
-        setSelectedId(obj.id);
       } catch (err) {
         console.error("canvas image upload failed", err);
       }
     },
-    [store, viewportCenterWorld],
+    [placeObject, viewportCenterWorld],
   );
-
   const onFilePicked = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -121,57 +158,179 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({
     [addImageFromFile],
   );
 
-  // Drag image files straight onto the canvas.
-  const onDrop = useCallback(
-    (e: React.DragEvent) => {
-      const files = Array.from(e.dataTransfer?.files ?? []).filter((f) =>
-        isUploadableImageType(f.type),
-      );
-      if (!files.length) return;
-      e.preventDefault();
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const base = screenToWorld(e.clientX, e.clientY, rect, view);
-      files.forEach((f, i) => addImageFromFile(f, { x: base.x + i * 24, y: base.y + i * 24 }));
+  useImperativeHandle(ref, () => ({ create: handleCreate, uploadImage: handleUploadImage }), [
+    handleCreate,
+    handleUploadImage,
+  ]);
+
+  // ── object move (group drag + option-duplicate) ──
+  const beginObjectDrag = useCallback(
+    (id: string, e: React.PointerEvent) => {
+      setMenu(null);
+      const shift = e.shiftKey;
+      const alt = e.altKey;
+      const current = selRef.current;
+
+      let ids: Set<string>;
+      if (shift) {
+        ids = new Set(current);
+        if (ids.has(id)) {
+          ids.delete(id);
+          setSelectedIds(ids);
+          return; // shift-click toggled off → no drag
+        }
+        ids.add(id);
+      } else if (current.has(id)) {
+        ids = new Set(current);
+      } else {
+        ids = new Set([id]);
+      }
+      setSelectedIds(ids);
+
+      let dragObjs = objsRef.current.filter((o) => ids.has(o.id));
+      if (alt) {
+        let z = nextZ();
+        const clones = dragObjs.map((o) => cloneObject(o, 0, 0, z++));
+        clones.forEach((c) => store.add(c));
+        setSelectedIds(new Set(clones.map((c) => c.id)));
+        dragObjs = clones;
+      }
+
+      const starts = dragObjs.map((o) => ({ id: o.id, x: o.x, y: o.y }));
+      const px = e.clientX;
+      const py = e.clientY;
+      const scale = viewRef.current.scale;
+      let ldx = 0;
+      let ldy = 0;
+      const move = (ev: PointerEvent) => {
+        ldx = (ev.clientX - px) / scale;
+        ldy = (ev.clientY - py) / scale;
+        starts.forEach((s) =>
+          store.patchLocal(s.id, { x: Math.round(s.x + ldx), y: Math.round(s.y + ldy) }),
+        );
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        if (ldx !== 0 || ldy !== 0) {
+          starts.forEach((s) =>
+            store.commit(s.id, { x: Math.round(s.x + ldx), y: Math.round(s.y + ldy) }),
+          );
+        }
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
     },
-    [addImageFromFile, view],
-  );
-  const onDragOver = useCallback((e: React.DragEvent) => {
-    if (Array.from(e.dataTransfer?.items ?? []).some((it) => it.kind === "file")) {
-      e.preventDefault();
-    }
-  }, []);
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      create: (type: CanvasObjectType) => handleCreate(type),
-      uploadImage: handleUploadImage,
-    }),
-    [handleCreate, handleUploadImage],
+    [store],
   );
 
-  // ── pan / zoom ──
-  function onBackgroundPointerDown(e: React.PointerEvent) {
+  // ── background pointer down: pan / marquee / place / draw ──
+  function onBgPointerDown(e: React.PointerEvent) {
     if (e.button !== 0) return;
-    setSelectedId(null);
-    setEditingId(null);
-    panRef.current = { px: e.clientX, py: e.clientY, vx: view.x, vy: view.y };
-    setPanning(true);
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  }
-  function onBackgroundPointerMove(e: React.PointerEvent) {
-    const p = panRef.current;
-    if (!p) return;
-    setView((v) => ({ ...v, x: p.vx + (e.clientX - p.px), y: p.vy + (e.clientY - p.py) }));
-  }
-  function onBackgroundPointerUp(e: React.PointerEvent) {
-    if (!panRef.current) return;
-    panRef.current = null;
-    setPanning(false);
-    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+    setMenu(null);
+    const handMode = tool === "hand" || spaceDown;
+
+    if (handMode) {
+      const start = { px: e.clientX, py: e.clientY, vx: view.x, vy: view.y };
+      setPanning(true);
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      const move = (ev: PointerEvent) =>
+        setView((v) => ({ ...v, x: start.vx + (ev.clientX - start.px), y: start.vy + (ev.clientY - start.py) }));
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        setPanning(false);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      return;
+    }
+
+    if (tool === "text" || tool === "sticky") {
+      const extra = tool === "sticky" ? { content: { color: stickyColor, text: "" } } : undefined;
+      placeObject(tool, toWorld(e.clientX, e.clientY), extra);
+      setTool("select");
+      return;
+    }
+
+    if (tool === "shape") {
+      const sx = e.clientX;
+      const sy = e.clientY;
+      const move = (ev: PointerEvent) => setRubber({ sx, sy, ex: ev.clientX, ey: ev.clientY });
+      const up = (ev: PointerEvent) => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        setRubber(null);
+        const w0 = toWorld(sx, sy);
+        const w1 = toWorld(ev.clientX, ev.clientY);
+        const r = normRect(w0.x, w0.y, w1.x, w1.y);
+        let width = Math.round(r.right - r.left);
+        let height = Math.round(r.bottom - r.top);
+        let center: { x: number; y: number };
+        if (width < 8 && height < 8) {
+          width = 200;
+          height = 150;
+          center = w0;
+        } else {
+          center = { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
+        }
+        const obj = createObject("shape", center, nextZ(), {
+          width,
+          height,
+          content: { shape: shapeKind, color: "sage" },
+        });
+        store.add(obj);
+        selectOnly(obj.id);
+        setTool("select");
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      return;
+    }
+
+    if (tool === "pen") return; // pen drawing — coming soon
+
+    // select tool → marquee
+    const sx = e.clientX;
+    const sy = e.clientY;
+    const shift = e.shiftKey;
+    const move = (ev: PointerEvent) => setMarquee({ sx, sy, ex: ev.clientX, ey: ev.clientY });
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setMarquee(null);
+      const dragged = Math.abs(ev.clientX - sx) > DRAG_THRESHOLD || Math.abs(ev.clientY - sy) > DRAG_THRESHOLD;
+      if (!dragged) {
+        if (!shift) setSelectedIds(new Set());
+        return;
+      }
+      const w0 = toWorld(sx, sy);
+      const w1 = toWorld(ev.clientX, ev.clientY);
+      const r = normRect(w0.x, w0.y, w1.x, w1.y);
+      const touch = ev.clientX < sx; // right-to-left drag = touch-select
+      const hits = objsRef.current.filter((o) => {
+        const b = objectAABB(o);
+        return touch ? rectIntersects(r, b) : rectContains(r, b);
+      });
+      setSelectedIds((prev) => {
+        const next = shift ? new Set(prev) : new Set<string>();
+        hits.forEach((o) => next.add(o.id));
+        return next;
+      });
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
   }
 
+  function onBgPointerMove(e: React.PointerEvent) {
+    if ((tool === "sticky" || tool === "text" || tool === "shape") && !panning) {
+      setPreview({ x: e.clientX, y: e.clientY });
+    } else if (preview) {
+      setPreview(null);
+    }
+  }
+
+  // ── wheel: pan / zoom-to-cursor ──
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -180,13 +339,9 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({
       const rect = el.getBoundingClientRect();
       if (e.ctrlKey || e.metaKey) {
         setView((v) => {
-          const worldBefore = screenToWorld(e.clientX, e.clientY, rect, v);
+          const before = screenToWorld(e.clientX, e.clientY, rect, v);
           const scale = clampScale(v.scale * (1 - e.deltaY * 0.0025));
-          return {
-            scale,
-            x: e.clientX - rect.left - worldBefore.x * scale,
-            y: e.clientY - rect.top - worldBefore.y * scale,
-          };
+          return { scale, x: e.clientX - rect.left - before.x * scale, y: e.clientY - rect.top - before.y * scale };
         });
       } else {
         setView((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }));
@@ -196,21 +351,52 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
-  // ── keyboard: delete / escape ──
+  // ── keyboard: tools, delete, escape, space-pan ──
+  const deleteSelected = useCallback(() => {
+    selRef.current.forEach((id) => store.remove(id));
+    setSelectedIds(new Set());
+  }, [store]);
+
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (editingId) return;
-      if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
-        e.preventDefault();
-        store.remove(selectedId);
-        setSelectedId(null);
-      } else if (e.key === "Escape") {
-        setSelectedId(null);
-      }
+    function isTyping() {
+      const el = document.activeElement as HTMLElement | null;
+      return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
     }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [editingId, selectedId, store]);
+    function onKeyDown(e: KeyboardEvent) {
+      if (isTyping() || editingId) return;
+      if (e.key === " ") {
+        e.preventDefault();
+        setSpaceDown(true);
+        return;
+      }
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (selRef.current.size) {
+          e.preventDefault();
+          deleteSelected();
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        setSelectedIds(new Set());
+        setTool("select");
+        setMenu(null);
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const map: Record<string, CanvasTool> = { v: "select", h: "hand", n: "sticky", t: "text", s: "shape", p: "pen" };
+      const t = map[e.key.toLowerCase()];
+      if (t) setTool(t);
+    }
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.key === " ") setSpaceDown(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [editingId, deleteSelected]);
 
   // ── object callbacks ──
   const commitGeometry = useCallback(
@@ -222,13 +408,14 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({
         height: o.height,
         rotation: o.rotation,
         z_index: o.zIndex,
+        content: o.content as unknown as Record<string, unknown>,
       });
     },
     [store],
   );
   const onText = useCallback(
     (id: string, text: string) => {
-      const o = store.objects.find((x) => x.id === id);
+      const o = objsRef.current.find((x) => x.id === id);
       if (!o) return;
       const content = { ...o.content, text };
       store.patchLocal(id, { content });
@@ -237,25 +424,64 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({
     [store],
   );
   const setSelectedColor = useCallback(
-    (color: StickyColor) => {
-      if (!selected) return;
-      const content = { ...selected.content, color } as StickyContent | ShapeContent;
-      store.patchLocal(selected.id, { content });
-      store.commit(selected.id, { content: content as unknown as Record<string, unknown> });
+    (id: string, color: StickyColor) => {
+      const o = objsRef.current.find((x) => x.id === id);
+      if (!o) return;
+      const content = { ...o.content, color };
+      store.patchLocal(id, { content });
+      store.commit(id, { content: content as unknown as Record<string, unknown> });
     },
-    [selected, store],
+    [store],
   );
 
-  // world → screen for the contextual toolbar
-  const toolbarPos = (() => {
-    if (!selected) return null;
-    return {
-      left: selected.x * view.scale + view.x + (selected.width * view.scale) / 2,
-      top: selected.y * view.scale + view.y - 46,
-    };
-  })();
+  // ── context menu actions ──
+  const duplicateSelected = useCallback(() => {
+    let z = nextZ();
+    const clones = objsRef.current.filter((o) => selRef.current.has(o.id)).map((o) => cloneObject(o, 24, 24, z++));
+    clones.forEach((c) => store.add(c));
+    setSelectedIds(new Set(clones.map((c) => c.id)));
+    setMenu(null);
+  }, [store]);
+  const bringForward = useCallback(() => {
+    let z = nextZ();
+    selRef.current.forEach((id) => {
+      store.patchLocal(id, { zIndex: z });
+      store.commit(id, { z_index: z });
+      z += 1;
+    });
+    setMenu(null);
+  }, [store]);
+  const sendBackward = useCallback(() => {
+    let z = minZ() - 1;
+    selRef.current.forEach((id) => {
+      store.patchLocal(id, { zIndex: z });
+      store.commit(id, { z_index: z });
+      z -= 1;
+    });
+    setMenu(null);
+  }, [store]);
 
-  const showColorBar = selected?.type === "sticky" || selected?.type === "shape";
+  const onObjectContextMenu = useCallback((id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedIds((prev) => (prev.has(id) ? prev : new Set([id])));
+    setMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  // ── selection toolbar (single sticky/shape) ──
+  const sole = selectedIds.size === 1 ? store.objects.find((o) => selectedIds.has(o.id)) ?? null : null;
+  const showColorBar = sole?.type === "sticky" || sole?.type === "shape";
+  const toolbarPos = sole
+    ? { left: sole.x * view.scale + view.x + (sole.width * view.scale) / 2, top: sole.y * view.scale + view.y - 46 }
+    : null;
+
+  const containerCursor = useMemo(() => {
+    if (tool === "hand" || spaceDown) return panning ? "grabbing" : "grab";
+    if (tool === "shape" || tool === "pen" || tool === "sticky" || tool === "text") return "crosshair";
+    return "default";
+  }, [tool, spaceDown, panning]);
+
+  const marqueeRect = marquee ?? rubber;
 
   return (
     <div
@@ -270,15 +496,29 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({
           "radial-gradient(circle, rgba(var(--color-charcoal-rgb), 0.13) 1px, transparent 1.4px)",
         backgroundSize: `${GRID_SIZE * view.scale}px ${GRID_SIZE * view.scale}px`,
         backgroundPosition: `${view.x}px ${view.y}px`,
-        cursor: panning ? "grabbing" : "default",
+        cursor: containerCursor,
         touchAction: "none",
         ...style,
       }}
-      onPointerDown={onBackgroundPointerDown}
-      onPointerMove={onBackgroundPointerMove}
-      onPointerUp={onBackgroundPointerUp}
-      onDrop={onDrop}
-      onDragOver={onDragOver}
+      onPointerDown={onBgPointerDown}
+      onPointerMove={onBgPointerMove}
+      onPointerLeave={() => setPreview(null)}
+      onDrop={(e) => {
+        const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => isUploadableImageType(f.type));
+        if (!files.length) return;
+        e.preventDefault();
+        const base = toWorld(e.clientX, e.clientY);
+        files.forEach((f, i) => addImageFromFile(f, { x: base.x + i * 24, y: base.y + i * 24 }));
+      }}
+      onDragOver={(e) => {
+        if (Array.from(e.dataTransfer?.items ?? []).some((it) => it.kind === "file")) e.preventDefault();
+      }}
+      onContextMenu={(e) => {
+        if (selectedIds.size) {
+          e.preventDefault();
+          setMenu({ x: e.clientX, y: e.clientY });
+        }
+      }}
     >
       {/* world layer */}
       <div
@@ -294,23 +534,79 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({
           <CanvasObjectView
             key={o.id}
             object={o}
-            selected={o.id === selectedId}
+            selected={selectedIds.has(o.id)}
+            soleSelected={selectedIds.size === 1 && selectedIds.has(o.id)}
             editing={o.id === editingId}
             scale={view.scale}
-            interactive={!panning}
-            onSelect={setSelectedId}
+            onBeginDrag={beginObjectDrag}
             onChangeLocal={store.patchLocal}
             onCommitGeometry={commitGeometry}
             onStartEdit={setEditingId}
             onText={onText}
             onEndEdit={() => setEditingId(null)}
+            onContextMenu={onObjectContextMenu}
           />
         ))}
       </div>
 
-      {/* contextual toolbar */}
-      {selected && !editingId && toolbarPos && (
+      {/* marquee / shape rubber-band (screen space) */}
+      {marqueeRect && (
         <div
+          style={{
+            position: "fixed",
+            left: Math.min(marqueeRect.sx, marqueeRect.ex),
+            top: Math.min(marqueeRect.sy, marqueeRect.ey),
+            width: Math.abs(marqueeRect.ex - marqueeRect.sx),
+            height: Math.abs(marqueeRect.ey - marqueeRect.sy),
+            background: "rgba(var(--color-sage-rgb), 0.12)",
+            border: "1px solid var(--color-sage)",
+            borderRadius: rubber ? "var(--radius-sm)" : 0,
+            pointerEvents: "none",
+            zIndex: 40,
+          }}
+        />
+      )}
+
+      {/* placement preview cursor */}
+      {preview && (tool === "sticky" || tool === "text" || tool === "shape") && (
+        <div
+          style={{
+            position: "fixed",
+            left: preview.x + 12,
+            top: preview.y + 12,
+            pointerEvents: "none",
+            zIndex: 41,
+            width: tool === "text" ? 20 : 34,
+            height: tool === "text" ? 20 : 26,
+            borderRadius: tool === "shape" && shapeKind === "ellipse" ? "50%" : "var(--radius-sm)",
+            background:
+              tool === "sticky"
+                ? STICKY_PALETTE[stickyColor].fill
+                : tool === "shape"
+                  ? STICKY_PALETTE.sage.fill
+                  : "transparent",
+            border:
+              tool === "text"
+                ? "none"
+                : `1px solid ${tool === "sticky" ? STICKY_PALETTE[stickyColor].border : STICKY_PALETTE.sage.border}`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "var(--color-text-tertiary)",
+            fontFamily: "var(--font-sans)",
+            fontSize: 14,
+            fontWeight: 600,
+            opacity: 0.85,
+          }}
+        >
+          {tool === "text" ? "T" : ""}
+        </div>
+      )}
+
+      {/* single-selection colour + delete toolbar */}
+      {sole && !editingId && toolbarPos && (
+        <div
+          onPointerDown={(e) => e.stopPropagation()}
           style={{
             position: "absolute",
             left: toolbarPos.left,
@@ -326,17 +622,16 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({
             boxShadow: "var(--shadow-lg)",
             zIndex: 30,
           }}
-          onPointerDown={(e) => e.stopPropagation()}
         >
           {showColorBar &&
             STICKY_COLOR_ORDER.map((color) => (
               <button
                 key={color}
                 aria-label={`${color} colour`}
-                onClick={() => setSelectedColor(color)}
+                onClick={() => setSelectedColor(sole.id, color)}
                 style={{
-                  width: 18,
-                  height: 18,
+                  width: 16,
+                  height: 16,
                   borderRadius: "var(--radius-full)",
                   background: STICKY_PALETTE[color].fill,
                   border: `1.5px solid ${STICKY_PALETTE[color].border}`,
@@ -344,15 +639,10 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({
                 }}
               />
             ))}
-          {showColorBar && (
-            <span style={{ width: 1, height: 18, background: "var(--color-border)" }} />
-          )}
+          {showColorBar && <span style={{ width: 1, height: 18, background: "var(--color-border)" }} />}
           <button
             aria-label="Delete"
-            onClick={() => {
-              store.remove(selected.id);
-              setSelectedId(null);
-            }}
+            onClick={deleteSelected}
             style={{
               display: "flex",
               alignItems: "center",
@@ -370,15 +660,72 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({
         </div>
       )}
 
-      {!hideDock && <ToolDock onCreate={handleCreate} onUploadImage={handleUploadImage} />}
+      {/* right-click context menu */}
+      {menu && (
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 49 }} onPointerDown={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }} />
+          <div
+            style={{
+              position: "fixed",
+              left: menu.x,
+              top: menu.y,
+              minWidth: 176,
+              padding: 6,
+              borderRadius: "var(--radius-md)",
+              background: "var(--color-surface-raised)",
+              border: "0.5px solid var(--color-border)",
+              boxShadow: "var(--shadow-lg)",
+              zIndex: 50,
+            }}
+          >
+            {[
+              { label: "Duplicate", icon: <Copy size={14} strokeWidth={1.75} />, onClick: duplicateSelected },
+              { label: "Bring to front", icon: <ArrowUpToLine size={14} strokeWidth={1.75} />, onClick: bringForward },
+              { label: "Send to back", icon: <ArrowDownToLine size={14} strokeWidth={1.75} />, onClick: sendBackward },
+              { label: "Delete", icon: <Trash2 size={14} strokeWidth={1.75} />, onClick: deleteSelected, danger: true },
+            ].map((item) => (
+              <button
+                key={item.label}
+                onClick={item.onClick}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  width: "100%",
+                  padding: "7px 9px",
+                  border: "none",
+                  background: "transparent",
+                  borderRadius: "var(--radius-sm)",
+                  cursor: "pointer",
+                  fontFamily: "var(--font-sans)",
+                  fontSize: 13,
+                  color: item.danger ? "var(--color-red)" : "var(--color-text-primary)",
+                  textAlign: "left",
+                }}
+              >
+                <span style={{ display: "flex", color: item.danger ? "var(--color-red)" : "var(--color-text-tertiary)" }}>
+                  {item.icon}
+                </span>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        onChange={onFilePicked}
-        style={{ display: "none" }}
-      />
+      {!hideDock && (
+        <ToolDock
+          tool={tool}
+          onSelectTool={setTool}
+          onUploadImage={handleUploadImage}
+          stickyColor={stickyColor}
+          onStickyColor={setStickyColor}
+          shapeKind={shapeKind}
+          onShapeKind={setShapeKind}
+        />
+      )}
+
+      <input ref={fileRef} type="file" accept="image/*" onChange={onFilePicked} style={{ display: "none" }} />
     </div>
   );
 });
