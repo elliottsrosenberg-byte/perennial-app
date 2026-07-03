@@ -15,6 +15,12 @@ Repo-specific gotchas for future re-syncs.
   and `EmptyState` dispatch a `open-ash` window CustomEvent on click; `CanvasAshHint` reads
   localStorage via useSyncExternalStore.
 
+## Re-sync prep (before running the build)
+- Create the self-symlink so the converter resolves the app as its own package (PKG_DIR):
+  `ln -sfn "$(pwd)" node_modules/perennial-app`  (gitignored; recreate per clone).
+  Run the build with `--node-modules ./node_modules` and NO `--entry` (triggers synth mode).
+- Install render-check deps once: `(cd .ds-sync && npm i esbuild ts-morph @types/react playwright && npx playwright install chromium)`.
+
 ## TWO REQUIRED CONVERTER PATCHES (reapply after staging `.ds-sync/` each sync)
 Synth-entry mode (app repo, no dist) needs two small edits to the staged converter libs.
 Reapply them to `.ds-sync/lib/*` after copying the skill scripts, before running the build:
