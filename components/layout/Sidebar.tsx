@@ -533,7 +533,7 @@ export default function Sidebar() {
             {tooltip.soon && (
               <span style={{
                 fontSize: 9, fontWeight: 600, padding: "1px 5px", borderRadius: 3,
-                background: "rgba(155,163,122,0.15)", color: "var(--color-sage)",
+                background: "rgba(var(--color-sage-rgb),0.15)", color: "var(--color-sage)",
               }}>
                 Soon
               </span>

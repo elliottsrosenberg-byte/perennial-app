@@ -801,8 +801,8 @@ export default function EventCard({
         <div style={{
           margin: "0 16px 12px",
           padding: "10px 12px", borderRadius: 8,
-          background: "rgba(220,62,13,0.06)",
-          border: "0.5px solid rgba(220,62,13,0.25)",
+          background: "rgba(var(--color-red-rgb),0.06)",
+          border: "0.5px solid rgba(var(--color-red-rgb),0.25)",
           fontSize: 11.5, color: "var(--color-red-orange)", lineHeight: 1.5,
         }}>
           Your {needsReconnect.provider === "microsoft" ? "Outlook" : "Google"} connection doesn&apos;t have write permission yet.{" "}
@@ -830,12 +830,12 @@ export default function EventCard({
                 padding: "6px 12px", borderRadius: 7,
                 background: "transparent",
                 color: "var(--color-red-orange)",
-                border: "0.5px solid rgba(220,62,13,0.25)",
+                border: "0.5px solid rgba(var(--color-red-rgb),0.25)",
                 fontSize: 11.5, fontWeight: 500, cursor: "pointer",
                 fontFamily: "inherit",
                 opacity: submitting ? 0.5 : 1,
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(220,62,13,0.06)")}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(var(--color-red-rgb),0.06)")}
               onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
             >
               <Trash2 size={12} strokeWidth={1.75} />
@@ -1106,7 +1106,7 @@ function LocationInput({ value, onChange, disabled }: {
             background: "var(--color-off-white)",
             border: "0.5px solid var(--color-border)",
             borderRadius: 8,
-            boxShadow: "0 2px 8px rgba(31,33,26,0.04), 0 8px 24px rgba(31,33,26,0.10)",
+            boxShadow: "0 2px 8px rgba(var(--color-charcoal-rgb),0.04), 0 8px 24px rgba(var(--color-charcoal-rgb),0.10)",
             maxHeight: 260,
             overflowY: "auto",
             padding: 4,

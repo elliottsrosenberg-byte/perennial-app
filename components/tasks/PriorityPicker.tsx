@@ -8,7 +8,7 @@ import { useState, useRef, useEffect } from "react";
 
 export const PRIORITY_DOT: Record<string, string> = {
   high:   "var(--color-red-orange)",
-  medium: "#b8860b",
+  medium: "var(--color-gold)",
   low:    "var(--color-text-tertiary)",
 };
 export const PRIORITY_LABELS: Record<string, string> = { high: "High", medium: "Medium", low: "Low" };

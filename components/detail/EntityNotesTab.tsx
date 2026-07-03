@@ -84,7 +84,7 @@ function InlineNoteEditor({
       borderRadius: 10,
       background: "var(--color-surface-raised)",
       border: "0.5px solid var(--color-sage)",
-      boxShadow: "0 0 0 2px rgba(155,163,122,0.15)",
+      boxShadow: "0 0 0 2px rgba(var(--color-sage-rgb),0.15)",
       overflow: "hidden",
       marginBottom: 10,
     }}>
@@ -277,8 +277,8 @@ export default function EntityNotesTab({
               onClick={() => setEditingId(note.id)}
               style={{
                 padding: "12px 14px", marginBottom: 8, borderRadius: 10,
-                background: hi ? "rgba(155,163,122,0.18)" : "var(--color-off-white)",
-                border: `0.5px solid ${hi ? "rgba(155,163,122,0.46)" : "var(--color-border)"}`,
+                background: hi ? "rgba(var(--color-sage-rgb),0.18)" : "var(--color-off-white)",
+                border: `0.5px solid ${hi ? "rgba(var(--color-sage-rgb),0.46)" : "var(--color-border)"}`,
                 cursor: "pointer",
                 transition: "background 0.6s ease, border-color 0.6s ease",
               }}
@@ -289,7 +289,7 @@ export default function EntityNotesTab({
                 {note.title ?? "Untitled note"}
               </p>
               {snippet
-                ? <p style={{ fontSize: 11.5, color: "#6b6860", lineHeight: 1.6, marginBottom: 4 }}>{snippet}{note.content && note.content.length > 120 ? "…" : ""}</p>
+                ? <p style={{ fontSize: 11.5, color: "var(--color-text-secondary)", lineHeight: 1.6, marginBottom: 4 }}>{snippet}{note.content && note.content.length > 120 ? "…" : ""}</p>
                 : <p style={{ fontSize: 11, color: "var(--color-grey)", fontStyle: "italic", marginBottom: 4 }}>Empty</p>
               }
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>

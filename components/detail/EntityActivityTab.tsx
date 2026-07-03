@@ -40,10 +40,10 @@ export interface EntityActivity {
 }
 
 const ACTIVITY_CONFIG: Record<ContactActivityType, { bg: string; color: string; label: string; icon: React.ReactNode }> = {
-  email:   { bg: "rgba(37,99,171,0.10)",  color: "#2563ab", label: "Email",   icon: <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg> },
-  call:    { bg: "rgba(61,107,79,0.10)",  color: "#3d6b4f", label: "Call",    icon: <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14.3 11.5l-2.1-2.1a1 1 0 00-1.4 0l-1 1c-.9-.5-1.7-1.2-2.4-2l1-1a1 1 0 000-1.4L6.3 3.9a1 1 0 00-1.4 0L3.5 5.3C3 7.5 5 11 8.7 14.5l1.5-1.5a1 1 0 001.1-1.5z"/></svg> },
-  note:    { bg: "rgba(184,134,11,0.10)", color: "#b8860b", label: "Note",    icon: <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 2h12v9H2z"/><path d="M5 6h6M5 9h4"/></svg> },
-  meeting: { bg: "rgba(109,79,163,0.10)", color: "#6d4fa3", label: "Meeting", icon: <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 2v2M11 2v2M2 7h12"/></svg> },
+  email:   { bg: "rgba(var(--color-blue-rgb),0.10)",  color: "var(--color-blue)", label: "Email",   icon: <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 4l6 5 6-5"/><rect x="1" y="3" width="14" height="10" rx="2"/></svg> },
+  call:    { bg: "rgba(61,107,79,0.10)",  color: "var(--color-green-deep)", label: "Call",    icon: <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14.3 11.5l-2.1-2.1a1 1 0 00-1.4 0l-1 1c-.9-.5-1.7-1.2-2.4-2l1-1a1 1 0 000-1.4L6.3 3.9a1 1 0 00-1.4 0L3.5 5.3C3 7.5 5 11 8.7 14.5l1.5-1.5a1 1 0 001.1-1.5z"/></svg> },
+  note:    { bg: "rgba(var(--color-gold-rgb),0.10)", color: "var(--color-gold)", label: "Note",    icon: <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 2h12v9H2z"/><path d="M5 6h6M5 9h4"/></svg> },
+  meeting: { bg: "rgba(var(--color-purple-rgb),0.10)", color: "var(--color-purple)", label: "Meeting", icon: <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 2v2M11 2v2M2 7h12"/></svg> },
 };
 
 const ACTIVITY_TYPE_ORDER: ContactActivityType[] = ["email", "call", "meeting", "note"];
@@ -281,7 +281,7 @@ export default function EntityActivityTab({
                 </button>
               )}
               {isScheduledFuture && (
-                <span style={{ fontSize: 10, color: "#b8860b", fontWeight: 500 }}>scheduled</span>
+                <span style={{ fontSize: 10, color: "var(--color-gold)", fontWeight: 500 }}>scheduled</span>
               )}
             </div>
             <button
@@ -318,11 +318,11 @@ export default function EntityActivityTab({
                     <div style={{ width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: cfg.bg, color: cfg.color, border: "0.5px solid var(--color-border)" }}>{cfg.icon}</div>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: "#6b6860" }}>{cfg.label}</span>
-                        {isFuture && <span style={{ fontSize: 9, color: "#b8860b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Scheduled</span>}
+                        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)" }}>{cfg.label}</span>
+                        {isFuture && <span style={{ fontSize: 9, color: "var(--color-gold)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Scheduled</span>}
                         <span style={{ fontSize: 10, marginLeft: "auto", color: "var(--color-grey)" }}>{fmtTime(act.occurred_at)}</span>
                       </div>
-                      {act.content && <p style={{ fontSize: 12, lineHeight: 1.6, color: "#6b6860" }}>{act.content}</p>}
+                      {act.content && <p style={{ fontSize: 12, lineHeight: 1.6, color: "var(--color-text-secondary)" }}>{act.content}</p>}
                     </div>
                   </div>
                 );

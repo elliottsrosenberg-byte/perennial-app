@@ -287,15 +287,15 @@ function InlineLinkPicker({
     return (
       <button type="button" key={key} onClick={onToggle} style={{
         width: "100%", textAlign: "left", padding: "7px 10px", borderRadius: 6, fontSize: 12,
-        background: selected ? "rgba(155,163,122,0.12)" : "transparent", border: "none",
-        color: selected ? "#5a7040" : "var(--color-text-secondary)", fontWeight: selected ? 600 : 400,
+        background: selected ? "rgba(var(--color-sage-rgb),0.12)" : "transparent", border: "none",
+        color: selected ? "var(--color-sage-deep)" : "var(--color-text-secondary)", fontWeight: selected ? 600 : 400,
         cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 8,
       }}
       onMouseEnter={e => { if (!selected) e.currentTarget.style.background = "var(--color-surface-sunken)"; }}
       onMouseLeave={e => { if (!selected) e.currentTarget.style.background = "transparent"; }}
       >
         {selected
-          ? <svg width="9" height="7" viewBox="0 0 10 8" fill="none"><path d="M1 4l2.5 2.5L9 1" stroke="#5a7040" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          ? <svg width="9" height="7" viewBox="0 0 10 8" fill="none"><path d="M1 4l2.5 2.5L9 1" stroke="var(--color-sage-deep)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           : <div style={{ width: 9 }} />
         }
         {label}
@@ -311,9 +311,9 @@ function InlineLinkPicker({
         style={{
           display: "flex", alignItems: "center", gap: 5,
           fontSize: 11, padding: "3px 8px", borderRadius: 9999,
-          border: `0.5px solid ${open ? "var(--color-border-strong)" : hasLinks ? "rgba(155,163,122,0.3)" : "var(--color-border)"}`,
-          background: hasLinks ? "rgba(155,163,122,0.12)" : "transparent",
-          color: hasLinks ? "#5a7040" : "var(--color-text-tertiary)",
+          border: `0.5px solid ${open ? "var(--color-border-strong)" : hasLinks ? "rgba(var(--color-sage-rgb),0.3)" : "var(--color-border)"}`,
+          background: hasLinks ? "rgba(var(--color-sage-rgb),0.12)" : "transparent",
+          color: hasLinks ? "var(--color-sage-deep)" : "var(--color-text-tertiary)",
           cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", maxWidth: 180,
           transition: "all 0.1s ease",
         }}
@@ -579,7 +579,7 @@ function TaskRow({
         display: "flex", alignItems: "center", gap: 10, padding: "9px 16px",
         borderBottom: "0.5px solid var(--color-border)",
         background: highlighted
-          ? "rgba(155,163,122,0.18)"
+          ? "rgba(var(--color-sage-rgb),0.18)"
           : (hovered || editing) && !task.completed
             ? "var(--color-surface-sunken)"
             : "var(--color-surface-raised)",
@@ -897,7 +897,7 @@ export default function TasksClient({ initialTasks, initialCompleted, projects }
     if (filter !== "all") return null;
     return [
       { title: "Overdue",  dot: "var(--color-red-orange)", active: viewTasks.filter(t => isOverdue(t.due_date)),  ghost: lingering.filter(t => isOverdue(t.due_date))  },
-      { title: "Today",    dot: "#a07800",                  active: viewTasks.filter(t => isToday(t.due_date)),    ghost: lingering.filter(t => isToday(t.due_date))    },
+      { title: "Today",    dot: "var(--color-amber-deep)",  active: viewTasks.filter(t => isToday(t.due_date)),    ghost: lingering.filter(t => isToday(t.due_date))    },
       { title: "Upcoming", dot: "var(--color-sage)",        active: viewTasks.filter(t => isUpcoming(t.due_date)), ghost: lingering.filter(t => isUpcoming(t.due_date)) },
       { title: "Later",    dot: undefined,                  active: viewTasks.filter(t => isLater(t.due_date)),    ghost: lingering.filter(t => isLater(t.due_date))    },
       { title: "No date",  dot: undefined,                  active: viewTasks.filter(t => !t.due_date),            ghost: lingering.filter(t => !t.due_date)            },

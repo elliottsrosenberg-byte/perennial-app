@@ -367,8 +367,8 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
                   margin: "0 10px 4px 20px", padding: "5px 8px",
                   fontSize: 10.5, fontWeight: 500, textDecoration: "none",
                   color: "var(--color-red-orange)",
-                  background: "rgba(220,62,13,0.07)",
-                  border: "0.5px solid rgba(220,62,13,0.25)", borderRadius: 6,
+                  background: "rgba(var(--color-red-rgb),0.07)",
+                  border: "0.5px solid rgba(var(--color-red-rgb),0.25)", borderRadius: 6,
                 }}
               >
                 <RefreshCw size={11} style={{ flexShrink: 0 }} />

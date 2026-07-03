@@ -22,7 +22,7 @@ export default function AshIcon() {
         alignItems:    "center",
         justifyContent:"center",
         background:    "linear-gradient(145deg, #a8b886 0%, var(--color-ash-mid) 60%, var(--color-ash-dark) 100%)",
-        boxShadow:     "0 2px 10px rgba(155,163,122,0.38), 0 1px 3px rgba(0,0,0,0.12)",
+        boxShadow:     "0 2px 10px rgba(var(--color-sage-rgb),0.38), 0 1px 3px rgba(0,0,0,0.12)",
         animation:     "ash-glow 4.5s ease-in-out infinite",
         transition:    "transform 0.15s ease",
         flexShrink:    0,
@@ -31,13 +31,13 @@ export default function AshIcon() {
         e.currentTarget.style.transform          = "scale(1.07)";
         e.currentTarget.style.animationPlayState = "paused";
         e.currentTarget.style.boxShadow          =
-          "0 6px 24px rgba(155,163,122,0.65), 0 2px 6px rgba(0,0,0,0.15)";
+          "0 6px 24px rgba(var(--color-sage-rgb),0.65), 0 2px 6px rgba(0,0,0,0.15)";
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform          = "scale(1)";
         e.currentTarget.style.animationPlayState = "running";
         e.currentTarget.style.boxShadow          =
-          "0 2px 10px rgba(155,163,122,0.38), 0 1px 3px rgba(0,0,0,0.12)";
+          "0 2px 10px rgba(var(--color-sage-rgb),0.38), 0 1px 3px rgba(0,0,0,0.12)";
       }}
     >
       <img
