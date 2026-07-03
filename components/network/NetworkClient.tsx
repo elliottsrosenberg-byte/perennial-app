@@ -827,7 +827,7 @@ export default function NetworkClient({ initialContacts, initialOrganizations }:
               data-tour-target={idx === 0 ? "contacts.first-row" : undefined}
               style={{
                 gridTemplateColumns: GRID, borderBottom: "0.5px solid var(--color-border)",
-                background: isSelected ? "rgba(61,107,79,0.06)" : "var(--color-off-white)", minHeight: "48px",
+                background: isSelected ? "rgba(var(--color-green-deep-rgb),0.06)" : "var(--color-off-white)", minHeight: "48px",
                 opacity: c.archived ? 0.6 : 1,
               }}
               onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = "var(--color-warm-white)"; }}

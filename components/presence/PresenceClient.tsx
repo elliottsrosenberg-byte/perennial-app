@@ -181,7 +181,7 @@ function ConnectIntegrationModal({ provider, onClose, onConnected }: {
 
 // ─── Accent palette (wireframe colours, not in design tokens) ─────────────────
 const C = {
-  accent:  "var(--color-green-deep)", accentL:  "rgba(61,107,79,0.09)",
+  accent:  "var(--color-green-deep)", accentL:  "rgba(var(--color-green-deep-rgb),0.09)",
   blue:    "var(--color-blue)", blueL:    "rgba(var(--color-blue-rgb),0.09)",
   purple:  "var(--color-purple)", purpleL:    "rgba(var(--color-purple-rgb),0.09)",
   amber:   "var(--color-gold)", amberL:   "rgba(var(--color-gold-rgb),0.10)",
@@ -1575,7 +1575,7 @@ const calBg: Record<string, string> = {
   openCall:  "rgba(var(--color-teal-rgb),0.18)",
   grant:     "rgba(var(--color-purple-rgb),0.18)",
   award:     "rgba(var(--color-gold-rgb),0.20)",
-  residency: "rgba(61,107,79,0.18)",
+  residency: "rgba(var(--color-green-deep-rgb),0.18)",
 };
 
 function MonthCalendar({ opps, onSelect }: { opps: Opportunity[]; onSelect: (id: string) => void }) {

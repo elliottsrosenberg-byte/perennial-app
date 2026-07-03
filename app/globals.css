@@ -120,9 +120,11 @@
   --color-orange-rgb:   232,133,13;
   --color-red-rgb:      220,62,13;
   --color-blue-rgb:     37,99,171;
-  --color-gold-rgb:     184,134,11;
-  --color-purple-rgb:   109,79,163;
-  --color-teal-rgb:     20,140,140;
+  --color-gold-rgb:       184,134,11;
+  --color-purple-rgb:     109,79,163;
+  --color-teal-rgb:       20,140,140;
+  --color-green-deep-rgb: 61,107,79;
+  --color-grey-rgb:       154,150,144;
 
   /* Sidebar interaction tokens — light mode (sage bg) */
   --sidebar-text:        rgba(255,255,255,0.75);

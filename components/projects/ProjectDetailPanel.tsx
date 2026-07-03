@@ -27,7 +27,7 @@ function chipBg(color: string): string {
   if (color === "var(--color-warm-yellow)") return "rgba(var(--color-amber-rgb),0.15)";
   if (color === "var(--color-red-orange)")  return "rgba(var(--color-red-rgb),0.10)";
   if (color === "var(--color-green)")       return "rgba(var(--color-green-rgb),0.12)";
-  if (color === "var(--color-grey)")        return "rgba(154,150,144,0.14)";
+  if (color === "var(--color-grey)")        return "rgba(var(--color-grey-rgb),0.14)";
   return "rgba(var(--color-charcoal-rgb),0.06)";
 }
 

@@ -1195,7 +1195,7 @@ export default function ContactDetailPanel({
               <div style={{ paddingBottom: 4 }}>
                 {contact.is_lead && (
                   <button onClick={convertToContact} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit", color: "var(--color-green-deep)" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "rgba(61,107,79,0.07)"}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(var(--color-green-deep-rgb),0.07)"}
                     onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                     <Users size={13} strokeWidth={1.75} />
                     <span style={{ fontSize: 12 }}>Convert to contact</span>

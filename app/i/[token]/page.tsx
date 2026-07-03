@@ -159,7 +159,7 @@ export default async function PublicInvoicePage({
           letter-spacing: 0.06em; margin-left: 10px; vertical-align: middle;
         }
         .pi-status-sent    { background: rgba(37,99,171,0.10);  color: #2563ab; }
-        .pi-status-paid    { background: rgba(61,107,79,0.12);  color: #3d6b4f; }
+        .pi-status-paid    { background: rgba(var(--color-green-deep-rgb),0.12);  color: #3d6b4f; }
         .pi-status-overdue { background: rgba(220,62,13,0.10);  color: #dc3e0d; }
         .pi-status-voided  { background: rgba(31,33,26,0.07);   color: #9a9690; }
 

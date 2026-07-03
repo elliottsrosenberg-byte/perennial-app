@@ -969,7 +969,7 @@ interface Props {
 const OPP_PALETTE: Record<string, { bg: string; fg: string; border: string }> = {
   fair:       { bg: "rgba(var(--color-purple-rgb),0.10)", fg: "var(--color-purple)", border: "rgba(var(--color-purple-rgb),0.30)" },
   openCall:   { bg: "rgba(var(--color-gold-rgb),0.10)", fg: "var(--color-gold)", border: "rgba(var(--color-gold-rgb),0.30)" },
-  grant:      { bg: "rgba(61,107,79,0.10)",  fg: "var(--color-green-deep)", border: "rgba(61,107,79,0.30)" },
+  grant:      { bg: "rgba(var(--color-green-deep-rgb),0.10)",  fg: "var(--color-green-deep)", border: "rgba(var(--color-green-deep-rgb),0.30)" },
   award:      { bg: "rgba(var(--color-red-rgb),0.10)",  fg: "var(--color-red-orange)", border: "rgba(var(--color-red-rgb),0.28)" },
   residency:  { bg: "rgba(var(--color-teal-rgb),0.10)", fg: "var(--color-teal)", border: "rgba(var(--color-teal-rgb),0.30)" },
   _default:   { bg: "rgba(var(--color-sage-rgb),0.12)",fg: "var(--color-sage-deep)", border: "rgba(var(--color-sage-rgb),0.28)" },

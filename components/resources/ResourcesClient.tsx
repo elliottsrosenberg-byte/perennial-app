@@ -18,7 +18,7 @@ const C = {
   blue:   "var(--color-sage)", blueL:     "rgba(var(--color-sage-rgb),0.12)",
   purple: "var(--color-purple)",           purpleL:   "rgba(var(--color-purple-rgb),0.09)",
   amber:  "var(--color-gold)",           amberL:    "rgba(var(--color-gold-rgb),0.10)",
-  darkAccent: "var(--color-green-deep)",       darkAccentL: "rgba(61,107,79,0.09)",
+  darkAccent: "var(--color-green-deep)",       darkAccentL: "rgba(var(--color-green-deep-rgb),0.09)",
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -679,7 +679,7 @@ function SetupModal({ resource, onClose, onSaved }: {
 
         <div style={{ flex:1, overflowY:"auto", padding:20 }}>
           {/* Why card */}
-          <div style={{ background:C.darkAccentL, border:"0.5px solid rgba(61,107,79,0.18)", borderRadius:8, padding:"12px 14px", fontSize:11, color:"var(--color-grey)", lineHeight:1.55, marginBottom:16 }}>
+          <div style={{ background:C.darkAccentL, border:"0.5px solid rgba(var(--color-green-deep-rgb),0.18)", borderRadius:8, padding:"12px 14px", fontSize:11, color:"var(--color-grey)", lineHeight:1.55, marginBottom:16 }}>
             {cfg.why}
           </div>
 

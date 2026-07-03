@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  :root{
+    --ink:#1a1a1a; --soft:#3c3a38; --grey:#6f6d69; --faint:#a8a6a2;
+    --rule:#1a1a1a; --frameline:#dcdbd7;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  body{font-family:'GT America','Helvetica Neue',Arial,sans-serif;color:var(--ink);
+       background:#fff;line-height:1.5;font-weight:300;-webkit-font-smoothing:antialiased;}
+  @page{size:13.333in 7.5in;margin:0;}
+  .slide{position:relative;width:13.333in;height:7.5in;background:#fff;overflow:hidden;
+         padding:0.5in 0.7in 0.46in;display:flex;flex-direction:column;page-break-after:always;}
+  .slide:last-child{page-break-after:auto;}
+
+  .hd{display:flex;justify-content:space-between;align-items:baseline;}
+  .hd .lbl{font-weight:700;font-size:11.5px;letter-spacing:0.15em;text-transform:uppercase;color:var(--ink);}
+  .hd .rt{font-weight:300;font-size:10px;letter-spacing:0.06em;color:var(--faint);font-style:italic;}
+  .rule{height:1.2px;background:var(--rule);margin-top:6px;}
+
+  .stage{flex:1 1 auto;display:flex;align-items:center;justify-content:center;min-height:0;width:100%;padding-top:0.24in;}
+  .shot{max-height:100%;max-width:100%;object-fit:contain;border:1px solid var(--frameline);
+        border-radius:7px;box-shadow:0 9px 26px rgba(20,20,18,0.09);}
+
+  .cap{margin:0.2in auto 0;max-width:10in;font-weight:300;font-size:13px;line-height:1.5;color:var(--soft);text-align:center;}
+  .cap b{font-weight:600;color:var(--ink);}
+
+  .pg{position:absolute;right:0.7in;bottom:0.3in;font-size:9px;font-weight:300;letter-spacing:0.1em;color:var(--faint);}
+  .wm{position:absolute;left:0.7in;bottom:0.3in;font-size:9px;font-weight:600;letter-spacing:0.14em;color:var(--faint);text-transform:uppercase;}
+
+  /* split title */
+  .split{display:flex;align-items:center;gap:0.7in;height:100%;}
+  .split .imgcol{flex:1.15;min-width:0;display:flex;align-items:center;justify-content:center;}
+  .split .imgcol img{max-width:100%;max-height:5.6in;border:1px solid var(--frameline);border-radius:7px;
+        box-shadow:0 10px 28px rgba(20,20,18,0.10);}
+  .split .txtcol{flex:0.85;min-width:0;}
+  .split .name{font-weight:700;font-size:33px;letter-spacing:-0.015em;color:var(--ink);}
+  .split .tag{font-weight:300;font-style:italic;font-size:14.5px;color:var(--grey);margin-top:7px;}
+  .split .body{font-weight:300;font-size:14px;line-height:1.55;color:var(--soft);margin-top:20px;}
+  .split .body b{font-weight:600;color:var(--ink);}
+  .split .meta{font-weight:300;font-size:9.5px;letter-spacing:0.12em;color:var(--faint);text-transform:uppercase;margin-top:26px;}
+
+  /* duo (light/dark) */
+  .duo{display:flex;gap:0.5in;width:100%;flex:1 1 auto;align-items:center;justify-content:center;padding-top:0.24in;}
+  .duo .cell{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;}
+  .duo .cell img{max-width:100%;max-height:4.3in;border:1px solid var(--frameline);border-radius:7px;box-shadow:0 9px 24px rgba(20,20,18,0.09);}
+  .duo .lab{font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--grey);margin-top:11px;font-weight:600;}
+
+  /* close */
+  .close{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;text-align:center;}
+  .close img.logo{height:36px;margin-bottom:30px;}
+  .close .tag{font-weight:300;font-style:italic;font-size:16px;color:var(--grey);}
+  .close .crule{height:1.2px;width:2.4in;background:var(--ink);margin:30px auto;}
+  .close .url{font-weight:600;font-size:14px;color:var(--ink);letter-spacing:0.01em;}
+  .close .by{font-weight:300;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);margin-top:10px;}
+</style>
+</head>
+<body>
+
+<!-- 1 · TITLE (split) -->
+<section class="slide">
+  <div class="split">
+    <div class="imgcol"><img src="screenshots/home.png"></div>
+    <div class="txtcol">
+      <div class="name">Perennial</div>
+      <div class="tag">Studio-management software for designers and makers — designed and built end to end.</div>
+      <div class="body">Perennial helps artists and designers turn their craft into a business, so they can spend more time making the work because it finally pays for itself. <b>It gives an independent practice the few tangible pieces it actually needs — clients, projects, money, and visibility — without assuming you speak the language of operations.</b></div>
+      <div class="meta">Product walkthrough &nbsp;·&nbsp; app.perennial.design &nbsp;·&nbsp; Elliott Rosenberg</div>
+    </div>
+  </div>
+  <div class="wm">Perennial</div><div class="pg">01</div>
+</section>
+
+<!-- 2 · HOME -->
+<section class="slide">
+  <div class="hd"><span class="lbl">Home — Dashboard</span><span class="rt">/home</span></div>
+  <div class="rule"></div>
+  <div class="stage"><img class="shot" src="screenshots/home.png"></div>
+  <div class="cap">The home screen pulls together data from every other module into a single view. Tasks coming due, invoices outstanding, active projects, and recent notes all surface here, so the first thing you see each day is an accurate read on the studio &mdash; without opening anything else.</div>
+  <div class="wm">Perennial</div><div class="pg">02</div>
+</section>
+
+<!-- 3 · PROJECTS BOARD -->
+<section class="slide">
+  <div class="hd"><span class="lbl">Projects — Board</span><span class="rt">/projects</span></div>
+  <div class="rule"></div>
+  <div class="stage"><img class="shot" src="screenshots/projects.png"></div>
+  <div class="cap">Projects are arranged on a board by status, and each card shows its type, client, value, and progress. The progress bar is calculated from the project&rsquo;s underlying tasks, so the board stays current on its own as work gets checked off.</div>
+  <div class="wm">Perennial</div><div class="pg">03</div>
+</section>
+
+<!-- 4 · PROJECT TASKS -->
+<section class="slide">
+  <div class="hd"><span class="lbl">Projects — A project&rsquo;s tasks</span><span class="rt">/projects · detail</span></div>
+  <div class="rule"></div>
+  <div class="stage"><img class="shot" src="screenshots/project-scrim-tasks.png"></div>
+  <div class="cap">Opening a project reveals a panel that holds everything about it in one place. The Tasks tab is a checklist with due dates and priorities, and the time logged against these tasks feeds directly into the studio&rsquo;s billable hours and, eventually, an invoice.</div>
+  <div class="wm">Perennial</div><div class="pg">04</div>
+</section>
+
+<!-- 5 · PROJECT NOTES -->
+<section class="slide">
+  <div class="hd"><span class="lbl">Projects — A project&rsquo;s notes</span><span class="rt">/projects · detail</span></div>
+  <div class="rule"></div>
+  <div class="stage"><img class="shot" src="screenshots/project-scrim-notes.png"></div>
+  <div class="cap">The same panel keeps the project&rsquo;s notes beside its tasks, files, and people. Research, creative direction, client constraints, and scope all live with the work they belong to, rather than scattered across a separate notes app.</div>
+  <div class="wm">Perennial</div><div class="pg">05</div>
+</section>
+
+<!-- 6 · CONTACTS -->
+<section class="slide">
+  <div class="hd"><span class="lbl">Network — Contacts</span><span class="rt">/network</span></div>
+  <div class="rule"></div>
+  <div class="stage"><img class="shot" src="screenshots/network-contacts.png"></div>
+  <div class="cap">The Network module is a CRM for everyone the studio works with &mdash; clients, collaborators, press, and vendors. Each person is linked to their organization and to the projects they&rsquo;re part of, so a contact, a company, and a piece of work are never more than a click apart.</div>
+  <div class="wm">Perennial</div><div class="pg">06</div>
+</section>
+
+<!-- 7 · LEADS -->
+<section class="slide">
+  <div class="hd"><span class="lbl">Network — Leads</span><span class="rt">/network · leads</span></div>
+  <div class="rule"></div>
+  <div class="stage"><img class="shot" src="screenshots/network-leads.png"></div>
+  <div class="cap">Potential work is tracked as leads that move through stages, from first contact to qualified. New business, press, and stockists all run through the same pipeline, and one person can be a client, a lead, and a press contact at once without duplicating their record.</div>
+  <div class="wm">Perennial</div><div class="pg">07</div>
+</section>
+
+<!-- 8 · ORGS -->
+<section class="slide">
+  <div class="hd"><span class="lbl">Network — Organizations</span><span class="rt">/network · organizations</span></div>
+  <div class="rule"></div>
+  <div class="stage"><img class="shot" src="screenshots/network-orgs.png"></div>
+  <div class="cap">Companies are tracked separately from people and tagged by type &mdash; brands, publications, galleries, fairs, and vendors. Opening an organization shows the people who work there and the history the studio has built with them.</div>
+  <div class="wm">Perennial</div><div class="pg">08</div>
+</section>
+
+<!-- 9 · OUTREACH -->
+<section class="slide">
+  <div class="hd"><span class="lbl">Outreach — Pipelines</span><span class="rt">/outreach</span></div>
+  <div class="rule"></div>
+  <div class="stage"><img class="shot" src="screenshots/outreach.png"></div>
+  <div class="cap">Outreach turns those relationships into visual pipelines for pursuing press, galleries, stockists, and new business. Each target moves through stages as it progresses, and the outcomes recorded here connect back to the contacts and coverage tracked elsewhere in the app.</div>
+  <div class="wm">Perennial</div><div class="pg">09</div>
+</section>
+
+<!-- 10 · INVOICES (draft) -->
+<section class="slide">
+  <div class="hd"><span class="lbl">Finance — Invoices</span><span class="rt">/finance · invoices</span></div>
+  <div class="rule"></div>
+  <div class="stage"><img class="shot" src="screenshots/invoices-draft.png"></div>
+  <div class="cap">Invoices are built from data the app already holds &mdash; the client, the project, and the rate carry over automatically. The selected invoice opens its full editor, where line items can be drawn straight from logged time before the invoice is sent.</div>
+  <div class="wm">Perennial</div><div class="pg">10</div>
+</section>
+
+<!-- 11 · INVOICES (sent / branded) -->
+<section class="slide">
+  <div class="hd"><span class="lbl">Finance — A sent invoice</span><span class="rt">/finance · invoices</span></div>
+  <div class="rule"></div>
+  <div class="stage"><img class="shot" src="screenshots/invoice-sent.png"></div>
+  <div class="cap">Once sent, an invoice becomes a clean, branded document carrying the studio&rsquo;s name and colors. Clients pay online through Stripe, with funds landing directly in the studio&rsquo;s own connected account &mdash; and the payment is later matched against the bank feed.</div>
+  <div class="wm">Perennial</div><div class="pg">11</div>
+</section>
+
+<!-- 12 · BANKING -->
+<section class="slide">
+  <div class="hd"><span class="lbl">Finance — Banking</span><span class="rt">/finance · banking</span></div>
+  <div class="rule"></div>
+  <div class="stage"><img class="shot" src="screenshots/banking.png"></div>
+  <div class="cap">A live bank feed connected through Plaid brings every transaction in and categorizes it automatically. Incoming payments are matched back to the invoice that produced them, so reconciling what was billed against what actually landed takes a single click.</div>
+  <div class="wm">Perennial</div><div class="pg">12</div>
+</section>
+
+<!-- 13 · OPPORTUNITIES -->
+<section class="slide">
+  <div class="hd"><span class="lbl">Presence — Opportunities</span><span class="rt">/presence · opportunities</span></div>
+  <div class="rule"></div>
+  <div class="stage"><img class="shot" src="screenshots/presence-opps.png"></div>
+  <div class="cap">The Opportunities feed is a curated, continuously updated list of fairs, open calls, grants, and awards relevant to independent studios. Items can be filtered by type and saved, where they connect into the calendar and outreach for follow-up.</div>
+  <div class="wm">Perennial</div><div class="pg">13</div>
+</section>
+
+<!-- 14 · ASH -->
+<section class="slide">
+  <div class="hd"><span class="lbl">Ash — Assistant</span><span class="rt">global</span></div>
+  <div class="rule"></div>
+  <div class="stage"><img class="shot" src="screenshots/ash.png"></div>
+  <div class="cap">Ash is built into every screen and already understands the studio &mdash; your clients, your projects, how your money moves, even how you write. Rather than sending you elsewhere with generic answers, it can do the task itself: draft the client update, build a cost list, or surface what to prioritize, using the context the rest of the app already holds.</div>
+  <div class="wm">Perennial</div><div class="pg">14</div>
+</section>
+
+<!-- 15 · CLOSE -->
+<section class="slide">
+  <div class="close">
+    <img class="logo" src="logotype-charcoal.svg">
+    <div class="tag">Studio-management software for designers and makers.</div>
+    <div class="crule"></div>
+    <div class="url">app.perennial.design</div>
+    <div class="by">Designed &amp; built end to end by Elliott Rosenberg</div>
+  </div>
+  <div class="pg">15</div>
+</section>
+
+</body>
+</html>

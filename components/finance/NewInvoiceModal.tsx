@@ -436,7 +436,7 @@ export default function NewInvoiceModal({
                 <span className="flex-1 text-[13px]" style={{ color: "var(--color-charcoal)" }}>{clientLabel}</span>
                 {projectId && clientFromProject && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded"
-                    style={{ background: "rgba(61,107,79,0.12)", color: "var(--color-sage-hover)" }}>From project</span>
+                    style={{ background: "rgba(var(--color-green-deep-rgb),0.12)", color: "var(--color-sage-hover)" }}>From project</span>
                 )}
                 <span className="text-[10px] px-1.5 py-0.5 rounded"
                   style={{ background: "rgba(var(--color-charcoal-rgb),0.07)", color: "var(--color-grey)" }}>
@@ -492,7 +492,7 @@ export default function NewInvoiceModal({
               />
             ) : (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-[12px]"
-                style={{ background: "rgba(61,107,79,0.08)", border: "0.5px solid rgba(61,107,79,0.25)", color: "var(--color-sage-hover)" }}>
+                style={{ background: "rgba(var(--color-green-deep-rgb),0.08)", border: "0.5px solid rgba(var(--color-green-deep-rgb),0.25)", color: "var(--color-sage-hover)" }}>
                 <Check size={12} />
                 <span>Rate set: <strong>{fmtMoney(projectRate)}/hr</strong></span>
                 <button type="button"
@@ -952,7 +952,7 @@ function ClientPicker({
 
   const groupHeader = (label: string, accent: boolean) => (
     <div className="px-4 py-1.5 text-[9.5px] font-bold uppercase tracking-wider"
-      style={{ color: "var(--color-grey)", background: accent ? "rgba(61,107,79,0.06)" : "rgba(var(--color-charcoal-rgb),0.03)",
+      style={{ color: "var(--color-grey)", background: accent ? "rgba(var(--color-green-deep-rgb),0.06)" : "rgba(var(--color-charcoal-rgb),0.03)",
                borderTop: accent ? undefined : "0.5px solid var(--color-border)", borderBottom: "0.5px solid var(--color-border)" }}>
       {label}
     </div>

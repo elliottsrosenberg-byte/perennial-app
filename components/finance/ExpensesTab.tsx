@@ -17,7 +17,7 @@ interface Props {
 }
 
 const CAT_CONFIG: Record<ExpenseCategory, { color: string; bg: string; label: string; initial: string }> = {
-  materials:  { color: "#3d6b4f", bg: "rgba(61,107,79,0.1)",   label: "Materials",  initial: "M" },
+  materials:  { color: "#3d6b4f", bg: "rgba(var(--color-green-deep-rgb),0.1)",   label: "Materials",  initial: "M" },
   travel:     { color: "#2563ab", bg: "rgba(37,99,171,0.1)",   label: "Travel",     initial: "T" },
   production: { color: "#b8860b", bg: "rgba(184,134,11,0.1)",  label: "Production", initial: "P" },
   software:   { color: "#6d4fa3", bg: "rgba(109,79,163,0.1)",  label: "Software",   initial: "S" },
