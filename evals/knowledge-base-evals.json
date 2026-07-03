@@ -1,0 +1,41 @@
+{
+  "description": "Ash knowledge-base eval set. Each case: the question, the doc it should retrieve (source), and the facts a correct answer must contain. `expect` is a list of groups; a group passes if ANY of its variant substrings appears (case-insensitive), and a case passes if ALL groups pass. Run with scripts/eval-knowledge.mjs.",
+  "cases": [
+    { "id": "gallery-commission",       "category": "galleries", "source": "galleries.md", "question": "What commission does a gallery usually take on sold work?", "expect": [["40"], ["60"]] },
+    { "id": "edition-share",            "category": "channels",  "source": "channels.md",  "question": "If I sell an edition through a gallery, what share of the retail price do I keep?", "expect": [["40"], ["60"]] },
+    { "id": "trade-pricing",            "category": "channels",  "source": "channels.md",  "question": "How much do trade clients like interior designers and hotels pay relative to retail?", "expect": [["40"], ["50"], ["net", "off retail"]] },
+    { "id": "booth-cost",               "category": "channels",  "source": "channels.md",  "question": "How much does a design fair booth typically cost?", "expect": [["3,000", "3000"], ["15,000", "15000"]] },
+    { "id": "ecommerce-highvalue",      "category": "channels",  "source": "channels.md",  "question": "Is e-commerce a good channel for high-value design objects?", "expect": [["challeng", "difficult", "hard"]] },
+
+    { "id": "design-miami-when",        "category": "fairs",     "source": "fairs.md",     "question": "When and where does Design Miami happen?", "expect": [["december", "dec"], ["basel"]] },
+    { "id": "salone-when",              "category": "fairs",     "source": "fairs.md",     "question": "When is Salone del Mobile and where?", "expect": [["april"], ["milan"]] },
+    { "id": "nyc-may-fairs",            "category": "fairs",     "source": "fairs.md",     "question": "Which design fairs happen in New York in May?", "expect": [["icff", "sight unseen", "collective"]] },
+    { "id": "pad-when",                 "category": "fairs",     "source": "fairs.md",     "question": "When do the PAD fairs take place?", "expect": [["october", "oct"]] },
+
+    { "id": "approach-gallery",         "category": "galleries", "source": "galleries.md", "question": "What's the best way to approach a gallery I want to be represented by?", "expect": [["relationship", "before applying", "build", "warm"]] },
+    { "id": "exclusivity",              "category": "galleries", "source": "galleries.md", "question": "What does gallery exclusivity mean and what should I watch for?", "expect": [["geographic"], ["categor"]] },
+    { "id": "application-contents",     "category": "galleries", "source": "galleries.md", "question": "What should a strong gallery application include?", "expect": [["statement"], ["pricing", "press", "exhibition"]] },
+
+    { "id": "press-outlets",            "category": "press",     "source": "press.md",     "question": "Which publications should I pitch for design press coverage?", "expect": [["dezeen", "wallpaper", "sight unseen", "architectural digest", "dwell"]] },
+    { "id": "press-vs-sales",           "category": "press",     "source": "press.md",     "question": "Does getting press coverage translate directly into sales?", "expect": [["credibility"], ["rarely", "not directly", "doesn't", "does not"]] },
+    { "id": "press-pitch",              "category": "press",     "source": "press.md",     "question": "How do I write a press pitch that actually lands?", "expect": [["short"], ["photograph", "image"]] },
+    { "id": "press-timing",             "category": "press",     "source": "press.md",     "question": "When is the best time to send press releases?", "expect": [["fair", "launch"]] },
+
+    { "id": "why-underprice",           "category": "pricing",   "source": "pricing.md",   "question": "Why do independent designers tend to underprice their work?", "expect": [["cost", "time", "overhead"]] },
+    { "id": "min-price-covers",         "category": "pricing",   "source": "pricing.md",   "question": "What does the minimum viable price of a piece need to cover?", "expect": [["material"], ["overhead"], ["margin"]] },
+    { "id": "commission-deposit",       "category": "pricing",   "source": "pricing.md",   "question": "What deposit should I ask for on a commission?", "expect": [["30"], ["50"]] },
+    { "id": "edition-pricing",          "category": "pricing",   "source": "pricing.md",   "question": "How should I price an edition that will sell through a gallery?", "expect": [["margin", "40", "60"]] },
+    { "id": "sanity-check-price",       "category": "pricing",   "source": "pricing.md",   "question": "How do I sanity-check whether my price is right?", "expect": [["backward", "cost"]] },
+
+    { "id": "invoice-payment-gap",      "category": "cash-flow", "source": "cash-flow.md", "question": "How long is the gap between invoicing and actually getting paid?", "expect": [["30"], ["90"]] },
+    { "id": "runway",                   "category": "cash-flow", "source": "cash-flow.md", "question": "How many months of runway should a studio aim to have?", "expect": [["3"], ["6"], ["month"]] },
+    { "id": "feast-famine",             "category": "cash-flow", "source": "cash-flow.md", "question": "How do I manage feast-or-famine income as a studio?", "expect": [["deposit", "milestone", "early invoic", "terms"]] },
+
+    { "id": "contract-contents",        "category": "contracts", "source": "contracts.md", "question": "What should a commission contract include?", "expect": [["scope"], ["payment", "deposit", "milestone"]] },
+    { "id": "revision-rounds",          "category": "contracts", "source": "contracts.md", "question": "How should I handle revision rounds in a commission?", "expect": [["revision"], ["round", "additional", "rate"]] },
+    { "id": "ip-ownership",             "category": "contracts", "source": "contracts.md", "question": "Who owns the design in a commission, me or the client?", "expect": [["intellectual property", "ip", "ownership", "reproduce", "exclusive"]] },
+    { "id": "payment-structure",        "category": "contracts", "source": "contracts.md", "question": "How should I structure the payments on a commission?", "expect": [["30"], ["50"], ["milestone", "deposit"]] },
+    { "id": "delivery-install",         "category": "contracts", "source": "contracts.md", "question": "Should delivery and installation be spelled out in the contract?", "expect": [["installation"], ["delivery", "shipping"]] },
+    { "id": "scope-importance",         "category": "contracts", "source": "contracts.md", "question": "Why does scope matter so much in a commission agreement?", "expect": [["scope"], ["unpaid", "lose money", "loses money", "expectation"]] }
+  ]
+}
