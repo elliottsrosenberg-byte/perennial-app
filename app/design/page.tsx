@@ -82,16 +82,8 @@ const COLOR_GROUPS = [
       { name: "Grey",       token: "--color-grey",        hex: "#9a9690",  note: "Tertiary text, icons" },
     ],
   },
-  {
-    title: "Status",
-    colors: [
-      { name: "Green",       token: "--color-green",       hex: "#8dd047",  note: "Success, complete" },
-      { name: "Warm Yellow", token: "--color-warm-yellow", hex: "#e8c547",  note: "In progress, warning" },
-      { name: "Orange",      token: "--color-orange",      hex: "#e8850d",  note: "Highlight, attention" },
-      { name: "Red Orange",  token: "--color-red-orange",  hex: "#dc3e0d",  note: "Alert, overdue, error" },
-      { name: "Blue",        token: "--color-blue",        hex: "#2563ab",  note: "Links, info, 'Sent' badges" },
-    ],
-  },
+  // Accent / status colours are NOT a separate design-system set — they draw from
+  // the 10-colour User Palette below. Sage (above) is the only brand accent.
 ];
 
 // ─── Type scale ────────────────────────────────────────────────────────────────
@@ -223,7 +215,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 function ColorsSection() {
   return (
-    <Section id="colors" title="Colors" description="All color tokens. CSS variable is the source of truth — hex shown for reference. Purple is reserved for user-selected tag colors only.">
+    <Section id="colors" title="Colors" description="Sage is the brand accent; charcoal + warm neutrals are the chrome. All accent/status/tag colours draw from the one 10-colour palette below — there is no separate accent set. CSS variables are the source of truth.">
       {COLOR_GROUPS.map((group) => (
         <SubSection key={group.title} title={group.title}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 16 }}>
@@ -298,7 +290,7 @@ function ColorsSection() {
 
       {/* User Palette — the 10 chosen colours for user-assignable data. A separate
           system from the tokens above (defined in lib/ui/palette.ts). */}
-      <SubSection title="User Palette — tags · calendar · pipelines · project accents">
+      <SubSection title="Accent · Status · Palette — the 10 colours">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 16 }}>
           {PALETTE.map((c) => (
             <div key={c.hex}>
@@ -308,11 +300,11 @@ function ColorsSection() {
             </div>
           ))}
         </div>
-        <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 14, lineHeight: 1.55, maxWidth: 620 }}>
-          Your 10 chosen colours for <strong style={{ color: "var(--color-text-secondary)" }}>user-assignable items</strong> — tag colours, calendar colours,
-          pipeline stages, project accents. This is a separate system from the design tokens above:
-          defined in <code style={{ fontFamily: "monospace", fontSize: 10 }}>lib/ui/palette.ts</code>, assigned per-item via <code style={{ fontFamily: "monospace", fontSize: 10 }}>paletteColorForKey</code>.
-          App chrome (badges, status, charts) never sources from this palette — it uses the tokens.
+        <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 14, lineHeight: 1.55, maxWidth: 640 }}>
+          The one palette for <strong style={{ color: "var(--color-text-secondary)" }}>every accent, status, and tag colour</strong> — statuses, tags, calendar
+          colours, pipeline stages, project accents all draw from these 10. Defined in <code style={{ fontFamily: "monospace", fontSize: 10 }}>lib/ui/palette.ts</code>;
+          assigned per-item via <code style={{ fontFamily: "monospace", fontSize: 10 }}>paletteColorForKey</code>. Only <strong style={{ color: "var(--color-text-secondary)" }}>sage</strong> (brand) and the neutral
+          chrome sit outside this palette.
         </p>
       </SubSection>
     </Section>
