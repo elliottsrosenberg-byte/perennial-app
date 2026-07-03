@@ -6,6 +6,7 @@ import type { OutreachPipeline, OutreachTarget, Contact, Organization } from "@/
 import { X, User, Building2, UserPlus, Plus } from "lucide-react";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
+import Modal from "@/components/ui/Modal";
 
 interface Props {
   pipelines: OutreachPipeline[];
@@ -262,23 +263,30 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
     && (kind === "unlinked" ? !!unlinkedName.trim() : !!linked);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(31,33,26,0.5)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
-        style={{ background: "var(--color-off-white)", border: "0.5px solid var(--color-border)" }}>
-        <div className="flex items-center justify-between px-6 py-4"
-          style={{ borderBottom: "0.5px solid var(--color-border)" }}>
-          <h2 className="text-[14px] font-semibold" style={{ color: "var(--color-charcoal)" }}>New target</h2>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg"
-            style={{ color: "var(--color-grey)" }}
+    <Modal
+      onClose={onClose}
+      size="md"
+      title="New target"
+      bodyStyle={{ padding: 0 }}
+      footer={
+        <>
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-[13px] rounded-lg transition-colors"
+            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-            <X size={14} />
+            Cancel
           </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+          <button onClick={handleSubmit as unknown as React.MouseEventHandler}
+            disabled={!canSubmit}
+            className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50"
+            style={{ background: selectedPipeline?.color ?? "var(--color-sage)" }}>
+            {loading ? "Adding…" : "Add target"}
+          </button>
+        </>
+      }
+    >
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
           {/* Kind toggle — the first thing the user picks. */}
           <div>
             <label className="block text-[11px] font-medium mb-2" style={{ color: "var(--color-charcoal)" }}>
@@ -520,25 +528,7 @@ export default function NewTargetModal({ pipelines, defaultPipelineId, defaultSt
 
           {error && <p className="text-[12px]" style={{ color: "var(--color-red-orange)" }}>{error}</p>}
         </form>
-
-        <div className="flex items-center justify-end gap-2 px-6 py-4"
-          style={{ borderTop: "0.5px solid var(--color-border)" }}>
-          <button type="button" onClick={onClose}
-            className="px-4 py-2 text-[13px] rounded-lg transition-colors"
-            style={{ color: "#6b6860", border: "0.5px solid var(--color-border)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-cream)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-            Cancel
-          </button>
-          <button onClick={handleSubmit as unknown as React.MouseEventHandler}
-            disabled={!canSubmit}
-            className="px-4 py-2 text-[13px] font-medium rounded-lg text-white disabled:opacity-50"
-            style={{ background: selectedPipeline?.color ?? "var(--color-sage)" }}>
-            {loading ? "Adding…" : "Add target"}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
