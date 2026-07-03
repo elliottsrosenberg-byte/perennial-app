@@ -5,6 +5,7 @@ import Link from "next/link";
 import Button from "@/components/ui/Button";
 import Toggle from "@/components/ui/Toggle";
 import Checkbox from "@/components/ui/Checkbox";
+import Badge, { type BadgeTone } from "@/components/ui/Badge";
 import {
   // Navigation
   LayoutDashboard, Layers, Users, Send, FileText, Calendar, Receipt, Globe, FolderOpen, Settings, Palette, Compass,
@@ -136,31 +137,32 @@ const SHADOW_SCALE = [
 ];
 
 // ─── Badge data ────────────────────────────────────────────────────────────────
-const STATUS_BADGES = [
-  { label: "Complete",    bg: "rgba(141,208,71,0.15)",  color: "#3d6b4f"                   },
-  { label: "In Progress", bg: "rgba(155,163,122,0.18)", color: "var(--color-sage)"         },
-  { label: "Planning",    bg: "rgba(31,33,26,0.07)",    color: "var(--color-text-tertiary)" },
-  { label: "On Hold",     bg: "rgba(232,197,71,0.18)",  color: "#a07800"                   },
-  { label: "Overdue",     bg: "rgba(220,62,13,0.12)",   color: "var(--color-red-orange)"   },
-  { label: "Draft",       bg: "rgba(31,33,26,0.07)",    color: "var(--color-text-tertiary)" },
-  { label: "Sent",        bg: "rgba(37,99,171,0.12)",   color: "#2563ab"                   },
-  { label: "Paid",        bg: "rgba(141,208,71,0.15)",  color: "#3d6b4f"                   },
-  { label: "Active",      bg: "rgba(155,163,122,0.18)", color: "#5a7040"                   },
-  { label: "Lead",        bg: "rgba(184,134,11,0.12)",  color: "#b8860b"                   },
-  { label: "Inactive",    bg: "rgba(31,33,26,0.07)",    color: "var(--color-text-tertiary)" },
-  { label: "Beta",        bg: "rgba(141,208,71,0.12)",  color: "#3d6b4f"                   },
-  { label: "Soon",        bg: "rgba(155,163,122,0.15)", color: "var(--color-sage)"         },
+// Labels mapped to their Badge tone — the primitive owns the actual colour.
+const STATUS_BADGES: { label: string; tone: BadgeTone }[] = [
+  { label: "Complete",    tone: "green"   },
+  { label: "In Progress", tone: "sage"    },
+  { label: "Planning",    tone: "neutral" },
+  { label: "On Hold",     tone: "amber"   },
+  { label: "Overdue",     tone: "red"     },
+  { label: "Draft",       tone: "neutral" },
+  { label: "Sent",        tone: "blue"    },
+  { label: "Paid",        tone: "green"   },
+  { label: "Active",      tone: "sage"    },
+  { label: "Lead",        tone: "gold"    },
+  { label: "Inactive",    tone: "neutral" },
+  { label: "Beta",        tone: "green"   },
+  { label: "Soon",        tone: "sage"    },
 ];
 
-const TAG_COLORS = [
-  { label: "gallery",   bg: "rgba(37,99,171,0.10)",   color: "#2563ab" },
-  { label: "client",    bg: "rgba(61,107,79,0.10)",   color: "#3d6b4f" },
-  { label: "supplier",  bg: "rgba(184,134,11,0.10)",  color: "#b8860b" },
-  { label: "press",     bg: "rgba(109,79,163,0.10)",  color: "#6d4fa3" },
-  { label: "lead",      bg: "rgba(154,150,144,0.10)", color: "#6b6860" },
-  { label: "event",     bg: "rgba(20,140,140,0.10)",  color: "#148c8c" },
-  { label: "residency", bg: "rgba(220,62,13,0.10)",   color: "#dc3e0d" },
-  { label: "award",     bg: "rgba(232,133,13,0.10)",  color: "#c06200" },
+const TAG_COLORS: { label: string; tone: BadgeTone }[] = [
+  { label: "gallery",   tone: "blue"    },
+  { label: "client",    tone: "green"   },
+  { label: "supplier",  tone: "gold"    },
+  { label: "press",     tone: "purple"  },
+  { label: "lead",      tone: "neutral" },
+  { label: "event",     tone: "teal"    },
+  { label: "residency", tone: "red"     },
+  { label: "award",     tone: "orange"  },
 ];
 
 // ─── Section wrapper ───────────────────────────────────────────────────────────
@@ -679,16 +681,7 @@ function BadgesSection() {
       <SubSection title="Status Badges">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {STATUS_BADGES.map((b) => (
-            <span
-              key={b.label}
-              style={{
-                fontSize: 10, fontWeight: 700, padding: "3px 8px",
-                borderRadius: 9999, background: b.bg, color: b.color,
-                textTransform: "uppercase", letterSpacing: "0.04em",
-              }}
-            >
-              {b.label}
-            </span>
+            <Badge key={b.label} tone={b.tone} variant="status">{b.label}</Badge>
           ))}
         </div>
       </SubSection>
@@ -696,15 +689,7 @@ function BadgesSection() {
       <SubSection title="Contact Tags">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {TAG_COLORS.map((t) => (
-            <span
-              key={t.label}
-              style={{
-                fontSize: 11, fontWeight: 500, padding: "3px 10px",
-                borderRadius: 9999, background: t.bg, color: t.color,
-              }}
-            >
-              {t.label}
-            </span>
+            <Badge key={t.label} tone={t.tone} variant="tag">{t.label}</Badge>
           ))}
         </div>
       </SubSection>
