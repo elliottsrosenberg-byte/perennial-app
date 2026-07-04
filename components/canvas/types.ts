@@ -52,6 +52,9 @@ export interface StickyContent {
   vAlign?: VAlign;
   textColor?: StickyColor;
 }
+export type LineCap = "none" | "arrow";
+export type LineDash = "solid" | "dashed" | "dotted";
+
 export interface ShapeContent {
   shape: "rect" | "ellipse" | "line" | "arrow";
   color: ShapeColor;
@@ -61,6 +64,11 @@ export interface ShapeContent {
   align?: TextAlign;
   vAlign?: VAlign;
   textColor?: StickyColor;
+  // Line/arrow only:
+  startCap?: LineCap;
+  endCap?: LineCap;
+  dash?: LineDash;
+  strokeWidth?: number;
 }
 export interface ImageContent {
   url: string;

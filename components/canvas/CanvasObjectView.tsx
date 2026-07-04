@@ -93,6 +93,7 @@ export default function CanvasObjectView({
   const shapeKind = object.type === "shape" ? (object.content as ShapeContent).shape : null;
   // Double-click to edit text: text, sticky, and box-shapes (not line/arrow).
   const editableText = scalable || shapeKind === "rect" || shapeKind === "ellipse";
+  const isLinear = shapeKind === "line" || shapeKind === "arrow";
 
   function onBodyPointerDown(e: React.PointerEvent) {
     if (editing || !interactive) return; // fall through so create/hand tools work
@@ -187,6 +188,44 @@ export default function CanvasObjectView({
     window.addEventListener("pointerup", up);
   }
 
+  // ── line/arrow endpoints ──
+  function onEndpointPointerDown(e: React.PointerEvent, which: "start" | "end") {
+    e.stopPropagation();
+    const o0 = object;
+    const rad = (o0.rotation * Math.PI) / 180;
+    const center = { x: o0.x + o0.width / 2, y: o0.y + o0.height / 2 };
+    const s = rotate(-o0.width / 2, 0, rad);
+    const eOff = rotate(o0.width / 2, 0, rad);
+    const startWorld = { x: center.x + s.x, y: center.y + s.y };
+    const endWorld = { x: center.x + eOff.x, y: center.y + eOff.y };
+    const fixed = which === "start" ? endWorld : startWorld;
+    const draggedFrom = which === "start" ? startWorld : endWorld;
+    const px = e.clientX;
+    const py = e.clientY;
+    const move = (ev: PointerEvent) => {
+      const dragged = { x: draggedFrom.x + (ev.clientX - px) * inv, y: draggedFrom.y + (ev.clientY - py) * inv };
+      const a = which === "start" ? dragged : fixed; // start endpoint
+      const b = which === "start" ? fixed : dragged; // end endpoint
+      const len = Math.max(1, Math.hypot(b.x - a.x, b.y - a.y));
+      const ang = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+      const c = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      onChangeLocal(object.id, {
+        width: Math.round(len),
+        height: o0.height,
+        x: Math.round(c.x - len / 2),
+        y: Math.round(c.y - o0.height / 2),
+        rotation: Math.round(ang),
+      });
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      onCommitGeometry(object.id, latestRef.current);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
   const handleSize = 11 * inv;
   const handleBorder = Math.max(0.5, 1.25 * inv);
   const outline = 1.5 * inv;
@@ -225,7 +264,7 @@ export default function CanvasObjectView({
         onEndEdit={onEndEdit}
       />
 
-      {selected && !editing && (
+      {selected && !editing && !isLinear && (
         <div
           style={{
             position: "absolute",
@@ -237,7 +276,34 @@ export default function CanvasObjectView({
         />
       )}
 
-      {soleSelected && interactive && !editing && (
+      {/* line/arrow: endpoint anchors instead of a bounding box */}
+      {soleSelected && interactive && !editing && isLinear && (
+        <>
+          {(["start", "end"] as const).map((which) => (
+            <div
+              key={which}
+              onPointerDown={(e) => onEndpointPointerDown(e, which)}
+              title={which === "start" ? "Start point" : "End point"}
+              style={{
+                position: "absolute",
+                left: which === "start" ? -handleSize * 0.75 : undefined,
+                right: which === "end" ? -handleSize * 0.75 : undefined,
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: handleSize * 1.5,
+                height: handleSize * 1.5,
+                borderRadius: "var(--radius-full)",
+                background: "var(--color-surface-raised)",
+                border: `${handleBorder}px solid var(--color-sage)`,
+                boxShadow: "var(--shadow-sm)",
+                cursor: "grab",
+              }}
+            />
+          ))}
+        </>
+      )}
+
+      {soleSelected && interactive && !editing && !isLinear && (
         <>
           {/* rotate zones just outside each corner — rotate cursor on hover */}
           {CORNERS.map((corner) => (

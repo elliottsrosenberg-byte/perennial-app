@@ -62,3 +62,11 @@ export const STICKY_PALETTE: Record<StickyColor, Swatch> = built.palette;
 export const SHAPE_PALETTE: Record<ShapeColor, Swatch> = STICKY_PALETTE;
 
 export const STICKY_COLOR_ORDER: StickyColor[] = built.order;
+
+const FALLBACK: StickyColor = built.order[0];
+
+/** Safe palette lookup — legacy objects may carry colour keys that no longer
+ *  exist after a palette change; fall back instead of crashing on `.accent`. */
+export function swatch(key?: string | null): Swatch {
+  return (key ? built.palette[key as StickyColor] : undefined) ?? built.palette[FALLBACK];
+}
