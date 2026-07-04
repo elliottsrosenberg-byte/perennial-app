@@ -29,6 +29,7 @@ import {
   Bold,
   Italic,
   Underline,
+  Heading,
   Heading1,
   Heading2,
   Heading3,
@@ -38,12 +39,11 @@ import {
   AlignRight,
   Link as LinkIcon,
   List,
-  Minus,
-  Plus,
   ChevronUp,
   ChevronDown,
   ArrowLeft,
   ArrowRight,
+  FoldVertical,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { CanvasObjectRow, CanvasScope } from "@/types/database";
@@ -121,6 +121,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const [preview, setPreview] = useState<{ x: number; y: number } | null>(null);
   const [picker, setPicker] = useState<EntityKind | null>(null);
   const [imagePicker, setImagePicker] = useState(false);
+  const [editDrop, setEditDrop] = useState<null | "block" | "align" | "valign" | "color">(null);
   const [menu, setMenu] = useState<
     { x: number; y: number; kind: "object" | "canvas"; world?: { x: number; y: number } } | null
   >(null);
@@ -885,10 +886,19 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     background: active ? "rgba(var(--color-sage-rgb), 0.16)" : "transparent",
     color: active ? "var(--color-sage-text)" : "var(--color-text-secondary)",
   });
+  const VALIGN_ITEMS = [
+    { v: "top" as const, icon: <ArrowUpToLine size={15} strokeWidth={1.9} /> },
+    { v: "middle" as const, icon: <FoldVertical size={15} strokeWidth={1.9} /> },
+    { v: "bottom" as const, icon: <ArrowDownToLine size={15} strokeWidth={1.9} /> },
+  ];
   const editingShapeKind =
     editingObj?.type === "shape" ? (editingObj.content as ShapeContent).shape : null;
   const editingBox =
     !!editingObj && (editingObj.type === "sticky" || editingShapeKind === "rect" || editingShapeKind === "ellipse");
+  // Close the editing-toolbar dropdowns whenever the editing target changes.
+  useEffect(() => {
+    setEditDrop(null);
+  }, [editingId]);
   const bumpFont = (delta: number) => {
     if (!editingObj) return;
     const cur =
@@ -1099,7 +1109,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
         >
           {soleIsLinear ? (
             <>
-              {/* end caps + delete */}
+              {/* caps + thickness + dash + delete (row 1) */}
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <button
                   title="Start arrow"
@@ -1119,13 +1129,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
                 >
                   <ArrowRight size={15} strokeWidth={2} />
                 </button>
-                <div style={{ flex: 1, minWidth: 8 }} />
-                <button aria-label="Delete" onClick={deleteSelected} style={segBtn(false)}>
-                  <Trash2 size={15} strokeWidth={1.75} />
-                </button>
-              </div>
-              {/* thickness + dash */}
-              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ width: 1, height: 16, background: "var(--color-border)", margin: "0 2px" }} />
                 {(
                   [
                     { n: 2, dot: 4 },
@@ -1137,7 +1141,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
                     <span style={{ width: t.dot, height: t.dot, borderRadius: "var(--radius-full)", background: "currentColor" }} />
                   </button>
                 ))}
-                <span style={{ width: 1, height: 16, background: "var(--color-border)", margin: "0 3px" }} />
+                <span style={{ width: 1, height: 16, background: "var(--color-border)", margin: "0 2px" }} />
                 {(["solid", "dashed", "dotted"] as const).map((d) => (
                   <button key={d} title={d} onClick={() => patchContent(sole.id, { dash: d })} style={segBtn((cc.dash ?? "solid") === d)}>
                     <svg width={18} height={10} viewBox="0 0 18 10">
@@ -1145,16 +1149,19 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
                     </svg>
                   </button>
                 ))}
+                <div style={{ flex: 1, minWidth: 8 }} />
+                <button aria-label="Delete" onClick={deleteSelected} style={segBtn(false)}>
+                  <Trash2 size={15} strokeWidth={1.75} />
+                </button>
               </div>
-              {/* colour */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontFamily: "var(--font-sans)", fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", width: 34, textAlign: "center" }}>Colour</span>
+              {/* colour circles, no label (row 2) */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                 {STICKY_COLOR_ORDER.map((color) => (
                   <button
                     key={color}
                     aria-label={`colour ${color}`}
                     onClick={() => patchContent(sole.id, { color })}
-                    style={{ width: 15, height: 15, borderRadius: "var(--radius-full)", background: swatch(color).accent, border: cc.color === color ? "2px solid var(--color-sage)" : "0.5px solid var(--color-border)", cursor: "pointer" }}
+                    style={{ width: 16, height: 16, borderRadius: "var(--radius-full)", background: swatch(color).accent, border: cc.color === color ? "2px solid var(--color-sage)" : "0.5px solid var(--color-border)", cursor: "pointer" }}
                   />
                 ))}
               </div>
@@ -1175,16 +1182,10 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
                       {b.icon}
                     </button>
                   ))}
-                {soleHasFill && soleTextBearing && <span style={{ width: 1, height: 16, background: "var(--color-border)", margin: "0 2px" }} />}
-                {soleHasFill &&
-                  (
-                    [
-                      { v: "top", icon: <ChevronUp size={15} strokeWidth={2} /> },
-                      { v: "middle", icon: <Minus size={15} strokeWidth={2} /> },
-                      { v: "bottom", icon: <ChevronDown size={15} strokeWidth={2} /> },
-                    ] as const
-                  ).map((b) => {
-                    const cur = cc.vAlign ?? (sole.type === "shape" ? "middle" : "top");
+                {soleTextBearing && <span style={{ width: 1, height: 16, background: "var(--color-border)", margin: "0 2px" }} />}
+                {soleTextBearing &&
+                  VALIGN_ITEMS.map((b) => {
+                    const cur = cc.vAlign ?? (sole.type === "text" ? "top" : "middle");
                     return (
                       <button key={b.v} aria-label={`Vertical ${b.v}`} onClick={() => patchContent(sole.id, { vAlign: b.v })} style={segBtn(cur === b.v)}>
                         {b.icon}
@@ -1251,127 +1252,140 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
             zIndex: 35,
           }}
         >
-          {(
-            [
-              { key: "bold", icon: <Bold size={14} strokeWidth={2} />, cmd: "bold" },
-              { key: "italic", icon: <Italic size={14} strokeWidth={2} />, cmd: "italic" },
-              { key: "underline", icon: <Underline size={14} strokeWidth={2} />, cmd: "underline" },
-              "|",
-              { key: "h1", icon: <Heading1 size={15} strokeWidth={2} />, cmd: "formatBlock", arg: "H1" },
-              { key: "h2", icon: <Heading2 size={15} strokeWidth={2} />, cmd: "formatBlock", arg: "H2" },
-              { key: "h3", icon: <Heading3 size={15} strokeWidth={2} />, cmd: "formatBlock", arg: "H3" },
-              { key: "p", icon: <Pilcrow size={14} strokeWidth={2} />, cmd: "formatBlock", arg: "P" },
-              { key: "bullets", icon: <List size={14} strokeWidth={2} />, cmd: "insertUnorderedList" },
-              "|",
-              { key: "left", icon: <AlignLeft size={14} strokeWidth={2} />, cmd: "justifyLeft" },
-              { key: "center", icon: <AlignCenter size={14} strokeWidth={2} />, cmd: "justifyCenter" },
-              { key: "right", icon: <AlignRight size={14} strokeWidth={2} />, cmd: "justifyRight" },
-              "|",
-              { key: "link", icon: <LinkIcon size={14} strokeWidth={2} />, cmd: "createLink" },
-            ] as const
-          ).map((b, i) =>
-            b === "|" ? (
-              <span key={`sep-${i}`} style={{ width: 1, height: 16, background: "var(--color-border)", margin: "0 3px" }} />
-            ) : (
-              <button
-                key={b.key}
-                title={b.key}
-                // preventDefault keeps the editable focused so execCommand applies.
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  if (b.cmd === "createLink") {
-                    const url = window.prompt("Link URL");
-                    if (url) document.execCommand("createLink", false, url);
-                  } else {
-                    exec(b.cmd, "arg" in b ? b.arg : undefined);
-                  }
-                }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 26,
-                  height: 26,
-                  border: "none",
-                  background: "transparent",
-                  borderRadius: "var(--radius-sm)",
-                  color: "var(--color-text-secondary)",
-                  cursor: "pointer",
-                }}
-              >
-                {b.icon}
-              </button>
-            ),
-          )}
-
-          <span style={{ width: 1, height: 16, background: "var(--color-border)", margin: "0 3px" }} />
-          {/* font size */}
-          {(
-            [
-              { key: "font-down", icon: <Minus size={14} strokeWidth={2} />, d: -2 },
-              { key: "font-up", icon: <Plus size={14} strokeWidth={2} />, d: 2 },
-            ] as const
-          ).map((b) => (
-            <button
-              key={b.key}
-              title={b.key === "font-up" ? "Bigger text" : "Smaller text"}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                bumpFont(b.d);
-              }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 26,
-                height: 26,
-                border: "none",
-                background: "transparent",
-                borderRadius: "var(--radius-sm)",
-                color: "var(--color-text-secondary)",
-                cursor: "pointer",
-              }}
-            >
-              {b.icon}
-            </button>
-          ))}
-
-          {/* vertical align (box objects) */}
-          {editingBox && (
-            <>
-              <span style={{ width: 1, height: 16, background: "var(--color-border)", margin: "0 3px" }} />
-              {(
-                [
-                  { key: "top", icon: <ChevronUp size={15} strokeWidth={2} /> },
-                  { key: "middle", icon: <Minus size={15} strokeWidth={2} /> },
-                  { key: "bottom", icon: <ChevronDown size={15} strokeWidth={2} /> },
-                ] as const
-              ).map((b) => (
+          {(() => {
+            const ib = (active?: boolean): CSSProperties => ({
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 26,
+              height: 26,
+              border: "none",
+              borderRadius: "var(--radius-sm)",
+              cursor: "pointer",
+              background: active ? "rgba(var(--color-sage-rgb), 0.16)" : "transparent",
+              color: active ? "var(--color-sage-text)" : "var(--color-text-secondary)",
+            });
+            const sep = <span style={{ width: 1, height: 16, background: "var(--color-border)", margin: "0 3px" }} />;
+            const md = (cmd: string, arg?: string) => (e: React.MouseEvent) => {
+              e.preventDefault();
+              exec(cmd, arg);
+            };
+            const dropWrap: CSSProperties = { position: "relative", display: "flex" };
+            const dropMenu: CSSProperties = {
+              position: "absolute",
+              top: "calc(100% + 6px)",
+              left: 0,
+              display: "flex",
+              flexDirection: "column",
+              gap: 2,
+              padding: 4,
+              borderRadius: "var(--radius-md)",
+              background: "var(--color-surface-raised)",
+              border: "0.5px solid var(--color-border)",
+              boxShadow: "var(--shadow-lg)",
+              zIndex: 40,
+            };
+            const caret = <ChevronDown size={11} strokeWidth={2} style={{ marginLeft: -1 }} />;
+            const tColor = editingObj ? (editingObj.content as { textColor?: StickyColor }).textColor : undefined;
+            return (
+              <>
+                <button title="Bold" onMouseDown={md("bold")} style={ib()}><Bold size={14} strokeWidth={2} /></button>
+                <button title="Italic" onMouseDown={md("italic")} style={ib()}><Italic size={14} strokeWidth={2} /></button>
+                <button title="Underline" onMouseDown={md("underline")} style={ib()}><Underline size={14} strokeWidth={2} /></button>
                 <button
-                  key={b.key}
-                  title={`Align ${b.key}`}
+                  title="Link"
                   onMouseDown={(e) => {
                     e.preventDefault();
-                    if (editingObj) patchContent(editingObj.id, { vAlign: b.key });
+                    const url = window.prompt("Link URL");
+                    if (url) document.execCommand("createLink", false, url);
                   }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: 26,
-                    height: 26,
-                    border: "none",
-                    background: "transparent",
-                    borderRadius: "var(--radius-sm)",
-                    color: "var(--color-text-secondary)",
-                    cursor: "pointer",
-                  }}
+                  style={ib()}
                 >
-                  {b.icon}
+                  <LinkIcon size={14} strokeWidth={2} />
                 </button>
-              ))}
-            </>
-          )}
+                {sep}
+
+                {/* block style dropdown */}
+                <div style={dropWrap}>
+                  <button title="Text style" onMouseDown={(e) => { e.preventDefault(); setEditDrop((d) => (d === "block" ? null : "block")); }} style={ib(editDrop === "block")}>
+                    <Heading size={15} strokeWidth={2} />
+                    {caret}
+                  </button>
+                  {editDrop === "block" && (
+                    <div style={dropMenu}>
+                      {([
+                        { a: "H1", icon: <Heading1 size={15} strokeWidth={2} /> },
+                        { a: "H2", icon: <Heading2 size={15} strokeWidth={2} /> },
+                        { a: "H3", icon: <Heading3 size={15} strokeWidth={2} /> },
+                        { a: "P", icon: <Pilcrow size={14} strokeWidth={2} /> },
+                      ] as const).map((o) => (
+                        <button key={o.a} title={o.a} onMouseDown={(e) => { e.preventDefault(); exec("formatBlock", o.a); setEditDrop(null); }} style={ib()}>{o.icon}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button title="Bullets" onMouseDown={md("insertUnorderedList")} style={ib()}><List size={14} strokeWidth={2} /></button>
+                {sep}
+
+                {/* align dropdown */}
+                <div style={dropWrap}>
+                  <button title="Align" onMouseDown={(e) => { e.preventDefault(); setEditDrop((d) => (d === "align" ? null : "align")); }} style={ib(editDrop === "align")}>
+                    <AlignLeft size={14} strokeWidth={2} />
+                    {caret}
+                  </button>
+                  {editDrop === "align" && (
+                    <div style={dropMenu}>
+                      {([
+                        { c: "justifyLeft", icon: <AlignLeft size={14} strokeWidth={2} /> },
+                        { c: "justifyCenter", icon: <AlignCenter size={14} strokeWidth={2} /> },
+                        { c: "justifyRight", icon: <AlignRight size={14} strokeWidth={2} /> },
+                      ] as const).map((o) => (
+                        <button key={o.c} onMouseDown={(e) => { e.preventDefault(); exec(o.c); setEditDrop(null); }} style={ib()}>{o.icon}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* vertical align dropdown (box objects) */}
+                {editingBox && (
+                  <div style={dropWrap}>
+                    <button title="Vertical align" onMouseDown={(e) => { e.preventDefault(); setEditDrop((d) => (d === "valign" ? null : "valign")); }} style={ib(editDrop === "valign")}>
+                      <FoldVertical size={15} strokeWidth={2} />
+                      {caret}
+                    </button>
+                    {editDrop === "valign" && (
+                      <div style={dropMenu}>
+                        {VALIGN_ITEMS.map((o) => (
+                          <button key={o.v} onMouseDown={(e) => { e.preventDefault(); if (editingObj) patchContent(editingObj.id, { vAlign: o.v }); setEditDrop(null); }} style={ib()}>{o.icon}</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {sep}
+
+                {/* text colour circle */}
+                <div style={dropWrap}>
+                  <button title="Text colour" onMouseDown={(e) => { e.preventDefault(); setEditDrop((d) => (d === "color" ? null : "color")); }} style={ib(editDrop === "color")}>
+                    <span style={{ width: 15, height: 15, borderRadius: "var(--radius-full)", background: tColor ? swatch(tColor).accent : "var(--color-text-primary)", border: "0.5px solid var(--color-border)" }} />
+                  </button>
+                  {editDrop === "color" && (
+                    <div style={{ ...dropMenu, flexDirection: "row", flexWrap: "wrap", width: 122, gap: 6 }}>
+                      {STICKY_COLOR_ORDER.map((color) => (
+                        <button key={color} aria-label={color} onMouseDown={(e) => { e.preventDefault(); if (editingObj) patchContent(editingObj.id, { textColor: color }); setEditDrop(null); }} style={{ width: 18, height: 18, borderRadius: "var(--radius-full)", background: swatch(color).accent, border: tColor === color ? "2px solid var(--color-sage)" : "0.5px solid var(--color-border)", cursor: "pointer" }} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {sep}
+
+                {/* font size: ∨ A ∧ */}
+                <button title="Smaller" onMouseDown={(e) => { e.preventDefault(); bumpFont(-2); }} style={ib()}><ChevronDown size={14} strokeWidth={2} /></button>
+                <span style={{ fontFamily: "var(--font-sans)", fontSize: 13, fontWeight: 600, color: "var(--color-text-secondary)", padding: "0 1px" }}>A</span>
+                <button title="Bigger" onMouseDown={(e) => { e.preventDefault(); bumpFont(2); }} style={ib()}><ChevronUp size={14} strokeWidth={2} /></button>
+              </>
+            );
+          })()}
         </div>
       )}
 
