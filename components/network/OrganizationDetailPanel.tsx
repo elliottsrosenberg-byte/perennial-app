@@ -1,12 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback, KeyboardEvent } from "react";
+import { useState, useEffect, useMemo, useRef, KeyboardEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Organization, OrganizationFile, Contact, OutreachTarget, Task, Note } from "@/types/database";
 import { X, Maximize2, Minimize2, FileText, CheckSquare, FolderOpen, Calendar, Settings, Trash2, Link2 } from "lucide-react";
-import { useEditor, EditorContent } from "@tiptap/react";
-import { getRichExtensions, RichToolbar, SelectionBubble } from "@/components/ui/RichEditor";
-import CanvasAshHint from "@/components/ui/CanvasAshHint";
+import Canvas from "@/components/canvas/Canvas";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import AshPromptsModule, { type AshPrompt } from "@/components/ui/AshPromptsModule";
 import EntityActivityTab, { type EntityActivity } from "@/components/detail/EntityActivityTab";
@@ -54,140 +52,6 @@ function EditableField(props: { label: string; value: string | null; placeholder
 function EditableTextarea(props: { label: string; value: string | null; placeholder?: string; onSave: (v: string | null) => void }) {
   return <SharedEditableField {...props} openWhenEmpty multiline />;
 }
-
-// ── Canvas editor for organizations ───────────────────────────────────────────
-//
-// Mirrors ContactCanvasEditor but without the inline-Ash popover trigger —
-// InlineAshSurface doesn't yet declare a "canvas-organization" variant, and
-// faking it as "canvas-contact" would mis-route Ash. Add the surface type and
-// wire it back in once we expose org context to the inline route.
-
-function OrganizationCanvasEditor({
-  organizationId, initialHtml, onSaved, onNoteCreated, onViewNote,
-}: {
-  organizationId: string;
-  initialHtml:    string | null;
-  onSaved:        (html: string | null) => void;
-  onNoteCreated:  (note: Note) => void;
-  onViewNote:     (noteId: string) => void;
-}) {
-  const [saving,         setSaving]         = useState(false);
-  const [saved,          setSaved]          = useState(false);
-  const [convertingNote, setConvertingNote] = useState(false);
-  const [createdNote,    setCreatedNote]    = useState<{ id: string; title: string | null } | null>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestHtml = useRef<string>(initialHtml ?? "");
-  const onSavedRef       = useRef(onSaved);       onSavedRef.current       = onSaved;
-  const onNoteCreatedRef = useRef(onNoteCreated); onNoteCreatedRef.current = onNoteCreated;
-  const onViewNoteRef    = useRef(onViewNote);    onViewNoteRef.current    = onViewNote;
-
-  const editor = useEditor({
-    immediatelyRender: false,
-    extensions: getRichExtensions({ placeholder: "Canvas — notes, plans, anything about this organization…" }),
-    content: initialHtml ?? "",
-    onUpdate({ editor }) {
-      const html = editor.getHTML();
-      latestHtml.current = html;
-      scheduleSave(html);
-    },
-    editorProps: { attributes: { style: "outline: none; min-height: 300px; font-size: 14px; line-height: 1.8; color: var(--color-text-secondary);" } },
-  }, [organizationId]);
-
-  useEffect(() => {
-    return () => {
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current);
-        saveTimer.current = null;
-        const html = latestHtml.current;
-        createClient().from("organizations").update({ canvas_html: html || null }).eq("id", organizationId);
-        onSavedRef.current(html || null);
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organizationId]);
-
-  function scheduleSave(html: string) {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    setSaving(true); setSaved(false);
-    saveTimer.current = setTimeout(async () => {
-      await createClient().from("organizations").update({ canvas_html: html || null }).eq("id", organizationId);
-      onSavedRef.current(html || null);
-      saveTimer.current = null;
-      setSaving(false); setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    }, 800);
-  }
-
-  async function handleConvertToNote(sel: { text: string; html: string }) {
-    if (convertingNote) return;
-    setConvertingNote(true);
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setConvertingNote(false); return; }
-    const title = sel.text.replace(/\s+/g, " ").trim().slice(0, 60);
-    const { data } = await supabase
-      .from("notes")
-      .insert({
-        user_id:         user.id,
-        organization_id: organizationId,
-        title:           title || null,
-        content:         sel.html,
-      })
-      .select("*")
-      .single();
-    setConvertingNote(false);
-    if (data) {
-      const note = data as Note;
-      onNoteCreatedRef.current(note);
-      setCreatedNote({ id: note.id, title: note.title });
-      setTimeout(() => setCreatedNote(null), 8000);
-    }
-  }
-
-  function truncate(s: string, max: number): string {
-    return s.length > max ? `${s.slice(0, max - 1)}…` : s;
-  }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", position: "relative" }}>
-      <RichToolbar editor={editor} />
-      <SelectionBubble editor={editor} onConvertToNote={handleConvertToNote} convertingToNote={convertingNote} />
-      <div style={{ flex: 1, overflowY: "auto", background: "var(--color-off-white)", position: "relative" }}>
-        <div style={{ maxWidth: 760, padding: "36px 60px 80px" }}>
-          <EditorContent editor={editor} />
-        </div>
-        <CanvasAshHint />
-      </div>
-      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, padding: "5px 20px", borderTop: "0.5px solid var(--color-border)", background: "var(--color-off-white)", flexShrink: 0, fontSize: 10, color: "var(--color-text-tertiary)" }}>
-        {createdNote && (
-          <>
-            <span style={{ color: "var(--color-sage-text)", fontWeight: 600 }}>
-              ✓ Note created{createdNote.title ? ` — “${truncate(createdNote.title, 32)}”` : ""}
-            </span>
-            <button
-              type="button"
-              onClick={() => { onViewNoteRef.current(createdNote.id); setCreatedNote(null); }}
-              style={{
-                fontSize: 10, fontWeight: 600,
-                padding: "2px 9px", borderRadius: 9999,
-                background: "rgba(var(--color-sage-rgb),0.16)", color: "var(--color-sage-text)",
-                border: "0.5px solid rgba(var(--color-sage-rgb),0.36)",
-                cursor: "pointer", fontFamily: "inherit",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.28)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.16)")}
-            >
-              View note →
-            </button>
-          </>
-        )}
-        {saving && "Saving…"}
-        {!saving && saved && !createdNote && <span style={{ color: "var(--color-sage)" }}>✓ Saved</span>}
-      </div>
-    </div>
-  );
-}
-
 
 // ── Tasks tab ─────────────────────────────────────────────────────────────────
 
@@ -533,7 +397,6 @@ export default function OrganizationDetailPanel({
   const [linkedTargets,  setLinkedTargets]  = useState<LinkedTarget[]>([]);
   const [tasks,          setTasks]          = useState<Task[]>([]);
   const [notes,          setNotes]          = useState<Note[]>([]);
-  const [canvasHtml,     setCanvasHtml]     = useState<string | null | undefined>(undefined);
   const [activeTab,      setActiveTab]      = useState<SectionTab>(
     initialTab && SECTION_TABS.has(initialTab as SectionTab) ? (initialTab as SectionTab) : "canvas",
   );
@@ -595,7 +458,6 @@ export default function OrganizationDetailPanel({
     }
     firstLoadRef.current = false;
     setSettingsOpen(false);
-    setCanvasHtml(undefined);
 
     const s = createClient();
     Promise.all([
@@ -604,9 +466,8 @@ export default function OrganizationDetailPanel({
       s.from("outreach_targets").select("id, name, pipeline_id, stage_id, pipeline:outreach_pipelines(id,name,color), stage:pipeline_stages(id,name)").eq("organization_id", initialOrg.id),
       s.from("tasks").select("*, project:projects(id,title)").eq("organization_id", initialOrg.id).order("created_at", { ascending: false }),
       s.from("notes").select("*").eq("organization_id", initialOrg.id).order("updated_at", { ascending: false }),
-      s.from("organizations").select("canvas_html").eq("id", initialOrg.id).single(),
       s.from("invoices").select("id, line_items:invoice_line_items(amount)").eq("client_organization_id", initialOrg.id),
-    ]).then(([{ data: a }, { data: c }, { data: ot }, { data: t }, { data: n }, { data: ch }, { data: inv }]) => {
+    ]).then(([{ data: a }, { data: c }, { data: ot }, { data: t }, { data: n }, { data: inv }]) => {
       if (a)  setActivities(a as EntityActivity[]);
       if (c)  setPeople(c as Contact[]);
       if (ot) {
@@ -625,7 +486,6 @@ export default function OrganizationDetailPanel({
       }
       if (t)  setTasks(t as Task[]);
       if (n)  setNotes(n as Note[]);
-      setCanvasHtml(ch?.canvas_html ?? null);
       if (inv && inv.length > 0) {
         type Inv = { id: string; line_items: { amount: number }[] };
         const invs = inv as unknown as Inv[];
@@ -960,20 +820,7 @@ export default function OrganizationDetailPanel({
           {/* Content */}
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
             {activeTab === "canvas" && (
-              canvasHtml === undefined
-                ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "var(--color-grey)" }}>Loading…</div>
-                : <OrganizationCanvasEditor
-                    key={org.id}
-                    organizationId={org.id}
-                    initialHtml={canvasHtml}
-                    onSaved={(h) => setCanvasHtml(h)}
-                    onNoteCreated={(note) => setNotes((prev) => [note, ...prev])}
-                    onViewNote={(noteId) => {
-                      setActiveTab("notes");
-                      setHighlightedNoteId(noteId);
-                      setTimeout(() => setHighlightedNoteId(null), 2400);
-                    }}
-                  />
+              <Canvas key={org.id} scope="organization" entityId={org.id} />
             )}
             {activeTab === "activity" && (
               <EntityActivityTab

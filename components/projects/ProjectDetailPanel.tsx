@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Project, Task, Note, Contact } from "@/types/database";
-import { Maximize2, Minimize2, X, Settings, FileText, CheckSquare, FolderOpen, Trash2, Pencil, Plus, Link2, ExternalLink, Users, Mail, Phone } from "lucide-react";
+import { Maximize2, Minimize2, X, Settings, FileText, CheckSquare, FolderOpen, Trash2, Pencil, Plus, Users, Mail, Phone } from "lucide-react";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import DetailPanelShell from "@/components/ui/DetailPanelShell";
 import SharedEditableField from "@/components/ui/EditableField";
@@ -34,10 +34,7 @@ function chipBg(color: string): string {
 function optionTagStyle(opt: ProjectOption): { bg: string; color: string } {
   return { bg: chipBg(opt.color), color: opt.color === "var(--color-grey)" ? "var(--color-text-secondary)" : opt.color };
 }
-import { useEditor, EditorContent } from "@tiptap/react";
-import { getRichExtensions, RichToolbar, InlineAshPopover, SelectionBubble, submitInlineAsh } from "@/components/ui/RichEditor";
-import type { AshPromptState } from "@/components/ui/RichEditor";
-import CanvasAshHint from "@/components/ui/CanvasAshHint";
+import Canvas from "@/components/canvas/Canvas";
 import { fmtDateShort as fmt } from "@/lib/format/date";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -255,133 +252,6 @@ function EditableDescription({ value, onSave }: { value: string | null; onSave: 
             : <p className="text-[11px]" style={{ color: "var(--color-grey)" }}>Add a description…</p>
           }
         </div>
-      )}
-    </div>
-  );
-}
-
-// ── CanvasEditor ──────────────────────────────────────────────────────────────
-
-function CanvasEditor({
-  projectId, projectTitle, initialHtml, onSaved,
-}: {
-  projectId:    string;
-  projectTitle: string;
-  initialHtml:  string | null;
-  onSaved:      (html: string | null) => void;
-}) {
-  const [saving,        setSaving]        = useState(false);
-  const [saved,         setSaved]         = useState(false);
-  const [convertingNote, setConvertingNote] = useState(false);
-  const [noteCreated,   setNoteCreated]   = useState(false);
-  const [ashPrompt,     setAshPrompt]     = useState<AshPromptState>(null);
-  const saveTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Mirror of the latest HTML the editor produced, kept in a ref so the
-  // unmount cleanup doesn't have to read from a possibly torn-down editor.
-  // Seeded with initialHtml so a "no edits" tab toggle preserves the input.
-  const latestHtml   = useRef<string>(initialHtml ?? "");
-  // Always-fresh onSaved reference so cleanup uses the latest parent
-  // callback (the prop is recreated on each parent render).
-  const onSavedRef   = useRef(onSaved);
-  onSavedRef.current = onSaved;
-
-  const handleAshTrigger = useCallback(
-    (pos: number, coords: { top: number; left: number; bottom: number }) => {
-      setAshPrompt({ pos, anchor: coords });
-    },
-    [],
-  );
-
-  const editor = useEditor({
-    immediatelyRender: false,
-    extensions: getRichExtensions({ placeholder: "Start writing…", onAshTrigger: handleAshTrigger }),
-    content: initialHtml ?? "",
-    onUpdate({ editor }) {
-      const html = editor.getHTML();
-      latestHtml.current = html;
-      scheduleSave(html);
-    },
-    editorProps: {
-      attributes: { style: "outline: none; min-height: 300px; font-size: 14px; line-height: 1.8; color: var(--color-text-secondary);" },
-    },
-  }, [projectId]);
-
-  // On unmount: flush any pending save with the ref-tracked HTML (the editor
-  // may already be torn down by Tiptap's own cleanup at this point, so
-  // reading editor.getHTML() can return empty and clobber the parent's
-  // canvasHtml state — that's exactly what was making the canvas blank out
-  // on a tab toggle. Using the ref keeps the last known content stable.
-  useEffect(() => {
-    return () => {
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current);
-        saveTimer.current = null;
-        const html = latestHtml.current;
-        createClient().from("projects").update({ canvas_html: html || null }).eq("id", projectId);
-        onSavedRef.current(html || null);
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
-
-  function scheduleSave(html: string) {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    setSaving(true); setSaved(false);
-    saveTimer.current = setTimeout(async () => {
-      await createClient().from("projects").update({ canvas_html: html || null }).eq("id", projectId);
-      onSavedRef.current(html || null);
-      saveTimer.current = null;
-      setSaving(false); setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    }, 800);
-  }
-
-  function handleAshSubmit(prompt: string) {
-    return submitInlineAsh({
-      prompt, editor, ashPrompt,
-      surface: { type: "canvas-project", project_id: projectId, project_title: projectTitle },
-      clearPrompt: () => setAshPrompt(null),
-    });
-  }
-
-  async function handleConvertToNote(sel: { text: string; html: string }) {
-    if (convertingNote) return;
-    setConvertingNote(true);
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setConvertingNote(false); return; }
-    const title = sel.text.replace(/\s+/g, " ").trim().slice(0, 60);
-    await supabase.from("notes").insert({
-      user_id:    user.id,
-      project_id: projectId,
-      title:      title || null,
-      content:    sel.html,
-    });
-    setConvertingNote(false);
-    setNoteCreated(true);
-    setTimeout(() => setNoteCreated(false), 2400);
-  }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", position: "relative" }}>
-      <RichToolbar editor={editor} />
-      <SelectionBubble editor={editor} onConvertToNote={handleConvertToNote} convertingToNote={convertingNote} />
-
-      <div style={{ flex: 1, overflowY: "auto", background: "var(--color-off-white)", position: "relative" }}>
-        <div style={{ maxWidth: 760, padding: "36px 60px 80px" }}>
-          <EditorContent editor={editor} />
-        </div>
-        <CanvasAshHint />
-      </div>
-
-      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, padding: "5px 20px", borderTop: "0.5px solid var(--color-border)", background: "var(--color-off-white)", flexShrink: 0 }}>
-        {noteCreated && <span style={{ fontSize: 10, color: "var(--color-sage-text)", fontWeight: 600 }}>✓ Note created</span>}
-        {saving  && <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>Saving…</span>}
-        {!saving && saved && <span style={{ fontSize: 10, color: "var(--color-sage)" }}>✓ Saved</span>}
-      </div>
-
-      {ashPrompt && (
-        <InlineAshPopover anchor={ashPrompt.anchor} onSubmit={handleAshSubmit} onClose={() => setAshPrompt(null)} />
       )}
     </div>
   );
@@ -696,7 +566,6 @@ export default function ProjectDetailPanel({
   const [localProject,   setLocalProject]   = useState<Project>(initialProject);
   const [tasks,          setTasks]          = useState<Task[]>(initialProject.tasks ?? []);
   const [notes,          setNotes]          = useState<Note[]>([]);
-  const [canvasHtml,     setCanvasHtml]     = useState<string | null | undefined>(undefined);
   const [activeTab,      setActiveTab]      = useState<SectionTab>(
     initialTab && SECTION_TABS.has(initialTab as SectionTab) ? (initialTab as SectionTab) : "canvas",
   );
@@ -771,17 +640,14 @@ export default function ProjectDetailPanel({
     if (!firstLoadRef.current) setActiveTab("canvas");
     firstLoadRef.current = false;
     setSettingsOpen(false);
-    setCanvasHtml(undefined); // show loading state while fetching
 
     const supabase = createClient();
     Promise.all([
       supabase.from("notes").select("*").eq("project_id", initialProject.id).order("updated_at", { ascending: false }),
       supabase.from("tasks").select("*").eq("project_id", initialProject.id).order("created_at", { ascending: true }),
-      supabase.from("projects").select("canvas_html").eq("id", initialProject.id).single(),
-    ]).then(([{ data: n }, { data: t }, { data: p }]) => {
+    ]).then(([{ data: n }, { data: t }]) => {
       if (n) setNotes(n as Note[]);
       if (t) setTasks(t as Task[]);
-      setCanvasHtml(p?.canvas_html ?? null);
     });
   }, [initialProject.id]);
 
@@ -1061,9 +927,7 @@ export default function ProjectDetailPanel({
           {/* Content */}
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
             {activeTab === "canvas" && (
-              canvasHtml === undefined
-                ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "var(--color-grey)" }}>Loading…</div>
-                : <CanvasEditor key={localProject.id} projectId={localProject.id} projectTitle={localProject.title} initialHtml={canvasHtml} onSaved={(h) => setCanvasHtml(h)} />
+              <Canvas key={localProject.id} scope="project" entityId={localProject.id} />
             )}
             {activeTab === "tasks" && (
               <EntityTasksTab fkColumn="project_id" id={localProject.id} idPrefix="project" tasks={tasks} setTasks={setTasks} highlightedTaskId={highlightedTaskId} />
