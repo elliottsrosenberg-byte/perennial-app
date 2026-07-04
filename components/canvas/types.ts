@@ -92,6 +92,8 @@ export interface ReferenceContent {
   initials?: string;
   /** accent tint key for the card's icon tile */
   color?: StickyColor;
+  /** For a task-list card: which entity the list is scoped to. */
+  scopeType?: "project" | "contact";
 }
 
 /** A live module-summary card (pulls stats from a module on mount). */

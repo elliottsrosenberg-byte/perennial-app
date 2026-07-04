@@ -7,7 +7,7 @@
 // colours come from design tokens (see palette.ts / AGENTS.md).
 
 import { useEffect, useRef } from "react";
-import { ImageIcon, FolderIcon, ListChecks, FileText, Calendar, Check } from "lucide-react";
+import { ImageIcon, FolderIcon, Calendar } from "lucide-react";
 import type {
   CanvasObject,
   TextContent,
@@ -20,6 +20,7 @@ import type {
 } from "./types";
 import { swatch } from "./palette";
 import ModuleCard from "./ModuleCard";
+import { LiveProjectCard, LiveContactCard, LiveNoteCard, LiveTaskListCard } from "./LiveCards";
 
 const textCol = (tc?: StickyColor) =>
   tc ? swatch(tc).accent : "var(--color-text-primary)";
@@ -411,6 +412,12 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
     case "reference": {
       const c = object.content as ReferenceContent;
       const rt = object.refType;
+      // Live, interactive cards for the entity types that support it.
+      if (rt === "project") return <LiveProjectCard object={object} />;
+      if (rt === "contact" || rt === "lead") return <LiveContactCard object={object} />;
+      if (rt === "note") return <LiveNoteCard object={object} />;
+      if (rt === "task") return <LiveTaskListCard object={object} />;
+      // organization / event / fallback → static snapshot below.
       const sw = swatch(c.color);
       const cardStyle = {
         width: "100%",
@@ -453,120 +460,7 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
         </div>
       );
 
-      if (rt === "task") {
-        return (
-          <div style={cardStyle}>
-            <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-              <div
-                style={{
-                  flexShrink: 0,
-                  width: 18,
-                  height: 18,
-                  marginTop: 1,
-                  borderRadius: 5,
-                  border: `1.5px solid ${c.done ? sw.accent : "var(--color-border-strong)"}`,
-                  background: c.done ? sw.accent : "transparent",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#fff",
-                }}
-              >
-                {c.done && <Check size={12} strokeWidth={2.5} />}
-              </div>
-              <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-                <span
-                  style={{
-                    ...titleStyle,
-                    whiteSpace: "normal",
-                    textDecoration: c.done ? "line-through" : undefined,
-                    color: c.done ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
-                  }}
-                >
-                  {c.title}
-                </span>
-                {(c.subtitle || c.meta) && <span style={meta}>{[c.subtitle, c.meta].filter(Boolean).join(" · ")}</span>}
-              </div>
-            </div>
-          </div>
-        );
-      }
-
-      if (rt === "contact") {
-        return (
-          <div style={cardStyle}>
-            <div style={{ display: "flex", gap: 11, alignItems: "center" }}>
-              <div
-                style={{
-                  flexShrink: 0,
-                  width: 34,
-                  height: 34,
-                  borderRadius: "var(--radius-full)",
-                  background: sw.fill,
-                  color: sw.accent,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontFamily: FONT,
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}
-              >
-                {c.initials}
-              </div>
-              <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-                <span style={titleStyle}>{c.title}</span>
-                {c.subtitle && <span style={meta}>{c.subtitle}</span>}
-              </div>
-            </div>
-          </div>
-        );
-      }
-
-      if (rt === "note") {
-        return (
-          <div style={cardStyle}>
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              {tile(<FileText size={16} strokeWidth={1.75} />)}
-              <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-                <span style={titleStyle}>{c.title}</span>
-                {c.meta && <span style={meta}>{c.meta}</span>}
-              </div>
-            </div>
-            {c.snippet && (
-              <span style={{ fontFamily: FONT, fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.4, overflow: "hidden" }}>
-                {c.snippet}
-              </span>
-            )}
-          </div>
-        );
-      }
-
-      if (rt === "project") {
-        return (
-          <div style={cardStyle}>
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              {tile(<ListChecks size={16} strokeWidth={1.75} />)}
-              <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-                <span style={titleStyle}>{c.title}</span>
-                {(c.status || c.meta) && (
-                  <span style={{ ...meta, textTransform: "capitalize" }}>
-                    {[c.status, c.meta].filter(Boolean).join(" · ")}
-                  </span>
-                )}
-              </div>
-            </div>
-            {typeof c.progress === "number" && (
-              <div style={{ height: 6, borderRadius: "var(--radius-full)", background: "var(--color-surface-sunken)", overflow: "hidden" }}>
-                <div style={{ width: `${Math.round(c.progress * 100)}%`, height: "100%", background: sw.accent }} />
-              </div>
-            )}
-            {c.subtitle && <span style={meta}>{c.subtitle}</span>}
-          </div>
-        );
-      }
-
-      // event + fallback
+      // organization / event / fallback (project/contact/note/task use live cards above)
       const Icon = rt === "event" ? Calendar : FolderIcon;
       return (
         <div style={cardStyle}>

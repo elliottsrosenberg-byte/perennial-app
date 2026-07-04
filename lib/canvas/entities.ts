@@ -70,24 +70,25 @@ export async function searchEntities(kind: EntityKind, query: string): Promise<E
     }
 
     case "task": {
+      // A task card is a completable task LIST scoped to a project.
       const { data } = await supabase
-        .from("tasks")
-        .select("id, title, completed, due_date, project:projects(title)")
+        .from("projects")
+        .select("id, title, tasks(id, completed)")
         .ilike("title", like)
-        .order("created_at", { ascending: false })
+        .order("updated_at", { ascending: false })
         .limit(20);
-      return (data ?? []).map((t): EntityResult => {
-        const project = t.project as unknown as { title: string } | null;
+      return (data ?? []).map((p): EntityResult => {
+        const tasks = (p.tasks ?? []) as { completed: boolean }[];
+        const open = tasks.filter((t) => !t.completed).length;
         return {
           refType: "task",
-          refId: t.id,
+          refId: p.id,
           width: 280,
-          height: 92,
+          height: 210,
           content: {
-            title: t.title,
-            done: t.completed,
-            subtitle: project?.title ?? undefined,
-            meta: t.due_date ? `Due ${fmtDate(t.due_date)}` : undefined,
+            title: p.title,
+            subtitle: `${open} open · ${tasks.length} tasks`,
+            scopeType: "project",
             color: "blue",
           },
         };

@@ -38,6 +38,8 @@ interface Props {
   onContextMenu: (id: string, e: React.MouseEvent) => void;
   /** Report measured content height (text objects auto-grow). */
   onAutoHeight: (id: string, height: number) => void;
+  /** Open the entity a reference card points at (double-click). */
+  onOpenReference: (o: CanvasObject) => void;
 }
 
 function rotate(vx: number, vy: number, rad: number) {
@@ -70,6 +72,7 @@ export default function CanvasObjectView({
   onEndEdit,
   onContextMenu,
   onAutoHeight,
+  onOpenReference,
 }: Props) {
   const latestRef = useRef<CanvasObject>(object);
   useEffect(() => {
@@ -254,6 +257,15 @@ export default function CanvasObjectView({
         if (editableText && interactive) {
           e.stopPropagation();
           onStartEdit(object.id);
+          return;
+        }
+        if (
+          interactive &&
+          object.type === "reference" &&
+          ["project", "contact", "organization", "lead"].includes(object.refType ?? "")
+        ) {
+          e.stopPropagation();
+          onOpenReference(object);
         }
       }}
     >
