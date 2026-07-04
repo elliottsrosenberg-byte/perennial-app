@@ -1,8 +1,10 @@
 "use client";
 
 // Per-type visual renderer for a canvas object. Selection/drag/resize chrome
-// lives in CanvasObjectView; this is purely the inner content. All colours come
-// from design tokens (see palette.ts / AGENTS.md).
+// lives in CanvasObjectView; this is purely the inner content. Text-bearing
+// objects (text, sticky, box-shapes) use a lightweight contentEditable rich
+// editor (RichEditable) when editing and render stored HTML otherwise. All
+// colours come from design tokens (see palette.ts / AGENTS.md).
 
 import { useEffect, useRef } from "react";
 import { ImageIcon, FolderIcon, ListChecks } from "lucide-react";
@@ -19,57 +21,62 @@ import { STICKY_PALETTE, SHAPE_PALETTE } from "./palette";
 interface Props {
   object: CanvasObject;
   editing: boolean;
-  /** Update editable text (text + sticky). */
-  onText: (text: string) => void;
+  /** Rich text change: (html, plainText). */
+  onRichChange: (html: string, text: string) => void;
   onEndEdit: () => void;
 }
 
 const FONT = "var(--font-sans)";
 
-function AutoTextarea({
-  value,
-  placeholder,
+// ── rich text: editable + static view ─────────────────────────────────────────
+
+function RichEditable({
+  html,
+  text,
   color,
   fontSize,
-  fontWeight,
   align,
   autoGrow,
+  placeholder,
   onChange,
   onEndEdit,
 }: {
-  value: string;
-  placeholder: string;
+  html?: string;
+  text: string;
   color: string;
   fontSize: number;
-  fontWeight?: number;
   align?: "left" | "center" | "right";
-  /** Grow height to fit content (text objects) instead of filling the box. */
   autoGrow?: boolean;
-  onChange: (v: string) => void;
+  placeholder?: string;
+  onChange: (html: string, text: string) => void;
   onEndEdit: () => void;
 }) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  const fit = () => {
-    const el = ref.current;
-    if (autoGrow && el) {
-      el.style.height = "auto";
-      el.style.height = `${el.scrollHeight}px`;
-    }
-  };
+  const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    ref.current?.focus();
-    ref.current?.select();
-    fit();
+    const el = ref.current;
+    if (!el) return;
+    if (html) el.innerHTML = html;
+    else el.innerText = text;
+    el.focus();
+    // caret to end
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <textarea
+    <div
       ref={ref}
-      value={value}
-      placeholder={placeholder}
-      onChange={(e) => {
-        onChange(e.target.value);
-        fit();
+      className="canvas-rich"
+      contentEditable
+      suppressContentEditableWarning
+      data-placeholder={placeholder}
+      onInput={() => {
+        const el = ref.current;
+        if (el) onChange(el.innerHTML, el.textContent ?? "");
       }}
       onBlur={onEndEdit}
       onKeyDown={(e) => {
@@ -79,65 +86,95 @@ function AutoTextarea({
         }
         e.stopPropagation();
       }}
+      onPaste={(e) => {
+        // Paste as plain text — keeps stored HTML to our own formatting only.
+        e.preventDefault();
+        const t = e.clipboardData.getData("text/plain");
+        document.execCommand("insertText", false, t);
+      }}
       onPointerDown={(e) => e.stopPropagation()}
       style={{
         width: "100%",
         height: autoGrow ? "auto" : "100%",
-        overflow: autoGrow ? "hidden" : undefined,
-        resize: "none",
-        border: "none",
         outline: "none",
-        background: "transparent",
         color,
         fontFamily: FONT,
         fontSize,
-        fontWeight,
         lineHeight: 1.35,
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word",
         textAlign: align ?? "left",
-        padding: 0,
-        margin: 0,
         userSelect: "text",
+        overflow: autoGrow ? "visible" : "hidden",
       }}
     />
   );
 }
 
-export default function CanvasObjectContent({
-  object,
-  editing,
-  onText,
-  onEndEdit,
-}: Props) {
+function RichView({
+  html,
+  text,
+  color,
+  emptyColor,
+  fontSize,
+  align,
+  placeholder,
+}: {
+  html?: string;
+  text: string;
+  color: string;
+  emptyColor: string;
+  fontSize: number;
+  align?: "left" | "center" | "right";
+  placeholder?: string;
+}) {
+  const base: React.CSSProperties = {
+    width: "100%",
+    fontFamily: FONT,
+    fontSize,
+    lineHeight: 1.35,
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+    textAlign: align ?? "left",
+  };
+  if (html) {
+    return <div className="canvas-rich" style={{ ...base, color }} dangerouslySetInnerHTML={{ __html: html }} />;
+  }
+  return (
+    <div className="canvas-rich" style={{ ...base, color: text ? color : emptyColor }}>
+      {text || placeholder || ""}
+    </div>
+  );
+}
+
+// ── main renderer ──────────────────────────────────────────────────────────────
+
+export default function CanvasObjectContent({ object, editing, onRichChange, onEndEdit }: Props) {
   switch (object.type) {
     case "text": {
       const c = object.content as TextContent;
       const size = c.fontSize ?? 16;
       return editing ? (
-        <AutoTextarea
-          value={c.text}
-          placeholder="Type something…"
+        <RichEditable
+          html={c.html}
+          text={c.text}
           color="var(--color-text-primary)"
           fontSize={size}
           align={c.align}
           autoGrow
-          onChange={onText}
+          placeholder="Type something…"
+          onChange={onRichChange}
           onEndEdit={onEndEdit}
         />
       ) : (
-        <div
-          style={{
-            width: "100%",
-            color: c.text ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
-            fontFamily: FONT,
-            fontSize: size,
-            lineHeight: 1.35,
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            textAlign: c.align ?? "left",
-          }}
-        >
-          {c.text || "Text"}
-        </div>
+        <RichView
+          html={c.html}
+          text={c.text || "Text"}
+          color="var(--color-text-primary)"
+          emptyColor="var(--color-text-tertiary)"
+          fontSize={size}
+          align={c.align}
+        />
       );
     }
 
@@ -180,27 +217,24 @@ export default function CanvasObjectContent({
           )}
           <div style={{ flex: 1, minHeight: 0 }}>
             {editing ? (
-              <AutoTextarea
-                value={c.text}
-                placeholder="Write a note…"
+              <RichEditable
+                html={c.html}
+                text={c.text}
                 color="var(--color-text-primary)"
                 fontSize={stickyFont}
-                onChange={onText}
+                placeholder="Write a note…"
+                onChange={onRichChange}
                 onEndEdit={onEndEdit}
               />
             ) : (
-              <div
-                style={{
-                  color: c.text ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
-                  fontFamily: FONT,
-                  fontSize: stickyFont,
-                  lineHeight: 1.4,
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                }}
-              >
-                {c.text || "Write a note…"}
-              </div>
+              <RichView
+                html={c.html}
+                text={c.text}
+                color="var(--color-text-primary)"
+                emptyColor="var(--color-text-tertiary)"
+                fontSize={stickyFont}
+                placeholder="Write a note…"
+              />
             )}
           </div>
         </div>
@@ -259,29 +293,24 @@ export default function CanvasObjectContent({
           }}
         >
           {editing ? (
-            <AutoTextarea
-              value={c.text ?? ""}
-              placeholder=""
+            <RichEditable
+              html={c.html}
+              text={c.text ?? ""}
               color="var(--color-text-primary)"
               fontSize={shapeFont}
               align="center"
-              onChange={onText}
+              onChange={onRichChange}
               onEndEdit={onEndEdit}
             />
-          ) : c.text ? (
-            <div
-              style={{
-                color: "var(--color-text-primary)",
-                fontFamily: FONT,
-                fontSize: shapeFont,
-                lineHeight: 1.35,
-                textAlign: "center",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-              }}
-            >
-              {c.text}
-            </div>
+          ) : c.html || c.text ? (
+            <RichView
+              html={c.html}
+              text={c.text ?? ""}
+              color="var(--color-text-primary)"
+              emptyColor="var(--color-text-tertiary)"
+              fontSize={shapeFont}
+              align="center"
+            />
           ) : null}
         </div>
       );

@@ -25,6 +25,16 @@ import {
   Type,
   BoxSelect,
   ClipboardPaste,
+  Bold,
+  Italic,
+  Underline,
+  Heading1,
+  Heading2,
+  Heading3,
+  Pilcrow,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
 } from "lucide-react";
 import type { CanvasObjectRow, CanvasScope } from "@/types/database";
 import { uploadEditorImage, isUploadableImageType } from "@/lib/uploads/editor-image";
@@ -459,10 +469,10 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     [store],
   );
   const onText = useCallback(
-    (id: string, text: string) => {
+    (id: string, html: string, text: string) => {
       const o = objsRef.current.find((x) => x.id === id);
       if (!o) return;
-      const content = { ...o.content, text };
+      const content = { ...o.content, html, text };
       store.patchLocal(id, { content });
       store.commitContentDebounced(id, content);
     },
@@ -562,6 +572,15 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const toolbarPos = sole
     ? { left: sole.x * view.scale + view.x + (sole.width * view.scale) / 2, top: sole.y * view.scale + view.y - 46 }
     : null;
+
+  // ── rich-text toolbar (while editing a text-bearing object) ──
+  const editingObj = editingId ? store.objects.find((o) => o.id === editingId) ?? null : null;
+  const editorBarPos = editingObj
+    ? { left: editingObj.x * view.scale + view.x + (editingObj.width * view.scale) / 2, top: editingObj.y * view.scale + view.y - 48 }
+    : null;
+  const exec = (cmd: string, arg?: string) => {
+    document.execCommand(cmd, false, arg);
+  };
 
   const containerCursor = useMemo(() => {
     if (tool === "hand" || spaceDown) return panning ? "grabbing" : "grab";
@@ -781,6 +800,73 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
           >
             <Trash2 size={15} strokeWidth={1.75} />
           </button>
+        </div>
+      )}
+
+      {/* rich-text toolbar while editing */}
+      {editingObj && editorBarPos && (
+        <div
+          onPointerDown={(e) => e.stopPropagation()}
+          style={{
+            position: "absolute",
+            left: editorBarPos.left,
+            top: editorBarPos.top,
+            transform: "translateX(-50%)",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+            padding: "5px 6px",
+            borderRadius: "var(--radius-full)",
+            background: "var(--color-surface-raised)",
+            border: "0.5px solid var(--color-border)",
+            boxShadow: "var(--shadow-lg)",
+            zIndex: 35,
+          }}
+        >
+          {(
+            [
+              { key: "bold", icon: <Bold size={14} strokeWidth={2} />, cmd: "bold" },
+              { key: "italic", icon: <Italic size={14} strokeWidth={2} />, cmd: "italic" },
+              { key: "underline", icon: <Underline size={14} strokeWidth={2} />, cmd: "underline" },
+              "|",
+              { key: "h1", icon: <Heading1 size={15} strokeWidth={2} />, cmd: "formatBlock", arg: "H1" },
+              { key: "h2", icon: <Heading2 size={15} strokeWidth={2} />, cmd: "formatBlock", arg: "H2" },
+              { key: "h3", icon: <Heading3 size={15} strokeWidth={2} />, cmd: "formatBlock", arg: "H3" },
+              { key: "p", icon: <Pilcrow size={14} strokeWidth={2} />, cmd: "formatBlock", arg: "P" },
+              "|",
+              { key: "left", icon: <AlignLeft size={14} strokeWidth={2} />, cmd: "justifyLeft" },
+              { key: "center", icon: <AlignCenter size={14} strokeWidth={2} />, cmd: "justifyCenter" },
+              { key: "right", icon: <AlignRight size={14} strokeWidth={2} />, cmd: "justifyRight" },
+            ] as const
+          ).map((b, i) =>
+            b === "|" ? (
+              <span key={`sep-${i}`} style={{ width: 1, height: 16, background: "var(--color-border)", margin: "0 3px" }} />
+            ) : (
+              <button
+                key={b.key}
+                title={b.key}
+                // preventDefault keeps the editable focused so execCommand applies.
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  exec(b.cmd, "arg" in b ? b.arg : undefined);
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 26,
+                  height: 26,
+                  border: "none",
+                  background: "transparent",
+                  borderRadius: "var(--radius-sm)",
+                  color: "var(--color-text-secondary)",
+                  cursor: "pointer",
+                }}
+              >
+                {b.icon}
+              </button>
+            ),
+          )}
         </div>
       )}
 
