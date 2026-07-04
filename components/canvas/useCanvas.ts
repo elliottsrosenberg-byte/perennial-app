@@ -43,6 +43,10 @@ export interface CanvasStore {
   remove: (id: string) => void;
   /** Highest z-index currently in use (for "bring new object to front"). */
   topZ: number;
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 export function useCanvas({
@@ -151,6 +155,77 @@ export function useCanvas({
     [supabase],
   );
 
+  // ── undo / redo ──────────────────────────────────────────────────────────
+  // Debounced snapshots of the whole object set at rest; undo/redo restore a
+  // snapshot and reconcile the DB (insert/update/delete the diff).
+  const objectsRef = useRef(objects);
+  const historyRef = useRef<CanvasObject[][]>([]);
+  const ptrRef = useRef(-1);
+  const applyingRef = useRef(false);
+  const [hist, setHist] = useState({ canUndo: false, canRedo: false });
+  useEffect(() => {
+    objectsRef.current = objects;
+  });
+
+  const clone = (objs: CanvasObject[]) => objs.map((o) => ({ ...o, content: { ...o.content } }));
+  const syncHist = () =>
+    setHist({ canUndo: ptrRef.current > 0, canRedo: ptrRef.current < historyRef.current.length - 1 });
+
+  // Record settled states.
+  useEffect(() => {
+    if (applyingRef.current) return;
+    const t = setTimeout(() => {
+      const cur = clone(objects);
+      const top = historyRef.current[ptrRef.current];
+      if (top && JSON.stringify(top) === JSON.stringify(cur)) return;
+      historyRef.current = historyRef.current.slice(0, ptrRef.current + 1);
+      historyRef.current.push(cur);
+      if (historyRef.current.length > 60) historyRef.current.shift();
+      ptrRef.current = historyRef.current.length - 1;
+      syncHist();
+    }, 450);
+    return () => clearTimeout(t);
+  }, [objects]);
+
+  const applyState = useCallback(
+    (target: CanvasObject[]) => {
+      applyingRef.current = true;
+      const cur = objectsRef.current;
+      const curMap = new Map(cur.map((o) => [o.id, o]));
+      const tgtMap = new Map(target.map((o) => [o.id, o]));
+      if (canvasId) {
+        for (const o of target) {
+          const c = curMap.get(o.id);
+          if (!c) insertCanvasObject(supabase, canvasId, o).catch((e) => console.error("undo insert failed", e));
+          else if (JSON.stringify(objectToColumns(c)) !== JSON.stringify(objectToColumns(o)))
+            updateCanvasObject(supabase, o.id, objectToColumns(o)).catch((e) => console.error("undo update failed", e));
+        }
+        for (const o of cur) {
+          if (!tgtMap.has(o.id)) deleteCanvasObject(supabase, o.id).catch((e) => console.error("undo delete failed", e));
+        }
+      }
+      setObjects(clone(target));
+      // Cleared after the state settles; the record effect also skips no-ops.
+      setTimeout(() => {
+        applyingRef.current = false;
+      }, 0);
+    },
+    [supabase, canvasId],
+  );
+
+  const undo = useCallback(() => {
+    if (ptrRef.current <= 0) return;
+    ptrRef.current -= 1;
+    applyState(historyRef.current[ptrRef.current]);
+    syncHist();
+  }, [applyState]);
+  const redo = useCallback(() => {
+    if (ptrRef.current >= historyRef.current.length - 1) return;
+    ptrRef.current += 1;
+    applyState(historyRef.current[ptrRef.current]);
+    syncHist();
+  }, [applyState]);
+
   return {
     loading,
     objects,
@@ -160,5 +235,9 @@ export function useCanvas({
     commitContentDebounced,
     remove,
     topZ,
+    undo,
+    redo,
+    canUndo: hist.canUndo,
+    canRedo: hist.canRedo,
   };
 }
