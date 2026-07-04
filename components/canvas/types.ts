@@ -40,8 +40,10 @@ export interface StickyContent {
   fontSize?: number;
 }
 export interface ShapeContent {
-  shape: "rect" | "ellipse";
+  shape: "rect" | "ellipse" | "line" | "arrow";
   color: ShapeColor;
+  text?: string;
+  fontSize?: number;
 }
 export interface ImageContent {
   url: string;

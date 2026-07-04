@@ -204,6 +204,39 @@ export default function CanvasObjectContent({
     case "shape": {
       const c = object.content as ShapeContent;
       const sw = SHAPE_PALETTE[c.color] ?? SHAPE_PALETTE.sage;
+
+      if (c.shape === "line" || c.shape === "arrow") {
+        const w = object.width;
+        const h = object.height;
+        const midY = h / 2;
+        return (
+          <svg
+            width="100%"
+            height="100%"
+            viewBox={`0 0 ${w} ${h}`}
+            preserveAspectRatio="none"
+            style={{ overflow: "visible", display: "block" }}
+          >
+            <line
+              x1={0}
+              y1={midY}
+              x2={c.shape === "arrow" ? w - 9 : w}
+              y2={midY}
+              style={{ stroke: sw.accent }}
+              strokeWidth={2.5}
+              strokeLinecap="round"
+            />
+            {c.shape === "arrow" && (
+              <polygon
+                points={`${w - 11},${midY - 6} ${w},${midY} ${w - 11},${midY + 6}`}
+                style={{ fill: sw.accent }}
+              />
+            )}
+          </svg>
+        );
+      }
+
+      const shapeFont = c.fontSize ?? 14;
       return (
         <div
           style={{
@@ -211,10 +244,40 @@ export default function CanvasObjectContent({
             height: "100%",
             background: sw.fill,
             border: `1.5px solid ${sw.border}`,
-            borderRadius:
-              c.shape === "ellipse" ? "50%" : "var(--radius-md)",
+            borderRadius: c.shape === "ellipse" ? "50%" : "var(--radius-md)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 12,
+            overflow: "hidden",
           }}
-        />
+        >
+          {editing ? (
+            <AutoTextarea
+              value={c.text ?? ""}
+              placeholder=""
+              color="var(--color-text-primary)"
+              fontSize={shapeFont}
+              align="center"
+              onChange={onText}
+              onEndEdit={onEndEdit}
+            />
+          ) : c.text ? (
+            <div
+              style={{
+                color: "var(--color-text-primary)",
+                fontFamily: FONT,
+                fontSize: shapeFont,
+                lineHeight: 1.35,
+                textAlign: "center",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+              }}
+            >
+              {c.text}
+            </div>
+          ) : null}
+        </div>
       );
     }
 

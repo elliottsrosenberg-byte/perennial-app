@@ -25,7 +25,7 @@ import {
 import type { CanvasTool, StickyColor } from "./types";
 import { STICKY_COLOR_ORDER, STICKY_PALETTE } from "./palette";
 
-export type ShapeKind = "rect" | "ellipse";
+export type ShapeKind = "rect" | "ellipse" | "line" | "arrow";
 
 interface Props {
   tool: CanvasTool;
@@ -92,7 +92,7 @@ function OptionsCard({
   if (tool === "sticky") {
     return (
       <div style={cardStyle}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
           {STICKY_COLOR_ORDER.map((c) => (
             <button
               key={c}
@@ -119,6 +119,8 @@ function OptionsCard({
     const shapes: { key: ShapeKind; icon: React.ReactNode; label: string }[] = [
       { key: "rect", icon: <Square size={17} strokeWidth={1.75} />, label: "Rectangle" },
       { key: "ellipse", icon: <Circle size={17} strokeWidth={1.75} />, label: "Ellipse" },
+      { key: "line", icon: <Minus size={17} strokeWidth={1.75} />, label: "Line" },
+      { key: "arrow", icon: <MoveUpRight size={17} strokeWidth={1.75} />, label: "Arrow" },
     ];
     return (
       <div style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 6, alignItems: "center" }}>
@@ -128,27 +130,10 @@ function OptionsCard({
             title={s.label}
             aria-label={s.label}
             onClick={() => onShapeKind(s.key)}
-            style={{
-              ...tile(s.key === shapeKind),
-              width: 32,
-              height: 32,
-            }}
+            style={{ ...tile(s.key === shapeKind), width: 32, height: 32 }}
           >
             {s.icon}
           </button>
-        ))}
-        <span style={{ width: 22, height: 1, background: "var(--color-border)" }} />
-        {[
-          { icon: <Minus size={17} strokeWidth={1.75} />, label: "Line" },
-          { icon: <MoveUpRight size={17} strokeWidth={1.75} />, label: "Arrow" },
-        ].map((s) => (
-          <div
-            key={s.label}
-            title={`${s.label} — soon`}
-            style={{ ...tile(false), width: 32, height: 32, cursor: "default", opacity: 0.4 }}
-          >
-            {s.icon}
-          </div>
         ))}
       </div>
     );

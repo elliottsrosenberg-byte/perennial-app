@@ -8,7 +8,7 @@
 // screen pointer deltas are divided by `scale`.
 
 import { useEffect, useRef } from "react";
-import type { CanvasObject } from "./types";
+import type { CanvasObject, ShapeContent } from "./types";
 import CanvasObjectContent from "./CanvasObjectContent";
 
 type Corner = "nw" | "ne" | "sw" | "se";
@@ -75,6 +75,9 @@ export default function CanvasObjectView({
 
   const inv = 1 / scale;
   const scalable = object.type === "text" || object.type === "sticky";
+  const shapeKind = object.type === "shape" ? (object.content as ShapeContent).shape : null;
+  // Double-click to edit text: text, sticky, and box-shapes (not line/arrow).
+  const editableText = scalable || shapeKind === "rect" || shapeKind === "ellipse";
 
   function onBodyPointerDown(e: React.PointerEvent) {
     if (editing || !interactive) return; // fall through so create/hand tools work
@@ -149,11 +152,16 @@ export default function CanvasObjectView({
     if (!rect) return;
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
+    // Anchor to the grab angle so rotation starts from the object's current
+    // angle instead of snapping (fixes the jump on pointer-down).
+    const deg = (rad: number) => (rad * 180) / Math.PI;
+    const startPointerAngle = deg(Math.atan2(e.clientY - cy, e.clientX - cx));
+    const startRotation = object.rotation;
     const move = (ev: PointerEvent) => {
-      const ang = (Math.atan2(ev.clientY - cy, ev.clientX - cx) * 180) / Math.PI + 90;
-      let deg = Math.round(ang);
-      if (ev.shiftKey) deg = Math.round(deg / 15) * 15;
-      onChangeLocal(object.id, { rotation: deg });
+      const delta = deg(Math.atan2(ev.clientY - cy, ev.clientX - cx)) - startPointerAngle;
+      let next = Math.round(startRotation + delta);
+      if (ev.shiftKey) next = Math.round(next / 15) * 15;
+      onChangeLocal(object.id, { rotation: next });
     };
     const up = () => {
       window.removeEventListener("pointermove", move);
@@ -188,7 +196,7 @@ export default function CanvasObjectView({
       onPointerDown={onBodyPointerDown}
       onContextMenu={(e) => onContextMenu(object.id, e)}
       onDoubleClick={(e) => {
-        if (scalable && interactive) {
+        if (editableText && interactive) {
           e.stopPropagation();
           onStartEdit(object.id);
         }
