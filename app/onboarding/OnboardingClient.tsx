@@ -523,6 +523,8 @@ export default function OnboardingClient({ userId }: { userId: string }) {
       updated_at:          new Date().toISOString(),
     });
     localStorage.setItem("perennial-just-onboarded", "1");
+    // Kick off Ash's background research on the user's niche (fire-and-forget).
+    void fetch("/api/ash/research", { method: "POST" }).catch(() => {});
     router.push("/");
     router.refresh();
   }

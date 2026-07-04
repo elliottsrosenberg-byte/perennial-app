@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AshContext } from "./system-prompt";
+import { loadPreferences } from "./preferences";
 
 export async function buildAshContext(
   userId: string,
@@ -20,6 +21,7 @@ export async function buildAshContext(
     { data: recentNotes },
     { data: openTasks },
     { data: profile },
+    preferences,
   ] = await Promise.all([
     supabase
       .from("projects")
@@ -71,6 +73,7 @@ export async function buildAshContext(
       .select("display_name, studio_name, tagline, bio, location, website, practice_types, work_types, selling_channels, price_range, years_in_practice, primary_challenges, business_issues, urgent_needs, perennial_goals, currency, hourly_rate")
       .eq("user_id", userId)
       .maybeSingle(),
+    loadPreferences(supabase, userId),
   ]);
 
   type RawInv = { id: string; number: number; due_at: string | null; line_items: { amount: number }[] };
@@ -149,5 +152,6 @@ export async function buildAshContext(
       project:  (t.project as unknown as { title: string } | null)?.title ?? null,
     })),
     billableHoursThisMonth: billableMinutes / 60,
+    preferences: preferences.map((p) => ({ kind: p.kind, content: p.content, weight: p.weight })),
   };
 }
