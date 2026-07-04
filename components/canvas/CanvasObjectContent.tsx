@@ -18,11 +18,11 @@ import type {
   DrawingContent,
   StickyColor,
 } from "./types";
-import { STICKY_PALETTE, SHAPE_PALETTE } from "./palette";
+import { swatch } from "./palette";
 import ModuleCard from "./ModuleCard";
 
 const textCol = (tc?: StickyColor) =>
-  tc ? STICKY_PALETTE[tc].accent : "var(--color-text-primary)";
+  tc ? swatch(tc).accent : "var(--color-text-primary)";
 const vJust = (v?: "top" | "middle" | "bottom") =>
   v === "top" ? "flex-start" : v === "bottom" ? "flex-end" : "center";
 
@@ -188,7 +188,7 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
 
     case "sticky": {
       const c = object.content as StickyContent;
-      const sw = STICKY_PALETTE[c.color] ?? STICKY_PALETTE.yellow;
+      const sw = swatch(c.color);
       const stickyFont = c.fontSize ?? 13;
       return (
         <div
@@ -254,12 +254,25 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
 
     case "shape": {
       const c = object.content as ShapeContent;
-      const sw = SHAPE_PALETTE[c.color] ?? SHAPE_PALETTE.green;
+      const sw = swatch(c.color);
 
       if (c.shape === "line" || c.shape === "arrow") {
         const w = object.width;
         const h = object.height;
         const midY = h / 2;
+        const strokeW = c.strokeWidth ?? 2.5;
+        const startCap = c.startCap ?? "none";
+        const endCap = c.endCap ?? (c.shape === "arrow" ? "arrow" : "none");
+        const head = strokeW * 3 + 3;
+        const hw = strokeW * 2 + 2;
+        const dashArray =
+          c.dash === "dashed"
+            ? `${strokeW * 2.6} ${strokeW * 2}`
+            : c.dash === "dotted"
+              ? `0.1 ${strokeW * 2.2}`
+              : undefined;
+        const x1 = startCap === "arrow" ? head : 0;
+        const x2 = endCap === "arrow" ? w - head : w;
         return (
           <svg
             width="100%"
@@ -269,19 +282,20 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
             style={{ overflow: "visible", display: "block" }}
           >
             <line
-              x1={0}
+              x1={x1}
               y1={midY}
-              x2={c.shape === "arrow" ? w - 9 : w}
+              x2={x2}
               y2={midY}
               style={{ stroke: sw.accent }}
-              strokeWidth={2.5}
-              strokeLinecap="round"
+              strokeWidth={strokeW}
+              strokeLinecap={c.dash === "dotted" ? "round" : "butt"}
+              strokeDasharray={dashArray}
             />
-            {c.shape === "arrow" && (
-              <polygon
-                points={`${w - 11},${midY - 6} ${w},${midY} ${w - 11},${midY + 6}`}
-                style={{ fill: sw.accent }}
-              />
+            {endCap === "arrow" && (
+              <polygon points={`${w - head},${midY - hw} ${w},${midY} ${w - head},${midY + hw}`} style={{ fill: sw.accent }} />
+            )}
+            {startCap === "arrow" && (
+              <polygon points={`${head},${midY - hw} 0,${midY} ${head},${midY + hw}`} style={{ fill: sw.accent }} />
             )}
           </svg>
         );
@@ -397,7 +411,7 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
     case "reference": {
       const c = object.content as ReferenceContent;
       const rt = object.refType;
-      const sw = STICKY_PALETTE[c.color ?? "green"];
+      const sw = swatch(c.color);
       const cardStyle = {
         width: "100%",
         height: "100%",
@@ -573,7 +587,7 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
 
     case "drawing": {
       const c = object.content as DrawingContent;
-      const sw = STICKY_PALETTE[c.color] ?? STICKY_PALETTE.olive;
+      const sw = swatch(c.color);
       const isHi = c.mode === "highlighter";
       return (
         <svg

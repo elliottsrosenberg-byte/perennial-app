@@ -347,13 +347,15 @@ export default function ToolDock(props: Props) {
         ))}
 
         {/* Module snapshots */}
-        <button
-          title="Module snapshot"
-          aria-label="Module snapshot"
-          onClick={() => setMenu((m) => (m === "module" ? null : "module"))}
-          style={tile(menu === "module")}
-        >
-          <LayoutGrid size={18} strokeWidth={1.75} />
+        <div style={{ position: "relative" }}>
+          <button
+            title="Module snapshot"
+            aria-label="Module snapshot"
+            onClick={() => setMenu((m) => (m === "module" ? null : "module"))}
+            style={tile(menu === "module")}
+          >
+            <LayoutGrid size={18} strokeWidth={1.75} />
+          </button>
           {menu === "module" && (
             <div style={flyout}>
               {MODULE_ITEMS.map((item) => (
@@ -371,16 +373,18 @@ export default function ToolDock(props: Props) {
               ))}
             </div>
           )}
-        </button>
+        </div>
 
         {/* Files */}
-        <button
-          title="File"
-          aria-label="File"
-          onClick={() => setMenu((m) => (m === "file" ? null : "file"))}
-          style={tile(menu === "file")}
-        >
-          <Paperclip size={18} strokeWidth={1.75} />
+        <div style={{ position: "relative" }}>
+          <button
+            title="File"
+            aria-label="File"
+            onClick={() => setMenu((m) => (m === "file" ? null : "file"))}
+            style={tile(menu === "file")}
+          >
+            <Paperclip size={18} strokeWidth={1.75} />
+          </button>
           {menu === "file" && (
             <div style={flyout}>
               <button
@@ -418,7 +422,7 @@ export default function ToolDock(props: Props) {
               </div>
             </div>
           )}
-        </button>
+        </div>
       </div>
     </div>
   );

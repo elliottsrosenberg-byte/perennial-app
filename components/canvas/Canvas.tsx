@@ -41,6 +41,8 @@ import {
   Plus,
   ChevronUp,
   ChevronDown,
+  ArrowLeft,
+  ArrowRight,
 } from "lucide-react";
 import type { CanvasObjectRow, CanvasScope } from "@/types/database";
 import { uploadEditorImage, isUploadableImageType } from "@/lib/uploads/editor-image";
@@ -64,9 +66,10 @@ import type {
   StickyColor,
   ShapeContent,
   TextAlign,
+  VAlign,
   ModuleKey,
 } from "./types";
-import { STICKY_COLOR_ORDER, STICKY_PALETTE } from "./palette";
+import { STICKY_COLOR_ORDER, STICKY_PALETTE, swatch } from "./palette";
 import CanvasObjectView from "./CanvasObjectView";
 import ToolDock, { type ShapeKind } from "./ToolDock";
 import EntityPicker from "./EntityPicker";
@@ -728,10 +731,21 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   // ── selection toolbar (single selection) ──
   const sole = selectedIds.size === 1 ? store.objects.find((o) => selectedIds.has(o.id)) ?? null : null;
   const soleShapeKind = sole?.type === "shape" ? (sole.content as ShapeContent).shape : null;
+  const soleIsLinear = soleShapeKind === "line" || soleShapeKind === "arrow";
   const soleTextBearing =
     !!sole && (sole.type === "text" || sole.type === "sticky" || soleShapeKind === "rect" || soleShapeKind === "ellipse");
-  const soleHasFill = !!sole && (sole.type === "sticky" || sole.type === "shape");
-  const cc = (sole?.content ?? {}) as { color?: StickyColor; textColor?: StickyColor; align?: TextAlign };
+  const soleHasFill = !!sole && (sole.type === "sticky" || (sole.type === "shape" && !soleIsLinear));
+  const soleHasText = !!sole && !!((sole.content as { text?: string }).text || (sole.content as { html?: string }).html);
+  const cc = (sole?.content ?? {}) as {
+    color?: StickyColor;
+    textColor?: StickyColor;
+    align?: TextAlign;
+    vAlign?: VAlign;
+    startCap?: "none" | "arrow";
+    endCap?: "none" | "arrow";
+    dash?: "solid" | "dashed" | "dotted";
+    strokeWidth?: number;
+  };
   const toolbarPos = sole
     ? { left: sole.x * view.scale + view.x + (sole.width * view.scale) / 2, top: sole.y * view.scale + view.y - 8 }
     : null;
@@ -744,6 +758,18 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const exec = (cmd: string, arg?: string) => {
     document.execCommand(cmd, false, arg);
   };
+  const segBtn = (active: boolean): CSSProperties => ({
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 26,
+    height: 26,
+    border: "none",
+    borderRadius: "var(--radius-sm)",
+    cursor: "pointer",
+    background: active ? "rgba(var(--color-sage-rgb), 0.16)" : "transparent",
+    color: active ? "var(--color-sage-text)" : "var(--color-text-secondary)",
+  });
   const editingShapeKind =
     editingObj?.type === "shape" ? (editingObj.content as ShapeContent).shape : null;
   const editingBox =
@@ -955,98 +981,136 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
             zIndex: 30,
           }}
         >
-          {/* alignment (text-bearing) + delete */}
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            {soleTextBearing &&
-              (
-                [
-                  { a: "left", icon: <AlignLeft size={14} strokeWidth={1.9} /> },
-                  { a: "center", icon: <AlignCenter size={14} strokeWidth={1.9} /> },
-                  { a: "right", icon: <AlignRight size={14} strokeWidth={1.9} /> },
-                ] as const
-              ).map((b) => (
+          {soleIsLinear ? (
+            <>
+              {/* end caps + delete */}
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <button
-                  key={b.a}
-                  aria-label={`Align ${b.a}`}
-                  onClick={() => patchContent(sole.id, { align: b.a })}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: 26,
-                    height: 26,
-                    border: "none",
-                    borderRadius: "var(--radius-sm)",
-                    cursor: "pointer",
-                    background: cc.align === b.a ? "rgba(var(--color-sage-rgb), 0.16)" : "transparent",
-                    color: cc.align === b.a ? "var(--color-sage-text)" : "var(--color-text-secondary)",
-                  }}
+                  title="Start arrow"
+                  onClick={() => patchContent(sole.id, { startCap: (cc.startCap ?? "none") === "arrow" ? "none" : "arrow" })}
+                  style={segBtn((cc.startCap ?? "none") === "arrow")}
                 >
-                  {b.icon}
+                  <ArrowLeft size={15} strokeWidth={2} />
                 </button>
-              ))}
-            <div style={{ flex: 1, minWidth: 8 }} />
-            <button
-              aria-label="Delete"
-              onClick={deleteSelected}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 26,
-                height: 26,
-                border: "none",
-                background: "transparent",
-                color: "var(--color-text-secondary)",
-                cursor: "pointer",
-              }}
-            >
-              <Trash2 size={15} strokeWidth={1.75} />
-            </button>
-          </div>
-
-          {/* text colour */}
-          {soleTextBearing && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontFamily: "var(--font-sans)", fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", width: 26, textAlign: "center" }}>A</span>
-              {STICKY_COLOR_ORDER.map((color) => (
                 <button
-                  key={color}
-                  aria-label={`text ${color}`}
-                  onClick={() => patchContent(sole.id, { textColor: color })}
-                  style={{
-                    width: 15,
-                    height: 15,
-                    borderRadius: "var(--radius-full)",
-                    background: STICKY_PALETTE[color].accent,
-                    border: cc.textColor === color ? "2px solid var(--color-sage)" : "0.5px solid var(--color-border)",
-                    cursor: "pointer",
-                  }}
-                />
-              ))}
-            </div>
-          )}
+                  title="End arrow"
+                  onClick={() =>
+                    patchContent(sole.id, {
+                      endCap: (cc.endCap ?? (soleShapeKind === "arrow" ? "arrow" : "none")) === "arrow" ? "none" : "arrow",
+                    })
+                  }
+                  style={segBtn((cc.endCap ?? (soleShapeKind === "arrow" ? "arrow" : "none")) === "arrow")}
+                >
+                  <ArrowRight size={15} strokeWidth={2} />
+                </button>
+                <div style={{ flex: 1, minWidth: 8 }} />
+                <button aria-label="Delete" onClick={deleteSelected} style={segBtn(false)}>
+                  <Trash2 size={15} strokeWidth={1.75} />
+                </button>
+              </div>
+              {/* thickness + dash */}
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                {(
+                  [
+                    { n: 2, dot: 4 },
+                    { n: 4, dot: 7 },
+                    { n: 7, dot: 10 },
+                  ] as const
+                ).map((t) => (
+                  <button key={t.n} title={`Thickness ${t.n}`} onClick={() => patchContent(sole.id, { strokeWidth: t.n })} style={segBtn((cc.strokeWidth ?? 2.5) === t.n)}>
+                    <span style={{ width: t.dot, height: t.dot, borderRadius: "var(--radius-full)", background: "currentColor" }} />
+                  </button>
+                ))}
+                <span style={{ width: 1, height: 16, background: "var(--color-border)", margin: "0 3px" }} />
+                {(["solid", "dashed", "dotted"] as const).map((d) => (
+                  <button key={d} title={d} onClick={() => patchContent(sole.id, { dash: d })} style={segBtn((cc.dash ?? "solid") === d)}>
+                    <svg width={18} height={10} viewBox="0 0 18 10">
+                      <line x1={1} y1={5} x2={17} y2={5} stroke="currentColor" strokeWidth={2} strokeLinecap={d === "dotted" ? "round" : "butt"} strokeDasharray={d === "dashed" ? "4 3" : d === "dotted" ? "0.1 4" : undefined} />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+              {/* colour */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontFamily: "var(--font-sans)", fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", width: 34, textAlign: "center" }}>Colour</span>
+                {STICKY_COLOR_ORDER.map((color) => (
+                  <button
+                    key={color}
+                    aria-label={`colour ${color}`}
+                    onClick={() => patchContent(sole.id, { color })}
+                    style={{ width: 15, height: 15, borderRadius: "var(--radius-full)", background: swatch(color).accent, border: cc.color === color ? "2px solid var(--color-sage)" : "0.5px solid var(--color-border)", cursor: "pointer" }}
+                  />
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              {/* H-align + V-align + delete */}
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                {soleTextBearing &&
+                  (
+                    [
+                      { a: "left", icon: <AlignLeft size={14} strokeWidth={1.9} /> },
+                      { a: "center", icon: <AlignCenter size={14} strokeWidth={1.9} /> },
+                      { a: "right", icon: <AlignRight size={14} strokeWidth={1.9} /> },
+                    ] as const
+                  ).map((b) => (
+                    <button key={b.a} aria-label={`Align ${b.a}`} onClick={() => patchContent(sole.id, { align: b.a })} style={segBtn(cc.align === b.a)}>
+                      {b.icon}
+                    </button>
+                  ))}
+                {soleHasFill && soleTextBearing && <span style={{ width: 1, height: 16, background: "var(--color-border)", margin: "0 2px" }} />}
+                {soleHasFill &&
+                  (
+                    [
+                      { v: "top", icon: <ChevronUp size={15} strokeWidth={2} /> },
+                      { v: "middle", icon: <Minus size={15} strokeWidth={2} /> },
+                      { v: "bottom", icon: <ChevronDown size={15} strokeWidth={2} /> },
+                    ] as const
+                  ).map((b) => {
+                    const cur = cc.vAlign ?? (sole.type === "shape" ? "middle" : "top");
+                    return (
+                      <button key={b.v} aria-label={`Vertical ${b.v}`} onClick={() => patchContent(sole.id, { vAlign: b.v })} style={segBtn(cur === b.v)}>
+                        {b.icon}
+                      </button>
+                    );
+                  })}
+                <div style={{ flex: 1, minWidth: 8 }} />
+                <button aria-label="Delete" onClick={deleteSelected} style={segBtn(false)}>
+                  <Trash2 size={15} strokeWidth={1.75} />
+                </button>
+              </div>
 
-          {/* fill colour */}
-          {soleHasFill && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontFamily: "var(--font-sans)", fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", width: 26, textAlign: "center" }}>Fill</span>
-              {STICKY_COLOR_ORDER.map((color) => (
-                <button
-                  key={color}
-                  aria-label={`fill ${color}`}
-                  onClick={() => patchContent(sole.id, { color })}
-                  style={{
-                    width: 15,
-                    height: 15,
-                    borderRadius: "var(--radius-full)",
-                    background: STICKY_PALETTE[color].fill,
-                    border: cc.color === color ? "2px solid var(--color-sage)" : `1.5px solid ${STICKY_PALETTE[color].border}`,
-                    cursor: "pointer",
-                  }}
-                />
-              ))}
-            </div>
+              {/* text colour — shapes only when they already have text */}
+              {soleTextBearing && (sole.type !== "shape" || soleHasText) && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontFamily: "var(--font-sans)", fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", width: 26, textAlign: "center" }}>A</span>
+                  {STICKY_COLOR_ORDER.map((color) => (
+                    <button
+                      key={color}
+                      aria-label={`text ${color}`}
+                      onClick={() => patchContent(sole.id, { textColor: color })}
+                      style={{ width: 15, height: 15, borderRadius: "var(--radius-full)", background: swatch(color).accent, border: cc.textColor === color ? "2px solid var(--color-sage)" : "0.5px solid var(--color-border)", cursor: "pointer" }}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* fill colour */}
+              {soleHasFill && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontFamily: "var(--font-sans)", fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", width: 26, textAlign: "center" }}>Fill</span>
+                  {STICKY_COLOR_ORDER.map((color) => (
+                    <button
+                      key={color}
+                      aria-label={`fill ${color}`}
+                      onClick={() => patchContent(sole.id, { color })}
+                      style={{ width: 15, height: 15, borderRadius: "var(--radius-full)", background: swatch(color).fill, border: cc.color === color ? "2px solid var(--color-sage)" : `1.5px solid ${swatch(color).border}`, cursor: "pointer" }}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
