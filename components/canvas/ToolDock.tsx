@@ -14,6 +14,7 @@ import {
   Square,
   Circle,
   PenTool,
+  Highlighter,
   Image as ImageIcon,
   ImagePlus,
   Plus,
@@ -41,6 +42,10 @@ interface Props {
   onStickyColor: (c: StickyColor) => void;
   shapeKind: ShapeKind;
   onShapeKind: (s: ShapeKind) => void;
+  penMode: "marker" | "highlighter";
+  onPenMode: (m: "marker" | "highlighter") => void;
+  penColor: StickyColor;
+  onPenColor: (c: StickyColor) => void;
   onAddEntity: (kind: EntityKind) => void;
   onImageFromFiles: () => void;
 }
@@ -96,7 +101,22 @@ function OptionsCard({
   onStickyColor,
   shapeKind,
   onShapeKind,
-}: Pick<Props, "tool" | "stickyColor" | "onStickyColor" | "shapeKind" | "onShapeKind">) {
+  penMode,
+  onPenMode,
+  penColor,
+  onPenColor,
+}: Pick<
+  Props,
+  | "tool"
+  | "stickyColor"
+  | "onStickyColor"
+  | "shapeKind"
+  | "onShapeKind"
+  | "penMode"
+  | "onPenMode"
+  | "penColor"
+  | "onPenColor"
+>) {
   if (tool === "sticky") {
     return (
       <div style={cardStyle}>
@@ -148,8 +168,39 @@ function OptionsCard({
   }
   if (tool === "pen") {
     return (
-      <div style={{ ...cardStyle, fontFamily: "var(--font-sans)", fontSize: 12, color: "var(--color-text-tertiary)" }}>
-        Pen, marker &amp; highlighter — coming soon
+      <div style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+        {(
+          [
+            { key: "marker", icon: <PenTool size={16} strokeWidth={1.75} />, label: "Marker" },
+            { key: "highlighter", icon: <Highlighter size={16} strokeWidth={1.75} />, label: "Highlighter" },
+          ] as const
+        ).map((m) => (
+          <button
+            key={m.key}
+            title={m.label}
+            aria-label={m.label}
+            onClick={() => onPenMode(m.key)}
+            style={{ ...tile(m.key === penMode), width: 32, height: 32 }}
+          >
+            {m.icon}
+          </button>
+        ))}
+        <span style={{ width: 22, height: 1, background: "var(--color-border)" }} />
+        {STICKY_COLOR_ORDER.map((c) => (
+          <button
+            key={c}
+            aria-label={`${c} ink`}
+            onClick={() => onPenColor(c)}
+            style={{
+              width: 20,
+              height: 20,
+              borderRadius: "var(--radius-full)",
+              background: STICKY_PALETTE[c].accent,
+              border: c === penColor ? "2px solid var(--color-sage)" : "0.5px solid var(--color-border)",
+              cursor: "pointer",
+            }}
+          />
+        ))}
       </div>
     );
   }
@@ -261,6 +312,10 @@ export default function ToolDock(props: Props) {
           onStickyColor={props.onStickyColor}
           shapeKind={props.shapeKind}
           onShapeKind={props.onShapeKind}
+          penMode={props.penMode}
+          onPenMode={props.onPenMode}
+          penColor={props.penColor}
+          onPenColor={props.onPenColor}
         />
       )}
     </div>
