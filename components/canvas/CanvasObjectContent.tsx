@@ -15,6 +15,7 @@ import type {
   ShapeContent,
   ImageContent,
   ReferenceContent,
+  DrawingContent,
 } from "./types";
 import { STICKY_PALETTE, SHAPE_PALETTE } from "./palette";
 
@@ -554,6 +555,31 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
             </div>
           </div>
         </div>
+      );
+    }
+
+    case "drawing": {
+      const c = object.content as DrawingContent;
+      const sw = STICKY_PALETTE[c.color] ?? STICKY_PALETTE.sage;
+      const isHi = c.mode === "highlighter";
+      return (
+        <svg
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${object.width} ${object.height}`}
+          preserveAspectRatio="none"
+          style={{ overflow: "visible", display: "block", mixBlendMode: isHi ? "multiply" : "normal" }}
+        >
+          <polyline
+            points={c.points.map((p) => p.join(",")).join(" ")}
+            fill="none"
+            style={{ stroke: sw.accent }}
+            strokeWidth={c.strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeOpacity={isHi ? 0.35 : 1}
+          />
+        </svg>
       );
     }
 

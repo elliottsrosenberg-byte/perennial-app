@@ -91,6 +91,9 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const [tool, setTool] = useState<CanvasTool>("select");
   const [stickyColor, setStickyColor] = useState<StickyColor>("amber");
   const [shapeKind, setShapeKind] = useState<ShapeKind>("rect");
+  const [penMode, setPenMode] = useState<"marker" | "highlighter">("marker");
+  const [penColor, setPenColor] = useState<StickyColor>("sage");
+  const [drawingPts, setDrawingPts] = useState<[number, number][] | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [spaceDown, setSpaceDown] = useState(false);
@@ -339,7 +342,48 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
       return;
     }
 
-    if (tool === "pen") return; // pen drawing — coming soon
+    if (tool === "pen") {
+      const pts: [number, number][] = [[e.clientX, e.clientY]];
+      setDrawingPts([...pts]);
+      const move = (ev: PointerEvent) => {
+        pts.push([ev.clientX, ev.clientY]);
+        setDrawingPts([...pts]);
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        setDrawingPts(null);
+        if (pts.length < 2) return;
+        const world = pts.map(([cx, cy]) => {
+          const w = toWorld(cx, cy);
+          return [w.x, w.y] as [number, number];
+        });
+        const xs = world.map((p) => p[0]);
+        const ys = world.map((p) => p[1]);
+        const pad = penMode === "highlighter" ? 12 : 6;
+        const bx = Math.min(...xs) - pad;
+        const by = Math.min(...ys) - pad;
+        const width = Math.max(1, Math.round(Math.max(...xs) - Math.min(...xs) + pad * 2));
+        const height = Math.max(1, Math.round(Math.max(...ys) - Math.min(...ys) + pad * 2));
+        const rel = world.map(
+          ([x, y]) => [Math.round((x - bx) * 100) / 100, Math.round((y - by) * 100) / 100] as [number, number],
+        );
+        const obj = createObject("drawing", { x: bx + width / 2, y: by + height / 2 }, nextZ(), {
+          width,
+          height,
+          content: {
+            points: rel,
+            color: penColor,
+            strokeWidth: penMode === "highlighter" ? 14 : 3,
+            mode: penMode,
+          },
+        });
+        store.add(obj);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      return;
+    }
 
     // select tool → marquee with live selection
     const sx = e.clientX;
@@ -764,6 +808,21 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
         </div>
       )}
 
+      {/* live pen stroke */}
+      {drawingPts && drawingPts.length > 1 && (
+        <svg style={{ position: "fixed", left: 0, top: 0, width: "100vw", height: "100vh", pointerEvents: "none", zIndex: 41, overflow: "visible" }}>
+          <polyline
+            points={drawingPts.map((p) => p.join(",")).join(" ")}
+            fill="none"
+            style={{ stroke: STICKY_PALETTE[penColor].accent }}
+            strokeWidth={(penMode === "highlighter" ? 14 : 3) * view.scale}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeOpacity={penMode === "highlighter" ? 0.35 : 1}
+          />
+        </svg>
+      )}
+
       {/* single-selection colour + delete toolbar */}
       {sole && !editingId && toolbarPos && (
         <div
@@ -964,6 +1023,10 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
           onStickyColor={setStickyColor}
           shapeKind={shapeKind}
           onShapeKind={setShapeKind}
+          penMode={penMode}
+          onPenMode={setPenMode}
+          penColor={penColor}
+          onPenColor={setPenColor}
           onAddEntity={(k) => setPicker(k)}
           onImageFromFiles={handleUploadImage}
         />
