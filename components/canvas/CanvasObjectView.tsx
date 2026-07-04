@@ -33,7 +33,7 @@ interface Props {
   onChangeLocal: (id: string, patch: Partial<CanvasObject>) => void;
   onCommitGeometry: (id: string, o: CanvasObject) => void;
   onStartEdit: (id: string) => void;
-  onText: (id: string, text: string) => void;
+  onText: (id: string, html: string, text: string) => void;
   onEndEdit: () => void;
   onContextMenu: (id: string, e: React.MouseEvent) => void;
   /** Report measured content height (text objects auto-grow). */
@@ -221,7 +221,7 @@ export default function CanvasObjectView({
       <CanvasObjectContent
         object={object}
         editing={editing}
-        onText={(t) => onText(object.id, t)}
+        onRichChange={(html, text) => onText(object.id, html, text)}
         onEndEdit={onEndEdit}
       />
 

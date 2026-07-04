@@ -28,13 +28,17 @@ export type StickyColor =
 /** Shape fill colour keys — same palette, used as solid-ish tints. */
 export type ShapeColor = StickyColor;
 
+// `html` holds rich formatting (bold/italic/underline, headings, alignment);
+// `text` is always the plain-text fallback (search, Ash, legacy objects).
 export interface TextContent {
   text: string;
+  html?: string;
   fontSize?: number;
   align?: "left" | "center" | "right";
 }
 export interface StickyContent {
   text: string;
+  html?: string;
   color: StickyColor;
   tag?: string;
   fontSize?: number;
@@ -43,6 +47,7 @@ export interface ShapeContent {
   shape: "rect" | "ellipse" | "line" | "arrow";
   color: ShapeColor;
   text?: string;
+  html?: string;
   fontSize?: number;
 }
 export interface ImageContent {
