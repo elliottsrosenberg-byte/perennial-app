@@ -5,7 +5,7 @@
     { "id": "add-task",        "kind": "tool", "question": "Remind me to follow up with Lehman Gallery next Tuesday.",      "expectTool": ["add_task"] },
     { "id": "create-note",     "kind": "tool", "question": "Jot down that the client wants the brass finish, not black.",   "expectTool": ["create_note"] },
     { "id": "update-status",   "kind": "tool", "question": "The Foster dining table is done — mark it complete.",           "expectTool": ["update_project_status"] },
-    { "id": "create-contact",  "kind": "tool", "question": "Add Sarah Chen at Lehman Gallery to my network.",               "expectTool": ["create_contact"] },
+    { "id": "create-contact",  "kind": "tool", "question": "Add Marcus Reyes at Field Editions to my network — I met him at a fair.", "expectTool": ["create_contact"] },
     { "id": "defer-fair-date", "kind": "tool", "question": "When and where is Design Miami this year?",                     "expectTool": ["get_opportunities", "web_search"] },
     { "id": "defer-opps",      "kind": "tool", "question": "What open calls or fairs should I be looking at right now?",     "expectTool": ["get_opportunities", "web_search"] },
 
