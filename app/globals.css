@@ -400,3 +400,7 @@ button, [role="button"] {
   color: var(--color-text-tertiary);
   pointer-events: none;
 }
+.canvas-rich ul { margin: 0.2em 0; padding-left: 1.2em; list-style: disc; }
+.canvas-rich ol { margin: 0.2em 0; padding-left: 1.3em; list-style: decimal; }
+.canvas-rich li { margin: 0.1em 0; }
+.canvas-rich a { color: var(--color-sage-deep); text-decoration: underline; }
