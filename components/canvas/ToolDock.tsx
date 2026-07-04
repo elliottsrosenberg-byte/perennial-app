@@ -16,9 +16,7 @@ import {
   PenTool,
   Highlighter,
   Eraser,
-  Image as ImageIcon,
   ImagePlus,
-  Plus,
   ListChecks,
   CheckSquare,
   FileText,
@@ -29,6 +27,10 @@ import {
   Users,
   Minus,
   MoveUpRight,
+  LayoutGrid,
+  Paperclip,
+  Monitor,
+  Link as LinkIcon,
 } from "lucide-react";
 import type { CanvasTool, StickyColor, ModuleKey } from "./types";
 import type { EntityKind } from "@/lib/canvas/entities";
@@ -245,9 +247,21 @@ function OptionsCard({
   return null;
 }
 
+const cardShell: React.CSSProperties = {
+  position: "relative",
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+  padding: 6,
+  borderRadius: "var(--radius-lg)",
+  background: "var(--color-surface-raised)",
+  border: "0.5px solid var(--color-border)",
+  boxShadow: "var(--shadow-lg)",
+};
+
 export default function ToolDock(props: Props) {
   const { tool, activeTool, onSelectTool, onUploadImage, onAddEntity, onImageFromFiles, onAddModule } = props;
-  const [showMore, setShowMore] = useState(false);
+  const [menu, setMenu] = useState<"module" | "file" | null>(null);
 
   const rowBtn: React.CSSProperties = {
     display: "flex",
@@ -267,6 +281,7 @@ export default function ToolDock(props: Props) {
     textAlign: "left",
     color: "var(--color-text-primary)",
   };
+  const flyout: React.CSSProperties = { ...cardStyle, top: undefined, bottom: 0, width: 190, whiteSpace: "normal" };
 
   return (
     <div
@@ -278,102 +293,133 @@ export default function ToolDock(props: Props) {
         transform: "translateY(-50%)",
         display: "flex",
         flexDirection: "column",
-        gap: 4,
-        padding: 6,
-        borderRadius: "var(--radius-lg)",
-        background: "var(--color-surface-raised)",
-        border: "0.5px solid var(--color-border)",
-        boxShadow: "var(--shadow-lg)",
+        gap: 8,
         zIndex: 20,
       }}
     >
-      {TOOLS.map((t) => (
-        <button
-          key={t.key}
-          title={`${t.label} (${t.short})`}
-          aria-label={t.label}
-          onClick={() => onSelectTool(t.key)}
-          style={tile(activeTool === t.key)}
-        >
-          {t.icon}
-        </button>
-      ))}
+      {/* Card 1 — tools */}
+      <div style={cardShell}>
+        {TOOLS.map((t) => (
+          <button
+            key={t.key}
+            title={`${t.label} (${t.short})`}
+            aria-label={t.label}
+            onClick={() => onSelectTool(t.key)}
+            style={tile(activeTool === t.key)}
+          >
+            {t.icon}
+          </button>
+        ))}
 
-      <button title="Image" aria-label="Image" onClick={onUploadImage} style={tile(false)}>
-        <ImageIcon size={18} strokeWidth={1.75} />
-      </button>
-
-      <button
-        title="Add"
-        aria-label="Add element"
-        onClick={() => setShowMore((v) => !v)}
-        style={tile(showMore)}
-      >
-        <Plus size={18} strokeWidth={1.75} />
-        {showMore && (
-          <div style={{ ...cardStyle, top: undefined, bottom: 0, width: 200, maxHeight: "62vh", overflowY: "auto", whiteSpace: "normal" }}>
-            {ADD_ITEMS.map((item) => (
-              <button
-                key={item.kind}
-                onClick={() => {
-                  setShowMore(false);
-                  onAddEntity(item.kind);
-                }}
-                style={rowBtn}
-              >
-                <span style={{ display: "flex", color: "var(--color-text-tertiary)" }}>{item.icon}</span>
-                <span style={rowLabel}>{item.label}</span>
-              </button>
-            ))}
-            <span style={{ display: "block", height: 1, background: "var(--color-border)", margin: "5px 4px" }} />
-            <button
-              onClick={() => {
-                setShowMore(false);
-                onImageFromFiles();
-              }}
-              style={rowBtn}
-            >
-              <span style={{ display: "flex", color: "var(--color-text-tertiary)" }}>
-                <ImagePlus size={15} strokeWidth={1.75} />
-              </span>
-              <span style={rowLabel}>Image from files</span>
-            </button>
-            <div style={{ padding: "8px 8px 4px", fontFamily: "var(--font-sans)", fontSize: 10, fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--color-text-tertiary)" }}>
-              Module snapshots
-            </div>
-            {MODULE_ITEMS.map((item) => (
-              <button
-                key={item.key}
-                onClick={() => {
-                  setShowMore(false);
-                  onAddModule(item.key);
-                }}
-                style={rowBtn}
-              >
-                <span style={{ display: "flex", color: "var(--color-text-tertiary)" }}>{item.icon}</span>
-                <span style={rowLabel}>{item.label}</span>
-              </button>
-            ))}
-          </div>
+        {/* Contextual options for the active create-tool */}
+        {(tool === "sticky" || tool === "shape" || tool === "pen") && (
+          <OptionsCard
+            tool={tool}
+            stickyColor={props.stickyColor}
+            onStickyColor={props.onStickyColor}
+            shapeKind={props.shapeKind}
+            onShapeKind={props.onShapeKind}
+            penMode={props.penMode}
+            onPenMode={props.onPenMode}
+            penColor={props.penColor}
+            onPenColor={props.onPenColor}
+            penSize={props.penSize}
+            onPenSize={props.onPenSize}
+          />
         )}
-      </button>
+      </div>
 
-      {/* Contextual options for the active create-tool */}
-      {(tool === "sticky" || tool === "shape" || tool === "pen") && (
-        <OptionsCard
-          tool={tool}
-          stickyColor={props.stickyColor}
-          onStickyColor={props.onStickyColor}
-          shapeKind={props.shapeKind}
-          onShapeKind={props.onShapeKind}
-          penMode={props.penMode}
-          onPenMode={props.onPenMode}
-          penColor={props.penColor}
-          onPenColor={props.onPenColor}
-          penSize={props.penSize}
-          onPenSize={props.onPenSize}
-        />
-      )}
+      {/* Card 2 — Perennial objects */}
+      <div style={cardShell}>
+        {ADD_ITEMS.map((item) => (
+          <button
+            key={item.kind}
+            title={item.label}
+            aria-label={item.label}
+            onClick={() => {
+              setMenu(null);
+              onAddEntity(item.kind);
+            }}
+            style={tile(false)}
+          >
+            {item.icon}
+          </button>
+        ))}
+
+        {/* Module snapshots */}
+        <button
+          title="Module snapshot"
+          aria-label="Module snapshot"
+          onClick={() => setMenu((m) => (m === "module" ? null : "module"))}
+          style={tile(menu === "module")}
+        >
+          <LayoutGrid size={18} strokeWidth={1.75} />
+          {menu === "module" && (
+            <div style={flyout}>
+              {MODULE_ITEMS.map((item) => (
+                <button
+                  key={item.key}
+                  onClick={() => {
+                    setMenu(null);
+                    onAddModule(item.key);
+                  }}
+                  style={rowBtn}
+                >
+                  <span style={{ display: "flex", color: "var(--color-text-tertiary)" }}>{item.icon}</span>
+                  <span style={rowLabel}>{item.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </button>
+
+        {/* Files */}
+        <button
+          title="File"
+          aria-label="File"
+          onClick={() => setMenu((m) => (m === "file" ? null : "file"))}
+          style={tile(menu === "file")}
+        >
+          <Paperclip size={18} strokeWidth={1.75} />
+          {menu === "file" && (
+            <div style={flyout}>
+              <button
+                onClick={() => {
+                  setMenu(null);
+                  onUploadImage();
+                }}
+                style={rowBtn}
+              >
+                <span style={{ display: "flex", color: "var(--color-text-tertiary)" }}>
+                  <Monitor size={15} strokeWidth={1.75} />
+                </span>
+                <span style={rowLabel}>From computer</span>
+              </button>
+              <button
+                onClick={() => {
+                  setMenu(null);
+                  onImageFromFiles();
+                }}
+                style={rowBtn}
+              >
+                <span style={{ display: "flex", color: "var(--color-text-tertiary)" }}>
+                  <ImagePlus size={15} strokeWidth={1.75} />
+                </span>
+                <span style={rowLabel}>From files</span>
+              </button>
+              <div style={{ ...rowBtn, cursor: "default", opacity: 0.5 }}>
+                <span style={{ display: "flex", color: "var(--color-text-tertiary)" }}>
+                  <LinkIcon size={15} strokeWidth={1.75} />
+                </span>
+                <span style={rowLabel}>Linked files</span>
+                <span style={{ fontFamily: "var(--font-sans)", fontSize: 10, fontWeight: 600, color: "var(--color-sage-text)", background: "rgba(var(--color-sage-rgb), 0.16)", borderRadius: "var(--radius-full)", padding: "2px 6px" }}>
+                  Soon
+                </span>
+              </div>
+            </div>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
