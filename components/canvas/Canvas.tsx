@@ -280,6 +280,27 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
         setRubber(null);
         const w0 = toWorld(sx, sy);
         const w1 = toWorld(ev.clientX, ev.clientY);
+
+        // Line / arrow: a thin box from start→end, rotated to the drag angle.
+        if (shapeKind === "line" || shapeKind === "arrow") {
+          const dx = w1.x - w0.x;
+          const dy = w1.y - w0.y;
+          const length = Math.hypot(dx, dy);
+          const finalLen = length < 6 ? 160 : length;
+          const angle = length < 6 ? 0 : (Math.atan2(dy, dx) * 180) / Math.PI;
+          const center = length < 6 ? w0 : { x: (w0.x + w1.x) / 2, y: (w0.y + w1.y) / 2 };
+          const lineObj = createObject("shape", center, nextZ(), {
+            width: Math.round(finalLen),
+            height: 14,
+            rotation: angle,
+            content: { shape: shapeKind, color: "sage" },
+          });
+          store.add(lineObj);
+          selectOnly(lineObj.id);
+          setTool("select");
+          return;
+        }
+
         const r = normRect(w0.x, w0.y, w1.x, w1.y);
         let width = Math.round(r.right - r.left);
         let height = Math.round(r.bottom - r.top);
@@ -518,7 +539,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     return "default";
   }, [tool, spaceDown, panning]);
 
-  const marqueeRect = marquee ?? rubber;
+  const shapeLinear = tool === "shape" && (shapeKind === "line" || shapeKind === "arrow");
 
   return (
     <div
@@ -587,23 +608,55 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
         ))}
       </div>
 
-      {/* marquee / shape rubber-band (screen space) */}
-      {marqueeRect && (
+      {/* selection marquee (box) */}
+      {marquee && (
         <div
           style={{
             position: "fixed",
-            left: Math.min(marqueeRect.sx, marqueeRect.ex),
-            top: Math.min(marqueeRect.sy, marqueeRect.ey),
-            width: Math.abs(marqueeRect.ex - marqueeRect.sx),
-            height: Math.abs(marqueeRect.ey - marqueeRect.sy),
+            left: Math.min(marquee.sx, marquee.ex),
+            top: Math.min(marquee.sy, marquee.ey),
+            width: Math.abs(marquee.ex - marquee.sx),
+            height: Math.abs(marquee.ey - marquee.sy),
             background: "rgba(var(--color-sage-rgb), 0.12)",
             border: "1px solid var(--color-sage)",
-            borderRadius: rubber ? (shapeKind === "ellipse" ? "50%" : "var(--radius-sm)") : 0,
             pointerEvents: "none",
             zIndex: 40,
           }}
         />
       )}
+
+      {/* shape rubber-band — line for line/arrow, box otherwise */}
+      {rubber &&
+        (shapeKind === "line" || shapeKind === "arrow" ? (
+          <svg
+            style={{ position: "fixed", left: 0, top: 0, width: "100vw", height: "100vh", overflow: "visible", pointerEvents: "none", zIndex: 40 }}
+          >
+            <line
+              x1={rubber.sx}
+              y1={rubber.sy}
+              x2={rubber.ex}
+              y2={rubber.ey}
+              style={{ stroke: "var(--color-sage)" }}
+              strokeWidth={2.5}
+              strokeLinecap="round"
+            />
+          </svg>
+        ) : (
+          <div
+            style={{
+              position: "fixed",
+              left: Math.min(rubber.sx, rubber.ex),
+              top: Math.min(rubber.sy, rubber.ey),
+              width: Math.abs(rubber.ex - rubber.sx),
+              height: Math.abs(rubber.ey - rubber.sy),
+              background: "rgba(var(--color-sage-rgb), 0.12)",
+              border: "1px solid var(--color-sage)",
+              borderRadius: shapeKind === "ellipse" ? "50%" : "var(--radius-sm)",
+              pointerEvents: "none",
+              zIndex: 40,
+            }}
+          />
+        ))}
 
       {/* placement preview cursor */}
       {preview && (tool === "sticky" || tool === "text" || tool === "shape") && (
@@ -615,16 +668,18 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
             pointerEvents: "none",
             zIndex: 41,
             width: tool === "text" ? 20 : 34,
-            height: tool === "text" ? 20 : 26,
-            borderRadius: tool === "shape" && shapeKind === "ellipse" ? "50%" : "var(--radius-sm)",
+            height: tool === "text" ? 20 : shapeLinear ? 3 : 26,
+            borderRadius: shapeLinear ? "var(--radius-full)" : tool === "shape" && shapeKind === "ellipse" ? "50%" : "var(--radius-sm)",
             background:
-              tool === "sticky"
-                ? STICKY_PALETTE[stickyColor].fill
-                : tool === "shape"
-                  ? STICKY_PALETTE.sage.fill
-                  : "transparent",
+              shapeLinear
+                ? "var(--color-sage)"
+                : tool === "sticky"
+                  ? STICKY_PALETTE[stickyColor].fill
+                  : tool === "shape"
+                    ? STICKY_PALETTE.sage.fill
+                    : "transparent",
             border:
-              tool === "text"
+              tool === "text" || shapeLinear
                 ? "none"
                 : `1px solid ${tool === "sticky" ? STICKY_PALETTE[stickyColor].border : STICKY_PALETTE.sage.border}`,
             display: "flex",
