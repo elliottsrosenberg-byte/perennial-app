@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { OutreachTarget, OutreachPipeline, PipelineStage, Project, Contact, Organization } from "@/types/database";
 import {
@@ -17,9 +17,7 @@ import EntityTasksTab from "@/components/detail/EntityTasksTab";
 import EntityNotesTab from "@/components/detail/EntityNotesTab";
 import EntityFilesTab from "@/components/detail/EntityFilesTab";
 import EntityActivityTab from "@/components/detail/EntityActivityTab";
-import { useEditor, EditorContent } from "@tiptap/react";
-import { getRichExtensions, RichToolbar, InlineAshPopover, submitInlineAsh } from "@/components/ui/RichEditor";
-import type { AshPromptState } from "@/components/ui/RichEditor";
+import Canvas from "@/components/canvas/Canvas";
 import AshPromptsModule, { type AshPrompt } from "@/components/ui/AshPromptsModule";
 import { fmtDayRelative as fmtDate } from "@/lib/format/date";
 
@@ -39,109 +37,6 @@ function dateInputToISO(s: string): string | null {
 // The canvas is the wrapped entity's canvas — same workspace the user sees
 // in the Network module. The target itself no longer owns canvas content;
 // it's a pipeline-position record over a Contact or Organization.
-function EntityCanvasEditor({
-  targetId, targetName,
-  entityKind, entityId, entityName, entityRoute,
-  initialHtml,
-}: {
-  targetId:    string;
-  targetName:  string;
-  entityKind:  "contact" | "organization";
-  entityId:    string;
-  entityName:  string;
-  /** Route for the "Open in Network" affordance — e.g. /network?contactId=… */
-  entityRoute: string;
-  initialHtml: string | null;
-}) {
-  const [saving,    setSaving]    = useState(false);
-  const [saved,     setSaved]     = useState(false);
-  const [ashPrompt, setAshPrompt] = useState<AshPromptState>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const table = entityKind === "contact" ? "contacts" : "organizations";
-
-  const handleAshTrigger = useCallback((pos: number, coords: { top: number; left: number; bottom: number }) => {
-    setAshPrompt({ pos, anchor: coords });
-  }, []);
-
-  const editor = useEditor({
-    immediatelyRender: false,
-    extensions: getRichExtensions({
-      placeholder: entityKind === "contact"
-        ? `Canvas for ${entityName} — notes, research, history…`
-        : `Canvas for ${entityName} — what they show, who's there, your angle…`,
-      onAshTrigger: handleAshTrigger,
-    }),
-    content: initialHtml ?? "",
-    onUpdate({ editor }) { scheduleSave(editor.getHTML()); },
-    editorProps: { attributes: { style: "outline: none; min-height: 300px; font-size: 14px; line-height: 1.8; color: var(--color-text-secondary);" } },
-  }, [entityId]);
-
-  useEffect(() => {
-    return () => {
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current);
-        const html = editor?.getHTML() ?? "";
-        createClient().from(table).update({ canvas_html: html || null }).eq("id", entityId);
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entityId]);
-
-  function scheduleSave(html: string) {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    setSaving(true); setSaved(false);
-    saveTimer.current = setTimeout(async () => {
-      await createClient().from(table).update({ canvas_html: html || null }).eq("id", entityId);
-      setSaving(false); setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    }, 800);
-  }
-
-  function handleAshSubmit(prompt: string) {
-    return submitInlineAsh({
-      prompt, editor, ashPrompt,
-      surface: {
-        type:        "outreach-target",
-        target_id:   targetId,
-        target_name: targetName,
-        contact_id:  entityKind === "contact" ? entityId : undefined,
-      },
-      clearPrompt: () => setAshPrompt(null),
-    });
-  }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", position: "relative" }}>
-      {/* Crossover banner — orients the user to the fact that this canvas is
-          shared with the Network module, and offers a one-click jump. */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 8,
-        padding: "6px 20px",
-        background: "var(--color-cream)",
-        borderBottom: "0.5px solid var(--color-border)",
-        fontSize: 11, color: "var(--color-grey)", flexShrink: 0,
-      }}>
-        <span>Workspace for <span style={{ color: "var(--color-charcoal)", fontWeight: 500 }}>{entityName}</span> — also editable in Network.</span>
-        <a href={entityRoute}
-          style={{ marginLeft: "auto", fontSize: 11, color: "var(--color-sage)", textDecoration: "none" }}>
-          Open in Network →
-        </a>
-      </div>
-      <RichToolbar editor={editor} />
-      <div style={{ flex: 1, overflowY: "auto", background: "var(--color-off-white)" }}>
-        <div style={{ maxWidth: 760, padding: "36px 60px 80px" }}>
-          <EditorContent editor={editor} />
-        </div>
-      </div>
-      <div style={{ display: "flex", justifyContent: "flex-end", padding: "5px 20px", borderTop: "0.5px solid var(--color-border)", background: "var(--color-off-white)", flexShrink: 0, fontSize: 10, color: "var(--color-text-tertiary)" }}>
-        {saving && "Saving…"}
-        {!saving && saved && <span style={{ color: "var(--color-sage)" }}>Saved</span>}
-      </div>
-      {ashPrompt && <InlineAshPopover anchor={ashPrompt.anchor} onSubmit={handleAshSubmit} onClose={() => setAshPrompt(null)} />}
-    </div>
-  );
-}
 
 // Orphan-target prompt — shown across the whole scrim when a target isn't yet
 // linked to a Contact or Organization. A target is allowed to exist as a bare
@@ -705,7 +600,6 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
   const { options: projectOptions } = useProjectOptions();
 
   const [target,       setTarget]       = useState(initialTarget);
-  const [canvasHtml,   setCanvasHtml]   = useState<string | null | undefined>(undefined);
   const [activeTab,    setActiveTab]    = useState<SectionTab>("canvas");
   const [maximized,    setMaximized]    = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -832,15 +726,6 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
     setSettingsOpen(false);
   }, [initialTarget.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load canvas from the wrapped entity (Contact's or Organization's
-  // canvas_html). Keyed on the resolved entity so linking an orphan target
-  // re-loads the newly linked record's canvas without reopening the panel.
-  useEffect(() => {
-    if (!entity) { setCanvasHtml(null); return; }
-    setCanvasHtml(undefined);
-    supabase.from(entity.parentTable).select("canvas_html").eq("id", entity.id).single()
-      .then(({ data }) => setCanvasHtml((data as { canvas_html?: string | null } | null)?.canvas_html ?? null));
-  }, [entity?.parentTable, entity?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Hide floating Ash FAB in scrim mode
   useEffect(() => {
@@ -1184,18 +1069,11 @@ export default function TargetDetailPanel({ target: initialTarget, pipeline, onC
             ) : (
               <>
                 {activeTab === "canvas" && (
-                  canvasHtml === undefined
-                    ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "var(--color-grey)" }}>Loading…</div>
-                    : <EntityCanvasEditor
-                        key={`${entity.kind}:${entity.id}`}
-                        targetId={target.id}
-                        targetName={target.name}
-                        entityKind={entity.kind}
-                        entityId={entity.id}
-                        entityName={entity.name}
-                        entityRoute={entity.route}
-                        initialHtml={canvasHtml}
-                      />
+                  <Canvas
+                    key={`${entity.kind}:${entity.id}`}
+                    scope={entity.parentTable === "organizations" ? "organization" : "contact"}
+                    entityId={entity.id}
+                  />
                 )}
                 {activeTab === "activity" && (
                   <EntityActivityTab

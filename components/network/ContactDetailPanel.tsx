@@ -1,13 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback, KeyboardEvent } from "react";
+import { useState, useEffect, useMemo, useRef, KeyboardEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Contact, ContactStatus, LeadStage, Organization, Project, Task, Note } from "@/types/database";
 import { X, Maximize2, Minimize2, FileText, CheckSquare, FolderOpen, Calendar, Settings, Trash2, Users, Link2 } from "lucide-react";
-import { useEditor, EditorContent } from "@tiptap/react";
-import { getRichExtensions, RichToolbar, InlineAshPopover, SelectionBubble, submitInlineAsh } from "@/components/ui/RichEditor";
-import type { AshPromptState } from "@/components/ui/RichEditor";
-import CanvasAshHint from "@/components/ui/CanvasAshHint";
+import Canvas from "@/components/canvas/Canvas";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import AshPromptsModule, { type AshPrompt } from "@/components/ui/AshPromptsModule";
 import EntityActivityTab, { type EntityActivity } from "@/components/detail/EntityActivityTab";
@@ -53,9 +50,6 @@ const PRESET_TAGS = ["Gallery", "Client", "Supplier", "Press", "Event"];
 
 function initials(c: Contact) { return (c.first_name[0] + (c.last_name[0] ?? "")).toUpperCase(); }
 
-function truncate(s: string, max: number): string {
-  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
-}
 function lastContactedDisplay(date: string | null): { label: string; color: string } {
   if (!date) return { label: "Never contacted", color: "var(--color-grey)" };
   const days = Math.floor((Date.now() - new Date(date).getTime()) / 86400000);
@@ -75,167 +69,6 @@ function PickerTag({ label, color, dot, onClick }: { label: string; color: strin
     </button>
   );
 }
-
-// ── Canvas editor for contacts ────────────────────────────────────────────────
-
-function ContactCanvasEditor({
-  contactId, contactName, initialHtml,
-  onSaved, onNoteCreated, onViewNote,
-}: {
-  contactId:      string;
-  contactName:    string;
-  initialHtml:    string | null;
-  /** Keeps the parent's `canvasHtml` state in sync so tab toggles don't
-   *  blank the editor on remount. */
-  onSaved:        (html: string | null) => void;
-  /** Bubbles a freshly-converted-to-note row up to the panel so the Notes
-   *  tab is populated without a re-fetch. */
-  onNoteCreated:  (note: Note) => void;
-  /** Switches the panel to the Notes tab and (optionally) highlights the
-   *  note the user just created. */
-  onViewNote:     (noteId: string) => void;
-}) {
-  const [saving,         setSaving]         = useState(false);
-  const [saved,          setSaved]          = useState(false);
-  const [convertingNote, setConvertingNote] = useState(false);
-  const [createdNote,    setCreatedNote]    = useState<{ id: string; title: string | null } | null>(null);
-  const [ashPrompt,      setAshPrompt]      = useState<AshPromptState>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Mirror of the latest HTML the editor produced, kept in a ref so the
-  // unmount cleanup doesn't have to read from a possibly torn-down editor.
-  // Seeded with initialHtml so a "no edits" tab toggle preserves the input.
-  // (Mirrors the fix applied earlier to the projects canvas — without it,
-  // toggling away from Canvas and back can wipe the parent state because
-  // Tiptap may have already torn down the editor by the time the cleanup
-  // effect runs.)
-  const latestHtml = useRef<string>(initialHtml ?? "");
-  // Always-fresh callbacks so the cleanup effect uses the latest parent
-  // references (props are recreated on each parent render).
-  const onSavedRef       = useRef(onSaved);       onSavedRef.current       = onSaved;
-  const onNoteCreatedRef = useRef(onNoteCreated); onNoteCreatedRef.current = onNoteCreated;
-  const onViewNoteRef    = useRef(onViewNote);    onViewNoteRef.current    = onViewNote;
-
-  const handleAshTrigger = useCallback((pos: number, coords: { top: number; left: number; bottom: number }) => {
-    setAshPrompt({ pos, anchor: coords });
-  }, []);
-
-  const editor = useEditor({
-    immediatelyRender: false,
-    extensions: getRichExtensions({ placeholder: "Canvas — notes, plans, anything about this contact…", onAshTrigger: handleAshTrigger }),
-    content: initialHtml ?? "",
-    onUpdate({ editor }) {
-      const html = editor.getHTML();
-      latestHtml.current = html;
-      scheduleSave(html);
-    },
-    editorProps: { attributes: { style: "outline: none; min-height: 300px; font-size: 14px; line-height: 1.8; color: var(--color-text-secondary);" } },
-  }, [contactId]);
-
-  // On unmount: flush any pending save with the ref-tracked HTML and bubble
-  // the latest content up to the parent so a tab toggle doesn't blank the
-  // canvas when this editor next remounts with stale parent state.
-  useEffect(() => {
-    return () => {
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current);
-        saveTimer.current = null;
-        const html = latestHtml.current;
-        createClient().from("contacts").update({ canvas_html: html || null }).eq("id", contactId);
-        onSavedRef.current(html || null);
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contactId]);
-
-  function scheduleSave(html: string) {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    setSaving(true); setSaved(false);
-    saveTimer.current = setTimeout(async () => {
-      await createClient().from("contacts").update({ canvas_html: html || null }).eq("id", contactId);
-      onSavedRef.current(html || null);
-      saveTimer.current = null;
-      setSaving(false); setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    }, 800);
-  }
-
-  function handleAshSubmit(prompt: string) {
-    return submitInlineAsh({
-      prompt, editor, ashPrompt,
-      surface: { type: "canvas-contact", contact_id: contactId, contact_name: contactName },
-      clearPrompt: () => setAshPrompt(null),
-    });
-  }
-
-  async function handleConvertToNote(sel: { text: string; html: string }) {
-    if (convertingNote) return;
-    setConvertingNote(true);
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setConvertingNote(false); return; }
-    const title = sel.text.replace(/\s+/g, " ").trim().slice(0, 60);
-    const { data } = await supabase
-      .from("notes")
-      .insert({
-        user_id:    user.id,
-        contact_id: contactId,
-        title:      title || null,
-        content:    sel.html,
-      })
-      .select("*")
-      .single();
-    setConvertingNote(false);
-    if (data) {
-      const note = data as Note;
-      onNoteCreatedRef.current(note);
-      setCreatedNote({ id: note.id, title: note.title });
-      // The "View →" affordance hangs around longer than the saved indicator
-      // so the user has time to act on it — 8s feels about right.
-      setTimeout(() => setCreatedNote(null), 8000);
-    }
-  }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", position: "relative" }}>
-      <RichToolbar editor={editor} />
-      <SelectionBubble editor={editor} onConvertToNote={handleConvertToNote} convertingToNote={convertingNote} />
-      <div style={{ flex: 1, overflowY: "auto", background: "var(--color-off-white)", position: "relative" }}>
-        <div style={{ maxWidth: 760, padding: "36px 60px 80px" }}>
-          <EditorContent editor={editor} />
-        </div>
-        <CanvasAshHint />
-      </div>
-      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, padding: "5px 20px", borderTop: "0.5px solid var(--color-border)", background: "var(--color-off-white)", flexShrink: 0, fontSize: 10, color: "var(--color-text-tertiary)" }}>
-        {createdNote && (
-          <>
-            <span style={{ color: "var(--color-sage-text)", fontWeight: 600 }}>
-              ✓ Note created{createdNote.title ? ` — “${truncate(createdNote.title, 32)}”` : ""}
-            </span>
-            <button
-              type="button"
-              onClick={() => { onViewNoteRef.current(createdNote.id); setCreatedNote(null); }}
-              style={{
-                fontSize: 10, fontWeight: 600,
-                padding: "2px 9px", borderRadius: 9999,
-                background: "rgba(var(--color-sage-rgb),0.16)", color: "var(--color-sage-text)",
-                border: "0.5px solid rgba(var(--color-sage-rgb),0.36)",
-                cursor: "pointer", fontFamily: "inherit",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.28)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.16)")}
-            >
-              View note →
-            </button>
-          </>
-        )}
-        {saving && "Saving…"}
-        {!saving && saved && !createdNote && <span style={{ color: "var(--color-sage)" }}>✓ Saved</span>}
-      </div>
-      {ashPrompt && <InlineAshPopover anchor={ashPrompt.anchor} onSubmit={handleAshSubmit} onClose={() => setAshPrompt(null)} />}
-    </div>
-  );
-}
-
 
 // ── Tasks tab ─────────────────────────────────────────────────────────────────
 
@@ -614,7 +447,6 @@ export default function ContactDetailPanel({
   const [linkedProjects, setLinkedProjects] = useState<Project[]>([]);
   const [tasks,          setTasks]          = useState<Task[]>([]);
   const [notes,          setNotes]          = useState<Note[]>([]);
-  const [canvasHtml,     setCanvasHtml]     = useState<string | null | undefined>(undefined);
   const [activeTab,      setActiveTab]      = useState<SectionTab>(
     initialTab && SECTION_TABS.has(initialTab as SectionTab) ? (initialTab as SectionTab) : "canvas",
   );
@@ -708,7 +540,6 @@ export default function ContactDetailPanel({
     }
     firstLoadRef.current = false;
     setSettingsOpen(false);
-    setCanvasHtml(undefined);
 
     const s = createClient();
     Promise.all([
@@ -716,14 +547,12 @@ export default function ContactDetailPanel({
       s.from("project_contacts").select("project:projects(*)").eq("contact_id", initialContact.id),
       s.from("tasks").select("*, project:projects(id,title)").eq("contact_id", initialContact.id).order("created_at", { ascending: false }),
       s.from("notes").select("*").eq("contact_id", initialContact.id).order("updated_at", { ascending: false }),
-      s.from("contacts").select("canvas_html").eq("id", initialContact.id).single(),
       s.from("invoices").select("id, line_items:invoice_line_items(amount)").eq("client_contact_id", initialContact.id),
-    ]).then(([{ data: a }, { data: pr }, { data: t }, { data: n }, { data: c }, { data: inv }]) => {
+    ]).then(([{ data: a }, { data: pr }, { data: t }, { data: n }, { data: inv }]) => {
       if (a)  setActivities(a as EntityActivity[]);
       if (pr) setLinkedProjects(pr.map((r: { project: Project | Project[] }) => Array.isArray(r.project) ? r.project[0] : r.project).filter(Boolean) as Project[]);
       if (t)  setTasks(t as Task[]);
       if (n)  setNotes(n as Note[]);
-      setCanvasHtml(c?.canvas_html ?? null);
       if (inv && inv.length > 0) {
         type Inv = { id: string; line_items: { amount: number }[] };
         const invs = inv as unknown as Inv[];
@@ -1257,22 +1086,7 @@ export default function ContactDetailPanel({
           {/* Content */}
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
             {activeTab === "canvas" && (
-              canvasHtml === undefined
-                ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "var(--color-grey)" }}>Loading…</div>
-                : <ContactCanvasEditor
-                    key={contact.id}
-                    contactId={contact.id}
-                    contactName={`${contact.first_name} ${contact.last_name}`}
-                    initialHtml={canvasHtml}
-                    onSaved={(h) => setCanvasHtml(h)}
-                    onNoteCreated={(note) => setNotes((prev) => [note, ...prev])}
-                    onViewNote={(noteId) => {
-                      setActiveTab("notes");
-                      setHighlightedNoteId(noteId);
-                      // Tint expires after the user has had time to spot it.
-                      setTimeout(() => setHighlightedNoteId(null), 2400);
-                    }}
-                  />
+              <Canvas key={contact.id} scope="contact" entityId={contact.id} />
             )}
             {activeTab === "activity" && (
               <EntityActivityTab
