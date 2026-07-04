@@ -1,0 +1,383 @@
+"use client";
+
+// Selection + interaction chrome around one object. Move (incl. group drag and
+// option-duplicate) is delegated to the parent Canvas via onBeginDrag; resize
+// and rotate are handled here for the single-selected object. `interactive` is
+// true only under the Select tool — otherwise pointer events fall through so
+// create tools can place over existing objects. Geometry is in world units;
+// screen pointer deltas are divided by `scale`.
+
+import { useEffect, useRef } from "react";
+import type { CanvasObject, ShapeContent } from "./types";
+import CanvasObjectContent from "./CanvasObjectContent";
+
+type Handle = "nw" | "ne" | "sw" | "se" | "n" | "s" | "e" | "w";
+const CORNERS: Handle[] = ["nw", "ne", "sw", "se"];
+const EDGES: Handle[] = ["n", "s", "e", "w"];
+const MIN_SIZE = 24;
+
+// Rotate cursor (a circular arrow). The stroke is a neutral glyph colour, not a
+// themeable UI colour — a cursor icon, so it's a contrast-anchor exception.
+const ROTATE_CURSOR =
+  "url(\"data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='22'%20height='22'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23555'%20stroke-width='2.2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M21%2012a9%209%200%201%201-3-6.7'/%3E%3Cpolyline%20points='21%203%2021%209%2015%209'/%3E%3C/svg%3E\") 11 11, grab";
+
+interface Props {
+  object: CanvasObject;
+  selected: boolean;
+  /** True when this is the ONLY selected object (shows resize/rotate handles). */
+  soleSelected: boolean;
+  /** True only under the Select tool — gates move/resize/rotate hit-testing. */
+  interactive: boolean;
+  editing: boolean;
+  scale: number;
+  onBeginDrag: (id: string, e: React.PointerEvent) => void;
+  onChangeLocal: (id: string, patch: Partial<CanvasObject>) => void;
+  onCommitGeometry: (id: string, o: CanvasObject) => void;
+  onStartEdit: (id: string) => void;
+  onText: (id: string, html: string, text: string) => void;
+  onEndEdit: () => void;
+  onContextMenu: (id: string, e: React.MouseEvent) => void;
+  /** Report measured content height (text objects auto-grow). */
+  onAutoHeight: (id: string, height: number) => void;
+  /** Open the entity a reference card points at (double-click). */
+  onOpenReference: (o: CanvasObject) => void;
+}
+
+function rotate(vx: number, vy: number, rad: number) {
+  const c = Math.cos(rad);
+  const s = Math.sin(rad);
+  return { x: vx * c - vy * s, y: vx * s + vy * c };
+}
+// Offset (from centre) of the FIXED anchor while dragging a handle — the
+// opposite side. Works for corners and edges (edge → opposite edge's midpoint).
+function anchorOffset(h: Handle, w: number, ht: number) {
+  return {
+    x: h.includes("e") ? -w / 2 : h.includes("w") ? w / 2 : 0,
+    y: h.includes("s") ? -ht / 2 : h.includes("n") ? ht / 2 : 0,
+  };
+}
+
+export default function CanvasObjectView({
+  object,
+  selected,
+  soleSelected,
+  interactive,
+  editing,
+  scale,
+  onBeginDrag,
+  onChangeLocal,
+  onCommitGeometry,
+  onStartEdit,
+  onText,
+  onEndEdit,
+  onContextMenu,
+  onAutoHeight,
+  onOpenReference,
+}: Props) {
+  const latestRef = useRef<CanvasObject>(object);
+  useEffect(() => {
+    latestRef.current = object;
+  });
+
+  // Text objects grow with their content: measure the wrapper and report up.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const isText = object.type === "text";
+  useEffect(() => {
+    if (!isText) return;
+    const el = wrapRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => onAutoHeight(object.id, el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isText, object.id, onAutoHeight]);
+
+  const inv = 1 / scale;
+  const scalable = object.type === "text" || object.type === "sticky";
+  const shapeKind = object.type === "shape" ? (object.content as ShapeContent).shape : null;
+  // Double-click to edit text: text, sticky, and box-shapes (not line/arrow).
+  const editableText = scalable || shapeKind === "rect" || shapeKind === "ellipse";
+  const isLinear = shapeKind === "line" || shapeKind === "arrow";
+
+  function onBodyPointerDown(e: React.PointerEvent) {
+    if (editing || !interactive) return; // fall through so create/hand tools work
+    e.stopPropagation();
+    onBeginDrag(object.id, e);
+  }
+
+  // ── resize (corners + edges) ──
+  function onResizePointerDown(e: React.PointerEvent, handle: Handle) {
+    e.stopPropagation();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    const start = { px: e.clientX, py: e.clientY, obj: object };
+    const move = (ev: PointerEvent) => {
+      const o = start.obj;
+      const rad = (o.rotation * Math.PI) / 180;
+      const wdx = (ev.clientX - start.px) * inv;
+      const wdy = (ev.clientY - start.py) * inv;
+      const local = rotate(wdx, wdy, -rad);
+      let nw = o.width;
+      let nh = o.height;
+      if (handle.includes("e")) nw = o.width + local.x;
+      if (handle.includes("w")) nw = o.width - local.x;
+      if (handle.includes("s")) nh = o.height + local.y;
+      if (handle.includes("n")) nh = o.height - local.y;
+      nw = Math.max(MIN_SIZE, nw);
+      nh = Math.max(MIN_SIZE, nh);
+
+      // Shift on a text/sticky corner = uniform scale of the box AND its text.
+      const uniform = ev.shiftKey && scalable && handle.length === 2;
+      let fontPatch: Partial<CanvasObject> = {};
+      if (uniform) {
+        const factor = Math.max(nw / o.width, nh / o.height);
+        nw = Math.round(o.width * factor);
+        nh = Math.round(o.height * factor);
+        const baseFont =
+          (o.content as { fontSize?: number }).fontSize ?? (o.type === "text" ? 16 : 13);
+        fontPatch = {
+          content: { ...o.content, fontSize: Math.max(6, Math.round(baseFont * factor)) },
+        };
+      }
+
+      const centerOld = { x: o.x + o.width / 2, y: o.y + o.height / 2 };
+      const aOld = anchorOffset(handle, o.width, o.height);
+      const rOld = rotate(aOld.x, aOld.y, rad);
+      const aWorld = { x: centerOld.x + rOld.x, y: centerOld.y + rOld.y };
+      const aNew = anchorOffset(handle, nw, nh);
+      const rNew = rotate(aNew.x, aNew.y, rad);
+      const centerNew = { x: aWorld.x - rNew.x, y: aWorld.y - rNew.y };
+      onChangeLocal(object.id, {
+        width: Math.round(nw),
+        height: Math.round(nh),
+        x: Math.round(centerNew.x - nw / 2),
+        y: Math.round(centerNew.y - nh / 2),
+        ...fontPatch,
+      });
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      onCommitGeometry(object.id, latestRef.current);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  // ── rotate ──
+  function onRotatePointerDown(e: React.PointerEvent) {
+    e.stopPropagation();
+    const el = (e.currentTarget as HTMLElement).closest("[data-canvas-object]");
+    const rect = el?.getBoundingClientRect();
+    if (!rect) return;
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    // Anchor to the grab angle so rotation starts from the object's current
+    // angle instead of snapping (fixes the jump on pointer-down).
+    const deg = (rad: number) => (rad * 180) / Math.PI;
+    const startPointerAngle = deg(Math.atan2(e.clientY - cy, e.clientX - cx));
+    const startRotation = object.rotation;
+    const move = (ev: PointerEvent) => {
+      const delta = deg(Math.atan2(ev.clientY - cy, ev.clientX - cx)) - startPointerAngle;
+      let next = Math.round(startRotation + delta);
+      if (ev.shiftKey) next = Math.round(next / 15) * 15;
+      onChangeLocal(object.id, { rotation: next });
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      onCommitGeometry(object.id, latestRef.current);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  // ── line/arrow endpoints ──
+  function onEndpointPointerDown(e: React.PointerEvent, which: "start" | "end") {
+    e.stopPropagation();
+    const o0 = object;
+    const rad = (o0.rotation * Math.PI) / 180;
+    const center = { x: o0.x + o0.width / 2, y: o0.y + o0.height / 2 };
+    const s = rotate(-o0.width / 2, 0, rad);
+    const eOff = rotate(o0.width / 2, 0, rad);
+    const startWorld = { x: center.x + s.x, y: center.y + s.y };
+    const endWorld = { x: center.x + eOff.x, y: center.y + eOff.y };
+    const fixed = which === "start" ? endWorld : startWorld;
+    const draggedFrom = which === "start" ? startWorld : endWorld;
+    const px = e.clientX;
+    const py = e.clientY;
+    const move = (ev: PointerEvent) => {
+      const dragged = { x: draggedFrom.x + (ev.clientX - px) * inv, y: draggedFrom.y + (ev.clientY - py) * inv };
+      const a = which === "start" ? dragged : fixed; // start endpoint
+      const b = which === "start" ? fixed : dragged; // end endpoint
+      const len = Math.max(1, Math.hypot(b.x - a.x, b.y - a.y));
+      const ang = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+      const c = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      onChangeLocal(object.id, {
+        width: Math.round(len),
+        height: o0.height,
+        x: Math.round(c.x - len / 2),
+        y: Math.round(c.y - o0.height / 2),
+        rotation: Math.round(ang),
+      });
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      onCommitGeometry(object.id, latestRef.current);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  const handleSize = 11 * inv;
+  const handleBorder = Math.max(0.5, 1.25 * inv);
+  const outline = 1.5 * inv;
+  const rotZone = 22 * inv;
+  const off = rotZone + handleSize / 2;
+
+  return (
+    <div
+      data-canvas-object
+      ref={wrapRef}
+      style={{
+        position: "absolute",
+        left: object.x,
+        top: object.y,
+        width: object.width,
+        height: isText ? "auto" : object.height,
+        transform: `rotate(${object.rotation}deg)`,
+        transformOrigin: "center center",
+        zIndex: object.zIndex,
+        cursor: interactive && !editing ? "move" : editing ? "text" : "inherit",
+        touchAction: "none",
+      }}
+      onPointerDown={onBodyPointerDown}
+      onContextMenu={(e) => onContextMenu(object.id, e)}
+      onDoubleClick={(e) => {
+        if (editableText && interactive) {
+          e.stopPropagation();
+          onStartEdit(object.id);
+          return;
+        }
+        if (
+          interactive &&
+          object.type === "reference" &&
+          ["project", "contact", "organization", "lead"].includes(object.refType ?? "")
+        ) {
+          e.stopPropagation();
+          onOpenReference(object);
+        }
+      }}
+    >
+      <CanvasObjectContent
+        object={object}
+        editing={editing}
+        onRichChange={(html, text) => onText(object.id, html, text)}
+        onEndEdit={onEndEdit}
+      />
+
+      {selected && !editing && !isLinear && (
+        <div
+          style={{
+            position: "absolute",
+            inset: -outline,
+            border: `${outline}px solid var(--color-sage)`,
+            borderRadius: "var(--radius-md)",
+            pointerEvents: "none",
+          }}
+        />
+      )}
+
+      {/* line/arrow: endpoint anchors instead of a bounding box */}
+      {soleSelected && interactive && !editing && isLinear && (
+        <>
+          {(["start", "end"] as const).map((which) => (
+            <div
+              key={which}
+              onPointerDown={(e) => onEndpointPointerDown(e, which)}
+              title={which === "start" ? "Start point" : "End point"}
+              style={{
+                position: "absolute",
+                left: which === "start" ? -handleSize * 0.75 : undefined,
+                right: which === "end" ? -handleSize * 0.75 : undefined,
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: handleSize * 1.5,
+                height: handleSize * 1.5,
+                borderRadius: "var(--radius-full)",
+                background: "var(--color-surface-raised)",
+                border: `${handleBorder}px solid var(--color-sage)`,
+                boxShadow: "var(--shadow-sm)",
+                cursor: "grab",
+              }}
+            />
+          ))}
+        </>
+      )}
+
+      {soleSelected && interactive && !editing && !isLinear && (
+        <>
+          {/* rotate zones just outside each corner — rotate cursor on hover */}
+          {CORNERS.map((corner) => (
+            <div
+              key={`rot-${corner}`}
+              onPointerDown={onRotatePointerDown}
+              title="Rotate"
+              style={{
+                position: "absolute",
+                left: corner.includes("w") ? -off : undefined,
+                right: corner.includes("e") ? -off : undefined,
+                top: corner.includes("n") ? -off : undefined,
+                bottom: corner.includes("s") ? -off : undefined,
+                width: rotZone,
+                height: rotZone,
+                cursor: ROTATE_CURSOR,
+              }}
+            />
+          ))}
+
+          {/* edge resize strips (invisible hit areas) */}
+          {EDGES.map((edge) => {
+            const horiz = edge === "n" || edge === "s";
+            return (
+              <div
+                key={`edge-${edge}`}
+                onPointerDown={(e) => onResizePointerDown(e, edge)}
+                style={{
+                  position: "absolute",
+                  left: edge === "w" ? -handleSize / 2 : horiz ? handleSize : undefined,
+                  right: edge === "e" ? -handleSize / 2 : horiz ? handleSize : undefined,
+                  top: edge === "n" ? -handleSize / 2 : horiz ? undefined : handleSize,
+                  bottom: edge === "s" ? -handleSize / 2 : horiz ? undefined : handleSize,
+                  width: horiz ? undefined : handleSize,
+                  height: horiz ? handleSize : undefined,
+                  cursor: horiz ? "ns-resize" : "ew-resize",
+                }}
+              />
+            );
+          })}
+
+          {/* corner resize handles */}
+          {CORNERS.map((corner) => (
+            <div
+              key={corner}
+              onPointerDown={(e) => onResizePointerDown(e, corner)}
+              style={{
+                position: "absolute",
+                left: corner.includes("w") ? -handleSize / 2 : undefined,
+                right: corner.includes("e") ? -handleSize / 2 : undefined,
+                top: corner.includes("n") ? -handleSize / 2 : undefined,
+                bottom: corner.includes("s") ? -handleSize / 2 : undefined,
+                width: handleSize,
+                height: handleSize,
+                background: "var(--color-surface-raised)",
+                border: `${handleBorder}px solid var(--color-sage)`,
+                borderRadius: 2 * inv,
+                cursor: `${corner}-resize`,
+              }}
+            />
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
