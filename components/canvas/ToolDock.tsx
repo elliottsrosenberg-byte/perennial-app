@@ -15,6 +15,7 @@ import {
   Circle,
   PenTool,
   Highlighter,
+  Eraser,
   Image as ImageIcon,
   ImagePlus,
   Plus,
@@ -49,6 +50,8 @@ interface Props {
   onPenMode: (m: "marker" | "highlighter") => void;
   penColor: StickyColor;
   onPenColor: (c: StickyColor) => void;
+  penSize: number;
+  onPenSize: (n: number) => void;
   onAddEntity: (kind: EntityKind) => void;
   onImageFromFiles: () => void;
   onAddModule: (key: ModuleKey) => void;
@@ -61,6 +64,7 @@ const TOOLS: { key: CanvasTool; label: string; icon: React.ReactNode; short: str
   { key: "sticky", label: "Sticky note", icon: <StickyNote size={18} strokeWidth={1.75} />, short: "N" },
   { key: "shape", label: "Shape", icon: <Square size={18} strokeWidth={1.75} />, short: "S" },
   { key: "pen", label: "Pen", icon: <PenTool size={18} strokeWidth={1.75} />, short: "P" },
+  { key: "eraser", label: "Eraser", icon: <Eraser size={18} strokeWidth={1.75} />, short: "E" },
 ];
 
 const ADD_ITEMS: { kind: EntityKind; label: string; icon: React.ReactNode }[] = [
@@ -118,6 +122,8 @@ function OptionsCard({
   onPenMode,
   penColor,
   onPenColor,
+  penSize,
+  onPenSize,
 }: Pick<
   Props,
   | "tool"
@@ -129,6 +135,8 @@ function OptionsCard({
   | "onPenMode"
   | "penColor"
   | "onPenColor"
+  | "penSize"
+  | "onPenSize"
 >) {
   if (tool === "sticky") {
     return (
@@ -196,6 +204,23 @@ function OptionsCard({
             style={{ ...tile(m.key === penMode), width: 32, height: 32 }}
           >
             {m.icon}
+          </button>
+        ))}
+        <span style={{ width: 22, height: 1, background: "var(--color-border)" }} />
+        {(
+          [
+            { n: 2, dot: 5 },
+            { n: 4, dot: 8 },
+            { n: 8, dot: 12 },
+          ] as const
+        ).map((s) => (
+          <button
+            key={s.n}
+            aria-label={`pen size ${s.n}`}
+            onClick={() => onPenSize(s.n)}
+            style={{ ...tile(s.n === penSize), width: 30, height: 30 }}
+          >
+            <span style={{ width: s.dot, height: s.dot, borderRadius: "var(--radius-full)", background: "currentColor" }} />
           </button>
         ))}
         <span style={{ width: 22, height: 1, background: "var(--color-border)" }} />
@@ -345,6 +370,8 @@ export default function ToolDock(props: Props) {
           onPenMode={props.onPenMode}
           penColor={props.penColor}
           onPenColor={props.onPenColor}
+          penSize={props.penSize}
+          onPenSize={props.onPenSize}
         />
       )}
     </div>

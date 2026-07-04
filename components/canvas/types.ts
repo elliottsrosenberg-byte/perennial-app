@@ -11,7 +11,7 @@ import type {
 export type { CanvasObjectType, CanvasRefType };
 
 /** Active canvas tool. */
-export type CanvasTool = "select" | "hand" | "sticky" | "text" | "shape" | "pen";
+export type CanvasTool = "select" | "hand" | "sticky" | "text" | "shape" | "pen" | "eraser";
 
 /** Sticky/shape colour keys — the app's 10-colour palette (see palette.ts). */
 export type StickyColor =
@@ -31,6 +31,7 @@ export type ShapeColor = StickyColor;
 // `html` holds rich formatting (bold/italic/underline, headings, alignment);
 // `text` is always the plain-text fallback (search, Ash, legacy objects).
 export type TextAlign = "left" | "center" | "right";
+export type VAlign = "top" | "middle" | "bottom";
 
 export interface TextContent {
   text: string;
@@ -47,6 +48,7 @@ export interface StickyContent {
   tag?: string;
   fontSize?: number;
   align?: TextAlign;
+  vAlign?: VAlign;
   textColor?: StickyColor;
 }
 export interface ShapeContent {
@@ -56,6 +58,7 @@ export interface ShapeContent {
   html?: string;
   fontSize?: number;
   align?: TextAlign;
+  vAlign?: VAlign;
   textColor?: StickyColor;
 }
 export interface ImageContent {

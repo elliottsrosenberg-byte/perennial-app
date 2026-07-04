@@ -36,6 +36,11 @@ import {
   AlignCenter,
   AlignRight,
   Link as LinkIcon,
+  List,
+  Minus,
+  Plus,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import type { CanvasObjectRow, CanvasScope } from "@/types/database";
 import { uploadEditorImage, isUploadableImageType } from "@/lib/uploads/editor-image";
@@ -98,6 +103,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const [shapeKind, setShapeKind] = useState<ShapeKind>("rect");
   const [penMode, setPenMode] = useState<"marker" | "highlighter">("marker");
   const [penColor, setPenColor] = useState<StickyColor>("sage");
+  const [penSize, setPenSize] = useState(4);
   const [drawingPts, setDrawingPts] = useState<[number, number][] | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -305,10 +311,57 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
       return;
     }
 
-    if (tool === "text" || tool === "sticky") {
-      const extra = tool === "sticky" ? { content: { color: stickyColor, text: "" } } : undefined;
-      placeObject(tool, toWorld(e.clientX, e.clientY), extra);
+    if (tool === "eraser") {
+      const eraseAt = (cx: number, cy: number) => {
+        const w = toWorld(cx, cy);
+        const hit = objsRef.current
+          .filter((o) => {
+            const b = objectAABB(o);
+            return w.x >= b.left && w.x <= b.right && w.y >= b.top && w.y <= b.bottom;
+          })
+          .sort((a, b) => b.zIndex - a.zIndex)[0];
+        if (hit) store.remove(hit.id);
+      };
+      eraseAt(e.clientX, e.clientY);
+      const move = (ev: PointerEvent) => eraseAt(ev.clientX, ev.clientY);
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      return;
+    }
+
+    if (tool === "sticky") {
+      placeObject("sticky", toWorld(e.clientX, e.clientY), { content: { color: stickyColor, text: "" } });
       setTool("select");
+      return;
+    }
+
+    if (tool === "text") {
+      // Click places a default text box; drag sizes the font to the drag height.
+      const sx = e.clientX;
+      const sy = e.clientY;
+      const move = (ev: PointerEvent) => setRubber({ sx, sy, ex: ev.clientX, ey: ev.clientY });
+      const up = (ev: PointerEvent) => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        setRubber(null);
+        const w0 = toWorld(sx, sy);
+        const w1 = toWorld(ev.clientX, ev.clientY);
+        const dh = Math.abs(w1.y - w0.y);
+        const dw = Math.abs(w1.x - w0.x);
+        const center = dh > 12 ? { x: (w0.x + w1.x) / 2, y: (w0.y + w1.y) / 2 } : w0;
+        const extra =
+          dh > 12
+            ? { width: Math.max(120, Math.round(dw)), content: { text: "", fontSize: Math.max(12, Math.min(160, Math.round(dh))) } }
+            : undefined;
+        placeObject("text", center, extra);
+        setTool("select");
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
       return;
     }
 
@@ -386,7 +439,8 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
         });
         const xs = world.map((p) => p[0]);
         const ys = world.map((p) => p[1]);
-        const pad = penMode === "highlighter" ? 12 : 6;
+        const stroke = penMode === "highlighter" ? penSize * 3.5 : penSize;
+        const pad = Math.max(6, stroke);
         const bx = Math.min(...xs) - pad;
         const by = Math.min(...ys) - pad;
         const width = Math.max(1, Math.round(Math.max(...xs) - Math.min(...xs) + pad * 2));
@@ -400,7 +454,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
           content: {
             points: rel,
             color: penColor,
-            strokeWidth: penMode === "highlighter" ? 14 : 3,
+            strokeWidth: stroke,
             mode: penMode,
           },
         });
@@ -510,8 +564,18 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
         setMenu(null);
         return;
       }
+      if (e.key === "Enter" && selRef.current.size === 1) {
+        const id = [...selRef.current][0];
+        const o = objsRef.current.find((x) => x.id === id);
+        const sk = o?.type === "shape" ? (o.content as ShapeContent).shape : null;
+        if (o && (o.type === "text" || o.type === "sticky" || sk === "rect" || sk === "ellipse")) {
+          e.preventDefault();
+          setEditingId(id);
+          return;
+        }
+      }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const map: Record<string, CanvasTool> = { v: "select", h: "hand", n: "sticky", t: "text", s: "shape", p: "pen" };
+      const map: Record<string, CanvasTool> = { v: "select", h: "hand", n: "sticky", t: "text", s: "shape", p: "pen", e: "eraser" };
       const t = map[e.key.toLowerCase()];
       if (t) selectTool(t);
     }
@@ -680,10 +744,21 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const exec = (cmd: string, arg?: string) => {
     document.execCommand(cmd, false, arg);
   };
+  const editingShapeKind =
+    editingObj?.type === "shape" ? (editingObj.content as ShapeContent).shape : null;
+  const editingBox =
+    !!editingObj && (editingObj.type === "sticky" || editingShapeKind === "rect" || editingShapeKind === "ellipse");
+  const bumpFont = (delta: number) => {
+    if (!editingObj) return;
+    const cur =
+      (editingObj.content as { fontSize?: number }).fontSize ??
+      (editingObj.type === "text" ? 16 : editingObj.type === "sticky" ? 13 : 14);
+    patchContent(editingObj.id, { fontSize: Math.max(8, Math.min(120, cur + delta)) });
+  };
 
   const containerCursor = useMemo(() => {
     if (tool === "hand" || spaceDown) return panning ? "grabbing" : "grab";
-    if (tool === "shape" || tool === "pen" || tool === "sticky" || tool === "text") return "crosshair";
+    if (tool === "shape" || tool === "pen" || tool === "sticky" || tool === "text" || tool === "eraser") return "crosshair";
     return "default";
   }, [tool, spaceDown, panning]);
 
@@ -852,7 +927,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
             points={drawingPts.map((p) => p.join(",")).join(" ")}
             fill="none"
             style={{ stroke: STICKY_PALETTE[penColor].accent }}
-            strokeWidth={(penMode === "highlighter" ? 14 : 3) * view.scale}
+            strokeWidth={(penMode === "highlighter" ? penSize * 3.5 : penSize) * view.scale}
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeOpacity={penMode === "highlighter" ? 0.35 : 1}
@@ -1006,6 +1081,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
               { key: "h2", icon: <Heading2 size={15} strokeWidth={2} />, cmd: "formatBlock", arg: "H2" },
               { key: "h3", icon: <Heading3 size={15} strokeWidth={2} />, cmd: "formatBlock", arg: "H3" },
               { key: "p", icon: <Pilcrow size={14} strokeWidth={2} />, cmd: "formatBlock", arg: "P" },
+              { key: "bullets", icon: <List size={14} strokeWidth={2} />, cmd: "insertUnorderedList" },
               "|",
               { key: "left", icon: <AlignLeft size={14} strokeWidth={2} />, cmd: "justifyLeft" },
               { key: "center", icon: <AlignCenter size={14} strokeWidth={2} />, cmd: "justifyCenter" },
@@ -1046,6 +1122,75 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
                 {b.icon}
               </button>
             ),
+          )}
+
+          <span style={{ width: 1, height: 16, background: "var(--color-border)", margin: "0 3px" }} />
+          {/* font size */}
+          {(
+            [
+              { key: "font-down", icon: <Minus size={14} strokeWidth={2} />, d: -2 },
+              { key: "font-up", icon: <Plus size={14} strokeWidth={2} />, d: 2 },
+            ] as const
+          ).map((b) => (
+            <button
+              key={b.key}
+              title={b.key === "font-up" ? "Bigger text" : "Smaller text"}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                bumpFont(b.d);
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 26,
+                height: 26,
+                border: "none",
+                background: "transparent",
+                borderRadius: "var(--radius-sm)",
+                color: "var(--color-text-secondary)",
+                cursor: "pointer",
+              }}
+            >
+              {b.icon}
+            </button>
+          ))}
+
+          {/* vertical align (box objects) */}
+          {editingBox && (
+            <>
+              <span style={{ width: 1, height: 16, background: "var(--color-border)", margin: "0 3px" }} />
+              {(
+                [
+                  { key: "top", icon: <ChevronUp size={15} strokeWidth={2} /> },
+                  { key: "middle", icon: <Minus size={15} strokeWidth={2} /> },
+                  { key: "bottom", icon: <ChevronDown size={15} strokeWidth={2} /> },
+                ] as const
+              ).map((b) => (
+                <button
+                  key={b.key}
+                  title={`Align ${b.key}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    if (editingObj) patchContent(editingObj.id, { vAlign: b.key });
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 26,
+                    height: 26,
+                    border: "none",
+                    background: "transparent",
+                    borderRadius: "var(--radius-sm)",
+                    color: "var(--color-text-secondary)",
+                    cursor: "pointer",
+                  }}
+                >
+                  {b.icon}
+                </button>
+              ))}
+            </>
           )}
         </div>
       )}
@@ -1130,6 +1275,8 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
           onPenMode={setPenMode}
           penColor={penColor}
           onPenColor={setPenColor}
+          penSize={penSize}
+          onPenSize={setPenSize}
           onAddEntity={(k) => setPicker(k)}
           onImageFromFiles={() => setImagePicker(true)}
           onAddModule={addModule}

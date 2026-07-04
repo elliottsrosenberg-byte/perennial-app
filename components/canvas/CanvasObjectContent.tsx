@@ -23,6 +23,8 @@ import ModuleCard from "./ModuleCard";
 
 const textCol = (tc?: StickyColor) =>
   tc ? STICKY_PALETTE[tc].accent : "var(--color-text-primary)";
+const vJust = (v?: "top" | "middle" | "bottom") =>
+  v === "top" ? "flex-start" : v === "bottom" ? "flex-end" : "center";
 
 interface Props {
   object: CanvasObject;
@@ -221,7 +223,7 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
               {c.tag}
             </span>
           )}
-          <div style={{ flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", justifyContent: vJust(c.vAlign ?? "top") }}>
             {editing ? (
               <RichEditable
                 html={c.html}
@@ -229,6 +231,7 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
                 color={textCol(c.textColor)}
                 fontSize={stickyFont}
                 align={c.align}
+                autoGrow
                 placeholder="Write a note…"
                 onChange={onRichChange}
                 onEndEdit={onEndEdit}
@@ -297,7 +300,7 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
             borderRadius: c.shape === "ellipse" ? "50%" : "var(--radius-md)",
             display: "flex",
             alignItems: "center",
-            justifyContent: "center",
+            justifyContent: vJust(c.vAlign),
             padding: 12,
             overflow: "hidden",
           }}
@@ -309,6 +312,7 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
               color={textCol(c.textColor)}
               fontSize={shapeFont}
               align={c.align ?? "center"}
+              autoGrow
               onChange={onRichChange}
               onEndEdit={onEndEdit}
             />
