@@ -39,6 +39,12 @@ const THRESHOLD = 0.8;
 
 const webSearch = { type: "web_search_20260209", name: "web_search", max_uses: 3 } as unknown as Anthropic.Tool;
 
+// Stubbed read-tool result so the harness can drive Ash through a natural
+// find-then-mutate flow (resolve an entity, get an id, then mutate).
+const STUB_TOOL_RESULT = JSON.stringify([
+  { id: "00000000-0000-0000-0000-000000000001", title: "Foster dining table", name: "Sarah Chen", status: "in_progress", organization: "Lehman Gallery" },
+]);
+
 function baseContext(preferences: AshContext["preferences"] = []): AshContext {
   return {
     module: "home",
@@ -85,15 +91,40 @@ function systemFor(ctx: AshContext): Anthropic.TextBlockParam[] {
 }
 
 async function runToolCase(c: EvalCase): Promise<{ pass: boolean; detail: string }> {
-  const res = await anthropic.messages.create({
-    model: MODEL, max_tokens: 1024, thinking: { type: "disabled" },
-    system: systemFor(baseContext()),
-    tools: [...(ANTHROPIC_TOOLS as Anthropic.Tool[]), webSearch],
-    messages: [{ role: "user", content: c.question }],
-  });
-  const names = res.content.flatMap((b) => (b.type === "tool_use" ? [b.name] : []));
-  const pass = names.some((n) => (c.expectTool ?? []).includes(n));
-  return { pass, detail: names.length ? `called: ${names.join(", ")}` : `no tool (stop=${res.stop_reason})` };
+  const expect = c.expectTool ?? [];
+  const called: string[] = [];
+  let messages: Anthropic.MessageParam[] = [{ role: "user", content: c.question }];
+
+  // Multi-turn: implementing an action legitimately takes a find-then-mutate path,
+  // so drive the loop (stubbing read results) and pass once Ash reaches the action.
+  for (let turn = 0; turn < 4; turn++) {
+    const res = await anthropic.messages.create({
+      model: MODEL, max_tokens: 1024, thinking: { type: "disabled" },
+      system: systemFor(baseContext()),
+      tools: [...(ANTHROPIC_TOOLS as Anthropic.Tool[]), webSearch],
+      messages,
+    });
+
+    const clientTools = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+    for (const b of clientTools) called.push(b.name);
+    for (const b of res.content) if (b.type === "server_tool_use") called.push(b.name);
+
+    if (called.some((n) => expect.includes(n))) {
+      return { pass: true, detail: `called: ${called.join(" → ")}` };
+    }
+    if (res.stop_reason === "pause_turn") {            // server tool (web search) still running
+      messages = [...messages, { role: "assistant", content: res.content }];
+      continue;
+    }
+    if (clientTools.length === 0) {                    // answered with text instead of acting
+      return { pass: false, detail: `no action; ended after: ${called.join(" → ") || "(text only)"}` };
+    }
+    const results: Anthropic.ToolResultBlockParam[] = clientTools.map((b) => ({
+      type: "tool_result", tool_use_id: b.id, content: STUB_TOOL_RESULT,
+    }));
+    messages = [...messages, { role: "assistant", content: res.content }, { role: "user", content: results }];
+  }
+  return { pass: false, detail: `expected [${expect.join("/")}] not reached in 4 turns; called: ${called.join(" → ")}` };
 }
 
 async function judge(question: string, answer: string, rubric: string): Promise<{ pass: boolean; reason: string }> {
