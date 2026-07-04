@@ -60,6 +60,8 @@ import type {
 import { STICKY_COLOR_ORDER, STICKY_PALETTE } from "./palette";
 import CanvasObjectView from "./CanvasObjectView";
 import ToolDock, { type ShapeKind } from "./ToolDock";
+import EntityPicker from "./EntityPicker";
+import type { EntityKind, EntityResult } from "@/lib/canvas/entities";
 
 export interface CanvasHandle {
   create: (type: CanvasObjectType) => void;
@@ -96,6 +98,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const [marquee, setMarquee] = useState<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
   const [rubber, setRubber] = useState<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
   const [preview, setPreview] = useState<{ x: number; y: number } | null>(null);
+  const [picker, setPicker] = useState<EntityKind | null>(null);
   const [menu, setMenu] = useState<
     { x: number; y: number; kind: "object" | "canvas"; world?: { x: number; y: number } } | null
   >(null);
@@ -566,6 +569,21 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     [placeObject, stickyColor],
   );
 
+  // Drop a picked entity as a reference card at the viewport centre.
+  const onPickEntity = useCallback(
+    (r: EntityResult) => {
+      placeObject("reference", viewportCenterWorld(), {
+        width: r.width,
+        height: r.height,
+        content: r.content,
+        refType: r.refType,
+        refId: r.refId,
+      });
+      setPicker(null);
+    },
+    [placeObject, viewportCenterWorld],
+  );
+
   // ── selection toolbar (single sticky/shape) ──
   const sole = selectedIds.size === 1 ? store.objects.find((o) => selectedIds.has(o.id)) ?? null : null;
   const showColorBar = sole?.type === "sticky" || sole?.type === "shape";
@@ -946,7 +964,13 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
           onStickyColor={setStickyColor}
           shapeKind={shapeKind}
           onShapeKind={setShapeKind}
+          onAddEntity={(k) => setPicker(k)}
+          onImageFromFiles={handleUploadImage}
         />
+      )}
+
+      {picker && (
+        <EntityPicker initialKind={picker} onPick={onPickEntity} onClose={() => setPicker(null)} />
       )}
 
       <input ref={fileRef} type="file" accept="image/*" onChange={onFilePicked} style={{ display: "none" }} />

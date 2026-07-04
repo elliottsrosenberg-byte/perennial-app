@@ -43,6 +43,7 @@ const DEFAULTS: Record<
   shape:     { width: 200, height: 150, content: { shape: "rect", color: "sage" } },
   image:     { width: 280, height: 200, content: { url: "" } },
   reference: { width: 300, height: 132, content: { title: "Untitled" } },
+  drawing:   { width: 200, height: 120, content: { points: [], color: "sage", strokeWidth: 3, mode: "marker" } },
 };
 
 let seq = 0;
