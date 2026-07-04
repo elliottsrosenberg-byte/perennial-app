@@ -188,7 +188,7 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
 
     case "sticky": {
       const c = object.content as StickyContent;
-      const sw = STICKY_PALETTE[c.color] ?? STICKY_PALETTE.amber;
+      const sw = STICKY_PALETTE[c.color] ?? STICKY_PALETTE.yellow;
       const stickyFont = c.fontSize ?? 13;
       return (
         <div
@@ -254,7 +254,7 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
 
     case "shape": {
       const c = object.content as ShapeContent;
-      const sw = SHAPE_PALETTE[c.color] ?? SHAPE_PALETTE.sage;
+      const sw = SHAPE_PALETTE[c.color] ?? SHAPE_PALETTE.green;
 
       if (c.shape === "line" || c.shape === "arrow") {
         const w = object.width;
@@ -397,7 +397,7 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
     case "reference": {
       const c = object.content as ReferenceContent;
       const rt = object.refType;
-      const sw = STICKY_PALETTE[c.color ?? "sage"];
+      const sw = STICKY_PALETTE[c.color ?? "green"];
       const cardStyle = {
         width: "100%",
         height: "100%",
@@ -573,7 +573,7 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
 
     case "drawing": {
       const c = object.content as DrawingContent;
-      const sw = STICKY_PALETTE[c.color] ?? STICKY_PALETTE.sage;
+      const sw = STICKY_PALETTE[c.color] ?? STICKY_PALETTE.olive;
       const isHi = c.mode === "highlighter";
       return (
         <svg

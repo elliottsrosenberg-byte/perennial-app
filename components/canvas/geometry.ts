@@ -39,11 +39,11 @@ const DEFAULTS: Record<
   { width: number; height: number; content: CanvasContent }
 > = {
   text:      { width: 240, height: 52,  content: { text: "Text", fontSize: 16 } },
-  sticky:    { width: 220, height: 168, content: { text: "", color: "amber" } },
-  shape:     { width: 200, height: 150, content: { shape: "rect", color: "sage" } },
+  sticky:    { width: 220, height: 168, content: { text: "", color: "yellow" } },
+  shape:     { width: 200, height: 150, content: { shape: "rect", color: "green" } },
   image:     { width: 280, height: 200, content: { url: "" } },
   reference: { width: 300, height: 132, content: { title: "Untitled" } },
-  drawing:   { width: 200, height: 120, content: { points: [], color: "sage", strokeWidth: 3, mode: "marker" } },
+  drawing:   { width: 200, height: 120, content: { points: [], color: "olive", strokeWidth: 3, mode: "marker" } },
   module:    { width: 248, height: 148, content: { moduleKey: "tasks" } },
 };
 

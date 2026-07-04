@@ -13,18 +13,19 @@ export type { CanvasObjectType, CanvasRefType };
 /** Active canvas tool. */
 export type CanvasTool = "select" | "hand" | "sticky" | "text" | "shape" | "pen" | "eraser";
 
-/** Sticky/shape colour keys — the app's 10-colour palette (see palette.ts). */
+/** Sticky/shape colour keys — the app's canonical 10-colour palette
+ *  (lib/ui/palette.ts, surfaced for canvas in palette.ts). */
 export type StickyColor =
-  | "sage"
   | "green"
-  | "amber"
+  | "grey"
+  | "brown"
   | "orange"
-  | "red"
+  | "yellow"
+  | "olive"
   | "blue"
-  | "gold"
   | "purple"
-  | "teal"
-  | "grey";
+  | "rose"
+  | "red";
 /** Shape fill colour keys — same palette, used as solid-ish tints. */
 export type ShapeColor = StickyColor;
 

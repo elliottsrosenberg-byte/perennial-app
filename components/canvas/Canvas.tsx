@@ -99,10 +99,10 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
 
   const [view, setView] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
   const [tool, setTool] = useState<CanvasTool>("select");
-  const [stickyColor, setStickyColor] = useState<StickyColor>("amber");
+  const [stickyColor, setStickyColor] = useState<StickyColor>("yellow");
   const [shapeKind, setShapeKind] = useState<ShapeKind>("rect");
   const [penMode, setPenMode] = useState<"marker" | "highlighter">("marker");
-  const [penColor, setPenColor] = useState<StickyColor>("sage");
+  const [penColor, setPenColor] = useState<StickyColor>("olive");
   const [penSize, setPenSize] = useState(4);
   const [drawingPts, setDrawingPts] = useState<[number, number][] | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -388,7 +388,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
             width: Math.round(finalLen),
             height: 14,
             rotation: angle,
-            content: { shape: shapeKind, color: "sage" },
+            content: { shape: shapeKind, color: "green" },
           });
           store.add(lineObj);
           selectOnly(lineObj.id);
@@ -410,7 +410,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
         const obj = createObject("shape", center, nextZ(), {
           width,
           height,
-          content: { shape: shapeKind, color: "sage" },
+          content: { shape: shapeKind, color: "green" },
         });
         store.add(obj);
         selectOnly(obj.id);
@@ -896,16 +896,16 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
             borderRadius: shapeLinear ? "var(--radius-full)" : tool === "shape" && shapeKind === "ellipse" ? "50%" : "var(--radius-sm)",
             background:
               shapeLinear
-                ? "var(--color-sage)"
+                ? STICKY_PALETTE.green.accent
                 : tool === "sticky"
                   ? STICKY_PALETTE[stickyColor].fill
                   : tool === "shape"
-                    ? STICKY_PALETTE.sage.fill
+                    ? STICKY_PALETTE.green.fill
                     : "transparent",
             border:
               tool === "text" || shapeLinear
                 ? "none"
-                : `1px solid ${tool === "sticky" ? STICKY_PALETTE[stickyColor].border : STICKY_PALETTE.sage.border}`,
+                : `1px solid ${tool === "sticky" ? STICKY_PALETTE[stickyColor].border : STICKY_PALETTE.green.border}`,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
