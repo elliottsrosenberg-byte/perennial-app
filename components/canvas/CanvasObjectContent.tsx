@@ -19,6 +19,7 @@ import type {
   StickyColor,
 } from "./types";
 import { STICKY_PALETTE, SHAPE_PALETTE } from "./palette";
+import ModuleCard from "./ModuleCard";
 
 const textCol = (tc?: StickyColor) =>
   tc ? STICKY_PALETTE[tc].accent : "var(--color-text-primary)";
@@ -590,6 +591,9 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
         </svg>
       );
     }
+
+    case "module":
+      return <ModuleCard object={object} />;
 
     default:
       return null;

@@ -23,10 +23,13 @@ import {
   FileText,
   Contact,
   Calendar,
+  FolderKanban,
+  DollarSign,
+  Users,
   Minus,
   MoveUpRight,
 } from "lucide-react";
-import type { CanvasTool, StickyColor } from "./types";
+import type { CanvasTool, StickyColor, ModuleKey } from "./types";
 import type { EntityKind } from "@/lib/canvas/entities";
 import { STICKY_COLOR_ORDER, STICKY_PALETTE } from "./palette";
 
@@ -48,6 +51,7 @@ interface Props {
   onPenColor: (c: StickyColor) => void;
   onAddEntity: (kind: EntityKind) => void;
   onImageFromFiles: () => void;
+  onAddModule: (key: ModuleKey) => void;
 }
 
 const TOOLS: { key: CanvasTool; label: string; icon: React.ReactNode; short: string }[] = [
@@ -65,6 +69,15 @@ const ADD_ITEMS: { kind: EntityKind; label: string; icon: React.ReactNode }[] = 
   { kind: "note", label: "Note", icon: <FileText size={15} strokeWidth={1.75} /> },
   { kind: "contact", label: "Contact", icon: <Contact size={15} strokeWidth={1.75} /> },
   { kind: "event", label: "Event", icon: <Calendar size={15} strokeWidth={1.75} /> },
+];
+
+const MODULE_ITEMS: { key: ModuleKey; label: string; icon: React.ReactNode }[] = [
+  { key: "tasks", label: "Tasks", icon: <ListChecks size={15} strokeWidth={1.75} /> },
+  { key: "projects", label: "Projects", icon: <FolderKanban size={15} strokeWidth={1.75} /> },
+  { key: "finance", label: "Finance", icon: <DollarSign size={15} strokeWidth={1.75} /> },
+  { key: "contacts", label: "Network", icon: <Users size={15} strokeWidth={1.75} /> },
+  { key: "notes", label: "Notes", icon: <FileText size={15} strokeWidth={1.75} /> },
+  { key: "calendar", label: "Calendar", icon: <Calendar size={15} strokeWidth={1.75} /> },
 ];
 
 function tile(active: boolean) {
@@ -208,7 +221,7 @@ function OptionsCard({
 }
 
 export default function ToolDock(props: Props) {
-  const { tool, activeTool, onSelectTool, onUploadImage, onAddEntity, onImageFromFiles } = props;
+  const { tool, activeTool, onSelectTool, onUploadImage, onAddEntity, onImageFromFiles, onAddModule } = props;
   const [showMore, setShowMore] = useState(false);
 
   const rowBtn: React.CSSProperties = {
@@ -273,7 +286,7 @@ export default function ToolDock(props: Props) {
       >
         <Plus size={18} strokeWidth={1.75} />
         {showMore && (
-          <div style={{ ...cardStyle, top: undefined, bottom: 0, width: 200, whiteSpace: "normal" }}>
+          <div style={{ ...cardStyle, top: undefined, bottom: 0, width: 200, maxHeight: "62vh", overflowY: "auto", whiteSpace: "normal" }}>
             {ADD_ITEMS.map((item) => (
               <button
                 key={item.kind}
@@ -300,6 +313,22 @@ export default function ToolDock(props: Props) {
               </span>
               <span style={rowLabel}>Image from files</span>
             </button>
+            <div style={{ padding: "8px 8px 4px", fontFamily: "var(--font-sans)", fontSize: 10, fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--color-text-tertiary)" }}>
+              Module snapshots
+            </div>
+            {MODULE_ITEMS.map((item) => (
+              <button
+                key={item.key}
+                onClick={() => {
+                  setShowMore(false);
+                  onAddModule(item.key);
+                }}
+                style={rowBtn}
+              >
+                <span style={{ display: "flex", color: "var(--color-text-tertiary)" }}>{item.icon}</span>
+                <span style={rowLabel}>{item.label}</span>
+              </button>
+            ))}
           </div>
         )}
       </button>

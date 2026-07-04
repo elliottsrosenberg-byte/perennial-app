@@ -730,7 +730,7 @@ export interface Canvas {
   updated_at: string;
 }
 
-export type CanvasObjectType = "text" | "sticky" | "shape" | "image" | "reference" | "drawing";
+export type CanvasObjectType = "text" | "sticky" | "shape" | "image" | "reference" | "drawing" | "module";
 export type CanvasRefType    = "project" | "task" | "note" | "contact" | "organization" | "lead" | "event";
 
 export interface CanvasObjectRow {
