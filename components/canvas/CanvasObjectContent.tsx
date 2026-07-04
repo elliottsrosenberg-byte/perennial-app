@@ -80,6 +80,7 @@ function AutoTextarea({
         textAlign: align ?? "left",
         padding: 0,
         margin: 0,
+        userSelect: "text",
       }}
     />
   );

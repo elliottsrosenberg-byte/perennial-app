@@ -29,6 +29,8 @@ export type ShapeKind = "rect" | "ellipse";
 
 interface Props {
   tool: CanvasTool;
+  /** Highlighted tool — may differ from `tool` (e.g. Hand while space is held). */
+  activeTool: CanvasTool;
   onSelectTool: (t: CanvasTool) => void;
   onUploadImage: () => void;
   stickyColor: StickyColor;
@@ -90,7 +92,7 @@ function OptionsCard({
   if (tool === "sticky") {
     return (
       <div style={cardStyle}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
           {STICKY_COLOR_ORDER.map((c) => (
             <button
               key={c}
@@ -119,7 +121,7 @@ function OptionsCard({
       { key: "ellipse", icon: <Circle size={17} strokeWidth={1.75} />, label: "Ellipse" },
     ];
     return (
-      <div style={{ ...cardStyle, display: "flex", gap: 6, alignItems: "center" }}>
+      <div style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 6, alignItems: "center" }}>
         {shapes.map((s) => (
           <button
             key={s.key}
@@ -135,7 +137,7 @@ function OptionsCard({
             {s.icon}
           </button>
         ))}
-        <span style={{ width: 1, height: 22, background: "var(--color-border)" }} />
+        <span style={{ width: 22, height: 1, background: "var(--color-border)" }} />
         {[
           { icon: <Minus size={17} strokeWidth={1.75} />, label: "Line" },
           { icon: <MoveUpRight size={17} strokeWidth={1.75} />, label: "Arrow" },
@@ -162,7 +164,7 @@ function OptionsCard({
 }
 
 export default function ToolDock(props: Props) {
-  const { tool, onSelectTool, onUploadImage } = props;
+  const { tool, activeTool, onSelectTool, onUploadImage } = props;
   const [showMore, setShowMore] = useState(false);
 
   return (
@@ -190,7 +192,7 @@ export default function ToolDock(props: Props) {
           title={`${t.label} (${t.short})`}
           aria-label={t.label}
           onClick={() => onSelectTool(t.key)}
-          style={tile(tool === t.key)}
+          style={tile(activeTool === t.key)}
         >
           {t.icon}
         </button>
