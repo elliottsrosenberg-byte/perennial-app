@@ -122,6 +122,8 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const [picker, setPicker] = useState<EntityKind | null>(null);
   const [imagePicker, setImagePicker] = useState(false);
   const [editDrop, setEditDrop] = useState<null | "block" | "align" | "valign" | "color">(null);
+  const [dropActive, setDropActive] = useState(false);
+  const dragDepth = useRef(0);
   const [menu, setMenu] = useState<
     { x: number; y: number; kind: "object" | "canvas"; world?: { x: number; y: number } } | null
   >(null);
@@ -863,8 +865,6 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const soleIsLinear = soleShapeKind === "line" || soleShapeKind === "arrow";
   const soleTextBearing =
     !!sole && (sole.type === "text" || sole.type === "sticky" || soleShapeKind === "rect" || soleShapeKind === "ellipse");
-  const soleHasFill = !!sole && (sole.type === "sticky" || (sole.type === "shape" && !soleIsLinear));
-  const soleHasText = !!sole && !!((sole.content as { text?: string }).text || (sole.content as { html?: string }).html);
   const cc = (sole?.content ?? {}) as {
     color?: StickyColor;
     textColor?: StickyColor;
@@ -949,15 +949,31 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
       onPointerDown={onBgPointerDown}
       onPointerMove={onBgPointerMove}
       onPointerLeave={() => setPreview(null)}
-      onDrop={(e) => {
-        const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => isUploadableImageType(f.type));
-        if (!files.length) return;
+      onDragEnter={(e) => {
+        if (!Array.from(e.dataTransfer?.types ?? []).includes("Files")) return;
         e.preventDefault();
-        const base = toWorld(e.clientX, e.clientY);
-        files.forEach((f, i) => addImageFromFile(f, { x: base.x + i * 24, y: base.y + i * 24 }));
+        dragDepth.current += 1;
+        setDropActive(true);
       }}
       onDragOver={(e) => {
-        if (Array.from(e.dataTransfer?.items ?? []).some((it) => it.kind === "file")) e.preventDefault();
+        // Must preventDefault on every dragover or the browser cancels the drop.
+        if (Array.from(e.dataTransfer?.types ?? []).includes("Files")) e.preventDefault();
+      }}
+      onDragLeave={() => {
+        dragDepth.current -= 1;
+        if (dragDepth.current <= 0) {
+          dragDepth.current = 0;
+          setDropActive(false);
+        }
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        dragDepth.current = 0;
+        setDropActive(false);
+        const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => isUploadableImageType(f.type));
+        if (!files.length) return;
+        const base = toWorld(e.clientX, e.clientY);
+        files.forEach((f, i) => addImageFromFile(f, { x: base.x + i * 24, y: base.y + i * 24 }));
       }}
       onContextMenu={(e) => {
         // Objects stop propagation for their own menu; this is empty canvas.
@@ -1125,14 +1141,14 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
               {/* caps + thickness + dash + delete (row 1) */}
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <button
-                  title="Start arrow"
+                  data-tip="Start arrow"
                   onClick={() => patchContent(sole.id, { startCap: (cc.startCap ?? "none") === "arrow" ? "none" : "arrow" })}
                   style={segBtn((cc.startCap ?? "none") === "arrow")}
                 >
                   <ArrowLeft size={15} strokeWidth={2} />
                 </button>
                 <button
-                  title="End arrow"
+                  data-tip="End arrow"
                   onClick={() =>
                     patchContent(sole.id, {
                       endCap: (cc.endCap ?? (soleShapeKind === "arrow" ? "arrow" : "none")) === "arrow" ? "none" : "arrow",
@@ -1150,13 +1166,13 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
                     { n: 7, dot: 10 },
                   ] as const
                 ).map((t) => (
-                  <button key={t.n} title={`Thickness ${t.n}`} onClick={() => patchContent(sole.id, { strokeWidth: t.n })} style={segBtn((cc.strokeWidth ?? 2.5) === t.n)}>
+                  <button key={t.n} data-tip={`Thickness ${t.n}`} onClick={() => patchContent(sole.id, { strokeWidth: t.n })} style={segBtn((cc.strokeWidth ?? 2.5) === t.n)}>
                     <span style={{ width: t.dot, height: t.dot, borderRadius: "var(--radius-full)", background: "currentColor" }} />
                   </button>
                 ))}
                 <span style={{ width: 1, height: 16, background: "var(--color-border)", margin: "0 2px" }} />
                 {(["solid", "dashed", "dotted"] as const).map((d) => (
-                  <button key={d} title={d} onClick={() => patchContent(sole.id, { dash: d })} style={segBtn((cc.dash ?? "solid") === d)}>
+                  <button key={d} data-tip={d} onClick={() => patchContent(sole.id, { dash: d })} style={segBtn((cc.dash ?? "solid") === d)}>
                     <svg width={18} height={10} viewBox="0 0 18 10">
                       <line x1={1} y1={5} x2={17} y2={5} stroke="currentColor" strokeWidth={2} strokeLinecap={d === "dotted" ? "round" : "butt"} strokeDasharray={d === "dashed" ? "4 3" : d === "dotted" ? "0.1 4" : undefined} />
                     </svg>
@@ -1211,35 +1227,8 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
                 </button>
               </div>
 
-              {/* text colour — shapes only when they already have text */}
-              {soleTextBearing && (sole.type !== "shape" || soleHasText) && (
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: "var(--font-sans)", fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", width: 26, textAlign: "center" }}>A</span>
-                  {STICKY_COLOR_ORDER.map((color) => (
-                    <button
-                      key={color}
-                      aria-label={`text ${color}`}
-                      onClick={() => patchContent(sole.id, { textColor: color })}
-                      style={{ width: 15, height: 15, borderRadius: "var(--radius-full)", background: swatch(color).accent, border: cc.textColor === color ? "2px solid var(--color-sage)" : "0.5px solid var(--color-border)", cursor: "pointer" }}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {/* fill colour */}
-              {soleHasFill && (
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: "var(--font-sans)", fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", width: 26, textAlign: "center" }}>Fill</span>
-                  {STICKY_COLOR_ORDER.map((color) => (
-                    <button
-                      key={color}
-                      aria-label={`fill ${color}`}
-                      onClick={() => patchContent(sole.id, { color })}
-                      style={{ width: 15, height: 15, borderRadius: "var(--radius-full)", background: swatch(color).fill, border: cc.color === color ? "2px solid var(--color-sage)" : `1.5px solid ${swatch(color).border}`, cursor: "pointer" }}
-                    />
-                  ))}
-                </div>
-              )}
+              {/* Fill + text colour intentionally removed — fill is set from the
+                  tool's options card; text colour lives in the text editor. */}
             </>
           )}
         </div>
@@ -1302,11 +1291,11 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
             const tColor = editingObj ? (editingObj.content as { textColor?: StickyColor }).textColor : undefined;
             return (
               <>
-                <button title="Bold" onMouseDown={md("bold")} style={ib()}><Bold size={14} strokeWidth={2} /></button>
-                <button title="Italic" onMouseDown={md("italic")} style={ib()}><Italic size={14} strokeWidth={2} /></button>
-                <button title="Underline" onMouseDown={md("underline")} style={ib()}><Underline size={14} strokeWidth={2} /></button>
+                <button data-tip="Bold" onMouseDown={md("bold")} style={ib()}><Bold size={14} strokeWidth={2} /></button>
+                <button data-tip="Italic" onMouseDown={md("italic")} style={ib()}><Italic size={14} strokeWidth={2} /></button>
+                <button data-tip="Underline" onMouseDown={md("underline")} style={ib()}><Underline size={14} strokeWidth={2} /></button>
                 <button
-                  title="Link"
+                  data-tip="Link"
                   onMouseDown={(e) => {
                     e.preventDefault();
                     const url = window.prompt("Link URL");
@@ -1320,7 +1309,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
 
                 {/* block style dropdown */}
                 <div style={dropWrap}>
-                  <button title="Text style" onMouseDown={(e) => { e.preventDefault(); setEditDrop((d) => (d === "block" ? null : "block")); }} style={ib(editDrop === "block")}>
+                  <button data-tip="Text style" onMouseDown={(e) => { e.preventDefault(); setEditDrop((d) => (d === "block" ? null : "block")); }} style={ib(editDrop === "block")}>
                     <Heading size={15} strokeWidth={2} />
                     {caret}
                   </button>
@@ -1332,17 +1321,17 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
                         { a: "H3", icon: <Heading3 size={15} strokeWidth={2} /> },
                         { a: "P", icon: <Pilcrow size={14} strokeWidth={2} /> },
                       ] as const).map((o) => (
-                        <button key={o.a} title={o.a} onMouseDown={(e) => { e.preventDefault(); exec("formatBlock", o.a); setEditDrop(null); }} style={ib()}>{o.icon}</button>
+                        <button key={o.a} data-tip={o.a} onMouseDown={(e) => { e.preventDefault(); exec("formatBlock", o.a); setEditDrop(null); }} style={ib()}>{o.icon}</button>
                       ))}
                     </div>
                   )}
                 </div>
-                <button title="Bullets" onMouseDown={md("insertUnorderedList")} style={ib()}><List size={14} strokeWidth={2} /></button>
+                <button data-tip="Bullets" onMouseDown={md("insertUnorderedList")} style={ib()}><List size={14} strokeWidth={2} /></button>
                 {sep}
 
                 {/* align dropdown */}
                 <div style={dropWrap}>
-                  <button title="Align" onMouseDown={(e) => { e.preventDefault(); setEditDrop((d) => (d === "align" ? null : "align")); }} style={ib(editDrop === "align")}>
+                  <button data-tip="Align" onMouseDown={(e) => { e.preventDefault(); setEditDrop((d) => (d === "align" ? null : "align")); }} style={ib(editDrop === "align")}>
                     <AlignLeft size={14} strokeWidth={2} />
                     {caret}
                   </button>
@@ -1362,7 +1351,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
                 {/* vertical align dropdown (box objects) */}
                 {editingBox && (
                   <div style={dropWrap}>
-                    <button title="Vertical align" onMouseDown={(e) => { e.preventDefault(); setEditDrop((d) => (d === "valign" ? null : "valign")); }} style={ib(editDrop === "valign")}>
+                    <button data-tip="Vertical align" onMouseDown={(e) => { e.preventDefault(); setEditDrop((d) => (d === "valign" ? null : "valign")); }} style={ib(editDrop === "valign")}>
                       <FoldVertical size={15} strokeWidth={2} />
                       {caret}
                     </button>
@@ -1379,7 +1368,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
 
                 {/* text colour circle */}
                 <div style={dropWrap}>
-                  <button title="Text colour" onMouseDown={(e) => { e.preventDefault(); setEditDrop((d) => (d === "color" ? null : "color")); }} style={ib(editDrop === "color")}>
+                  <button data-tip="Text colour" onMouseDown={(e) => { e.preventDefault(); setEditDrop((d) => (d === "color" ? null : "color")); }} style={ib(editDrop === "color")}>
                     <span style={{ width: 15, height: 15, borderRadius: "var(--radius-full)", background: tColor ? swatch(tColor).accent : "var(--color-text-primary)", border: "0.5px solid var(--color-border)" }} />
                   </button>
                   {editDrop === "color" && (
@@ -1393,9 +1382,9 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
                 {sep}
 
                 {/* font size: ∨ A ∧ */}
-                <button title="Smaller" onMouseDown={(e) => { e.preventDefault(); bumpFont(-2); }} style={ib()}><ChevronDown size={14} strokeWidth={2} /></button>
+                <button data-tip="Smaller" onMouseDown={(e) => { e.preventDefault(); bumpFont(-2); }} style={ib()}><ChevronDown size={14} strokeWidth={2} /></button>
                 <span style={{ fontFamily: "var(--font-sans)", fontSize: 13, fontWeight: 600, color: "var(--color-text-secondary)", padding: "0 1px" }}>A</span>
-                <button title="Bigger" onMouseDown={(e) => { e.preventDefault(); bumpFont(2); }} style={ib()}><ChevronUp size={14} strokeWidth={2} /></button>
+                <button data-tip="Bigger" onMouseDown={(e) => { e.preventDefault(); bumpFont(2); }} style={ib()}><ChevronUp size={14} strokeWidth={2} /></button>
               </>
             );
           })()}
@@ -1467,6 +1456,27 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
             })}
           </div>
         </>
+      )}
+
+      {dropActive && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 10,
+            borderRadius: "var(--radius-xl)",
+            border: "2px dashed var(--color-sage)",
+            background: "rgba(var(--color-sage-rgb), 0.08)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "none",
+            zIndex: 45,
+          }}
+        >
+          <span style={{ fontFamily: "var(--font-sans)", fontSize: 15, fontWeight: 600, color: "var(--color-sage-text)" }}>
+            Drop images to add
+          </span>
+        </div>
       )}
 
       {!hideDock && (
