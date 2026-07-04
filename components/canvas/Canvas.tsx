@@ -25,6 +25,7 @@ import {
   Type,
   BoxSelect,
   ClipboardPaste,
+  FileText,
   Bold,
   Italic,
   Underline,
@@ -46,6 +47,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { CanvasObjectRow, CanvasScope } from "@/types/database";
+import { createClient } from "@/lib/supabase/client";
 import { uploadEditorImage, isUploadableImageType } from "@/lib/uploads/editor-image";
 import { useCanvas } from "./useCanvas";
 import {
@@ -544,6 +546,44 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     setSelectedIds(new Set());
   }, [store]);
 
+  // ── copy / cut / paste (cross-canvas via localStorage) ──
+  const copySelection = useCallback(() => {
+    const objs = objsRef.current
+      .filter((o) => selRef.current.has(o.id))
+      .map((o) => ({ type: o.type, x: o.x, y: o.y, width: o.width, height: o.height, rotation: o.rotation, content: o.content, refType: o.refType, refId: o.refId }));
+    if (!objs.length) return;
+    try {
+      localStorage.setItem("perennial:canvas-clipboard", JSON.stringify(objs));
+    } catch (e) {
+      console.error("canvas copy failed", e);
+    }
+  }, []);
+  const pasteClipboard = useCallback(() => {
+    let objs: ReturnType<typeof JSON.parse>;
+    try {
+      objs = JSON.parse(localStorage.getItem("perennial:canvas-clipboard") ?? "[]");
+    } catch {
+      objs = [];
+    }
+    if (!Array.isArray(objs) || !objs.length) return;
+    const minX = Math.min(...objs.map((o) => o.x));
+    const minY = Math.min(...objs.map((o) => o.y));
+    const base = viewportCenterWorld();
+    let z = nextZ();
+    const created = objs.map((o) =>
+      createObject(o.type, { x: base.x + (o.x - minX) + o.width / 2, y: base.y + (o.y - minY) + o.height / 2 }, z++, {
+        width: o.width,
+        height: o.height,
+        rotation: o.rotation,
+        content: o.content,
+        refType: o.refType,
+        refId: o.refId,
+      }),
+    );
+    created.forEach((c) => store.add(c));
+    setSelectedIds(new Set(created.map((c) => c.id)));
+  }, [store, viewportCenterWorld]);
+
   useEffect(() => {
     function isTyping() {
       const el = document.activeElement as HTMLElement | null;
@@ -579,6 +619,29 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
           return;
         }
       }
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && !e.altKey) {
+        const k = e.key.toLowerCase();
+        if (k === "c") {
+          copySelection();
+          return;
+        }
+        if (k === "x") {
+          copySelection();
+          deleteSelected();
+          return;
+        }
+        if (k === "v") {
+          e.preventDefault();
+          pasteClipboard();
+          return;
+        }
+        if (k === "a") {
+          e.preventDefault();
+          setSelectedIds(new Set(objsRef.current.map((o) => o.id)));
+          return;
+        }
+      }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const map: Record<string, CanvasTool> = { v: "select", h: "hand", n: "sticky", t: "text", s: "shape", p: "pen", e: "eraser" };
       const t = map[e.key.toLowerCase()];
@@ -593,7 +656,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [editingId, deleteSelected, selectTool]);
+  }, [editingId, deleteSelected, selectTool, copySelection, pasteClipboard]);
 
   // ── object callbacks ──
   const commitGeometry = useCallback(
@@ -694,6 +757,38 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     setSelectedIds((prev) => (prev.has(id) ? prev : new Set([id])));
     setMenu({ x: e.clientX, y: e.clientY, kind: "object" });
   }, []);
+
+  // ── convert a sticky/text into a real Note + a live note card ──
+  const convertToNote = useCallback(async () => {
+    const o = objsRef.current.find((x) => selRef.current.has(x.id) && (x.type === "sticky" || x.type === "text"));
+    setMenu(null);
+    if (!o) return;
+    const cnt = o.content as { html?: string; text?: string };
+    const text = cnt.text ?? "";
+    const html = cnt.html ?? (text ? `<p>${text.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</p>` : "");
+    const title = text.split("\n")[0].slice(0, 80) || "Canvas note";
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: note } = await supabase.from("notes").insert({ user_id: user.id, title, content: html }).select("id, title").single();
+      if (!note) return;
+      const ref = createObject("reference", { x: o.x + o.width / 2, y: o.y + o.height / 2 }, nextZ(), {
+        width: 280,
+        height: 140,
+        content: { title: note.title || title },
+        refType: "note",
+        refId: note.id,
+      });
+      store.remove(o.id);
+      store.add(ref);
+      setSelectedIds(new Set([ref.id]));
+    } catch (e) {
+      console.error("convert to note failed", e);
+    }
+  }, [store]);
 
   const selectAll = useCallback(() => {
     setSelectedIds(new Set(objsRef.current.map((o) => o.id)));
@@ -1300,7 +1395,11 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
           >
             {(menu.kind === "object"
               ? [
+                  { label: "Copy", icon: <Copy size={14} strokeWidth={1.75} />, onClick: () => { copySelection(); setMenu(null); } },
                   { label: "Duplicate", icon: <Copy size={14} strokeWidth={1.75} />, onClick: duplicateSelected },
+                  ...(store.objects.some((o) => selectedIds.has(o.id) && (o.type === "sticky" || o.type === "text"))
+                    ? [{ label: "Convert to note", icon: <FileText size={14} strokeWidth={1.75} />, onClick: convertToNote }]
+                    : []),
                   { label: "Bring to front", icon: <ArrowUpToLine size={14} strokeWidth={1.75} />, onClick: bringForward },
                   { label: "Send to back", icon: <ArrowDownToLine size={14} strokeWidth={1.75} />, onClick: sendBackward },
                   { label: "Delete", icon: <Trash2 size={14} strokeWidth={1.75} />, onClick: deleteSelected, danger: true },
@@ -1308,16 +1407,14 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
               : [
                   { label: "Add note here", icon: <StickyNote size={14} strokeWidth={1.75} />, onClick: () => menu.world && addHere("sticky", menu.world) },
                   { label: "Add text here", icon: <Type size={14} strokeWidth={1.75} />, onClick: () => menu.world && addHere("text", menu.world) },
+                  { label: "Paste", icon: <ClipboardPaste size={14} strokeWidth={1.75} />, onClick: () => { pasteClipboard(); setMenu(null); } },
                   { label: "Select all", icon: <BoxSelect size={14} strokeWidth={1.75} />, onClick: selectAll },
-                  { label: "Paste", icon: <ClipboardPaste size={14} strokeWidth={1.75} />, disabled: true },
                 ]
             ).map((item) => {
-              const disabled = "disabled" in item && item.disabled;
               return (
                 <button
                   key={item.label}
-                  onClick={disabled ? undefined : item.onClick}
-                  disabled={disabled}
+                  onClick={item.onClick}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -1327,8 +1424,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
                     border: "none",
                     background: "transparent",
                     borderRadius: "var(--radius-sm)",
-                    cursor: disabled ? "default" : "pointer",
-                    opacity: disabled ? 0.4 : 1,
+                    cursor: "pointer",
                     fontFamily: "var(--font-sans)",
                     fontSize: 13,
                     color: "danger" in item && item.danger ? "var(--color-red)" : "var(--color-text-primary)",
