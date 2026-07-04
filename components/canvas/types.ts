@@ -82,6 +82,12 @@ export interface ReferenceContent {
   color?: StickyColor;
 }
 
+/** A live module-summary card (pulls stats from a module on mount). */
+export type ModuleKey = "tasks" | "projects" | "finance" | "contacts" | "notes" | "calendar";
+export interface ModuleContent {
+  moduleKey: ModuleKey;
+}
+
 /** Freehand pen stroke. Points are relative to the object's box; the SVG
  *  viewBox stretches with the box so resize/rotate just work. */
 export interface DrawingContent {
@@ -97,7 +103,8 @@ export type CanvasContent =
   | ShapeContent
   | ImageContent
   | ReferenceContent
-  | DrawingContent;
+  | DrawingContent
+  | ModuleContent;
 
 /** In-memory canvas object. Geometry is in canvas (world) coordinates. */
 export interface CanvasObject {

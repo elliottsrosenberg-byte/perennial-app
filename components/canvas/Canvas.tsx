@@ -59,6 +59,7 @@ import type {
   StickyColor,
   ShapeContent,
   TextAlign,
+  ModuleKey,
 } from "./types";
 import { STICKY_COLOR_ORDER, STICKY_PALETTE } from "./palette";
 import CanvasObjectView from "./CanvasObjectView";
@@ -638,6 +639,13 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     [placeObject, stickyColor],
   );
 
+  const addModule = useCallback(
+    (moduleKey: ModuleKey) => {
+      placeObject("module", viewportCenterWorld(), { content: { moduleKey } });
+    },
+    [placeObject, viewportCenterWorld],
+  );
+
   // Drop a picked entity as a reference card at the viewport centre.
   const onPickEntity = useCallback(
     (r: EntityResult) => {
@@ -1124,6 +1132,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
           onPenColor={setPenColor}
           onAddEntity={(k) => setPicker(k)}
           onImageFromFiles={() => setImagePicker(true)}
+          onAddModule={addModule}
         />
       )}
 
