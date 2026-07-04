@@ -11,8 +11,9 @@ import { useEffect, useRef } from "react";
 import type { CanvasObject, ShapeContent } from "./types";
 import CanvasObjectContent from "./CanvasObjectContent";
 
-type Corner = "nw" | "ne" | "sw" | "se";
-const CORNERS: Corner[] = ["nw", "ne", "sw", "se"];
+type Handle = "nw" | "ne" | "sw" | "se" | "n" | "s" | "e" | "w";
+const CORNERS: Handle[] = ["nw", "ne", "sw", "se"];
+const EDGES: Handle[] = ["n", "s", "e", "w"];
 const MIN_SIZE = 24;
 
 // Rotate cursor (a circular arrow). The stroke is a neutral glyph colour, not a
@@ -47,14 +48,13 @@ function rotate(vx: number, vy: number, rad: number) {
   const s = Math.sin(rad);
   return { x: vx * c - vy * s, y: vx * s + vy * c };
 }
-function cornerOffset(corner: Corner, w: number, h: number) {
+// Offset (from centre) of the FIXED anchor while dragging a handle — the
+// opposite side. Works for corners and edges (edge → opposite edge's midpoint).
+function anchorOffset(h: Handle, w: number, ht: number) {
   return {
-    x: (corner.includes("e") ? 1 : -1) * (w / 2),
-    y: (corner.includes("s") ? 1 : -1) * (h / 2),
+    x: h.includes("e") ? -w / 2 : h.includes("w") ? w / 2 : 0,
+    y: h.includes("s") ? -ht / 2 : h.includes("n") ? ht / 2 : 0,
   };
-}
-function opposite(corner: Corner): Corner {
-  return `${corner[0] === "n" ? "s" : "n"}${corner[1] === "w" ? "e" : "w"}` as Corner;
 }
 
 export default function CanvasObjectView({
@@ -104,8 +104,8 @@ export default function CanvasObjectView({
     onBeginDrag(object.id, e);
   }
 
-  // ── resize ──
-  function onResizePointerDown(e: React.PointerEvent, corner: Corner) {
+  // ── resize (corners + edges) ──
+  function onResizePointerDown(e: React.PointerEvent, handle: Handle) {
     e.stopPropagation();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     const start = { px: e.clientX, py: e.clientY, obj: object };
@@ -117,15 +117,15 @@ export default function CanvasObjectView({
       const local = rotate(wdx, wdy, -rad);
       let nw = o.width;
       let nh = o.height;
-      if (corner.includes("e")) nw = o.width + local.x;
-      if (corner.includes("w")) nw = o.width - local.x;
-      if (corner.includes("s")) nh = o.height + local.y;
-      if (corner.includes("n")) nh = o.height - local.y;
+      if (handle.includes("e")) nw = o.width + local.x;
+      if (handle.includes("w")) nw = o.width - local.x;
+      if (handle.includes("s")) nh = o.height + local.y;
+      if (handle.includes("n")) nh = o.height - local.y;
       nw = Math.max(MIN_SIZE, nw);
       nh = Math.max(MIN_SIZE, nh);
 
       // Shift on a text/sticky corner = uniform scale of the box AND its text.
-      const uniform = ev.shiftKey && scalable;
+      const uniform = ev.shiftKey && scalable && handle.length === 2;
       let fontPatch: Partial<CanvasObject> = {};
       if (uniform) {
         const factor = Math.max(nw / o.width, nh / o.height);
@@ -138,12 +138,11 @@ export default function CanvasObjectView({
         };
       }
 
-      const anchor = opposite(corner);
       const centerOld = { x: o.x + o.width / 2, y: o.y + o.height / 2 };
-      const aOld = cornerOffset(anchor, o.width, o.height);
+      const aOld = anchorOffset(handle, o.width, o.height);
       const rOld = rotate(aOld.x, aOld.y, rad);
       const aWorld = { x: centerOld.x + rOld.x, y: centerOld.y + rOld.y };
-      const aNew = cornerOffset(anchor, nw, nh);
+      const aNew = anchorOffset(handle, nw, nh);
       const rNew = rotate(aNew.x, aNew.y, rad);
       const centerNew = { x: aWorld.x - rNew.x, y: aWorld.y - rNew.y };
       onChangeLocal(object.id, {
@@ -336,7 +335,28 @@ export default function CanvasObjectView({
             />
           ))}
 
-          {/* resize handles */}
+          {/* edge resize strips (invisible hit areas) */}
+          {EDGES.map((edge) => {
+            const horiz = edge === "n" || edge === "s";
+            return (
+              <div
+                key={`edge-${edge}`}
+                onPointerDown={(e) => onResizePointerDown(e, edge)}
+                style={{
+                  position: "absolute",
+                  left: edge === "w" ? -handleSize / 2 : horiz ? handleSize : undefined,
+                  right: edge === "e" ? -handleSize / 2 : horiz ? handleSize : undefined,
+                  top: edge === "n" ? -handleSize / 2 : horiz ? undefined : handleSize,
+                  bottom: edge === "s" ? -handleSize / 2 : horiz ? undefined : handleSize,
+                  width: horiz ? undefined : handleSize,
+                  height: horiz ? handleSize : undefined,
+                  cursor: horiz ? "ns-resize" : "ew-resize",
+                }}
+              />
+            );
+          })}
+
+          {/* corner resize handles */}
           {CORNERS.map((corner) => (
             <div
               key={corner}

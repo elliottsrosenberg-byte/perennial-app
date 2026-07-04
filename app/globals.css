@@ -404,3 +404,26 @@ button, [role="button"] {
 .canvas-rich ol { margin: 0.2em 0; padding-left: 1.3em; list-style: decimal; }
 .canvas-rich li { margin: 0.1em 0; }
 .canvas-rich a { color: var(--color-sage-deep); text-decoration: underline; }
+
+/* Fast hover tooltips for canvas controls (data-tip on buttons). */
+[data-tip] { position: relative; }
+[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-charcoal);
+  color: var(--color-surface-app);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 120;
+  opacity: 0;
+  animation: canvas-tip 0.01s linear 0.18s forwards;
+}
+@keyframes canvas-tip { to { opacity: 1; } }

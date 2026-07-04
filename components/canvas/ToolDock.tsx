@@ -178,7 +178,7 @@ function OptionsCard({
         {shapes.map((s) => (
           <button
             key={s.key}
-            title={s.label}
+            data-tip={s.label}
             aria-label={s.label}
             onClick={() => onShapeKind(s.key)}
             style={{ ...tile(s.key === shapeKind), width: 32, height: 32 }}
@@ -200,7 +200,7 @@ function OptionsCard({
         ).map((m) => (
           <button
             key={m.key}
-            title={m.label}
+            data-tip={m.label}
             aria-label={m.label}
             onClick={() => onPenMode(m.key)}
             style={{ ...tile(m.key === penMode), width: 32, height: 32 }}
@@ -302,7 +302,7 @@ export default function ToolDock(props: Props) {
         {TOOLS.map((t) => (
           <button
             key={t.key}
-            title={`${t.label} (${t.short})`}
+            data-tip={`${t.label} (${t.short})`}
             aria-label={t.label}
             onClick={() => onSelectTool(t.key)}
             style={tile(activeTool === t.key)}
@@ -334,7 +334,7 @@ export default function ToolDock(props: Props) {
         {ADD_ITEMS.map((item) => (
           <button
             key={item.kind}
-            title={item.label}
+            data-tip={item.label}
             aria-label={item.label}
             onClick={() => {
               setMenu(null);
@@ -349,7 +349,7 @@ export default function ToolDock(props: Props) {
         {/* Module snapshots */}
         <div style={{ position: "relative" }}>
           <button
-            title="Module snapshot"
+            data-tip="Module snapshot"
             aria-label="Module snapshot"
             onClick={() => setMenu((m) => (m === "module" ? null : "module"))}
             style={tile(menu === "module")}
@@ -378,7 +378,7 @@ export default function ToolDock(props: Props) {
         {/* Files */}
         <div style={{ position: "relative" }}>
           <button
-            title="File"
+            data-tip="File"
             aria-label="File"
             onClick={() => setMenu((m) => (m === "file" ? null : "file"))}
             style={tile(menu === "file")}
