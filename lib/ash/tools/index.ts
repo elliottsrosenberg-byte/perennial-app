@@ -21,6 +21,33 @@ export const ANTHROPIC_TOOLS = ALL_TOOLS.map(({ name, description, input_schema 
   input_schema,
 }));
 
+// ─── Capabilities manifest (Ash self-knowledge) ────────────────────────────────
+//
+// Generated from the live registry so Ash's sense of what it can do never drifts
+// from what it actually can do. Injected into the system prompt. As tools are
+// added, this updates automatically.
+
+const firstSentence = (d: string) => {
+  const s = d.split(/\.\s/)[0].trim();
+  return s.endsWith(".") ? s.slice(0, -1) : s;
+};
+
+export function buildCapabilitiesManifest(): string {
+  const reads  = READ_TOOLS.map((t)  => `- **${t.name}** — ${firstSentence(t.description)}`).join("\n");
+  const writes = WRITE_TOOLS.map((t) => `- **${t.name}** — ${firstSentence(t.description)}`).join("\n");
+  return `## What you can actually do
+
+These are your real capabilities in Perennial, via your tools. When a user's request maps to one of these, **do it** — don't just describe how they could. When it doesn't, say plainly that you can't do that directly yet, then either point them to the right module or capture it (e.g. as a note or task) so it isn't lost. Never imply you took an action you didn't.
+
+**Look things up (read):**
+${reads}
+
+**Take action — create and update the user's records (write):**
+${writes}
+
+You also have web search for external facts. You cannot send email, move money, or take actions outside this list — be honest about that boundary.`;
+}
+
 // Execute a tool by name
 export async function executeTool(
   name:  string,

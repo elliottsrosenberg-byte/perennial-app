@@ -4,6 +4,7 @@
 // context than the initial snapshot — specific projects, contact history, etc.
 
 import type { AshToolDefinition, ToolContext } from "./types";
+import { embedOne } from "@/lib/ash/embeddings";
 
 // ─── search_projects ───────────────────────────────────────────────────────────
 
@@ -539,6 +540,69 @@ export const getOpportunitiesTool: AshToolDefinition = {
   handler: get_opportunities,
 };
 
+// ─── search_knowledge_base ──────────────────────────────────────────────────────
+//
+// RAG retrieval over Ash's expert knowledge base (pricing, galleries, fairs,
+// press, channels, cash flow, contracts). Embeds the query, runs cosine search
+// via the match_knowledge RPC, returns the most relevant chunks with sources.
+// RLS scopes results to global expertise plus this user's own private knowledge.
+
+async function search_knowledge_base(
+  input: { query: string; category?: string },
+  { supabase }: ToolContext
+): Promise<string> {
+  if (!input.query?.trim()) return "Provide a query to search the knowledge base.";
+
+  let embedding: number[];
+  try {
+    embedding = await embedOne(input.query, "query");
+  } catch (err) {
+    return `Knowledge base is unavailable: ${err instanceof Error ? err.message : String(err)}`;
+  }
+
+  const { data, error } = await supabase.rpc("match_knowledge", {
+    query_embedding: embedding,
+    match_count:     4,
+    filter_category: input.category ?? null,
+  });
+
+  if (error)         return `Knowledge base search failed: ${error.message}`;
+  if (!data?.length) return `No knowledge-base entries found for "${input.query}".`;
+
+  return JSON.stringify(
+    (data as Array<{ title: string; category: string; source: string | null; content: string }>).map((k) => ({
+      title:    k.title,
+      category: k.category,
+      source:   k.source,
+      content:  k.content,
+    }))
+  );
+}
+
+export const searchKnowledgeBaseTool: AshToolDefinition = {
+  name: "search_knowledge_base",
+  description:
+    "Search Perennial's expert knowledge base for the art/design/small-business/freelance world — " +
+    "frameworks, options, and how to weigh a decision on pricing, galleries, press, selling channels, " +
+    "cash flow, and contracts. Use it to lay out the tradeoffs on nuanced questions, not to recite a " +
+    "single verdict. It also holds what's been learned about this specific user's niche. Do NOT use it " +
+    "for live dates or deadlines (use the events/opportunities tools) or for the user's own figures " +
+    "(use the finance/project tools). Returns the most relevant passages with their sources.",
+  input_schema: {
+    type: "object",
+    properties: {
+      query:    { type: "string", description: "What you need to know, phrased as a natural-language question or topic" },
+      category: {
+        type: "string",
+        enum: ["pricing", "galleries", "fairs", "press", "channels", "cash-flow", "contracts"],
+        description: "Optional filter to a single knowledge area",
+      },
+    },
+    required: ["query"],
+  },
+  handler: search_knowledge_base,
+};
+
 // ─── Export all read tools ─────────────────────────────────────────────────────
 
 export const READ_TOOLS: AshToolDefinition[] = [
@@ -551,4 +615,5 @@ export const READ_TOOLS: AshToolDefinition[] = [
   getTasksTool,
   getOutreachSummaryTool,
   getOpportunitiesTool,
+  searchKnowledgeBaseTool,
 ];
