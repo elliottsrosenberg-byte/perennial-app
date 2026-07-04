@@ -2,11 +2,12 @@
 
 // Selection + interaction chrome around one object. Move (incl. group drag and
 // option-duplicate) is delegated to the parent Canvas via onBeginDrag; resize
-// and rotate are handled here for the single-selected object. Geometry is in
-// world units — screen pointer deltas are divided by `scale`.
+// and rotate are handled here for the single-selected object. `interactive` is
+// true only under the Select tool — otherwise pointer events fall through so
+// create tools can place over existing objects. Geometry is in world units;
+// screen pointer deltas are divided by `scale`.
 
 import { useEffect, useRef } from "react";
-import { RotateCw } from "lucide-react";
 import type { CanvasObject } from "./types";
 import CanvasObjectContent from "./CanvasObjectContent";
 
@@ -14,11 +15,18 @@ type Corner = "nw" | "ne" | "sw" | "se";
 const CORNERS: Corner[] = ["nw", "ne", "sw", "se"];
 const MIN_SIZE = 24;
 
+// Rotate cursor (a circular arrow). The stroke is a neutral glyph colour, not a
+// themeable UI colour — a cursor icon, so it's a contrast-anchor exception.
+const ROTATE_CURSOR =
+  "url(\"data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='22'%20height='22'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23555'%20stroke-width='2.2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M21%2012a9%209%200%201%201-3-6.7'/%3E%3Cpolyline%20points='21%203%2021%209%2015%209'/%3E%3C/svg%3E\") 11 11, grab";
+
 interface Props {
   object: CanvasObject;
   selected: boolean;
   /** True when this is the ONLY selected object (shows resize/rotate handles). */
   soleSelected: boolean;
+  /** True only under the Select tool — gates move/resize/rotate hit-testing. */
+  interactive: boolean;
   editing: boolean;
   scale: number;
   onBeginDrag: (id: string, e: React.PointerEvent) => void;
@@ -49,6 +57,7 @@ export default function CanvasObjectView({
   object,
   selected,
   soleSelected,
+  interactive,
   editing,
   scale,
   onBeginDrag,
@@ -68,7 +77,7 @@ export default function CanvasObjectView({
   const scalable = object.type === "text" || object.type === "sticky";
 
   function onBodyPointerDown(e: React.PointerEvent) {
-    if (editing) return;
+    if (editing || !interactive) return; // fall through so create/hand tools work
     e.stopPropagation();
     onBeginDrag(object.id, e);
   }
@@ -158,7 +167,8 @@ export default function CanvasObjectView({
   const handleSize = 11 * inv;
   const handleBorder = Math.max(0.5, 1.25 * inv);
   const outline = 1.5 * inv;
-  const rotateOffset = 30 * inv;
+  const rotZone = 22 * inv;
+  const off = rotZone + handleSize / 2;
 
   return (
     <div
@@ -172,13 +182,13 @@ export default function CanvasObjectView({
         transform: `rotate(${object.rotation}deg)`,
         transformOrigin: "center center",
         zIndex: object.zIndex,
-        cursor: editing ? "text" : "move",
+        cursor: interactive && !editing ? "move" : editing ? "text" : "inherit",
         touchAction: "none",
       }}
       onPointerDown={onBodyPointerDown}
       onContextMenu={(e) => onContextMenu(object.id, e)}
       onDoubleClick={(e) => {
-        if (scalable) {
+        if (scalable && interactive) {
           e.stopPropagation();
           onStartEdit(object.id);
         }
@@ -203,44 +213,26 @@ export default function CanvasObjectView({
         />
       )}
 
-      {soleSelected && !editing && (
+      {soleSelected && interactive && !editing && (
         <>
-          {/* rotate handle — stem + knob above the object */}
-          <div
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: -rotateOffset,
-              width: handleBorder,
-              height: rotateOffset - handleSize / 2,
-              transform: "translateX(-50%)",
-              background: "var(--color-sage)",
-              pointerEvents: "none",
-            }}
-          />
-          <div
-            onPointerDown={onRotatePointerDown}
-            title="Rotate"
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: -rotateOffset,
-              width: handleSize * 1.7,
-              height: handleSize * 1.7,
-              transform: "translate(-50%, -50%)",
-              borderRadius: "var(--radius-full)",
-              background: "var(--color-surface-raised)",
-              border: `${handleBorder}px solid var(--color-sage)`,
-              boxShadow: "var(--shadow-sm)",
-              cursor: "grab",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "var(--color-sage-text)",
-            }}
-          >
-            <RotateCw size={handleSize} strokeWidth={2} />
-          </div>
+          {/* rotate zones just outside each corner — rotate cursor on hover */}
+          {CORNERS.map((corner) => (
+            <div
+              key={`rot-${corner}`}
+              onPointerDown={onRotatePointerDown}
+              title="Rotate"
+              style={{
+                position: "absolute",
+                left: corner.includes("w") ? -off : undefined,
+                right: corner.includes("e") ? -off : undefined,
+                top: corner.includes("n") ? -off : undefined,
+                bottom: corner.includes("s") ? -off : undefined,
+                width: rotZone,
+                height: rotZone,
+                cursor: ROTATE_CURSOR,
+              }}
+            />
+          ))}
 
           {/* resize handles */}
           {CORNERS.map((corner) => (

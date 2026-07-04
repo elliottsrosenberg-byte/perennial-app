@@ -16,9 +16,9 @@ interface Swatch {
   border: string;
 }
 
-/** Fill translucency — colour reads clearly but the canvas shows through. */
-const FILL_ALPHA = 0.22;
-const BORDER_ALPHA = 0.4;
+/** Fill translucency — colour reads clearly but the canvas still shows through. */
+const FILL_ALPHA = 0.4;
+const BORDER_ALPHA = 0.6;
 
 // hue → optional deeper accent token (falls back to the base hue).
 const HUES: { key: StickyColor; accent?: string }[] = [

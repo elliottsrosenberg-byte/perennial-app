@@ -21,6 +21,10 @@ import {
   Copy,
   ArrowUpToLine,
   ArrowDownToLine,
+  StickyNote,
+  Type,
+  BoxSelect,
+  ClipboardPaste,
 } from "lucide-react";
 import type { CanvasObjectRow, CanvasScope } from "@/types/database";
 import { uploadEditorImage, isUploadableImageType } from "@/lib/uploads/editor-image";
@@ -82,7 +86,9 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const [marquee, setMarquee] = useState<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
   const [rubber, setRubber] = useState<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
   const [preview, setPreview] = useState<{ x: number; y: number } | null>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<
+    { x: number; y: number; kind: "object" | "canvas"; world?: { x: number; y: number } } | null
+  >(null);
 
   // Live refs so window/keyboard handlers read current values without re-binding.
   // Synced in an effect (not during render) per react-hooks/refs; handlers run
@@ -108,6 +114,17 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const minZ = () => objsRef.current.reduce((m, o) => Math.min(m, o.zIndex), 0);
 
   const selectOnly = useCallback((id: string) => setSelectedIds(new Set([id])), []);
+
+  // Arming a create tool clears the current selection so its handles don't
+  // intercept placement clicks. Select/hand keep the selection.
+  const selectTool = useCallback((t: CanvasTool) => {
+    setTool(t);
+    setMenu(null);
+    if (t !== "select" && t !== "hand") {
+      setSelectedIds(new Set());
+      setEditingId(null);
+    }
+  }, []);
 
   // ── create / place ──
   const placeObject = useCallback(
@@ -290,33 +307,38 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
 
     if (tool === "pen") return; // pen drawing — coming soon
 
-    // select tool → marquee
+    // select tool → marquee with live selection
     const sx = e.clientX;
     const sy = e.clientY;
     const shift = e.shiftKey;
-    const move = (ev: PointerEvent) => setMarquee({ sx, sy, ex: ev.clientX, ey: ev.clientY });
+    const base = new Set(selRef.current);
+    const applySelection = (ex: number, ey: number) => {
+      const w0 = toWorld(sx, sy);
+      const w1 = toWorld(ex, ey);
+      const r = normRect(w0.x, w0.y, w1.x, w1.y);
+      const touch = ex < sx; // right-to-left drag = touch-select
+      const next = shift ? new Set(base) : new Set<string>();
+      objsRef.current.forEach((o) => {
+        const b = objectAABB(o);
+        if (touch ? rectIntersects(r, b) : rectContains(r, b)) next.add(o.id);
+      });
+      setSelectedIds(next);
+    };
+    const dragged = (ev: PointerEvent) =>
+      Math.abs(ev.clientX - sx) > DRAG_THRESHOLD || Math.abs(ev.clientY - sy) > DRAG_THRESHOLD;
+    const move = (ev: PointerEvent) => {
+      setMarquee({ sx, sy, ex: ev.clientX, ey: ev.clientY });
+      if (dragged(ev)) applySelection(ev.clientX, ev.clientY);
+    };
     const up = (ev: PointerEvent) => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       setMarquee(null);
-      const dragged = Math.abs(ev.clientX - sx) > DRAG_THRESHOLD || Math.abs(ev.clientY - sy) > DRAG_THRESHOLD;
-      if (!dragged) {
+      if (!dragged(ev)) {
         if (!shift) setSelectedIds(new Set());
         return;
       }
-      const w0 = toWorld(sx, sy);
-      const w1 = toWorld(ev.clientX, ev.clientY);
-      const r = normRect(w0.x, w0.y, w1.x, w1.y);
-      const touch = ev.clientX < sx; // right-to-left drag = touch-select
-      const hits = objsRef.current.filter((o) => {
-        const b = objectAABB(o);
-        return touch ? rectIntersects(r, b) : rectContains(r, b);
-      });
-      setSelectedIds((prev) => {
-        const next = shift ? new Set(prev) : new Set<string>();
-        hits.forEach((o) => next.add(o.id));
-        return next;
-      });
+      applySelection(ev.clientX, ev.clientY);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -340,7 +362,9 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
       if (e.ctrlKey || e.metaKey) {
         setView((v) => {
           const before = screenToWorld(e.clientX, e.clientY, rect, v);
-          const scale = clampScale(v.scale * (1 - e.deltaY * 0.0025));
+          // Exponential zoom (clamped) — snappier trackpad pinch.
+          const dy = Math.max(-60, Math.min(60, e.deltaY));
+          const scale = clampScale(v.scale * Math.exp(-dy * 0.01));
           return { scale, x: e.clientX - rect.left - before.x * scale, y: e.clientY - rect.top - before.y * scale };
         });
       } else {
@@ -385,7 +409,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const map: Record<string, CanvasTool> = { v: "select", h: "hand", n: "sticky", t: "text", s: "shape", p: "pen" };
       const t = map[e.key.toLowerCase()];
-      if (t) setTool(t);
+      if (t) selectTool(t);
     }
     function onKeyUp(e: KeyboardEvent) {
       if (e.key === " ") setSpaceDown(false);
@@ -396,7 +420,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [editingId, deleteSelected]);
+  }, [editingId, deleteSelected, selectTool]);
 
   // ── object callbacks ──
   const commitGeometry = useCallback(
@@ -465,8 +489,21 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     e.preventDefault();
     e.stopPropagation();
     setSelectedIds((prev) => (prev.has(id) ? prev : new Set([id])));
-    setMenu({ x: e.clientX, y: e.clientY });
+    setMenu({ x: e.clientX, y: e.clientY, kind: "object" });
   }, []);
+
+  const selectAll = useCallback(() => {
+    setSelectedIds(new Set(objsRef.current.map((o) => o.id)));
+    setMenu(null);
+  }, []);
+  const addHere = useCallback(
+    (type: CanvasObjectType, world: { x: number; y: number }) => {
+      const extra = type === "sticky" ? { content: { color: stickyColor, text: "" } } : undefined;
+      placeObject(type, world, extra);
+      setMenu(null);
+    },
+    [placeObject, stickyColor],
+  );
 
   // ── selection toolbar (single sticky/shape) ──
   const sole = selectedIds.size === 1 ? store.objects.find((o) => selectedIds.has(o.id)) ?? null : null;
@@ -498,6 +535,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
         backgroundPosition: `${view.x}px ${view.y}px`,
         cursor: containerCursor,
         touchAction: "none",
+        userSelect: "none",
         ...style,
       }}
       onPointerDown={onBgPointerDown}
@@ -514,10 +552,9 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
         if (Array.from(e.dataTransfer?.items ?? []).some((it) => it.kind === "file")) e.preventDefault();
       }}
       onContextMenu={(e) => {
-        if (selectedIds.size) {
-          e.preventDefault();
-          setMenu({ x: e.clientX, y: e.clientY });
-        }
+        // Objects stop propagation for their own menu; this is empty canvas.
+        e.preventDefault();
+        setMenu({ x: e.clientX, y: e.clientY, kind: "canvas", world: toWorld(e.clientX, e.clientY) });
       }}
     >
       {/* world layer */}
@@ -536,6 +573,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
             object={o}
             selected={selectedIds.has(o.id)}
             soleSelected={selectedIds.size === 1 && selectedIds.has(o.id)}
+            interactive={tool === "select" && !spaceDown}
             editing={o.id === editingId}
             scale={view.scale}
             onBeginDrag={beginObjectDrag}
@@ -560,7 +598,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
             height: Math.abs(marqueeRect.ey - marqueeRect.sy),
             background: "rgba(var(--color-sage-rgb), 0.12)",
             border: "1px solid var(--color-sage)",
-            borderRadius: rubber ? "var(--radius-sm)" : 0,
+            borderRadius: rubber ? (shapeKind === "ellipse" ? "50%" : "var(--radius-sm)") : 0,
             pointerEvents: "none",
             zIndex: 40,
           }}
@@ -678,37 +716,50 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
               zIndex: 50,
             }}
           >
-            {[
-              { label: "Duplicate", icon: <Copy size={14} strokeWidth={1.75} />, onClick: duplicateSelected },
-              { label: "Bring to front", icon: <ArrowUpToLine size={14} strokeWidth={1.75} />, onClick: bringForward },
-              { label: "Send to back", icon: <ArrowDownToLine size={14} strokeWidth={1.75} />, onClick: sendBackward },
-              { label: "Delete", icon: <Trash2 size={14} strokeWidth={1.75} />, onClick: deleteSelected, danger: true },
-            ].map((item) => (
-              <button
-                key={item.label}
-                onClick={item.onClick}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  width: "100%",
-                  padding: "7px 9px",
-                  border: "none",
-                  background: "transparent",
-                  borderRadius: "var(--radius-sm)",
-                  cursor: "pointer",
-                  fontFamily: "var(--font-sans)",
-                  fontSize: 13,
-                  color: item.danger ? "var(--color-red)" : "var(--color-text-primary)",
-                  textAlign: "left",
-                }}
-              >
-                <span style={{ display: "flex", color: item.danger ? "var(--color-red)" : "var(--color-text-tertiary)" }}>
-                  {item.icon}
-                </span>
-                {item.label}
-              </button>
-            ))}
+            {(menu.kind === "object"
+              ? [
+                  { label: "Duplicate", icon: <Copy size={14} strokeWidth={1.75} />, onClick: duplicateSelected },
+                  { label: "Bring to front", icon: <ArrowUpToLine size={14} strokeWidth={1.75} />, onClick: bringForward },
+                  { label: "Send to back", icon: <ArrowDownToLine size={14} strokeWidth={1.75} />, onClick: sendBackward },
+                  { label: "Delete", icon: <Trash2 size={14} strokeWidth={1.75} />, onClick: deleteSelected, danger: true },
+                ]
+              : [
+                  { label: "Add note here", icon: <StickyNote size={14} strokeWidth={1.75} />, onClick: () => menu.world && addHere("sticky", menu.world) },
+                  { label: "Add text here", icon: <Type size={14} strokeWidth={1.75} />, onClick: () => menu.world && addHere("text", menu.world) },
+                  { label: "Select all", icon: <BoxSelect size={14} strokeWidth={1.75} />, onClick: selectAll },
+                  { label: "Paste", icon: <ClipboardPaste size={14} strokeWidth={1.75} />, disabled: true },
+                ]
+            ).map((item) => {
+              const disabled = "disabled" in item && item.disabled;
+              return (
+                <button
+                  key={item.label}
+                  onClick={disabled ? undefined : item.onClick}
+                  disabled={disabled}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    width: "100%",
+                    padding: "7px 9px",
+                    border: "none",
+                    background: "transparent",
+                    borderRadius: "var(--radius-sm)",
+                    cursor: disabled ? "default" : "pointer",
+                    opacity: disabled ? 0.4 : 1,
+                    fontFamily: "var(--font-sans)",
+                    fontSize: 13,
+                    color: "danger" in item && item.danger ? "var(--color-red)" : "var(--color-text-primary)",
+                    textAlign: "left",
+                  }}
+                >
+                  <span style={{ display: "flex", color: "danger" in item && item.danger ? "var(--color-red)" : "var(--color-text-tertiary)" }}>
+                    {item.icon}
+                  </span>
+                  {item.label}
+                </button>
+              );
+            })}
           </div>
         </>
       )}
@@ -716,7 +767,8 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
       {!hideDock && (
         <ToolDock
           tool={tool}
-          onSelectTool={setTool}
+          activeTool={spaceDown ? "hand" : tool}
+          onSelectTool={selectTool}
           onUploadImage={handleUploadImage}
           stickyColor={stickyColor}
           onStickyColor={setStickyColor}
