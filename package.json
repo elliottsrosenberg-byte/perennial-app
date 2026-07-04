@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "eval:ash": "tsx evals/ash-behavior.eval.ts"
+    "eval:ash": "tsx --env-file=.env.local evals/ash-behavior.eval.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
