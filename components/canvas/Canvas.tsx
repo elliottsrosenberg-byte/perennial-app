@@ -468,6 +468,36 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     },
     [store],
   );
+  // Text objects report their measured height here; persist it (debounced) so
+  // marquee hit-testing and reloads stay in sync with the auto-grown box.
+  const heightTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const onAutoHeight = useCallback(
+    (id: string, h: number) => {
+      const o = objsRef.current.find((x) => x.id === id);
+      const rounded = Math.round(h);
+      if (!o || rounded < 1 || Math.abs(o.height - rounded) < 1) return;
+      store.patchLocal(id, { height: rounded });
+      const timers = heightTimers.current;
+      const prev = timers.get(id);
+      if (prev) clearTimeout(prev);
+      timers.set(
+        id,
+        setTimeout(() => {
+          timers.delete(id);
+          store.commit(id, { height: rounded });
+        }, 500),
+      );
+    },
+    [store],
+  );
+  useEffect(() => {
+    const timers = heightTimers.current;
+    return () => {
+      timers.forEach((t) => clearTimeout(t));
+      timers.clear();
+    };
+  }, []);
+
   const setSelectedColor = useCallback(
     (id: string, color: StickyColor) => {
       const o = objsRef.current.find((x) => x.id === id);
@@ -604,6 +634,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
             onText={onText}
             onEndEdit={() => setEditingId(null)}
             onContextMenu={onObjectContextMenu}
+            onAutoHeight={onAutoHeight}
           />
         ))}
       </div>

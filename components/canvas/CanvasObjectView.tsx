@@ -36,6 +36,8 @@ interface Props {
   onText: (id: string, text: string) => void;
   onEndEdit: () => void;
   onContextMenu: (id: string, e: React.MouseEvent) => void;
+  /** Report measured content height (text objects auto-grow). */
+  onAutoHeight: (id: string, height: number) => void;
 }
 
 function rotate(vx: number, vy: number, rad: number) {
@@ -67,11 +69,24 @@ export default function CanvasObjectView({
   onText,
   onEndEdit,
   onContextMenu,
+  onAutoHeight,
 }: Props) {
   const latestRef = useRef<CanvasObject>(object);
   useEffect(() => {
     latestRef.current = object;
   });
+
+  // Text objects grow with their content: measure the wrapper and report up.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const isText = object.type === "text";
+  useEffect(() => {
+    if (!isText) return;
+    const el = wrapRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => onAutoHeight(object.id, el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isText, object.id, onAutoHeight]);
 
   const inv = 1 / scale;
   const scalable = object.type === "text" || object.type === "sticky";
@@ -181,12 +196,13 @@ export default function CanvasObjectView({
   return (
     <div
       data-canvas-object
+      ref={wrapRef}
       style={{
         position: "absolute",
         left: object.x,
         top: object.y,
         width: object.width,
-        height: object.height,
+        height: isText ? "auto" : object.height,
         transform: `rotate(${object.rotation}deg)`,
         transformOrigin: "center center",
         zIndex: object.zIndex,

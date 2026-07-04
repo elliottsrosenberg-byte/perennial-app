@@ -33,6 +33,7 @@ function AutoTextarea({
   fontSize,
   fontWeight,
   align,
+  autoGrow,
   onChange,
   onEndEdit,
 }: {
@@ -42,20 +43,34 @@ function AutoTextarea({
   fontSize: number;
   fontWeight?: number;
   align?: "left" | "center" | "right";
+  /** Grow height to fit content (text objects) instead of filling the box. */
+  autoGrow?: boolean;
   onChange: (v: string) => void;
   onEndEdit: () => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const fit = () => {
+    const el = ref.current;
+    if (autoGrow && el) {
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    }
+  };
   useEffect(() => {
     ref.current?.focus();
     ref.current?.select();
+    fit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
     <textarea
       ref={ref}
       value={value}
       placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => {
+        onChange(e.target.value);
+        fit();
+      }}
       onBlur={onEndEdit}
       onKeyDown={(e) => {
         if (e.key === "Escape") {
@@ -67,7 +82,8 @@ function AutoTextarea({
       onPointerDown={(e) => e.stopPropagation()}
       style={{
         width: "100%",
-        height: "100%",
+        height: autoGrow ? "auto" : "100%",
+        overflow: autoGrow ? "hidden" : undefined,
         resize: "none",
         border: "none",
         outline: "none",
@@ -96,41 +112,31 @@ export default function CanvasObjectContent({
     case "text": {
       const c = object.content as TextContent;
       const size = c.fontSize ?? 16;
-      return (
+      return editing ? (
+        <AutoTextarea
+          value={c.text}
+          placeholder="Type something…"
+          color="var(--color-text-primary)"
+          fontSize={size}
+          align={c.align}
+          autoGrow
+          onChange={onText}
+          onEndEdit={onEndEdit}
+        />
+      ) : (
         <div
           style={{
             width: "100%",
-            height: "100%",
-            display: "flex",
-            alignItems: "flex-start",
+            color: c.text ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
+            fontFamily: FONT,
+            fontSize: size,
+            lineHeight: 1.35,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            textAlign: c.align ?? "left",
           }}
         >
-          {editing ? (
-            <AutoTextarea
-              value={c.text}
-              placeholder="Type something…"
-              color="var(--color-text-primary)"
-              fontSize={size}
-              align={c.align}
-              onChange={onText}
-              onEndEdit={onEndEdit}
-            />
-          ) : (
-            <div
-              style={{
-                width: "100%",
-                color: c.text ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
-                fontFamily: FONT,
-                fontSize: size,
-                lineHeight: 1.35,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                textAlign: c.align ?? "left",
-              }}
-            >
-              {c.text || "Text"}
-            </div>
-          )}
+          {c.text || "Text"}
         </div>
       );
     }
