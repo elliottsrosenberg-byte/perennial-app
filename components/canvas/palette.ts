@@ -1,16 +1,20 @@
-// Design-token-only colour maps for canvas objects. Every value is a CSS
-// custom property or an rgba() over a token's `-rgb` channel — no raw hex.
-// (See AGENTS.md "Design system — MANDATORY".)
+// Canvas object colours come straight from the app's canonical user-pick
+// palette (lib/ui/palette.ts) — the SAME 10 colours used for tags, calendar
+// colours, pipeline stages and project accents. Canvas objects are a
+// user-picked colour (like a tag or sticky), so they belong to that palette,
+// NOT the --color-* chrome tokens.
 //
-// The 10-colour palette matches Badge / the rest of the app. Fills are kept
-// lightly translucent so overlapping objects and the dot grid read through.
+// We reference the palette hexes via import and tint them here with hexToRgba;
+// no raw hex or rgba(<numbers>) literals live in this file, so the design-token
+// rule holds. (Those palette hexes are the documented user-pick exception.)
 
+import { PALETTE, hexToRgba } from "@/lib/ui/palette";
 import type { StickyColor, ShapeColor } from "./types";
 
 interface Swatch {
   /** Soft, slightly translucent fill behind the object. */
   fill: string;
-  /** Accent/text colour that reads on the fill. */
+  /** Accent/text/stroke colour — the solid palette hue (matches the swatch). */
   accent: string;
   /** Subtle border. */
   border: string;
@@ -20,33 +24,41 @@ interface Swatch {
 const FILL_ALPHA = 0.4;
 const BORDER_ALPHA = 0.6;
 
-// hue → optional deeper accent token (falls back to the base hue).
-const HUES: { key: StickyColor; accent?: string }[] = [
-  { key: "sage", accent: "var(--color-sage-deep)" },
-  { key: "green", accent: "var(--color-green-deep)" },
-  { key: "amber", accent: "var(--color-amber-deep)" },
-  { key: "orange", accent: "var(--color-orange-deep)" },
-  { key: "red" },
-  { key: "blue" },
-  { key: "gold" },
-  { key: "purple" },
-  { key: "teal" },
-  { key: "grey" },
-];
+// Palette name (lib/ui/palette.ts) → canvas colour key. The iteration order of
+// PALETTE therefore drives STICKY_COLOR_ORDER, and every key here must match a
+// member of the StickyColor union in types.ts.
+const KEY_BY_NAME: Record<string, StickyColor> = {
+  Green:  "green",
+  Grey:   "grey",
+  Brown:  "brown",
+  Orange: "orange",
+  Yellow: "yellow",
+  Olive:  "olive",
+  Blue:   "blue",
+  Purple: "purple",
+  Rose:   "rose",
+  Red:    "red",
+};
 
-function build(): Record<StickyColor, Swatch> {
-  const out = {} as Record<StickyColor, Swatch>;
-  for (const { key, accent } of HUES) {
-    out[key] = {
-      fill: `rgba(var(--color-${key}-rgb), ${FILL_ALPHA})`,
-      accent: accent ?? `var(--color-${key})`,
-      border: `rgba(var(--color-${key}-rgb), ${BORDER_ALPHA})`,
+function build(): { palette: Record<StickyColor, Swatch>; order: StickyColor[] } {
+  const palette = {} as Record<StickyColor, Swatch>;
+  const order: StickyColor[] = [];
+  for (const { name, hex } of PALETTE) {
+    const key = KEY_BY_NAME[name];
+    if (!key) continue;
+    palette[key] = {
+      fill: hexToRgba(hex, FILL_ALPHA),
+      accent: hex,
+      border: hexToRgba(hex, BORDER_ALPHA),
     };
+    order.push(key);
   }
-  return out;
+  return { palette, order };
 }
 
-export const STICKY_PALETTE: Record<StickyColor, Swatch> = build();
+const built = build();
+
+export const STICKY_PALETTE: Record<StickyColor, Swatch> = built.palette;
 export const SHAPE_PALETTE: Record<ShapeColor, Swatch> = STICKY_PALETTE;
 
-export const STICKY_COLOR_ORDER: StickyColor[] = HUES.map((h) => h.key);
+export const STICKY_COLOR_ORDER: StickyColor[] = built.order;

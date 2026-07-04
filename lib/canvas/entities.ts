@@ -63,7 +63,7 @@ export async function searchEntities(kind: EntityKind, query: string): Promise<E
             progress: tasks.length ? done / tasks.length : 0,
             subtitle: tasks.length ? `${done} of ${tasks.length} tasks` : undefined,
             meta: p.due_date ? `Due ${fmtDate(p.due_date)}` : undefined,
-            color: "sage",
+            color: "green",
           },
         };
       });
@@ -112,7 +112,7 @@ export async function searchEntities(kind: EntityKind, query: string): Promise<E
             title: n.title || "Untitled note",
             snippet: snippet || undefined,
             meta: n.updated_at ? `Edited ${fmtDate(n.updated_at)}` : undefined,
-            color: "amber",
+            color: "yellow",
           },
         };
       });
@@ -135,7 +135,7 @@ export async function searchEntities(kind: EntityKind, query: string): Promise<E
           refId: c.id,
           width: 260,
           height: 92,
-          content: { title: name, subtitle: org?.name ?? undefined, initials, color: "teal" },
+          content: { title: name, subtitle: org?.name ?? undefined, initials, color: "purple" },
         };
       });
     }
