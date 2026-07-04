@@ -164,7 +164,7 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
                   submit();
                 }
               }}
-              placeholder="Ask Ash to create anything on your canvas…"
+              placeholder="Work with Ash to help your studio grow…"
               style={{
                 flex: 1,
                 border: "none",

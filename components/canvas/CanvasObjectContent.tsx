@@ -16,8 +16,12 @@ import type {
   ImageContent,
   ReferenceContent,
   DrawingContent,
+  StickyColor,
 } from "./types";
 import { STICKY_PALETTE, SHAPE_PALETTE } from "./palette";
+
+const textCol = (tc?: StickyColor) =>
+  tc ? STICKY_PALETTE[tc].accent : "var(--color-text-primary)";
 
 interface Props {
   object: CanvasObject;
@@ -159,7 +163,7 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
         <RichEditable
           html={c.html}
           text={c.text}
-          color="var(--color-text-primary)"
+          color={textCol(c.textColor)}
           fontSize={size}
           align={c.align}
           autoGrow
@@ -171,7 +175,7 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
         <RichView
           html={c.html}
           text={c.text || "Text"}
-          color="var(--color-text-primary)"
+          color={textCol(c.textColor)}
           emptyColor="var(--color-text-tertiary)"
           fontSize={size}
           align={c.align}
@@ -221,8 +225,9 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
               <RichEditable
                 html={c.html}
                 text={c.text}
-                color="var(--color-text-primary)"
+                color={textCol(c.textColor)}
                 fontSize={stickyFont}
+                align={c.align}
                 placeholder="Write a note…"
                 onChange={onRichChange}
                 onEndEdit={onEndEdit}
@@ -231,9 +236,10 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
               <RichView
                 html={c.html}
                 text={c.text}
-                color="var(--color-text-primary)"
+                color={textCol(c.textColor)}
                 emptyColor="var(--color-text-tertiary)"
                 fontSize={stickyFont}
+                align={c.align}
                 placeholder="Write a note…"
               />
             )}
@@ -283,7 +289,9 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
           style={{
             width: "100%",
             height: "100%",
-            background: sw.fill,
+            // Opaque: composite the tint over the canvas surface so nothing
+            // behind the shape shows through.
+            background: `linear-gradient(0deg, ${sw.fill}, ${sw.fill}), var(--color-surface-app)`,
             border: `1.5px solid ${sw.border}`,
             borderRadius: c.shape === "ellipse" ? "50%" : "var(--radius-md)",
             display: "flex",
@@ -297,9 +305,9 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
             <RichEditable
               html={c.html}
               text={c.text ?? ""}
-              color="var(--color-text-primary)"
+              color={textCol(c.textColor)}
               fontSize={shapeFont}
-              align="center"
+              align={c.align ?? "center"}
               onChange={onRichChange}
               onEndEdit={onEndEdit}
             />
@@ -307,10 +315,10 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
             <RichView
               html={c.html}
               text={c.text ?? ""}
-              color="var(--color-text-primary)"
-              emptyColor="var(--color-text-tertiary)"
+              color={textCol(c.textColor)}
               fontSize={shapeFont}
-              align="center"
+              emptyColor="var(--color-text-tertiary)"
+              align={c.align ?? "center"}
             />
           ) : null}
         </div>
