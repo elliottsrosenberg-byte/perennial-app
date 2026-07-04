@@ -61,6 +61,7 @@ import { STICKY_COLOR_ORDER, STICKY_PALETTE } from "./palette";
 import CanvasObjectView from "./CanvasObjectView";
 import ToolDock, { type ShapeKind } from "./ToolDock";
 import EntityPicker from "./EntityPicker";
+import ImagePicker from "./ImagePicker";
 import type { EntityKind, EntityResult } from "@/lib/canvas/entities";
 
 export interface CanvasHandle {
@@ -102,6 +103,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const [rubber, setRubber] = useState<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
   const [preview, setPreview] = useState<{ x: number; y: number } | null>(null);
   const [picker, setPicker] = useState<EntityKind | null>(null);
+  const [imagePicker, setImagePicker] = useState(false);
   const [menu, setMenu] = useState<
     { x: number; y: number; kind: "object" | "canvas"; world?: { x: number; y: number } } | null
   >(null);
@@ -189,6 +191,26 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
       if (file) addImageFromFile(file);
     },
     [addImageFromFile],
+  );
+
+  // Place an existing library image (by URL) at the viewport centre, sizing to
+  // the image's natural aspect ratio.
+  const placeImageFromUrl = useCallback(
+    (url: string) => {
+      setImagePicker(false);
+      const img = new window.Image();
+      const drop = (w: number, h: number) =>
+        placeObject("image", viewportCenterWorld(), { width: w, height: h, content: { url } });
+      img.onload = () => {
+        const maxW = 360;
+        const width = Math.min(maxW, img.naturalWidth || maxW);
+        const ratio = img.naturalWidth ? img.naturalHeight / img.naturalWidth : 0.66;
+        drop(width, Math.round(width * ratio));
+      };
+      img.onerror = () => drop(280, 200);
+      img.src = url;
+    },
+    [placeObject, viewportCenterWorld],
   );
 
   useImperativeHandle(ref, () => ({ create: handleCreate, uploadImage: handleUploadImage }), [
@@ -1028,12 +1050,16 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
           penColor={penColor}
           onPenColor={setPenColor}
           onAddEntity={(k) => setPicker(k)}
-          onImageFromFiles={handleUploadImage}
+          onImageFromFiles={() => setImagePicker(true)}
         />
       )}
 
       {picker && (
         <EntityPicker initialKind={picker} onPick={onPickEntity} onClose={() => setPicker(null)} />
+      )}
+
+      {imagePicker && (
+        <ImagePicker onPick={placeImageFromUrl} onClose={() => setImagePicker(false)} />
       )}
 
       <input ref={fileRef} type="file" accept="image/*" onChange={onFilePicked} style={{ display: "none" }} />
