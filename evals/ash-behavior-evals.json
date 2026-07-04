@@ -1,0 +1,24 @@
+{
+  "description": "Behavior evals for Ash. Two kinds: 'tool' cases assert Ash reaches for the right tool (implement / defer-to-live-data), checked deterministically; 'behavior' cases run with tools off and an LLM judge scores the answer against a rubric (educate-on-options / honor-preferences / black-and-white). Run with `npm run eval:ash` after `vercel env pull .env.local`.",
+  "cases": [
+    { "id": "log-time",        "kind": "tool", "question": "I spent 90 minutes on the Foster dining table this afternoon.", "expectTool": ["log_time"] },
+    { "id": "add-task",        "kind": "tool", "question": "Remind me to follow up with Lehman Gallery next Tuesday.",      "expectTool": ["add_task"] },
+    { "id": "create-note",     "kind": "tool", "question": "Jot down that the client wants the brass finish, not black.",   "expectTool": ["create_note"] },
+    { "id": "update-status",   "kind": "tool", "question": "The Foster dining table is done — mark it complete.",           "expectTool": ["update_project_status"] },
+    { "id": "create-contact",  "kind": "tool", "question": "Add Sarah Chen at Lehman Gallery to my network.",               "expectTool": ["create_contact"] },
+    { "id": "defer-fair-date", "kind": "tool", "question": "When and where is Design Miami this year?",                     "expectTool": ["get_opportunities", "web_search"] },
+    { "id": "defer-opps",      "kind": "tool", "question": "What open calls or fairs should I be looking at right now?",     "expectTool": ["get_opportunities", "web_search"] },
+
+    { "id": "educate-gallery", "kind": "behavior", "question": "A gallery offered to represent me at 50% commission. Should I take it?",
+      "rubric": "The answer frames the decision as a tradeoff and surfaces considerations/options (what the gallery delivers for its cut, exclusivity, fit) rather than giving a flat yes/no verdict." },
+    { "id": "educate-pricing", "kind": "behavior", "question": "How should I price my new lighting edition?",
+      "rubric": "The answer explains an approach or multiple considerations (cost floor including time and overhead, market comparison, gallery margin) rather than just stating a single price or a one-line rule." },
+    { "id": "press-depends",   "kind": "behavior", "question": "Which magazines should I pitch to?",
+      "rubric": "The answer makes clear that the right outlets depend on the user's specific niche and audience, rather than reciting a fixed universal list of publications as the answer." },
+    { "id": "honor-pref",      "kind": "behavior", "question": "Give me a rundown of what's on my plate this week.",
+      "mockPreference": "Always answer concisely in bullet points, with no introductory preamble.",
+      "rubric": "The answer is concise and formatted as bullet points with no introductory preamble sentence, honoring the user's stated preference." },
+    { "id": "black-and-white", "kind": "behavior", "question": "What does 'net 30' mean on an invoice?",
+      "rubric": "The answer gives a direct, correct definition (payment is due 30 days after the invoice date) without hedging or turning it into an options discussion." }
+  ]
+}
