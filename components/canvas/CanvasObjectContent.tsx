@@ -7,7 +7,7 @@
 // colours come from design tokens (see palette.ts / AGENTS.md).
 
 import { useEffect, useRef } from "react";
-import { ImageIcon, FolderIcon, ListChecks } from "lucide-react";
+import { ImageIcon, FolderIcon, ListChecks, FileText, Calendar, Check } from "lucide-react";
 import type {
   CanvasObject,
   TextContent,
@@ -382,61 +382,176 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
 
     case "reference": {
       const c = object.content as ReferenceContent;
-      const Icon = object.refType === "project" ? ListChecks : FolderIcon;
-      return (
+      const rt = object.refType;
+      const sw = STICKY_PALETTE[c.color ?? "sage"];
+      const cardStyle = {
+        width: "100%",
+        height: "100%",
+        background: "var(--color-surface-raised)",
+        border: "0.5px solid var(--color-border)",
+        borderRadius: "var(--radius-lg)",
+        boxShadow: "var(--shadow-md)",
+        padding: 16,
+        display: "flex",
+        flexDirection: "column" as const,
+        gap: 10,
+        overflow: "hidden",
+      };
+      const meta = { fontFamily: FONT, fontSize: 11, color: "var(--color-text-tertiary)" };
+      const titleStyle = {
+        fontFamily: FONT,
+        fontSize: 14,
+        fontWeight: 600,
+        color: "var(--color-text-primary)",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap" as const,
+      };
+      const tile = (icon: React.ReactNode) => (
         <div
           style={{
-            width: "100%",
-            height: "100%",
-            background: "var(--color-surface-raised)",
-            border: "0.5px solid var(--color-border)",
-            borderRadius: "var(--radius-lg)",
-            boxShadow: "var(--shadow-md)",
-            padding: 16,
+            flexShrink: 0,
+            width: 28,
+            height: 28,
+            borderRadius: "var(--radius-md)",
+            background: sw.fill,
             display: "flex",
-            gap: 12,
-            alignItems: "flex-start",
+            alignItems: "center",
+            justifyContent: "center",
+            color: sw.accent,
           }}
         >
-          <div
-            style={{
-              flexShrink: 0,
-              width: 28,
-              height: 28,
-              borderRadius: "var(--radius-md)",
-              background: "rgba(var(--color-sage-rgb), 0.16)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "var(--color-sage-text)",
-            }}
-          >
-            <Icon size={16} strokeWidth={1.75} />
+          {icon}
+        </div>
+      );
+
+      if (rt === "task") {
+        return (
+          <div style={cardStyle}>
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+              <div
+                style={{
+                  flexShrink: 0,
+                  width: 18,
+                  height: 18,
+                  marginTop: 1,
+                  borderRadius: 5,
+                  border: `1.5px solid ${c.done ? sw.accent : "var(--color-border-strong)"}`,
+                  background: c.done ? sw.accent : "transparent",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#fff",
+                }}
+              >
+                {c.done && <Check size={12} strokeWidth={2.5} />}
+              </div>
+              <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                <span
+                  style={{
+                    ...titleStyle,
+                    whiteSpace: "normal",
+                    textDecoration: c.done ? "line-through" : undefined,
+                    color: c.done ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
+                  }}
+                >
+                  {c.title}
+                </span>
+                {(c.subtitle || c.meta) && <span style={meta}>{[c.subtitle, c.meta].filter(Boolean).join(" · ")}</span>}
+              </div>
+            </div>
           </div>
-          <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-            <span
-              style={{
-                fontFamily: FONT,
-                fontSize: 14,
-                fontWeight: 600,
-                color: "var(--color-text-primary)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {c.title}
-            </span>
-            {c.subtitle && (
-              <span style={{ fontFamily: FONT, fontSize: 11, color: "var(--color-text-tertiary)" }}>
-                {c.subtitle}
+        );
+      }
+
+      if (rt === "contact") {
+        return (
+          <div style={cardStyle}>
+            <div style={{ display: "flex", gap: 11, alignItems: "center" }}>
+              <div
+                style={{
+                  flexShrink: 0,
+                  width: 34,
+                  height: 34,
+                  borderRadius: "var(--radius-full)",
+                  background: sw.fill,
+                  color: sw.accent,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontFamily: FONT,
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                {c.initials}
+              </div>
+              <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                <span style={titleStyle}>{c.title}</span>
+                {c.subtitle && <span style={meta}>{c.subtitle}</span>}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (rt === "note") {
+        return (
+          <div style={cardStyle}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              {tile(<FileText size={16} strokeWidth={1.75} />)}
+              <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+                <span style={titleStyle}>{c.title}</span>
+                {c.meta && <span style={meta}>{c.meta}</span>}
+              </div>
+            </div>
+            {c.snippet && (
+              <span style={{ fontFamily: FONT, fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.4, overflow: "hidden" }}>
+                {c.snippet}
               </span>
             )}
-            {c.meta && (
-              <span style={{ fontFamily: FONT, fontSize: 11, color: "var(--color-text-tertiary)" }}>
-                {c.meta}
-              </span>
+          </div>
+        );
+      }
+
+      if (rt === "project") {
+        return (
+          <div style={cardStyle}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              {tile(<ListChecks size={16} strokeWidth={1.75} />)}
+              <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+                <span style={titleStyle}>{c.title}</span>
+                {(c.status || c.meta) && (
+                  <span style={{ ...meta, textTransform: "capitalize" }}>
+                    {[c.status, c.meta].filter(Boolean).join(" · ")}
+                  </span>
+                )}
+              </div>
+            </div>
+            {typeof c.progress === "number" && (
+              <div style={{ height: 6, borderRadius: "var(--radius-full)", background: "var(--color-surface-sunken)", overflow: "hidden" }}>
+                <div style={{ width: `${Math.round(c.progress * 100)}%`, height: "100%", background: sw.accent }} />
+              </div>
             )}
+            {c.subtitle && <span style={meta}>{c.subtitle}</span>}
+          </div>
+        );
+      }
+
+      // event + fallback
+      const Icon = rt === "event" ? Calendar : FolderIcon;
+      return (
+        <div style={cardStyle}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            {tile(<Icon size={16} strokeWidth={1.75} />)}
+            <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+              <span style={titleStyle}>{c.title}</span>
+              {(c.subtitle || c.meta) && (
+                <span style={{ ...meta, textTransform: "capitalize" }}>
+                  {[c.subtitle, c.meta].filter(Boolean).join(" · ")}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       );

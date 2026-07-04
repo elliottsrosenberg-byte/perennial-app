@@ -54,12 +54,33 @@ export interface ImageContent {
   url: string;
   caption?: string;
 }
-/** A reference card points at another entity in the app. `snapshot` denormalizes
- *  just enough to render the card without a join (title/subtitle/meta). */
+/** A reference card points at another entity in the app. Fields denormalize
+ *  just enough to render the card without a join. */
 export interface ReferenceContent {
   title: string;
   subtitle?: string;
   meta?: string;
+  /** project/task status label */
+  status?: string;
+  /** project completion 0..1 */
+  progress?: number;
+  /** task completed */
+  done?: boolean;
+  /** note preview text */
+  snippet?: string;
+  /** contact initials */
+  initials?: string;
+  /** accent tint key for the card's icon tile */
+  color?: StickyColor;
+}
+
+/** Freehand pen stroke. Points are relative to the object's box; the SVG
+ *  viewBox stretches with the box so resize/rotate just work. */
+export interface DrawingContent {
+  points: [number, number][];
+  color: StickyColor;
+  strokeWidth: number;
+  mode: "marker" | "highlighter";
 }
 
 export type CanvasContent =
@@ -67,7 +88,8 @@ export type CanvasContent =
   | StickyContent
   | ShapeContent
   | ImageContent
-  | ReferenceContent;
+  | ReferenceContent
+  | DrawingContent;
 
 /** In-memory canvas object. Geometry is in canvas (world) coordinates. */
 export interface CanvasObject {

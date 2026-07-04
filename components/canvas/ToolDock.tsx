@@ -15,14 +15,18 @@ import {
   Circle,
   PenTool,
   Image as ImageIcon,
+  ImagePlus,
   Plus,
-  Workflow,
   ListChecks,
+  CheckSquare,
+  FileText,
   Contact,
+  Calendar,
   Minus,
   MoveUpRight,
 } from "lucide-react";
 import type { CanvasTool, StickyColor } from "./types";
+import type { EntityKind } from "@/lib/canvas/entities";
 import { STICKY_COLOR_ORDER, STICKY_PALETTE } from "./palette";
 
 export type ShapeKind = "rect" | "ellipse" | "line" | "arrow";
@@ -37,6 +41,8 @@ interface Props {
   onStickyColor: (c: StickyColor) => void;
   shapeKind: ShapeKind;
   onShapeKind: (s: ShapeKind) => void;
+  onAddEntity: (kind: EntityKind) => void;
+  onImageFromFiles: () => void;
 }
 
 const TOOLS: { key: CanvasTool; label: string; icon: React.ReactNode; short: string }[] = [
@@ -48,10 +54,12 @@ const TOOLS: { key: CanvasTool; label: string; icon: React.ReactNode; short: str
   { key: "pen", label: "Pen", icon: <PenTool size={18} strokeWidth={1.75} />, short: "P" },
 ];
 
-const COMING_SOON = [
-  { label: "Project / task card", icon: <ListChecks size={15} strokeWidth={1.75} /> },
-  { label: "Contact reference", icon: <Contact size={15} strokeWidth={1.75} /> },
-  { label: "Connectors", icon: <Workflow size={15} strokeWidth={1.75} /> },
+const ADD_ITEMS: { kind: EntityKind; label: string; icon: React.ReactNode }[] = [
+  { kind: "project", label: "Project", icon: <ListChecks size={15} strokeWidth={1.75} /> },
+  { kind: "task", label: "Task", icon: <CheckSquare size={15} strokeWidth={1.75} /> },
+  { kind: "note", label: "Note", icon: <FileText size={15} strokeWidth={1.75} /> },
+  { kind: "contact", label: "Contact", icon: <Contact size={15} strokeWidth={1.75} /> },
+  { kind: "event", label: "Event", icon: <Calendar size={15} strokeWidth={1.75} /> },
 ];
 
 function tile(active: boolean) {
@@ -149,8 +157,27 @@ function OptionsCard({
 }
 
 export default function ToolDock(props: Props) {
-  const { tool, activeTool, onSelectTool, onUploadImage } = props;
+  const { tool, activeTool, onSelectTool, onUploadImage, onAddEntity, onImageFromFiles } = props;
   const [showMore, setShowMore] = useState(false);
+
+  const rowBtn: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    width: "100%",
+    padding: "8px 8px",
+    border: "none",
+    background: "transparent",
+    borderRadius: "var(--radius-sm)",
+    cursor: "pointer",
+  };
+  const rowLabel: React.CSSProperties = {
+    flex: 1,
+    fontFamily: "var(--font-sans)",
+    fontSize: 13,
+    textAlign: "left",
+    color: "var(--color-text-primary)",
+  };
 
   return (
     <div
@@ -188,44 +215,40 @@ export default function ToolDock(props: Props) {
       </button>
 
       <button
-        title="More — coming soon"
-        aria-label="More tools"
+        title="Add"
+        aria-label="Add element"
         onClick={() => setShowMore((v) => !v)}
         style={tile(showMore)}
       >
         <Plus size={18} strokeWidth={1.75} />
         {showMore && (
-          <div style={{ ...cardStyle, top: undefined, bottom: 0, width: 210, whiteSpace: "normal" }}>
-            {COMING_SOON.map((item) => (
-              <div
-                key={item.label}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "8px 8px",
-                  color: "var(--color-text-tertiary)",
+          <div style={{ ...cardStyle, top: undefined, bottom: 0, width: 200, whiteSpace: "normal" }}>
+            {ADD_ITEMS.map((item) => (
+              <button
+                key={item.kind}
+                onClick={() => {
+                  setShowMore(false);
+                  onAddEntity(item.kind);
                 }}
+                style={rowBtn}
               >
-                <span style={{ display: "flex" }}>{item.icon}</span>
-                <span style={{ flex: 1, fontFamily: "var(--font-sans)", fontSize: 13, textAlign: "left" }}>
-                  {item.label}
-                </span>
-                <span
-                  style={{
-                    fontFamily: "var(--font-sans)",
-                    fontSize: 10,
-                    fontWeight: 600,
-                    color: "var(--color-sage-text)",
-                    background: "rgba(var(--color-sage-rgb), 0.16)",
-                    borderRadius: "var(--radius-full)",
-                    padding: "2px 6px",
-                  }}
-                >
-                  Soon
-                </span>
-              </div>
+                <span style={{ display: "flex", color: "var(--color-text-tertiary)" }}>{item.icon}</span>
+                <span style={rowLabel}>{item.label}</span>
+              </button>
             ))}
+            <span style={{ display: "block", height: 1, background: "var(--color-border)", margin: "5px 4px" }} />
+            <button
+              onClick={() => {
+                setShowMore(false);
+                onImageFromFiles();
+              }}
+              style={rowBtn}
+            >
+              <span style={{ display: "flex", color: "var(--color-text-tertiary)" }}>
+                <ImagePlus size={15} strokeWidth={1.75} />
+              </span>
+              <span style={rowLabel}>Image from files</span>
+            </button>
           </div>
         )}
       </button>
