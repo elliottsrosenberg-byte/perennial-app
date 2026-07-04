@@ -35,6 +35,7 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
+  Link as LinkIcon,
 } from "lucide-react";
 import type { CanvasObjectRow, CanvasScope } from "@/types/database";
 import { uploadEditorImage, isUploadableImageType } from "@/lib/uploads/editor-image";
@@ -56,6 +57,8 @@ import type {
   CanvasObjectType,
   CanvasTool,
   StickyColor,
+  ShapeContent,
+  TextAlign,
 } from "./types";
 import { STICKY_COLOR_ORDER, STICKY_PALETTE } from "./palette";
 import CanvasObjectView from "./CanvasObjectView";
@@ -577,11 +580,11 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     };
   }, []);
 
-  const setSelectedColor = useCallback(
-    (id: string, color: StickyColor) => {
+  const patchContent = useCallback(
+    (id: string, patch: Record<string, unknown>) => {
       const o = objsRef.current.find((x) => x.id === id);
       if (!o) return;
-      const content = { ...o.content, color };
+      const content = { ...o.content, ...patch };
       store.patchLocal(id, { content });
       store.commit(id, { content: content as unknown as Record<string, unknown> });
     },
@@ -650,11 +653,15 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     [placeObject, viewportCenterWorld],
   );
 
-  // ── selection toolbar (single sticky/shape) ──
+  // ── selection toolbar (single selection) ──
   const sole = selectedIds.size === 1 ? store.objects.find((o) => selectedIds.has(o.id)) ?? null : null;
-  const showColorBar = sole?.type === "sticky" || sole?.type === "shape";
+  const soleShapeKind = sole?.type === "shape" ? (sole.content as ShapeContent).shape : null;
+  const soleTextBearing =
+    !!sole && (sole.type === "text" || sole.type === "sticky" || soleShapeKind === "rect" || soleShapeKind === "ellipse");
+  const soleHasFill = !!sole && (sole.type === "sticky" || sole.type === "shape");
+  const cc = (sole?.content ?? {}) as { color?: StickyColor; textColor?: StickyColor; align?: TextAlign };
   const toolbarPos = sole
-    ? { left: sole.x * view.scale + view.x + (sole.width * view.scale) / 2, top: sole.y * view.scale + view.y - 46 }
+    ? { left: sole.x * view.scale + view.x + (sole.width * view.scale) / 2, top: sole.y * view.scale + view.y - 8 }
     : null;
 
   // ── rich-text toolbar (while editing a text-bearing object) ──
@@ -845,7 +852,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
         </svg>
       )}
 
-      {/* single-selection colour + delete toolbar */}
+      {/* single-selection formatting toolbar */}
       {sole && !editingId && toolbarPos && (
         <div
           onPointerDown={(e) => e.stopPropagation()}
@@ -853,52 +860,111 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
             position: "absolute",
             left: toolbarPos.left,
             top: toolbarPos.top,
-            transform: "translateX(-50%)",
+            transform: "translate(-50%, -100%)",
             display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "6px 8px",
-            borderRadius: "var(--radius-full)",
+            flexDirection: "column",
+            gap: 7,
+            padding: 8,
+            borderRadius: "var(--radius-lg)",
             background: "var(--color-surface-raised)",
             border: "0.5px solid var(--color-border)",
             boxShadow: "var(--shadow-lg)",
             zIndex: 30,
           }}
         >
-          {showColorBar &&
-            STICKY_COLOR_ORDER.map((color) => (
-              <button
-                key={color}
-                aria-label={`${color} colour`}
-                onClick={() => setSelectedColor(sole.id, color)}
-                style={{
-                  width: 16,
-                  height: 16,
-                  borderRadius: "var(--radius-full)",
-                  background: STICKY_PALETTE[color].fill,
-                  border: `1.5px solid ${STICKY_PALETTE[color].border}`,
-                  cursor: "pointer",
-                }}
-              />
-            ))}
-          {showColorBar && <span style={{ width: 1, height: 18, background: "var(--color-border)" }} />}
-          <button
-            aria-label="Delete"
-            onClick={deleteSelected}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 26,
-              height: 26,
-              border: "none",
-              background: "transparent",
-              color: "var(--color-text-secondary)",
-              cursor: "pointer",
-            }}
-          >
-            <Trash2 size={15} strokeWidth={1.75} />
-          </button>
+          {/* alignment (text-bearing) + delete */}
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            {soleTextBearing &&
+              (
+                [
+                  { a: "left", icon: <AlignLeft size={14} strokeWidth={1.9} /> },
+                  { a: "center", icon: <AlignCenter size={14} strokeWidth={1.9} /> },
+                  { a: "right", icon: <AlignRight size={14} strokeWidth={1.9} /> },
+                ] as const
+              ).map((b) => (
+                <button
+                  key={b.a}
+                  aria-label={`Align ${b.a}`}
+                  onClick={() => patchContent(sole.id, { align: b.a })}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 26,
+                    height: 26,
+                    border: "none",
+                    borderRadius: "var(--radius-sm)",
+                    cursor: "pointer",
+                    background: cc.align === b.a ? "rgba(var(--color-sage-rgb), 0.16)" : "transparent",
+                    color: cc.align === b.a ? "var(--color-sage-text)" : "var(--color-text-secondary)",
+                  }}
+                >
+                  {b.icon}
+                </button>
+              ))}
+            <div style={{ flex: 1, minWidth: 8 }} />
+            <button
+              aria-label="Delete"
+              onClick={deleteSelected}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 26,
+                height: 26,
+                border: "none",
+                background: "transparent",
+                color: "var(--color-text-secondary)",
+                cursor: "pointer",
+              }}
+            >
+              <Trash2 size={15} strokeWidth={1.75} />
+            </button>
+          </div>
+
+          {/* text colour */}
+          {soleTextBearing && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontFamily: "var(--font-sans)", fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", width: 26, textAlign: "center" }}>A</span>
+              {STICKY_COLOR_ORDER.map((color) => (
+                <button
+                  key={color}
+                  aria-label={`text ${color}`}
+                  onClick={() => patchContent(sole.id, { textColor: color })}
+                  style={{
+                    width: 15,
+                    height: 15,
+                    borderRadius: "var(--radius-full)",
+                    background: STICKY_PALETTE[color].accent,
+                    border: cc.textColor === color ? "2px solid var(--color-sage)" : "0.5px solid var(--color-border)",
+                    cursor: "pointer",
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* fill colour */}
+          {soleHasFill && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontFamily: "var(--font-sans)", fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", width: 26, textAlign: "center" }}>Fill</span>
+              {STICKY_COLOR_ORDER.map((color) => (
+                <button
+                  key={color}
+                  aria-label={`fill ${color}`}
+                  onClick={() => patchContent(sole.id, { color })}
+                  style={{
+                    width: 15,
+                    height: 15,
+                    borderRadius: "var(--radius-full)",
+                    background: STICKY_PALETTE[color].fill,
+                    border: cc.color === color ? "2px solid var(--color-sage)" : `1.5px solid ${STICKY_PALETTE[color].border}`,
+                    cursor: "pointer",
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -936,6 +1002,8 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
               { key: "left", icon: <AlignLeft size={14} strokeWidth={2} />, cmd: "justifyLeft" },
               { key: "center", icon: <AlignCenter size={14} strokeWidth={2} />, cmd: "justifyCenter" },
               { key: "right", icon: <AlignRight size={14} strokeWidth={2} />, cmd: "justifyRight" },
+              "|",
+              { key: "link", icon: <LinkIcon size={14} strokeWidth={2} />, cmd: "createLink" },
             ] as const
           ).map((b, i) =>
             b === "|" ? (
@@ -947,7 +1015,12 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
                 // preventDefault keeps the editable focused so execCommand applies.
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  exec(b.cmd, "arg" in b ? b.arg : undefined);
+                  if (b.cmd === "createLink") {
+                    const url = window.prompt("Link URL");
+                    if (url) document.execCommand("createLink", false, url);
+                  } else {
+                    exec(b.cmd, "arg" in b ? b.arg : undefined);
+                  }
                 }}
                 style={{
                   display: "flex",

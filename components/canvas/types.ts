@@ -30,11 +30,15 @@ export type ShapeColor = StickyColor;
 
 // `html` holds rich formatting (bold/italic/underline, headings, alignment);
 // `text` is always the plain-text fallback (search, Ash, legacy objects).
+export type TextAlign = "left" | "center" | "right";
+
 export interface TextContent {
   text: string;
   html?: string;
   fontSize?: number;
-  align?: "left" | "center" | "right";
+  align?: TextAlign;
+  /** Base text colour (whole box); inline colours can override in html. */
+  textColor?: StickyColor;
 }
 export interface StickyContent {
   text: string;
@@ -42,6 +46,8 @@ export interface StickyContent {
   color: StickyColor;
   tag?: string;
   fontSize?: number;
+  align?: TextAlign;
+  textColor?: StickyColor;
 }
 export interface ShapeContent {
   shape: "rect" | "ellipse" | "line" | "arrow";
@@ -49,6 +55,8 @@ export interface ShapeContent {
   text?: string;
   html?: string;
   fontSize?: number;
+  align?: TextAlign;
+  textColor?: StickyColor;
 }
 export interface ImageContent {
   url: string;
