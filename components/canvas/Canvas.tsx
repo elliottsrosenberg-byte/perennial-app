@@ -44,6 +44,7 @@ import {
   ArrowLeft,
   ArrowRight,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import type { CanvasObjectRow, CanvasScope } from "@/types/database";
 import { uploadEditorImage, isUploadableImageType } from "@/lib/uploads/editor-image";
 import { useCanvas } from "./useCanvas";
@@ -97,6 +98,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   ref,
 ) {
   const store = useCanvas({ canvasId, initialObjects, scope, entityId });
+  const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -713,6 +715,24 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     [placeObject, viewportCenterWorld],
   );
 
+  // Double-click a reference card → open the entity (as if from its module page).
+  const openReference = useCallback(
+    (o: CanvasObject) => {
+      const id = o.refId;
+      if (!id) return;
+      const href =
+        o.refType === "project"
+          ? `/projects?projectId=${id}`
+          : o.refType === "organization"
+            ? `/network?organizationId=${id}`
+            : o.refType === "lead"
+              ? `/network?view=leads&contactId=${id}`
+              : `/network?contactId=${id}`;
+      router.push(href);
+    },
+    [router],
+  );
+
   // Drop a picked entity as a reference card at the viewport centre.
   const onPickEntity = useCallback(
     (r: EntityResult) => {
@@ -854,6 +874,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
             onEndEdit={() => setEditingId(null)}
             onContextMenu={onObjectContextMenu}
             onAutoHeight={onAutoHeight}
+            onOpenReference={openReference}
           />
         ))}
       </div>
