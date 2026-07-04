@@ -132,10 +132,12 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const viewRef = useRef(view);
   const objsRef = useRef(store.objects);
   const selRef = useRef(selectedIds);
+  const storeRef = useRef(store);
   useEffect(() => {
     viewRef.current = view;
     objsRef.current = store.objects;
     selRef.current = selectedIds;
+    storeRef.current = store;
   });
 
   const rectOf = () => containerRef.current!.getBoundingClientRect();
@@ -623,6 +625,17 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
       const mod = e.metaKey || e.ctrlKey;
       if (mod && !e.altKey) {
         const k = e.key.toLowerCase();
+        if (k === "z") {
+          e.preventDefault();
+          if (e.shiftKey) storeRef.current.redo();
+          else storeRef.current.undo();
+          return;
+        }
+        if (k === "y") {
+          e.preventDefault();
+          storeRef.current.redo();
+          return;
+        }
         if (k === "c") {
           copySelection();
           return;
