@@ -40,6 +40,8 @@ export interface CanvasStore {
   commit: (id: string, patch: ColumnPatch) => void;
   /** Debounced content persist (text typing). */
   commitContentDebounced: (id: string, content: CanvasObject["content"]) => void;
+  /** Immediately persist any pending debounced content for an object (on blur). */
+  flushContent: (id: string) => void;
   remove: (id: string) => void;
   /** Highest z-index currently in use (for "bring new object to front"). */
   topZ: number;
@@ -118,17 +120,23 @@ export function useCanvas({
   const debounceRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
+  // Latest un-persisted content per object, so a blur/unmount can flush the
+  // most recent value instead of dropping it mid-debounce.
+  const pendingRef = useRef<Map<string, Record<string, unknown>>>(new Map());
   const commitContentDebounced = useCallback(
     (id: string, content: CanvasObject["content"]) => {
       const timers = debounceRef.current;
+      const payload = content as unknown as Record<string, unknown>;
+      pendingRef.current.set(id, payload);
       const prev = timers.get(id);
       if (prev) clearTimeout(prev);
       timers.set(
         id,
         setTimeout(() => {
           timers.delete(id);
+          pendingRef.current.delete(id);
           updateCanvasObject(supabase, id, {
-            content: content as unknown as Record<string, unknown>,
+            content: payload,
           }).catch((e) => console.error("canvas content save failed", e));
         }, 600),
       );
@@ -136,14 +144,38 @@ export function useCanvas({
     [supabase],
   );
 
-  // Flush pending debounced saves on unmount.
+  // Force-persist an object's pending content immediately (e.g. editor blur).
+  const flushContent = useCallback(
+    (id: string) => {
+      const timers = debounceRef.current;
+      const t = timers.get(id);
+      if (t) {
+        clearTimeout(t);
+        timers.delete(id);
+      }
+      const payload = pendingRef.current.get(id);
+      if (!payload) return;
+      pendingRef.current.delete(id);
+      updateCanvasObject(supabase, id, { content: payload }).catch((e) =>
+        console.error("canvas content flush failed", e),
+      );
+    },
+    [supabase],
+  );
+
+  // Flush pending debounced saves on unmount instead of dropping them.
   useEffect(() => {
     const timers = debounceRef.current;
+    const pending = pendingRef.current;
     return () => {
       timers.forEach((t) => clearTimeout(t));
       timers.clear();
+      pending.forEach((payload, id) => {
+        updateCanvasObject(supabase, id, { content: payload }).catch(() => {});
+      });
+      pending.clear();
     };
-  }, []);
+  }, [supabase]);
 
   const remove = useCallback(
     (id: string) => {
@@ -233,6 +265,7 @@ export function useCanvas({
     patchLocal,
     commit,
     commitContentDebounced,
+    flushContent,
     remove,
     topZ,
     undo,
