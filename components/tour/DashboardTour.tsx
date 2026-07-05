@@ -20,29 +20,23 @@ interface Step {
 
 const STEPS: Step[] = [
   {
-    id:     "overview",
-    title:  "Your home dashboard",
-    body:   "A daily lens into your studio. Each card is a live snapshot from the modules in the sidebar — no data lives here, the dashboard reads from the rest of the app.",
+    id:     "welcome",
+    title:  "This is your board",
+    body:   "Your home in Perennial is a canvas — a space to think, plan, and pull your studio together. Nothing here is fixed; arrange it however you like.",
     anchor: null,
   },
   {
-    id:     "capture",
-    title:  "Quick capture",
-    body:   "Notes, Tasks, and Calendar give you fast capture. Notes is the only card you can write in directly. Tasks lets you add quick to-dos. Calendar surfaces upcoming deadlines.",
-    anchor: '[data-tour-step="dashboard.capture"]',
-  },
-  {
-    id:     "snapshots",
-    title:  "Module snapshots",
-    body:   "Finance, Projects, and Network stay quiet until your modules have data. They each link to their module — click View all to set them up.",
-    anchor: '[data-tour-step="dashboard.snapshots"]',
+    id:     "tools",
+    title:  "Build it out",
+    body:   "Add sticky notes, text, shapes, and arrows from the toolbar — or drop in live cards from your projects, tasks, and finance so the board reflects real work.",
+    anchor: '[data-tour-canvas="tools"]',
   },
   {
     id:       "ash",
     title:    "Meet Ash",
-    body:     "Ash is your AI partner with full studio context — bottom-right of every page. Open it now and Ash will get to know you. We'll show you the rest of the modules after.",
-    anchor:   ".ash-fab",
-    finalCta: { label: "Open Ash →" },
+    body:     "Ash is your studio partner, right here on the board. Ask it anything — or tap “Help me finish setting up” to pick up where onboarding left off.",
+    anchor:   '[data-tour-canvas="ash"]',
+    finalCta: { label: "Start exploring" },
   },
 ];
 
@@ -169,48 +163,14 @@ export default function DashboardTour() {
     window.dispatchEvent(new CustomEvent("tour-visited", { detail: { visited: next } }));
   }
 
-  async function finishAndOpenAsh() {
-    // Mark the dashboard portion of the tour complete so the GettingStarted
-    // widget reflects it. Then hand off to Ash with the onboarding prompt —
-    // and set the waiting flag so the sidebar TourCallout stays hidden until
-    // the user closes Ash.
+  async function finish() {
+    // Mark the home walkthrough complete so the GettingStarted widget + sidebar
+    // module tour proceed. We no longer auto-open Ash — the "Help me finish
+    // setting up" ghost prompt in the board's Ash bar owns that handoff now, so
+    // the user starts guided setup on their own terms.
     await markHomeVisited();
     setActive(false);
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem(TOUR_WAITING_KEY, "1");
-      window.dispatchEvent(new Event("tour-waiting-ash"));
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent("open-ash", {
-          detail: { message: "I just finished onboarding." },
-        }));
-      }, 250);
-    }
   }
-
-  // If the user opens Ash directly via the floating button (rather than the
-  // tooltip's "Open Ash" CTA), still mark the home tour complete and set the
-  // waiting flag so the sidebar callout stays hidden until Ash closes.
-  // We do NOT auto-send the onboarding prompt here — the user took their own
-  // path, so they get a blank conversation.
-  async function finishOnDirectAshOpen() {
-    await markHomeVisited();
-    setActive(false);
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem(TOUR_WAITING_KEY, "1");
-      window.dispatchEvent(new Event("tour-waiting-ash"));
-    }
-  }
-
-  useEffect(() => {
-    if (!active) return;
-    if (stepIdx !== STEPS.length - 1) return;
-    const fab = document.querySelector<HTMLElement>(".ash-fab");
-    if (!fab) return;
-    const onClick = () => { finishOnDirectAshOpen(); };
-    fab.addEventListener("click", onClick);
-    return () => fab.removeEventListener("click", onClick);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, stepIdx]);
 
   async function skip() {
     // Skip the entire tour, including sidebar callouts.
@@ -329,7 +289,7 @@ export default function DashboardTour() {
           </button>
           <button
             onClick={() => {
-              if (isLast) finishAndOpenAsh();
+              if (isLast) finish();
               else        setStepIdx((i) => i + 1);
             }}
             style={{

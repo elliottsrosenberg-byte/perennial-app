@@ -26,7 +26,14 @@ function openAsh(message: string) {
 interface Props {
   canvasId: string | null;
   initialObjects: CanvasObjectRow[];
+  /** Whether the user has finished the Ash-guided deep setup. When false, the
+   *  Ash bar shows the "Help me finish setting up" ghost prompt. */
+  setupComplete?: boolean;
 }
+
+// Ghost prompt shown in the Ash bar until guided setup is complete. Sending an
+// empty bar (or the placeholder itself) kicks off the guided onboarding in Ash.
+const SETUP_PROMPT = "Help me finish setting up";
 
 // Ref-free chip data (label/icon/action) so the render-time array holds no
 // ref-reading closures — dispatched via runChip below (react-hooks/refs).
@@ -37,7 +44,7 @@ const CHIPS = [
   { action: "image", label: "Add an image", icon: <ImageIcon size={14} strokeWidth={1.75} /> },
 ] as const;
 
-export default function HomeCanvas({ canvasId, initialObjects }: Props) {
+export default function HomeCanvas({ canvasId, initialObjects, setupComplete = true }: Props) {
   const canvasRef = useRef<CanvasHandle>(null);
   const [draft, setDraft] = useState("");
 
@@ -60,7 +67,12 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
 
   function submit() {
     const msg = draft.trim();
-    if (!msg) return;
+    if (!msg) {
+      // Empty bar: if setup isn't done, accept the ghost prompt and start the
+      // guided onboarding in Ash. Otherwise do nothing.
+      if (!setupComplete) openAsh(SETUP_PROMPT);
+      return;
+    }
     openAsh(msg);
     setDraft("");
   }
@@ -141,6 +153,7 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
           </div>
 
           <div
+            data-tour-canvas="ash"
             style={{
               width: "100%",
               display: "flex",
@@ -164,7 +177,7 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
                   submit();
                 }
               }}
-              placeholder="Work with Ash to help your studio grow…"
+              placeholder={setupComplete ? "Work with Ash to help your studio grow…" : `${SETUP_PROMPT}…`}
               style={{
                 flex: 1,
                 border: "none",
