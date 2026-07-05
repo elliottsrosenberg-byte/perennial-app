@@ -70,29 +70,56 @@ export async function searchEntities(kind: EntityKind, query: string): Promise<E
     }
 
     case "task": {
-      // A task card is a completable task LIST scoped to a project.
-      const { data } = await supabase
-        .from("projects")
-        .select("id, title, tasks(id, completed)")
-        .ilike("title", like)
-        .order("updated_at", { ascending: false })
-        .limit(20);
-      return (data ?? []).map((p): EntityResult => {
-        const tasks = (p.tasks ?? []) as { completed: boolean }[];
+      // A task card is a completable task LIST scoped to a project OR a contact
+      // (tasks carry both project_id and contact_id; the card renders whichever
+      // scope it was created for — see LiveTaskListCard / fetchScopeTasks).
+      const [{ data: projs }, { data: contacts }] = await Promise.all([
+        supabase
+          .from("projects")
+          .select("id, title, tasks(id, completed)")
+          .ilike("title", like)
+          .order("updated_at", { ascending: false })
+          .limit(12),
+        supabase
+          .from("contacts")
+          .select("id, first_name, last_name, tasks(id, completed)")
+          .eq("archived", false)
+          .or(`first_name.ilike.${like},last_name.ilike.${like}`)
+          .order("last_contacted_at", { ascending: false, nullsFirst: false })
+          .limit(8),
+      ]);
+      const summarize = (tasks: { completed: boolean }[]) => {
         const open = tasks.filter((t) => !t.completed).length;
+        return `${open} open · ${tasks.length} tasks`;
+      };
+      const projectCards = (projs ?? []).map((p): EntityResult => ({
+        refType: "task",
+        refId: p.id,
+        width: 280,
+        height: 210,
+        content: {
+          title: p.title,
+          subtitle: summarize((p.tasks ?? []) as { completed: boolean }[]),
+          scopeType: "project",
+          color: "blue",
+        },
+      }));
+      const contactCards = (contacts ?? []).map((c): EntityResult => {
+        const name = `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "Unnamed";
         return {
           refType: "task",
-          refId: p.id,
+          refId: c.id,
           width: 280,
           height: 210,
           content: {
-            title: p.title,
-            subtitle: `${open} open · ${tasks.length} tasks`,
-            scopeType: "project",
-            color: "blue",
+            title: name,
+            subtitle: summarize((c.tasks ?? []) as { completed: boolean }[]),
+            scopeType: "contact",
+            color: "purple",
           },
         };
       });
+      return [...projectCards, ...contactCards];
     }
 
     case "note": {
