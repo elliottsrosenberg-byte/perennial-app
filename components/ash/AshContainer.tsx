@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import AshPanel from "./AshPanel";
 import AshMark from "@/components/ui/AshMark";
+import { ASH_GRADIENT } from "./theme";
 
 function getModule(pathname: string): string {
   if (pathname === "/") return "home";
@@ -92,7 +93,7 @@ export default function AshContainer() {
           display:        "flex",
           alignItems:     "center",
           justifyContent: "center",
-          background:     "linear-gradient(145deg, #a8b886 0%, var(--color-ash-mid) 60%, var(--color-ash-dark) 100%)",
+          background:     ASH_GRADIENT,
           boxShadow:      "0 2px 10px rgba(var(--color-sage-rgb),0.38), 0 1px 3px rgba(0,0,0,0.12)",
           animation:      "ash-glow 4.5s ease-in-out infinite",
           transition:     "transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease",

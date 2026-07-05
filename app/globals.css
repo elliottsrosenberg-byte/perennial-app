@@ -7,6 +7,7 @@
   --color-charcoal:    #1f211a;
   --color-sage:        #9BA37A;
   --color-warm-white:  #f9faf4;
+  --color-warm-white-rgb: 249,250,244;
   --color-off-white:   #fffefc;
   --color-cream:       #eff0e7;
   --color-grey:        #9a9690;
@@ -71,6 +72,7 @@
 
   /* ── Ash AI ── */
   --color-ash:        #9BA37A;
+  --color-ash-light:  #a8b886;
   --color-ash-dark:   #4a6232;
   --color-ash-mid:    #6b8a4e;
   --color-ash-tint:   rgba(155,163,122,0.10);
@@ -145,6 +147,7 @@
     --foreground: #e8eae2;
 
     --color-warm-white:      #14160f;
+    --color-warm-white-rgb:  20,22,15;
     --color-off-white:       #1b1e16;
     --color-cream:           #232619;
     --color-charcoal:        #e8eae2;
@@ -188,6 +191,7 @@
   --foreground: #e8eae2;
 
   --color-warm-white:      #14160f;
+  --color-warm-white-rgb:  20,22,15;
   --color-off-white:       #1b1e16;
   --color-cream:           #232619;
   --color-charcoal:        #e8eae2;
@@ -230,6 +234,7 @@
   --foreground: #1f211a;
 
   --color-warm-white:      #f9faf4;
+  --color-warm-white-rgb:  249,250,244;
   --color-off-white:       #fffefc;
   --color-cream:           #eff0e7;
   --color-charcoal:        #1f211a;
