@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Plus,
   ArrowUp,
+  ChevronUp,
   Leaf,
   StickyNote,
   Type,
@@ -50,8 +51,9 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
   } = useAshChat({ module: "home" });
 
   // The conversation can be minimized ("closed down") without clearing it —
-  // any new send re-opens it.
+  // any new send (or the Resume pill) re-opens it.
   const [collapsed, setCollapsed] = useState(false);
+  const [focused, setFocused]     = useState(false);
   const conversationOpen = messages.length > 0 && !collapsed;
 
   function handleSend(text: string) {
@@ -111,6 +113,23 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
       ? "Ask Ash about your board…"
       : "Ask Ash anything…";
 
+  // The backdrop blur rises with engagement rather than snapping to full: a
+  // light baseline always sits below the bar, deepens while composing the
+  // first prompt, and fills in once a conversation is open.
+  const engaged   = focused || input.trim().length > 0;
+  const blurLevel = conversationOpen ? "open" : engaged ? "engaged" : "idle";
+  const blur = {
+    idle:    { height: "116px", amount: 12, opacity: 0.55 },
+    engaged: { height: "40%",   amount: 18, opacity: 0.85 },
+    open:    { height: "64%",   amount: 22, opacity: 1 },
+  }[blurLevel];
+
+  // Preview of the minimized conversation so "closed" reads as "tucked away".
+  const lastMessage = messages[messages.length - 1];
+  const collapsedPreview = lastMessage
+    ? lastMessage.content.replace(/\s+/g, " ").trim().slice(0, 54)
+    : "";
+
   const chipStyle: React.CSSProperties = {
     display: "inline-flex",
     alignItems: "center",
@@ -152,28 +171,30 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
           scope="home"
         />
 
-        {/* Full-width blur backdrop while chatting — spans the whole screen and
-            the strip below the bar, fading up into the canvas. Clicking it
-            (outside the conversation/bar) closes Ash down. */}
-        {conversationOpen && (
-          <div
-            onClick={() => setCollapsed(true)}
-            aria-hidden
-            style={{
-              position: "absolute",
-              left: 0, right: 0, bottom: 0,
-              height: "64%",
-              zIndex: 1,
-              pointerEvents: "auto",
-              backdropFilter: "blur(20px)",
-              WebkitBackdropFilter: "blur(20px)",
-              background:
-                "linear-gradient(to bottom, rgba(var(--color-warm-white-rgb),0) 0%, rgba(var(--color-warm-white-rgb),0.5) 55%, rgba(var(--color-warm-white-rgb),0.66) 100%)",
-              maskImage: "linear-gradient(to bottom, transparent 0, black 104px, black 100%)",
-              WebkitMaskImage: "linear-gradient(to bottom, transparent 0, black 104px, black 100%)",
-            }}
-          />
-        )}
+        {/* Full-width blur backdrop — spans the whole screen and the strip below
+            the bar, fading up into the canvas. A light baseline is always
+            present and rises with engagement (see `blur`). Clicking it while a
+            conversation is open closes Ash down. */}
+        <div
+          onClick={conversationOpen ? () => setCollapsed(true) : undefined}
+          aria-hidden
+          style={{
+            position: "absolute",
+            left: 0, right: 0, bottom: 0,
+            height: blur.height,
+            opacity: blur.opacity,
+            zIndex: 1,
+            pointerEvents: conversationOpen ? "auto" : "none",
+            backdropFilter: `blur(${blur.amount}px)`,
+            WebkitBackdropFilter: `blur(${blur.amount}px)`,
+            background:
+              "linear-gradient(to bottom, rgba(var(--color-warm-white-rgb),0) 0%, rgba(var(--color-warm-white-rgb),0.5) 55%, rgba(var(--color-warm-white-rgb),0.66) 100%)",
+            maskImage: "linear-gradient(to bottom, transparent 0, black 104px, black 100%)",
+            WebkitMaskImage: "linear-gradient(to bottom, transparent 0, black 104px, black 100%)",
+            transition:
+              "height 0.5s ease, opacity 0.5s ease, backdrop-filter 0.5s ease, -webkit-backdrop-filter 0.5s ease",
+          }}
+        />
 
         {/* Ash overlay — conversation / suggestion chips + chat bar */}
         <div
@@ -197,6 +218,35 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
               onClear={clearChat}
               onClose={() => setCollapsed(true)}
             />
+          ) : messages.length > 0 ? (
+            /* Minimized — tucked at the bottom, one click (or typing) reopens it */
+            <button
+              onClick={() => setCollapsed(false)}
+              title="Resume chat"
+              style={{
+                display: "flex", alignItems: "center", gap: 8,
+                maxWidth: "100%",
+                padding: "8px 14px",
+                borderRadius: "var(--radius-full)",
+                background: "var(--color-surface-raised)",
+                border: "0.5px solid var(--color-border)",
+                boxShadow: "var(--shadow-md)",
+                color: "var(--color-text-secondary)",
+                fontFamily: "var(--font-sans)", fontSize: 13,
+                cursor: "pointer", pointerEvents: "auto",
+              }}
+            >
+              <ChevronUp size={15} strokeWidth={2} style={{ color: "var(--color-sage)", flexShrink: 0 }} />
+              <span style={{ fontWeight: 600, flexShrink: 0 }}>Resume chat</span>
+              {collapsedPreview && (
+                <span style={{
+                  color: "var(--color-text-tertiary)",
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>
+                  — {collapsedPreview}…
+                </span>
+              )}
+            </button>
           ) : messages.length === 0 ? (
             <div
               style={{
@@ -237,6 +287,8 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
