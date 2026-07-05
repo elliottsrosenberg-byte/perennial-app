@@ -42,7 +42,22 @@ export default function AshHomeConversation({ messages, onClear, onClose }: Prop
   if (messages.length === 0) return null;
 
   return (
-    <div style={{ position: "relative", width: "100%", pointerEvents: "auto" }}>
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        pointerEvents: "auto",
+        // Rise in over the same 0.3s the backdrop blur takes, so text and blur
+        // come up together when opening or resuming a chat.
+        animation: "ash-home-rise 0.3s ease",
+      }}
+    >
+      <style>{`
+        @keyframes ash-home-rise {
+          from { opacity: 0; transform: translateY(14px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
       {/* Controls — crisp, above the faded top edge of the stack */}
       <div style={{ position: "absolute", top: -2, right: 6, zIndex: 2, display: "flex", gap: 8 }}>
         <button onClick={onClear} title="New chat" aria-label="Start a new chat" style={ctrlBtn}>

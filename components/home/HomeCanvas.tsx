@@ -38,6 +38,21 @@ const CHIPS = [
 export default function HomeCanvas({ canvasId, initialObjects }: Props) {
   const canvasRef = useRef<CanvasHandle>(null);
   const inputRef  = useRef<HTMLInputElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  // Measured height of the overlay (conversation + bar) so the blur can be
+  // sized to the actual content — it then grows exactly as the text does
+  // (rising with each streamed line, holding steady while Ash thinks) instead
+  // of snapping to a fixed height.
+  const [overlayH, setOverlayH] = useState(0);
+  useEffect(() => {
+    const el = overlayRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setOverlayH(el.offsetHeight));
+    ro.observe(el);
+    setOverlayH(el.offsetHeight);
+    return () => ro.disconnect();
+  }, []);
 
   // Ash on Home streams directly onto the canvas (the global docked panel is
   // hidden on "/"): the bar below is the composer, and replies stack upward
@@ -115,14 +130,20 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
 
   // The backdrop blur rises with engagement rather than snapping to full: a
   // light baseline always sits below the bar, deepens while composing the
-  // first prompt, and fills in once a conversation is open.
+  // first prompt, and — once a conversation is open — tracks the measured
+  // content height so it rises line-by-line alongside Ash's reply.
   const engaged   = focused || input.trim().length > 0;
   const blurLevel = conversationOpen ? "open" : engaged ? "engaged" : "idle";
-  const blur = {
-    idle:    { height: "116px", amount: 12, opacity: 0.55 },
-    engaged: { height: "40%",   amount: 18, opacity: 0.85 },
-    open:    { height: "64%",   amount: 22, opacity: 1 },
+  const blurTint = {
+    idle:    { amount: 12, opacity: 0.55 },
+    engaged: { amount: 18, opacity: 0.85 },
+    open:    { amount: 22, opacity: 1 },
   }[blurLevel];
+  const blurHeight = conversationOpen
+    ? `${Math.max(overlayH + 88, 200)}px`
+    : engaged
+      ? "220px"
+      : "116px";
 
   // Preview of the minimized conversation so "closed" reads as "tucked away".
   const lastMessage = messages[messages.length - 1];
@@ -181,23 +202,24 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
           style={{
             position: "absolute",
             left: 0, right: 0, bottom: 0,
-            height: blur.height,
-            opacity: blur.opacity,
+            height: blurHeight,
+            opacity: blurTint.opacity,
             zIndex: 1,
             pointerEvents: conversationOpen ? "auto" : "none",
-            backdropFilter: `blur(${blur.amount}px)`,
-            WebkitBackdropFilter: `blur(${blur.amount}px)`,
+            backdropFilter: `blur(${blurTint.amount}px)`,
+            WebkitBackdropFilter: `blur(${blurTint.amount}px)`,
             background:
               "linear-gradient(to bottom, rgba(var(--color-warm-white-rgb),0) 0%, rgba(var(--color-warm-white-rgb),0.5) 55%, rgba(var(--color-warm-white-rgb),0.66) 100%)",
             maskImage: "linear-gradient(to bottom, transparent 0, black 104px, black 100%)",
             WebkitMaskImage: "linear-gradient(to bottom, transparent 0, black 104px, black 100%)",
             transition:
-              "height 0.5s ease, opacity 0.5s ease, backdrop-filter 0.5s ease, -webkit-backdrop-filter 0.5s ease",
+              "height 0.3s ease, opacity 0.3s ease, backdrop-filter 0.3s ease, -webkit-backdrop-filter 0.3s ease",
           }}
         />
 
         {/* Ash overlay — conversation / suggestion chips + chat bar */}
         <div
+          ref={overlayRef}
           style={{
             position: "absolute",
             left: "50%",
