@@ -327,6 +327,97 @@ export const logTimeTool: AshToolDefinition = {
   handler: log_time,
 };
 
+// ─── save_profile_details ──────────────────────────────────────────────────────
+
+async function save_profile_details(
+  input: {
+    work_types?:        string[];
+    selling_channels?:  string[];
+    price_range?:       string;
+    years_in_practice?: string;
+    primary_challenges?: string[];
+    business_issues?:   string;
+    urgent_needs?:      string;
+    bio?:               string;
+    tagline?:           string;
+    website?:           string;
+    location?:          string;
+  },
+  { supabase, userId }: ToolContext
+): Promise<string> {
+  const patch: Record<string, unknown> = {};
+  const setArr = (k: string, v: unknown) => { if (Array.isArray(v) && v.length) patch[k] = v; };
+  const setStr = (k: string, v: unknown) => { if (typeof v === "string" && v.trim()) patch[k] = v.trim(); };
+
+  setArr("work_types",         input.work_types);
+  setArr("selling_channels",   input.selling_channels);
+  setStr("price_range",        input.price_range);
+  setStr("years_in_practice",  input.years_in_practice);
+  setArr("primary_challenges", input.primary_challenges);
+  setStr("business_issues",    input.business_issues);
+  setStr("urgent_needs",       input.urgent_needs);
+  setStr("bio",                input.bio);
+  setStr("tagline",            input.tagline);
+  setStr("website",            input.website);
+  setStr("location",           input.location);
+
+  if (Object.keys(patch).length === 0) return "No profile details were provided to save.";
+  patch.updated_at = new Date().toISOString();
+
+  const { error } = await supabase.from("profiles").update(patch).eq("user_id", userId);
+  if (error) return `Failed to save profile details: ${error.message}`;
+  return `Saved to their studio profile: ${Object.keys(patch).filter((k) => k !== "updated_at").join(", ")}.`;
+}
+
+export const saveProfileDetailsTool: AshToolDefinition = {
+  name: "save_profile_details",
+  description:
+    "Persist details about the user's studio to their profile during guided setup (or " +
+    "any time they share them). Pass only the fields you've genuinely learned; omit the " +
+    "rest. Use the canonical ids for the enumerated fields so they render consistently.",
+  input_schema: {
+    type: "object",
+    properties: {
+      work_types:        { type: "array", items: { type: "string", enum: ["editions", "bespoke", "client_work", "wholesale", "partnerships"] }, description: "How they work" },
+      selling_channels:  { type: "array", items: { type: "string", enum: ["gallery", "direct", "fairs", "trade", "ecommerce", "commissions", "not_selling"] }, description: "How they sell" },
+      price_range:       { type: "string", enum: ["sub500", "500_2k", "2k_10k", "10k_50k", "over50k"], description: "Typical price point of their work" },
+      years_in_practice: { type: "string", enum: ["starting", "finding", "building", "established"], description: "Career stage" },
+      primary_challenges: { type: "array", items: { type: "string" }, description: "Their biggest current challenges (free text is fine)" },
+      business_issues:   { type: "string", description: "What's broken in their business right now, in their words" },
+      urgent_needs:      { type: "string", description: "Anything urgent on their plate right now" },
+      bio:               { type: "string", description: "Studio bio / artist statement" },
+      tagline:           { type: "string", description: "One-line studio tagline" },
+      website:           { type: "string", description: "Studio website URL" },
+      location:          { type: "string", description: "Where they're based" },
+    },
+  },
+  handler: save_profile_details,
+};
+
+// ─── complete_setup ────────────────────────────────────────────────────────────
+
+async function complete_setup(
+  _input: Record<string, never>,
+  { supabase, userId }: ToolContext
+): Promise<string> {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ profile_setup_complete: true, updated_at: new Date().toISOString() })
+    .eq("user_id", userId);
+  if (error) return `Failed to mark setup complete: ${error.message}`;
+  return "Marked guided setup complete — the 'Help me finish setting up' prompt will retire from their board.";
+}
+
+export const completeSetupTool: AshToolDefinition = {
+  name: "complete_setup",
+  description:
+    "Mark the user's guided setup as complete. Call this once the essentials are covered " +
+    "OR the user wants to stop — setup is resumable either way. This retires the 'Help me " +
+    "finish setting up' prompt on their home board. Don't force exhaustive completeness first.",
+  input_schema: { type: "object", properties: {} },
+  handler: complete_setup,
+};
+
 // ─── Export all write tools ────────────────────────────────────────────────────
 
 export const WRITE_TOOLS: AshToolDefinition[] = [
@@ -337,4 +428,6 @@ export const WRITE_TOOLS: AshToolDefinition[] = [
   createContactTool,
   logContactActivityTool,
   logTimeTool,
+  saveProfileDetailsTool,
+  completeSetupTool,
 ];

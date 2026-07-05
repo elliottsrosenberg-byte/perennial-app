@@ -1,20 +1,29 @@
 "use client";
 
+// Short, required sign-up modal (4 slides). Collects only what the app needs to
+// feel personalized from the first screen — name, studio, what they make, and
+// how they want to use Perennial. Everything deeper (work types, channels,
+// challenges, bio, integrations, uploads) is deferred to the conversational Ash
+// onboarding, triggered later from the home canvas. See the two-flag state model:
+//   onboarding_complete   → finished this modal (gates the /onboarding redirect)
+//   profile_setup_complete → finished the Ash-driven deep setup (starts false)
+
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Layers, Users, Receipt, Send, Clock, Globe, BookOpen, UploadCloud, X as XIcon, Armchair, Lamp, Diamond, Gem, Palette, Hammer, PenTool, Briefcase, Boxes, Pencil, Video, Monitor, Code2, Shapes } from "lucide-react";
+import {
+  Layers, Users, Receipt, Send, Clock, Globe, BookOpen,
+  Armchair, Lamp, Diamond, Gem, Palette, Hammer, PenTool, Briefcase,
+  Boxes, Pencil, Video, Monitor, Code2, Shapes,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { PALETTE, paletteColorForKey } from "@/lib/ui/palette";
 import AshMark from "@/components/ui/AshMark";
-import Select from "@/components/ui/Select";
-import { COUNTRIES, BUSINESS_TYPES, composeStudioAddress } from "@/lib/profile/business";
-import { uploadStudioLogo } from "@/lib/uploads/studio-logo";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const ASH_GRADIENT = "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)";
-const TOTAL_STEPS = 9;
+const TOTAL_STEPS = 4;
 
 const PRACTICE_OPTIONS = [
   "Furniture", "Objects & lighting", "Ceramics & glass", "Textiles",
@@ -22,28 +31,37 @@ const PRACTICE_OPTIONS = [
   "Video", "Graphic design", "Websites", "Software", "Client-based work",
 ];
 
-// Stable key + color per practice option so the Projects board can default
-// to a list of types that mirrors how the user describes their work. Order
-// here is the canonical order; the user's selection order determines which
-// types appear first on their board.
-const PRACTICE_TO_PROJECT_TYPE: Record<string, { key: string; color: string }> = {
-  "Furniture":          { key: "furniture",    color: "#b8860b" },
-  "Objects & lighting": { key: "objects",      color: "#d97706" },
-  "Ceramics & glass":   { key: "ceramics",     color: "#2a8a8a" },
-  "Textiles":           { key: "textiles",     color: "#6d4fa3" },
-  "Jewelry":            { key: "jewelry",      color: "#c93a6a" },
-  "Painting":           { key: "painting",     color: "#a13a1f" },
-  "Illustration":       { key: "illustration", color: "#3b8fc4" },
-  "Sculpture":          { key: "sculpture",    color: "#5a6470" },
-  "Printmaking":        { key: "printmaking",  color: "#4a4fa3" },
-  "Video":              { key: "video",        color: "#a1308a" },
-  "Graphic design":     { key: "graphic_design", color: "#b5179e" },
-  "Websites":           { key: "websites",     color: "#1d7a8c" },
-  "Software":           { key: "software",      color: "#3f3f9e" },
-  "Client-based work":  { key: "client_project", color: "#2563ab" },
+// Stable key + palette colour per practice option so the Projects board can
+// default to a type list that mirrors how the user describes their work. Colours
+// are named from the canonical user-pick palette (lib/ui/palette.ts) — the same
+// source tags, pipeline stages, and project accents draw from — so no raw hex
+// lives here and users can recolour any type later. Order here is canonical; the
+// user's selection order determines which types appear first on their board.
+const PRACTICE_TO_PROJECT_TYPE: Record<string, { key: string; palette: string }> = {
+  "Furniture":          { key: "furniture",      palette: "Brown"  },
+  "Objects & lighting": { key: "objects",        palette: "Orange" },
+  "Ceramics & glass":   { key: "ceramics",       palette: "Olive"  },
+  "Textiles":           { key: "textiles",       palette: "Purple" },
+  "Jewelry":            { key: "jewelry",        palette: "Rose"   },
+  "Painting":           { key: "painting",       palette: "Red"    },
+  "Illustration":       { key: "illustration",   palette: "Blue"   },
+  "Sculpture":          { key: "sculpture",      palette: "Grey"   },
+  "Printmaking":        { key: "printmaking",    palette: "Yellow" },
+  "Video":              { key: "video",          palette: "Green"  },
+  "Graphic design":     { key: "graphic_design", palette: "Purple" },
+  "Websites":           { key: "websites",       palette: "Blue"   },
+  "Software":           { key: "software",        palette: "Grey"   },
+  "Client-based work":  { key: "client_project", palette: "Blue"   },
 };
 
-function buildProjectTypeOptions(practiceTypes: string[], workTypes: string[]) {
+const PALETTE_HEX_BY_NAME: Record<string, string> =
+  Object.fromEntries(PALETTE.map(c => [c.name, c.hex]));
+
+function paletteHex(name: string): string {
+  return PALETTE_HEX_BY_NAME[name] ?? PALETTE_HEX_BY_NAME["Grey"];
+}
+
+function buildProjectTypeOptions(practiceTypes: string[]) {
   // The user's picked practice types become the priority list — their first
   // pick anchors the Projects board's default type.
   const seen = new Set<string>();
@@ -51,23 +69,18 @@ function buildProjectTypeOptions(practiceTypes: string[], workTypes: string[]) {
   for (const p of practiceTypes) {
     const map = PRACTICE_TO_PROJECT_TYPE[p];
     if (map && !seen.has(map.key)) {
-      out.push({ key: map.key, label: p, color: map.color });
+      out.push({ key: map.key, label: p, color: paletteHex(map.palette) });
       seen.add(map.key);
     } else if (!map && !seen.has(p.toLowerCase())) {
-      // Custom "Other"-added practice — keep it.
-      out.push({ key: p.toLowerCase().replace(/[^a-z0-9]+/g, "_"), label: p, color: "#5a6470" });
+      // Custom "Other"-added practice — deterministic palette colour by name.
+      out.push({ key: p.toLowerCase().replace(/[^a-z0-9]+/g, "_"), label: p, color: paletteColorForKey(p).hex });
       seen.add(p.toLowerCase());
     }
   }
-  // Always keep a "Client" type available if any client-style work was picked,
-  // so client projects have somewhere to live even if the user didn't tick the
-  // practice chip.
-  const wantsClient =
-    practiceTypes.includes("Client-based work") ||
-    workTypes.includes("client_work") ||
-    workTypes.includes("bespoke");
-  if (wantsClient && !seen.has("client_project")) {
-    out.push({ key: "client_project", label: "Client", color: "#2563ab" });
+  // Always keep a "Client" type available if client-style work was picked, so
+  // client projects have somewhere to live.
+  if (practiceTypes.includes("Client-based work") && !seen.has("client_project")) {
+    out.push({ key: "client_project", label: "Client", color: paletteHex("Blue") });
   }
   return out;
 }
@@ -89,50 +102,6 @@ const PRACTICE_ICONS: Record<string, LucideIcon> = {
   "Client-based work":  Briefcase,
 };
 
-const WORK_TYPE_OPTIONS = [
-  { id: "editions",     label: "Studio editions",          sub: "Small-batch objects, multiples, or prints" },
-  { id: "bespoke",      label: "Bespoke commissions",       sub: "One-off pieces made to client specification" },
-  { id: "client_work",  label: "Client-based design work",  sub: "Fees, retainers, or project-based client engagements" },
-  { id: "wholesale",    label: "Wholesale / retail",        sub: "Selling through stockists, shops, or platforms" },
-  { id: "partnerships", label: "Partnerships & brand deals", sub: "Collaborations with brands, sponsored work, licensing" },
-];
-
-const CHANNEL_OPTIONS = [
-  { id: "gallery",     label: "Gallery representation", sub: "Consignment or representation deals" },
-  { id: "direct",      label: "Direct to collectors",   sub: "Studio sales, Instagram, newsletter, word of mouth" },
-  { id: "fairs",       label: "Design fairs",           sub: "ICFF, Sight Unseen, PAD, Design Miami, etc." },
-  { id: "trade",       label: "Trade clients",          sub: "Interior designers, hospitality, developers" },
-  { id: "ecommerce",   label: "E-commerce",             sub: "Own website, 1stDibs, etc." },
-  { id: "commissions", label: "Public / corporate commissions", sub: "Institutional or architectural projects" },
-  { id: "not_selling", label: "I don't really sell yet", sub: "Focused on developing my practice — Ash will lean into learning-oriented guidance" },
-];
-
-const PRICE_OPTIONS = [
-  { id: "sub500",  label: "Under $500" },
-  { id: "500_2k",  label: "$500 – $2,000" },
-  { id: "2k_10k",  label: "$2,000 – $10,000" },
-  { id: "10k_50k", label: "$10,000 – $50,000" },
-  { id: "over50k", label: "$50,000+" },
-];
-
-const YEARS_OPTIONS = [
-  { id: "starting",    label: "Just getting started", sub: "Under 1 year" },
-  { id: "finding",     label: "Finding my footing",   sub: "1–3 years" },
-  { id: "building",    label: "Building momentum",    sub: "3–7 years" },
-  { id: "established", label: "Established practice", sub: "7+ years" },
-];
-
-const CHALLENGE_OPTIONS = [
-  "Getting paid on time",
-  "Finding new collectors or clients",
-  "Pricing my work correctly",
-  "Gallery representation",
-  "Staying organized across projects",
-  "Press and visibility",
-  "Tracking time and profitability",
-  "Managing client expectations",
-];
-
 const GOAL_OPTIONS: { id: string; label: string; Icon: LucideIcon | null }[] = [
   { id: "projects",  label: "Track projects and deadlines",          Icon: Layers   },
   { id: "invoicing", label: "Send professional invoices",            Icon: Receipt  },
@@ -146,134 +115,52 @@ const GOAL_OPTIONS: { id: string; label: string; Icon: LucideIcon | null }[] = [
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
-
-interface StagedFile {
-  id:          string;
-  file:        File;
-  name:        string;
-  description: string;
-}
+type Step = 1 | 2 | 3 | 4;
 
 interface OnboardingData {
-  firstName:       string;
-  lastName:        string;
-  studioName:      string;
-  city:            string;
-  website:         string;
-  tagline:         string;
-  bio:             string;
-  // Billing identity — feeds invoices + Stripe Connect onboarding.
-  businessType:    string;
-  country:         string;
-  addressLine1:    string;
-  addressLine2:    string;
-  addressCity:     string;
-  addressState:    string;
-  addressZip:      string;
-  phone:           string;
-  ein:             string;
-  logoUrl:         string | null;
-  logoPath:        string | null;
-  brandColor:      string;
-  practiceTypes:   string[];
-  workTypes:       string[];
-  sellingChannels: string[];
-  priceRange:      string;
-  yearsInPractice: string;
-  challenges:      string[];
-  businessIssues:  string;
-  urgentNeeds:     string;
-  goals:           string[];
-}
-
-/** The `profiles` billing-identity columns derived from onboarding data.
- *  `address` is the composed display string invoices render; the
- *  structured columns also feed Stripe Connect prefill. Shared by the
- *  complete + skip save paths so neither drops what the user entered. */
-function billingPatch(d: OnboardingData) {
-  return {
-    business_type: d.businessType || null,
-    country:       d.country || null,
-    address_line1: d.addressLine1 || null,
-    address_line2: d.addressLine2 || null,
-    address_city:  d.addressCity || null,
-    address_state: d.addressState || null,
-    address_zip:   d.addressZip || null,
-    address: composeStudioAddress({
-      address_line1: d.addressLine1,
-      address_line2: d.addressLine2,
-      address_city:  d.addressCity,
-      address_state: d.addressState,
-      address_zip:   d.addressZip,
-      country:       d.country,
-    }) || null,
-  };
+  firstName:     string;
+  lastName:      string;
+  studioName:    string;
+  city:          string;
+  practiceTypes: string[];
+  goals:         string[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function Chip({
-  selected, onClick, children, sub,
-}: { selected: boolean; onClick: () => void; children: React.ReactNode; sub?: string }) {
+  selected, onClick, children,
+}: { selected: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       onClick={onClick}
       style={{
-        padding: sub ? "10px 14px" : "7px 14px",
+        padding: "7px 14px",
         borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
         transition: "all 0.1s ease", textAlign: "left",
         background: selected ? "var(--color-sage)" : "var(--color-off-white)",
         color:      selected ? "var(--color-warm-white)" : "var(--color-text-secondary)",
         border:     `0.5px solid ${selected ? "var(--color-sage)" : "var(--color-border)"}`,
-        display: "flex", flexDirection: "column", gap: 2,
+        fontSize: 12, fontWeight: 500,
       }}
     >
-      <span style={{ fontSize: 12, fontWeight: 500 }}>{children}</span>
-      {sub && <span style={{ fontSize: 10, opacity: selected ? 0.8 : 0.8 }}>{sub}</span>}
-    </button>
-  );
-}
-
-function SingleChip({
-  selected, onClick, children, sub,
-}: { selected: boolean; onClick: () => void; children: React.ReactNode; sub?: string }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        padding: sub ? "10px 14px" : "7px 14px",
-        borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
-        transition: "all 0.1s ease", textAlign: "left",
-        background: selected ? "var(--color-sage)" : "var(--color-off-white)",
-        color:      selected ? "var(--color-warm-white)" : "var(--color-text-secondary)",
-        border:     `0.5px solid ${selected ? "var(--color-sage)" : "var(--color-border)"}`,
-        display: "flex", flexDirection: "column", gap: 2,
-        position: "relative",
-      }}
-    >
-      {selected && (
-        <span style={{ position: "absolute", top: 8, right: 10, fontSize: 10, opacity: 0.8 }}>✓</span>
-      )}
-      <span style={{ fontSize: 12, fontWeight: 500 }}>{children}</span>
-      {sub && <span style={{ fontSize: 10, opacity: selected ? 0.8 : 0.8 }}>{sub}</span>}
+      {children}
     </button>
   );
 }
 
 function OtherInput({
-  values, knownIds, onAdd, placeholder = "Add your own", disabled = false,
-}: { values: string[]; knownIds: string[]; onAdd: (v: string) => void; placeholder?: string; disabled?: boolean }) {
+  values, knownIds, onAdd, placeholder = "Add your own",
+}: { values: string[]; knownIds: string[]; onAdd: (v: string) => void; placeholder?: string }) {
   const [val, setVal] = useState("");
   function submit() {
-    if (disabled) return;
     const v = val.trim();
     if (!v) return;
     if (knownIds.includes(v) || values.includes(v)) { setVal(""); return; }
     onAdd(v);
     setVal("");
   }
-  const ready = val.trim().length > 0 && !disabled;
+  const ready = val.trim().length > 0;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
       <span style={{ fontSize: 11, color: "var(--color-grey)", flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>Other</span>
@@ -339,13 +226,18 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 }
 
 function TextInput({
-  value, onChange, placeholder, type = "text",
-}: { value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
+  value, onChange, placeholder, onEnter, inputRef, type = "text",
+}: {
+  value: string; onChange: (v: string) => void; placeholder?: string;
+  onEnter?: () => void; inputRef?: React.RefObject<HTMLInputElement>; type?: string;
+}) {
   return (
     <input
+      ref={inputRef}
       type={type}
       value={value}
       onChange={e => onChange(e.target.value)}
+      onKeyDown={e => { if (e.key === "Enter" && onEnter) { e.preventDefault(); onEnter(); } }}
       placeholder={placeholder}
       style={{
         width: "100%", padding: "9px 13px", fontSize: 13,
@@ -360,19 +252,11 @@ function TextInput({
   );
 }
 
-function SelectInput({
-  value, onChange, options,
-}: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
-  return <Select value={value} onChange={onChange} options={options} />;
-}
-
 // ─── Main page component ──────────────────────────────────────────────────────
 
 export default function OnboardingClient({ userId }: { userId: string }) {
   const router = useRouter();
-  // Step state mirrors a ?step= query param so users coming back from an
-  // OAuth round-trip (Google / Microsoft → /onboarding) land back on the
-  // integrations step instead of step 1.
+  // Step mirrors a ?step= query param so a refresh keeps the user in place.
   const [step, _setStep] = useState<Step>(() => {
     if (typeof window === "undefined") return 1;
     const n = parseInt(new URLSearchParams(window.location.search).get("step") ?? "1", 10);
@@ -390,35 +274,9 @@ export default function OnboardingClient({ userId }: { userId: string }) {
 
   const [data, setData] = useState<OnboardingData>({
     firstName: "", lastName: "",
-    studioName: "", city: "", website: "", tagline: "", bio: "",
-    businessType: "", country: "", addressLine1: "", addressLine2: "",
-    addressCity: "", addressState: "", addressZip: "",
-    phone: "", ein: "", logoUrl: null, logoPath: null, brandColor: "",
-    practiceTypes: [], workTypes: [], sellingChannels: [],
-    priceRange: "", yearsInPractice: "", challenges: [],
-    businessIssues: "", urgentNeeds: "",
-    goals: [],
+    studioName: "", city: "",
+    practiceTypes: [], goals: [],
   });
-
-  const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-
-  function addFiles(incoming: File[]) {
-    setUploadError(null);
-    const next: StagedFile[] = incoming.map(file => ({
-      id:          `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      file,
-      name:        file.name.replace(/\.[^.]+$/, ""),
-      description: "",
-    }));
-    setStagedFiles(prev => [...prev, ...next]);
-  }
-  function updateStagedFile(id: string, patch: Partial<StagedFile>) {
-    setStagedFiles(prev => prev.map(f => f.id === id ? { ...f, ...patch } : f));
-  }
-  function removeStagedFile(id: string) {
-    setStagedFiles(prev => prev.filter(f => f.id !== id));
-  }
 
   const firstInputRef = useRef<HTMLInputElement>(null);
 
@@ -437,125 +295,55 @@ export default function OnboardingClient({ userId }: { userId: string }) {
     setData(d => ({ ...d, [key]: value }));
   }
 
+  const canAdvance1 = data.firstName.trim().length > 0;
+  const canAdvance2 = data.studioName.trim().length > 0;
+  const canAdvance3 = data.practiceTypes.length > 0;
+
   async function handleFinish() {
     setSaving(true);
-    setUploadError(null);
     const supabase = createClient();
 
-    // Upload staged files to Supabase Storage and create one Resource row each.
-    // Skipped silently if nothing was staged — keeps the no-files path fast.
-    if (stagedFiles.length > 0) {
-      try {
-        for (const f of stagedFiles) {
-          const safeName = f.file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-          const path     = `${userId}/${f.id}-${safeName}`;
-          const { error: upErr } = await supabase.storage
-            .from("resources")
-            .upload(path, f.file, { cacheControl: "3600", upsert: false });
-          if (upErr) throw upErr;
-          const { data: urlData } = supabase.storage.from("resources").getPublicUrl(path);
-          await supabase.from("resources").insert({
-            user_id:      userId,
-            category:     "brand",
-            item_type:    "file",
-            status:       "complete",
-            name:         f.name.trim() || f.file.name,
-            meta:         f.description.trim() || "",
-            file_urls:    [urlData.publicUrl],
-            preview_type: "file",
-          });
-        }
-      } catch (err) {
-        setUploadError(err instanceof Error ? err.message : "Couldn't upload one or more files. Onboarding will continue.");
-        // Don't block onboarding completion on a partial upload failure.
-      }
-    }
-
     // Seed the user's project_options.type from their practice picks so the
-    // Projects board defaults to a type list that matches their work.
-    const projectTypeOptions = buildProjectTypeOptions(data.practiceTypes, data.workTypes);
-    const projectOptionsPatch = projectTypeOptions.length > 0
-      ? { project_options: { type: projectTypeOptions } as Record<string, unknown> }
-      : {};
-    if (projectOptionsPatch.project_options) {
-      // Merge with any existing project_options (status / priority) so we
-      // don't clobber other dimensions. profiles.project_options is jsonb and
-      // may have been seeded by a signup trigger.
+    // Projects board defaults to a type list that matches their work. Merge with
+    // any existing project_options (status / priority) so we don't clobber other
+    // dimensions the signup trigger may have seeded.
+    const projectTypeOptions = buildProjectTypeOptions(data.practiceTypes);
+    let projectOptionsPatch: Record<string, unknown> = {};
+    if (projectTypeOptions.length > 0) {
       const { data: existing } = await supabase
         .from("profiles")
         .select("project_options")
         .eq("user_id", userId)
         .maybeSingle();
       const merged = { ...(existing?.project_options as Record<string, unknown> ?? {}), type: projectTypeOptions };
-      projectOptionsPatch.project_options = merged;
+      projectOptionsPatch = { project_options: merged };
     }
 
     await supabase.from("profiles").upsert({
-      user_id:             userId,
-      display_name:        [data.firstName, data.lastName].map(s => s.trim()).filter(Boolean).join(" ") || null,
-      studio_name:         data.studioName || null,
-      tagline:             data.tagline || null,
-      bio:                 data.bio || null,
-      location:            data.city || null,
-      website:             data.website || null,
-      phone:               data.phone || null,
-      ein:                 data.ein || null,
-      logo_url:            data.logoUrl,
-      logo_path:           data.logoPath,
-      brand_color:         data.brandColor || null,
-      ...billingPatch(data),
-      practice_types:      data.practiceTypes,
-      work_types:          data.workTypes,
-      selling_channels:    data.sellingChannels,
-      price_range:         data.priceRange || null,
-      years_in_practice:   data.yearsInPractice || null,
-      primary_challenges:  data.challenges,
-      business_issues:     data.businessIssues || null,
-      urgent_needs:        data.urgentNeeds || null,
-      perennial_goals:     data.goals,
-      onboarding_complete: true,
+      user_id:                userId,
+      display_name:           [data.firstName, data.lastName].map(s => s.trim()).filter(Boolean).join(" ") || null,
+      studio_name:            data.studioName || null,
+      location:               data.city || null,
+      practice_types:         data.practiceTypes,
+      perennial_goals:        data.goals,
+      onboarding_complete:    true,   // finished the required sign-up modal
+      profile_setup_complete: false,  // deep Ash-driven setup still to come
       ...projectOptionsPatch,
       // Reset the post-onboarding tour state so a fresh onboarding always
-      // triggers the dashboard walkthrough. (Real users only onboard once;
+      // triggers the home canvas walkthrough. (Real users only onboard once;
       // this matters mostly for testing.)
-      tour_visited:        {},
-      tour_dismissed:      false,
-      updated_at:          new Date().toISOString(),
+      tour_visited:           {},
+      tour_dismissed:         false,
+      updated_at:             new Date().toISOString(),
     });
     localStorage.setItem("perennial-just-onboarded", "1");
     // Kick off Ash's background research on the user's niche (fire-and-forget).
+    // Practice types + goals are enough signal to warm the knowledge base while
+    // the user explores the canvas.
     void fetch("/api/ash/research", { method: "POST" }).catch(() => {});
     router.push("/");
     router.refresh();
   }
-
-  async function handleSkip() {
-    setSaving(true);
-    const supabase = createClient();
-    await supabase.from("profiles").upsert({
-      user_id:             userId,
-      display_name:        [data.firstName, data.lastName].map(s => s.trim()).filter(Boolean).join(" ") || null,
-      studio_name:         data.studioName || null,
-      tagline:             data.tagline || null,
-      bio:                 data.bio || null,
-      phone:               data.phone || null,
-      ein:                 data.ein || null,
-      logo_url:            data.logoUrl,
-      logo_path:           data.logoPath,
-      brand_color:         data.brandColor || null,
-      ...billingPatch(data),
-      onboarding_complete: true,
-      tour_visited:        {},
-      tour_dismissed:      false,
-      updated_at:          new Date().toISOString(),
-    });
-    localStorage.setItem("perennial-just-onboarded", "1");
-    router.push("/");
-    router.refresh();
-  }
-
-  const canAdvance2 = data.firstName.trim().length > 0;
-  const canAdvance3 = data.studioName.trim().length > 0;
 
   return (
     <div
@@ -587,472 +375,133 @@ export default function OnboardingClient({ userId }: { userId: string }) {
         background: "var(--color-warm-white)",
       }}>
         <Image src="/Logotype.svg" alt="Perennial" width={120} height={28} style={{ height: "auto", opacity: 0.85 }} />
-        {step > 1 && (
-          <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-            <StepProgress current={step - 1} total={TOTAL_STEPS - 1} />
-          </div>
-        )}
-        <button
-          onClick={handleSkip}
-          disabled={saving}
-          style={{
-            fontSize: 12, color: "var(--color-grey)",
-            background: "none", border: "none", cursor: saving ? "default" : "pointer",
-            fontFamily: "inherit", padding: "6px 10px",
-          }}
-        >
-          Skip for now
-        </button>
+        <div style={{ flex: 1, display: "flex", justifyContent: "flex-end" }}>
+          <StepProgress current={step} total={TOTAL_STEPS} />
+        </div>
       </header>
 
       {/* Step content */}
       <main style={{
         flex: 1, display: "flex", alignItems: "flex-start", justifyContent: "center",
-        padding: "32px 24px 48px", position: "relative", zIndex: 1,
+        padding: "48px 24px", position: "relative", zIndex: 1,
         overflowY: "auto",
       }}>
-        <div style={{ width: "100%", maxWidth: 680 }}>
+        <div style={{ width: "100%", maxWidth: 560 }}>
 
-          {/* ── Step 1: Welcome ──────────────────────────────────────────────── */}
+          {/* ── Step 1: Your name ────────────────────────────────────────────── */}
           {step === 1 && (
-            <div style={{
-              background: "var(--color-off-white)", borderRadius: 20,
-              border: "0.5px solid var(--color-border)",
-              boxShadow: "var(--shadow-card)",
-              overflow: "hidden",
-            }}>
-              {/* Hero — charcoal panel with botanical, matches login */}
-              <div style={{ position: "relative", background: "#1f211a", padding: "44px 40px 40px", textAlign: "center", overflow: "hidden" }}>
-                <img
-                  src="/botanicals/Botanical Illustrations.png"
-                  aria-hidden="true"
-                  alt=""
-                  style={{
-                    position: "absolute", bottom: "-30%", right: "-20%",
-                    width: 460, height: "auto", opacity: 0.5,
-                    pointerEvents: "none", userSelect: "none",
-                  }}
-                />
-                <div style={{ position: "relative", zIndex: 1 }}>
-                  <Image
-                    src="/Logotype.svg" alt="Perennial"
-                    width={140} height={32}
-                    style={{ height: "auto", opacity: 0.95, margin: "0 auto 20px", display: "block" }}
-                  />
-                  <h1 style={{
-                    fontFamily: "var(--font-newsreader)",
-                    fontSize: 30, fontWeight: 400, lineHeight: 1.15,
-                    color: "#f5f1e9", letterSpacing: "-0.01em",
-                    marginBottom: 10,
-                  }}>
-                    Welcome.
-                  </h1>
-                  <p style={{ fontSize: 13, color: "rgba(245,241,233,0.65)", lineHeight: 1.6, maxWidth: 380, margin: "0 auto" }}>
-                    Studio management for independent designers and makers.
-                  </p>
-                </div>
-              </div>
-
-              <div style={{ padding: "28px 40px 0" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                  {[
-                    { Icon: Layers,  label: "Projects", body: "Every piece of work you're making, selling, or pitching — tracked with tasks, timelines, linked contacts, and value." },
-                    { Icon: Users,   label: "Network",  body: "Contacts, leads, and organizations in one place — galleries, collectors, press, clients, fabricators, and the people and studios you're still chasing. Know who you know and where each relationship stands." },
-                    { Icon: Receipt, label: "Finance",  body: "Time tracking, expenses, and invoicing in one place. Understand what you're earning and what you're owed." },
-                    { Icon: Send,    label: "Outreach", body: "Pipeline management for gallery submissions, press pitches, fair applications, and client pursuits." },
-                    { Icon: null,    label: "Ash",      body: "Your AI business partner — Ash has full context on your studio and can answer questions, create records, and help you think.", ash: true },
-                  ].map(({ Icon, label, body, ash }) => (
-                    <div key={label} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-                      <div style={{
-                        width: 38, height: 38, borderRadius: 10, flexShrink: 0,
-                        background: ash ? "rgba(var(--color-sage-rgb),0.12)" : "var(--color-cream)",
-                        border: `0.5px solid ${ash ? "rgba(var(--color-sage-rgb),0.25)" : "var(--color-border)"}`,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        color: ash ? "var(--color-sage)" : "var(--color-charcoal)",
-                      }}>
-                        {ash ? <AshMark size={19} variant="on-light" /> : Icon && <Icon size={17} strokeWidth={1.5} />}
-                      </div>
-                      <div>
-                        <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 2 }}>{label}</p>
-                        <p style={{ fontSize: 11, color: "var(--color-grey)", lineHeight: 1.55 }}>{body}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ padding: "24px 40px 32px", display: "flex", justifyContent: "flex-end" }}>
-                <button
-                  onClick={() => setStep(2)}
-                  style={{ padding: "11px 26px", fontSize: 13, fontWeight: 600, background: "var(--color-sage)", color: "var(--color-warm-white)", border: "none", borderRadius: 10, cursor: "pointer", fontFamily: "inherit", transition: "opacity 0.15s ease" }}
-                  onMouseEnter={e => (e.currentTarget.style.opacity = "0.88")}
-                  onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
-                >
-                  Let&apos;s get started →
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ── Step 2: About you ────────────────────────────────────────────── */}
-          {step === 2 && (
             <div style={panelStyle}>
-              <h2 style={titleStyle}>About you</h2>
+              <h2 style={titleStyle}>First, your name</h2>
               <p style={subtitleStyle}>
-                Ash addresses you by name. You can add more about yourself in Settings later.
+                Ash addresses you by name. This takes under a minute — you&apos;ll be on your board shortly.
               </p>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                 <div>
                   <FieldLabel>First name *</FieldLabel>
-                  <input
-                    ref={firstInputRef as React.RefObject<HTMLInputElement>}
-                    type="text"
+                  <TextInput
+                    inputRef={firstInputRef as React.RefObject<HTMLInputElement>}
                     value={data.firstName}
-                    onChange={e => set("firstName", e.target.value)}
+                    onChange={v => set("firstName", v)}
                     placeholder="What should Ash call you?"
-                    onKeyDown={e => { if (e.key === "Enter" && canAdvance2) setStep(3); }}
-                    style={{ width: "100%", padding: "9px 13px", fontSize: 13, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 9, color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
-                    onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
-                    onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
+                    onEnter={() => { if (canAdvance1) setStep(2); }}
                   />
                 </div>
                 <div>
                   <FieldLabel>Last name</FieldLabel>
-                  <input
-                    type="text"
+                  <TextInput
                     value={data.lastName}
-                    onChange={e => set("lastName", e.target.value)}
+                    onChange={v => set("lastName", v)}
                     placeholder="Surname (optional)"
-                    onKeyDown={e => { if (e.key === "Enter" && canAdvance2) setStep(3); }}
-                    style={{ width: "100%", padding: "9px 13px", fontSize: 13, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 9, color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
-                    onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
-                    onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
+                    onEnter={() => { if (canAdvance1) setStep(2); }}
                   />
                 </div>
               </div>
 
-              <StepFooter onBack={() => setStep(1)} onSkip={() => setStep(3)} onNext={() => setStep(3)} nextDisabled={!canAdvance2} />
+              <StepFooter onNext={() => setStep(2)} nextDisabled={!canAdvance1} />
             </div>
           )}
 
-          {/* ── Step 3: Studio identity ─────────────────────────────────────── */}
-          {step === 3 && (
+          {/* ── Step 2: Your studio ──────────────────────────────────────────── */}
+          {step === 2 && (
             <div style={panelStyle}>
               <h2 style={titleStyle}>Your studio</h2>
               <p style={subtitleStyle}>
-                This appears in the sidebar and on your invoices. Ash uses it to personalize advice.
+                This appears in the sidebar and on your invoices. You can add a bio, logo, and billing details later in Settings.
               </p>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 <div>
                   <FieldLabel>Studio or practice name *</FieldLabel>
-                  <input
-                    type="text"
-                    value={data.studioName}
-                    onChange={e => set("studioName", e.target.value)}
-                    placeholder="Your studio or practice name"
-                    onKeyDown={e => { if (e.key === "Enter" && canAdvance3) setStep(4); }}
-                    style={{ width: "100%", padding: "9px 13px", fontSize: 13, background: "var(--color-off-white)", border: "0.5px solid var(--color-border)", borderRadius: 9, color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
-                    onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
-                    onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
-                  />
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                  <div>
-                    <FieldLabel>City</FieldLabel>
-                    <TextInput value={data.city} onChange={v => set("city", v)} placeholder="e.g. New York, NY" />
-                  </div>
-                  <div>
-                    <FieldLabel>Website</FieldLabel>
-                    <TextInput value={data.website} onChange={v => set("website", v)} placeholder="https://" type="url" />
-                  </div>
-                </div>
-                <div>
-                  <FieldLabel>Studio tagline</FieldLabel>
                   <TextInput
-                    value={data.tagline}
-                    onChange={v => set("tagline", v)}
-                    placeholder="A one-line description of your work"
+                    inputRef={firstInputRef as React.RefObject<HTMLInputElement>}
+                    value={data.studioName}
+                    onChange={v => set("studioName", v)}
+                    placeholder="Your studio or practice name"
+                    onEnter={() => { if (canAdvance2) setStep(3); }}
                   />
                 </div>
                 <div>
-                  <FieldLabel>Studio bio / statement</FieldLabel>
-                  <textarea
-                    value={data.bio}
-                    onChange={e => set("bio", e.target.value)}
-                    placeholder="Paste your artist statement, studio bio, or a longer description of your practice. Ash will use this to write about your work, draft pitches, and stay on-voice."
-                    rows={5}
-                    style={{
-                      width: "100%", padding: "10px 13px", fontSize: 13,
-                      background: "var(--color-off-white)",
-                      border: "0.5px solid var(--color-border)", borderRadius: 9,
-                      color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none",
-                      boxSizing: "border-box", resize: "vertical", lineHeight: 1.55,
-                    }}
-                    onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
-                    onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
-                  />
-                </div>
-                <div>
-                  <FieldLabel>Logo &amp; brand color</FieldLabel>
-                  <StudioBrandFields
-                    logoUrl={data.logoUrl}
-                    brandColor={data.brandColor}
-                    onLogo={(url, path) => setData(d => ({ ...d, logoUrl: url, logoPath: path }))}
-                    onColor={v => set("brandColor", v)}
-                  />
-                </div>
-                <div>
-                  <FieldLabel>Billing &amp; payments</FieldLabel>
-                  <p style={{ fontSize: 11, color: "var(--color-grey)", lineHeight: 1.6, marginTop: -2, marginBottom: 12 }}>
-                    Used on your invoices and to prefill Stripe when you set up online payments. Optional — you can finish this later in Settings.
-                  </p>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                      <SelectInput
-                        value={data.businessType}
-                        onChange={v => set("businessType", v)}
-                        options={[{ value: "", label: "Business type…" }, ...BUSINESS_TYPES]}
-                      />
-                      <SelectInput
-                        value={data.country}
-                        onChange={v => set("country", v)}
-                        options={[{ value: "", label: "Country…" }, ...COUNTRIES.map(c => ({ value: c.code, label: c.name }))]}
-                      />
-                    </div>
-                    <TextInput value={data.addressLine1} onChange={v => set("addressLine1", v)} placeholder="Street address" />
-                    <TextInput value={data.addressLine2} onChange={v => set("addressLine2", v)} placeholder="Apt, suite, unit (optional)" />
-                    <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 14 }}>
-                      <TextInput value={data.addressCity} onChange={v => set("addressCity", v)} placeholder="City" />
-                      <TextInput value={data.addressState} onChange={v => set("addressState", v)} placeholder="State" />
-                      <TextInput value={data.addressZip} onChange={v => set("addressZip", v)} placeholder="ZIP" />
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                      <TextInput value={data.phone} onChange={v => set("phone", v)} placeholder="Phone — +1 (555) 123-4567" type="tel" />
-                      <TextInput value={data.ein} onChange={v => set("ein", v)} placeholder="EIN / tax ID — XX-XXXXXXX" />
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <FieldLabel>What do you make?</FieldLabel>
-                  <p style={{ fontSize: 11, color: "var(--color-grey)", lineHeight: 1.6, marginTop: -2, marginBottom: 12 }}>
-                    Perennial uses this to tailor your Projects board — your top picks become the default project types.
-                  </p>
-
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {PRACTICE_OPTIONS.map(opt => {
-                      const Icon = PRACTICE_ICONS[opt];
-                      const selected = data.practiceTypes.includes(opt);
-                      return (
-                        <Chip key={opt} selected={selected} onClick={() => toggle("practiceTypes", opt)}>
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                            {Icon && <Icon size={12} strokeWidth={1.75} style={{ opacity: selected ? 0.95 : 0.75 }} />}
-                            {opt}
-                          </span>
-                        </Chip>
-                      );
-                    })}
-                    {data.practiceTypes.filter(v => !PRACTICE_OPTIONS.includes(v)).map(v => (
-                      <Chip key={v} selected onClick={() => toggle("practiceTypes", v)}>
-                        {v}
-                      </Chip>
-                    ))}
-                  </div>
-                  <OtherInput
-                    values={data.practiceTypes}
-                    knownIds={PRACTICE_OPTIONS}
-                    onAdd={v => set("practiceTypes", [...data.practiceTypes, v])}
+                  <FieldLabel>Where are you based?</FieldLabel>
+                  <TextInput
+                    value={data.city}
+                    onChange={v => set("city", v)}
+                    placeholder="e.g. New York, NY (optional)"
+                    onEnter={() => { if (canAdvance2) setStep(3); }}
                   />
                 </div>
               </div>
 
-              <StepFooter onBack={() => setStep(2)} onSkip={() => setStep(4)} onNext={() => setStep(4)} nextDisabled={!canAdvance3} />
+              <StepFooter onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={!canAdvance2} />
             </div>
           )}
 
-          {/* ── Step 4: How you work ─────────────────────────────────────────── */}
-          {step === 4 && (
+          {/* ── Step 3: What you make ────────────────────────────────────────── */}
+          {step === 3 && (
             <div style={panelStyle}>
-              <h2 style={titleStyle}>How you work</h2>
+              <h2 style={titleStyle}>What do you make?</h2>
               <p style={subtitleStyle}>
-                Select all that describe your practice. This shapes how your modules are set up.
+                Pick everything that fits. Your top picks become the default project types on your Projects board.
               </p>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {WORK_TYPE_OPTIONS.map(opt => (
-                  <Chip key={opt.id} selected={data.workTypes.includes(opt.id)} onClick={() => toggle("workTypes", opt.id)} sub={opt.sub}>
-                    {opt.label}
-                  </Chip>
-                ))}
-                {data.workTypes.filter(v => !WORK_TYPE_OPTIONS.some(o => o.id === v)).map(v => (
-                  <Chip key={v} selected onClick={() => toggle("workTypes", v)}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {PRACTICE_OPTIONS.map(opt => {
+                  const Icon = PRACTICE_ICONS[opt];
+                  const selected = data.practiceTypes.includes(opt);
+                  return (
+                    <Chip key={opt} selected={selected} onClick={() => toggle("practiceTypes", opt)}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        {Icon && <Icon size={12} strokeWidth={1.75} style={{ opacity: selected ? 0.95 : 0.75 }} />}
+                        {opt}
+                      </span>
+                    </Chip>
+                  );
+                })}
+                {data.practiceTypes.filter(v => !PRACTICE_OPTIONS.includes(v)).map(v => (
+                  <Chip key={v} selected onClick={() => toggle("practiceTypes", v)}>
                     {v}
                   </Chip>
                 ))}
               </div>
               <OtherInput
-                values={data.workTypes}
-                knownIds={WORK_TYPE_OPTIONS.map(o => o.id)}
-                onAdd={v => set("workTypes", [...data.workTypes, v])}
+                values={data.practiceTypes}
+                knownIds={PRACTICE_OPTIONS}
+                onAdd={v => set("practiceTypes", [...data.practiceTypes, v])}
               />
 
-              <StepFooter onBack={() => setStep(3)} onSkip={() => setStep(5)} onNext={() => setStep(5)} />
+              <StepFooter onBack={() => setStep(2)} onNext={() => setStep(4)} nextDisabled={!canAdvance3} />
             </div>
           )}
 
-          {/* ── Step 5: How you sell ─────────────────────────────────────────── */}
-          {step === 5 && (
+          {/* ── Step 4: How you want to use Perennial ────────────────────────── */}
+          {step === 4 && (
             <div style={panelStyle}>
-              <h2 style={titleStyle}>How you sell</h2>
+              <h2 style={titleStyle}>How do you want to use Perennial?</h2>
               <p style={subtitleStyle}>
-                Select all that apply. Ash uses this to give you relevant outreach and pricing advice.
+                Pick what matters most — Ash will start here with you. You can change this any time.
               </p>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {CHANNEL_OPTIONS.map(opt => (
-                  <Chip key={opt.id} selected={data.sellingChannels.includes(opt.id)} onClick={() => toggle("sellingChannels", opt.id)} sub={opt.sub}>
-                    {opt.label}
-                  </Chip>
-                ))}
-                {data.sellingChannels.filter(v => !CHANNEL_OPTIONS.some(o => o.id === v)).map(v => (
-                  <Chip key={v} selected onClick={() => toggle("sellingChannels", v)}>
-                    {v}
-                  </Chip>
-                ))}
-              </div>
-              <div style={{ marginBottom: 20 }}>
-                <OtherInput
-                  values={data.sellingChannels}
-                  knownIds={CHANNEL_OPTIONS.map(o => o.id)}
-                  onAdd={v => set("sellingChannels", [...data.sellingChannels, v])}
-                />
-              </div>
-
-              <div>
-                <FieldLabel>Typical price point of your work</FieldLabel>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  {PRICE_OPTIONS.map(opt => (
-                    <SingleChip key={opt.id} selected={data.priceRange === opt.id} onClick={() => set("priceRange", data.priceRange === opt.id ? "" : opt.id)}>
-                      {opt.label}
-                    </SingleChip>
-                  ))}
-                </div>
-              </div>
-
-              <StepFooter onBack={() => setStep(4)} onSkip={() => setStep(6)} onNext={() => setStep(6)} />
-            </div>
-          )}
-
-          {/* ── Step 6: Where you are ────────────────────────────────────────── */}
-          {step === 6 && (
-            <div style={panelStyle}>
-              <h2 style={titleStyle}>Where you are</h2>
-              <p style={subtitleStyle}>
-                Helps Ash calibrate its advice to your stage and what you&apos;re actually dealing with.
-              </p>
-
-              <div style={{ marginBottom: 20 }}>
-                <FieldLabel>How long have you been practicing?</FieldLabel>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  {YEARS_OPTIONS.map(opt => (
-                    <SingleChip key={opt.id} selected={data.yearsInPractice === opt.id} onClick={() => set("yearsInPractice", data.yearsInPractice === opt.id ? "" : opt.id)} sub={opt.sub}>
-                      {opt.label}
-                    </SingleChip>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <FieldLabel>Biggest challenges right now <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(pick up to 3)</span></FieldLabel>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {CHALLENGE_OPTIONS.map(opt => {
-                    const selected = data.challenges.includes(opt);
-                    const blocked = !selected && data.challenges.length >= 3;
-                    return (
-                      <span key={opt} style={blocked ? { opacity: 0.4 } : undefined}>
-                        <Chip
-                          selected={selected}
-                          onClick={() => { if (blocked) return; toggle("challenges", opt); }}
-                        >
-                          {opt}
-                        </Chip>
-                      </span>
-                    );
-                  })}
-                  {data.challenges.filter(v => !CHALLENGE_OPTIONS.includes(v)).map(v => (
-                    <Chip key={v} selected onClick={() => toggle("challenges", v)}>
-                      {v}
-                    </Chip>
-                  ))}
-                </div>
-                <OtherInput
-                  values={data.challenges}
-                  knownIds={CHALLENGE_OPTIONS}
-                  disabled={data.challenges.length >= 3}
-                  onAdd={v => {
-                    if (data.challenges.length >= 3) return;
-                    set("challenges", [...data.challenges, v]);
-                  }}
-                />
-                {data.challenges.length >= 3 && (
-                  <p style={{ fontSize: 10, color: "var(--color-grey)", marginTop: 8 }}>
-                    That&apos;s 3 — remove one to choose a different challenge.
-                  </p>
-                )}
-              </div>
-
-              <div style={{ marginTop: 20 }}>
-                <FieldLabel>What&apos;s broken in your business right now?</FieldLabel>
-                <textarea
-                  value={data.businessIssues}
-                  onChange={e => set("businessIssues", e.target.value)}
-                  placeholder="Recurring problems, things that frustrate you, blockers in your workflow. Be candid — Ash will use this to suggest where to start."
-                  rows={3}
-                  style={{
-                    width: "100%", padding: "10px 13px", fontSize: 13,
-                    background: "var(--color-off-white)",
-                    border: "0.5px solid var(--color-border)", borderRadius: 9,
-                    color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none",
-                    boxSizing: "border-box", resize: "vertical", lineHeight: 1.55,
-                  }}
-                  onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
-                  onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
-                />
-              </div>
-
-              <div style={{ marginTop: 16 }}>
-                <FieldLabel>Anything urgent on your plate?</FieldLabel>
-                <textarea
-                  value={data.urgentNeeds}
-                  onChange={e => set("urgentNeeds", e.target.value)}
-                  placeholder="Pending invoices, deadlines this week, a pitch you owe someone, a contract you need to send. Things you'd like off your plate first."
-                  rows={3}
-                  style={{
-                    width: "100%", padding: "10px 13px", fontSize: 13,
-                    background: "var(--color-off-white)",
-                    border: "0.5px solid var(--color-border)", borderRadius: 9,
-                    color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none",
-                    boxSizing: "border-box", resize: "vertical", lineHeight: 1.55,
-                  }}
-                  onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
-                  onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
-                />
-              </div>
-
-              <StepFooter onBack={() => setStep(5)} onSkip={() => setStep(7)} onNext={() => setStep(7)} />
-            </div>
-          )}
-
-          {/* ── Step 7: Goals + Ash ──────────────────────────────────────────── */}
-          {step === 7 && (
-            <div style={panelStyle}>
-              <h2 style={titleStyle}>What do you want from Perennial?</h2>
-              <p style={subtitleStyle}>
-                Select your priorities. Ash will start here with you.
-              </p>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
                 {GOAL_OPTIONS.map(opt => {
                   const sel = data.goals.includes(opt.id);
                   const Icon = opt.Icon;
@@ -1086,467 +535,21 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                     </button>
                   );
                 })}
-                {data.goals.filter(v => !GOAL_OPTIONS.some(o => o.id === v)).map(v => (
-                  <button
-                    key={v}
-                    onClick={() => toggle("goals", v)}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 14, padding: "12px 14px",
-                      borderRadius: 10, cursor: "pointer", fontFamily: "inherit", textAlign: "left",
-                      background: "var(--color-sage)",
-                      border: "0.5px solid var(--color-sage)",
-                    }}
-                  >
-                    <div style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }} />
-                    <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-warm-white)" }}>{v}</span>
-                    <span style={{ marginLeft: "auto", fontSize: 12, color: "rgba(255,255,255,0.8)" }}>✓</span>
-                  </button>
-                ))}
               </div>
 
-              <div style={{ marginBottom: 24 }}>
-                <OtherInput
-                  values={data.goals}
-                  knownIds={GOAL_OPTIONS.map(o => o.id)}
-                  onAdd={v => set("goals", [...data.goals, v])}
-                />
-              </div>
-
-              <StepFooter onBack={() => setStep(6)} onSkip={() => setStep(8)} onNext={() => setStep(8)} />
-            </div>
-          )}
-
-          {/* ── Step 8: Studio resources upload ──────────────────────────────── */}
-          {step === 8 && (
-            <div style={panelStyle}>
-              <h2 style={titleStyle}>Bring in your studio materials</h2>
-              <p style={subtitleStyle}>
-                Drop in artist statements, bios, press, lookbooks, contracts — anything that defines your studio. Ash reads these to stay on-voice and reference your work. They land in <strong style={{ color: "var(--color-charcoal)", fontWeight: 600 }}>Resources</strong> so you can find them later.
-                <br />
-                <span style={{ color: "var(--color-grey)" }}>Don&apos;t worry — this is optional, and you can always add these later from Resources.</span>
-              </p>
-
-              <FileDropzone
-                files={stagedFiles}
-                onAdd={addFiles}
-                onUpdate={updateStagedFile}
-                onRemove={removeStagedFile}
-                uploadError={uploadError}
+              <StepFooter
+                onBack={() => setStep(3)}
+                onNext={handleFinish}
+                nextLabel={saving ? "Setting up…" : "Enter Perennial"}
+                nextDisabled={saving}
+                ash
               />
-
-              <div style={{ padding: "14px 16px", borderRadius: 12, background: "rgba(var(--color-sage-rgb),0.08)", border: "0.5px solid rgba(var(--color-sage-rgb),0.22)", marginTop: 20, marginBottom: 20 }}>
-                <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
-                  <div style={{ width: 24, height: 24, borderRadius: "50%", background: ASH_GRADIENT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <AshMark size={13} variant="on-dark" animate />
-                  </div>
-                  <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-charcoal)" }}>Ash is ready</p>
-                </div>
-                <p style={{ fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
-                  When you finish, Ash will open with a personalized response based on everything you&apos;ve shared — your practice, goals, challenges, and any documents you uploaded. It will walk you through where to start.
-                </p>
-              </div>
-
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 8, borderTop: "0.5px solid var(--color-border)", marginTop: 16 }}>
-                <button onClick={() => setStep(7)} style={backLinkStyle}>← Back</button>
-                <button
-                  onClick={() => setStep(9)}
-                  style={{
-                    padding: "10px 24px", fontSize: 13, fontWeight: 600,
-                    background: "var(--color-sage)", color: "white",
-                    border: "none", borderRadius: 10, cursor: "pointer",
-                    fontFamily: "inherit",
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.opacity = "0.88"}
-                  onMouseLeave={e => e.currentTarget.style.opacity = "1"}
-                >
-                  Next →
-                </button>
-              </div>
-            </div>
-          )}
-
-          {step === 9 && (
-            <div style={panelStyle}>
-              <h2 style={titleStyle}>Auto-fill your activity log</h2>
-              <p style={subtitleStyle}>
-                Connect email and calendar to let Perennial log emails and meetings against your contacts automatically. Skippable — you can connect any time from Settings.
-              </p>
-
-              <IntegrationConnectStep />
-
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 8, borderTop: "0.5px solid var(--color-border)", marginTop: 16 }}>
-                <button onClick={() => setStep(8)} style={backLinkStyle}>← Back</button>
-                <button
-                  onClick={handleFinish}
-                  disabled={saving}
-                  style={{
-                    padding: "10px 24px", fontSize: 13, fontWeight: 600,
-                    background: ASH_GRADIENT, color: "white",
-                    border: "none", borderRadius: 10, cursor: saving ? "not-allowed" : "pointer",
-                    fontFamily: "inherit", display: "flex", alignItems: "center", gap: 8,
-                    opacity: saving ? 0.7 : 1,
-                  }}
-                  onMouseEnter={e => { if (!saving) e.currentTarget.style.opacity = "0.88"; }}
-                  onMouseLeave={e => (e.currentTarget.style.opacity = saving ? "0.7" : "1")}
-                >
-                  <AshMark size={14} variant="on-dark" />
-                  {saving ? "Saving…" : "Get started"}
-                </button>
-              </div>
             </div>
           )}
 
         </div>
       </main>
     </div>
-  );
-}
-
-// ─── Integration connect step ────────────────────────────────────────────────
-
-// Organized by module so the user can see *why* each connection
-// matters. OAuth providers redirect straight to the connect URL with
-// ?next=/onboarding?step=9 so they come back here. API-key /
-// app-password providers redirect to Settings → Integrations with
-// ?openModal=X so the modal opens automatically — keeping the
-// connect-form UI in one place rather than duplicating it here.
-const CONNECT_NEXT = "/onboarding?step=9";
-
-interface ConnectTile {
-  id:    string;     // matches integrations.provider
-  name:  string;
-  desc:  string;
-  href:  string;
-  multi?: boolean;   // provider supports connecting multiple accounts
-}
-interface ConnectCategory {
-  title: string;
-  hint:  string;
-  tiles: ConnectTile[];
-}
-
-const ONBOARDING_CATEGORIES: ConnectCategory[] = [
-  {
-    title: "Communication",
-    hint:  "Auto-log emails and meetings against your Network contacts.",
-    tiles: [
-      { id: "google",    name: "Google",        desc: "Gmail + Calendar + Contacts + Drive",  href: `/api/auth/google?next=${encodeURIComponent(CONNECT_NEXT)}`, multi: true },
-      { id: "microsoft", name: "Microsoft 365", desc: "Outlook Mail + Calendar + Contacts",   href: `/api/auth/microsoft?next=${encodeURIComponent(CONNECT_NEXT)}`, multi: true },
-    ],
-  },
-  {
-    title: "Presence",
-    hint:  "Track newsletter and social stats inside the Presence module.",
-    tiles: [
-      { id: "mailchimp",        name: "Mailchimp",        desc: "Newsletter list size + recent campaigns", href: "/settings?section=integrations&openModal=mailchimp" },
-      { id: "beehiiv",          name: "Beehiiv",          desc: "Subscriber count + recent posts",         href: "/settings?section=integrations&openModal=beehiiv" },
-      { id: "instagram",        name: "Instagram",        desc: "Follower growth + engagement",            href: `/api/auth/instagram?next=${encodeURIComponent(CONNECT_NEXT)}` },
-      { id: "google_analytics", name: "Google Analytics", desc: "Website traffic + top pages",             href: `/api/auth/google-analytics?next=${encodeURIComponent(CONNECT_NEXT)}` },
-    ],
-  },
-  {
-    title: "Finance",
-    hint:  "See live transactions and cash flow in the Finance module.",
-    tiles: [
-      { id: "teller", name: "Bank account", desc: "Connect your bank securely via Plaid", href: "/finance" },
-    ],
-  },
-];
-
-function IntegrationConnectStep() {
-  const [connected, setConnected] = useState<Set<string>>(new Set());
-  const [loading,   setLoading]   = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res  = await fetch("/api/integrations/connect-status");
-        if (!res.ok) return;
-        const json = await res.json() as { providers?: string[] };
-        if (json.providers) setConnected(new Set(json.providers));
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 22, marginTop: 8, marginBottom: 16 }}>
-      {ONBOARDING_CATEGORIES.map((cat) => (
-        <div key={cat.title}>
-          <div style={{ marginBottom: 8 }}>
-            <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-grey)" }}>
-              {cat.title}
-            </p>
-            <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 2 }}>
-              {cat.hint}
-            </p>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {cat.tiles.map((t) => {
-              const isConnected = connected.has(t.id);
-              return (
-                <div
-                  key={t.id}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 12,
-                    padding: "11px 14px",
-                    background: isConnected ? "rgba(var(--color-green-rgb),0.10)" : "var(--color-off-white)",
-                    border:     isConnected ? "0.5px solid rgba(var(--color-green-rgb),0.32)" : "0.5px solid var(--color-border)",
-                    borderRadius: 10,
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 12.5, fontWeight: 600, color: "var(--color-charcoal)" }}>{t.name}</p>
-                    <p style={{ fontSize: 11, color: "var(--color-grey)", marginTop: 1 }}>{t.desc}</p>
-                  </div>
-                  {isConnected ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: "var(--color-green-deep)", background: "rgba(var(--color-green-rgb),0.18)", padding: "3px 8px", borderRadius: 99 }}>
-                        Connected ✓
-                      </span>
-                      {t.multi && (
-                        <a href={t.href} style={{ fontSize: 10, fontWeight: 600, color: "var(--color-sage)", textDecoration: "none" }}>
-                          + Add another
-                        </a>
-                      )}
-                    </div>
-                  ) : (
-                    <a
-                      href={t.href}
-                      style={{
-                        padding: "6px 12px", fontSize: 11, fontWeight: 600,
-                        background: "var(--color-sage)", color: "var(--color-warm-white)",
-                        border: "none", borderRadius: 7, textDecoration: "none",
-                      }}
-                    >
-                      Connect
-                    </a>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-      {loading && <p style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>Checking your connections…</p>}
-    </div>
-  );
-}
-
-// ─── Studio logo + brand color (onboarding step 3) ──────────────────────────
-
-function StudioBrandFields({
-  logoUrl, brandColor, onLogo, onColor,
-}: {
-  logoUrl:    string | null;
-  brandColor: string;
-  onLogo:     (url: string | null, path: string | null) => void;
-  onColor:    (v: string) => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [err,  setErr]  = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  async function pick(file: File) {
-    setErr(null);
-    setBusy(true);
-    try {
-      const { url, path } = await uploadStudioLogo(file);
-      onLogo(url, path);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Couldn't upload that logo.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-      <div>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/png,image/jpeg,image/webp,image/svg+xml"
-          style={{ display: "none" }}
-          onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) pick(f); }}
-        />
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={busy}
-          aria-label="Upload studio logo"
-          style={{
-            width: 72, height: 72, borderRadius: 12, padding: 0,
-            border: "1px dashed var(--color-border)", background: "var(--color-off-white)",
-            cursor: busy ? "default" : "pointer", overflow: "hidden",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}
-        >
-          {logoUrl
-            ? <img src={logoUrl} alt="Studio logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-            : <UploadCloud size={20} strokeWidth={1.5} style={{ color: "var(--color-grey)" }} />}
-        </button>
-        {logoUrl && (
-          <button
-            type="button"
-            onClick={() => onLogo(null, null)}
-            style={{ display: "block", marginTop: 6, fontSize: 10, color: "var(--color-grey)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
-          >
-            Remove
-          </button>
-        )}
-      </div>
-      <div style={{ flex: 1 }}>
-        <p style={{ fontSize: 11, color: "var(--color-grey)", lineHeight: 1.6, marginBottom: 10 }}>
-          {busy ? "Uploading…" : "Optional — your logo and brand color appear on invoices and the emails clients receive."}
-        </p>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <input
-            type="color"
-            value={brandColor || "#9ba37a"}
-            onChange={e => onColor(e.target.value)}
-            aria-label="Brand color"
-            style={{ width: 40, height: 30, padding: 0, border: "0.5px solid var(--color-border)", borderRadius: 7, background: "none", cursor: "pointer" }}
-          />
-          <span style={{ fontSize: 12, color: "var(--color-charcoal)" }}>{brandColor || "Default sage"}</span>
-          {brandColor && (
-            <button
-              type="button"
-              onClick={() => onColor("")}
-              style={{ fontSize: 10, color: "var(--color-grey)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
-            >
-              Reset
-            </button>
-          )}
-        </div>
-        {err && <p style={{ fontSize: 11, color: "var(--color-red-orange)", marginTop: 8 }}>{err}</p>}
-      </div>
-    </div>
-  );
-}
-
-// ─── File dropzone ────────────────────────────────────────────────────────────
-
-function FileDropzone({
-  files, onAdd, onUpdate, onRemove, uploadError,
-}: {
-  files:       StagedFile[];
-  onAdd:       (fs: File[]) => void;
-  onUpdate:    (id: string, patch: Partial<StagedFile>) => void;
-  onRemove:    (id: string) => void;
-  uploadError: string | null;
-}) {
-  const [hover, setHover] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  function handleDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setHover(false);
-    if (!e.dataTransfer.files?.length) return;
-    onAdd(Array.from(e.dataTransfer.files));
-  }
-
-  return (
-    <>
-      <div
-        onDragOver={e => { e.preventDefault(); setHover(true); }}
-        onDragLeave={() => setHover(false)}
-        onDrop={handleDrop}
-        onClick={() => inputRef.current?.click()}
-        style={{
-          padding: "28px 24px",
-          borderRadius: 12,
-          border: `1px dashed ${hover ? "var(--color-sage)" : "var(--color-border)"}`,
-          background: hover ? "rgba(var(--color-sage-rgb),0.06)" : "var(--color-off-white)",
-          textAlign: "center", cursor: "pointer",
-          transition: "all 0.12s ease",
-        }}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          style={{ display: "none" }}
-          onChange={e => {
-            if (e.target.files?.length) onAdd(Array.from(e.target.files));
-            e.target.value = "";
-          }}
-        />
-        <UploadCloud size={22} strokeWidth={1.5} style={{ color: "var(--color-grey)", margin: "0 auto 8px", display: "block" }} />
-        <p style={{ fontSize: 13, fontWeight: 500, color: "var(--color-charcoal)", marginBottom: 2 }}>
-          Drag files here or click to browse
-        </p>
-        <p style={{ fontSize: 11, color: "var(--color-grey)" }}>
-          PDFs, images, docs — anything that describes your studio
-        </p>
-      </div>
-
-      {uploadError && (
-        <p style={{ fontSize: 12, color: "var(--color-red-orange)", marginTop: 10 }}>
-          {uploadError}
-        </p>
-      )}
-
-      {files.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
-          {files.map(f => (
-            <div key={f.id} style={{
-              padding: 12, borderRadius: 10,
-              background: "var(--color-off-white)",
-              border: "0.5px solid var(--color-border)",
-            }}>
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
-                <input
-                  type="text"
-                  value={f.name}
-                  onChange={e => onUpdate(f.id, { name: e.target.value })}
-                  placeholder="Title for this file"
-                  style={{
-                    flex: 1, padding: "6px 10px", fontSize: 13, fontWeight: 500,
-                    background: "var(--color-warm-white)",
-                    border: "0.5px solid var(--color-border)", borderRadius: 7,
-                    color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none",
-                  }}
-                  onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
-                  onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
-                />
-                <button
-                  type="button"
-                  onClick={() => onRemove(f.id)}
-                  aria-label="Remove file"
-                  style={{
-                    background: "none", border: "none", padding: 6, cursor: "pointer",
-                    color: "var(--color-grey)", borderRadius: 6, flexShrink: 0,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}
-                >
-                  <XIcon size={14} />
-                </button>
-              </div>
-              <textarea
-                value={f.description}
-                onChange={e => onUpdate(f.id, { description: e.target.value })}
-                placeholder="What is this? (e.g. 'Studio bio used for gallery submissions, last updated 2026')"
-                rows={2}
-                style={{
-                  width: "100%", padding: "8px 10px", fontSize: 12,
-                  background: "var(--color-warm-white)",
-                  border: "0.5px solid var(--color-border)", borderRadius: 7,
-                  color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none",
-                  boxSizing: "border-box", resize: "vertical", lineHeight: 1.5,
-                }}
-                onFocus={e => (e.target.style.borderColor = "var(--color-sage)")}
-                onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
-              />
-              <p style={{ fontSize: 10, color: "var(--color-grey)", marginTop: 6 }}>
-                {f.file.name} · {(f.file.size / 1024).toFixed(0)} KB
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
-    </>
   );
 }
 
@@ -1574,27 +577,31 @@ const backLinkStyle: React.CSSProperties = {
 };
 
 function StepFooter({
-  onBack, onSkip, onNext, nextDisabled = false,
-}: { onBack: () => void; onSkip: () => void; onNext: () => void; nextDisabled?: boolean }) {
+  onBack, onNext, nextDisabled = false, nextLabel = "Continue →", ash = false,
+}: {
+  onBack?: () => void; onNext: () => void;
+  nextDisabled?: boolean; nextLabel?: string; ash?: boolean;
+}) {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 16, borderTop: "0.5px solid var(--color-border)", marginTop: 24 }}>
-      <button onClick={onBack} style={backLinkStyle}>← Back</button>
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <button onClick={onSkip} style={backLinkStyle}>Skip</button>
-        <button
-          onClick={onNext}
-          disabled={nextDisabled}
-          style={{
-            padding: "9px 22px", fontSize: 12, fontWeight: 600,
-            background: nextDisabled ? "var(--color-cream)" : "var(--color-sage)",
-            color: nextDisabled ? "var(--color-grey)" : "var(--color-warm-white)",
-            border: "none", borderRadius: 9,
-            cursor: nextDisabled ? "not-allowed" : "pointer", fontFamily: "inherit",
-          }}
-        >
-          Continue →
-        </button>
-      </div>
+      {onBack
+        ? <button onClick={onBack} style={backLinkStyle}>← Back</button>
+        : <span />}
+      <button
+        onClick={onNext}
+        disabled={nextDisabled}
+        style={{
+          padding: "9px 22px", fontSize: 12, fontWeight: 600,
+          background: nextDisabled ? "var(--color-cream)" : "var(--color-sage)",
+          color: nextDisabled ? "var(--color-grey)" : "var(--color-warm-white)",
+          border: "none", borderRadius: 9,
+          cursor: nextDisabled ? "not-allowed" : "pointer", fontFamily: "inherit",
+          display: "flex", alignItems: "center", gap: 8,
+        }}
+      >
+        {ash && !nextDisabled && <AshMark size={14} variant="on-dark" />}
+        {nextLabel}
+      </button>
     </div>
   );
 }
