@@ -48,7 +48,7 @@ const titleStyle: React.CSSProperties = {
 const metaStyle: React.CSSProperties = { fontFamily: FONT, fontSize: 11, color: "var(--color-text-tertiary)" };
 const stop = (e: React.PointerEvent) => e.stopPropagation();
 
-function Tile({ children }: { children: React.ReactNode }) {
+function Tile({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
   return (
     <div
       style={{
@@ -56,14 +56,34 @@ function Tile({ children }: { children: React.ReactNode }) {
         width: 28,
         height: 28,
         borderRadius: "var(--radius-md)",
-        background: "rgba(var(--color-sage-rgb), 0.16)",
+        background: muted ? "var(--color-surface-sunken)" : "rgba(var(--color-sage-rgb), 0.16)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        color: "var(--color-sage-text)",
+        color: muted ? "var(--color-text-tertiary)" : "var(--color-sage-text)",
       }}
     >
       {children}
+    </div>
+  );
+}
+
+type LoadState = "loading" | "ok" | "missing";
+
+// Shown when a card's referenced entity no longer exists (it was deleted after
+// the card was placed). Renders the last-known title, struck through.
+function MissingCard({ title, icon }: { title?: string; icon: React.ReactNode }) {
+  return (
+    <div style={cardStyle}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <Tile muted>{icon}</Tile>
+        <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+          <span style={{ ...titleStyle, color: "var(--color-text-tertiary)", textDecoration: "line-through" }}>
+            {title || "Untitled"}
+          </span>
+          <span style={metaStyle}>No longer available</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -72,21 +92,23 @@ function Tile({ children }: { children: React.ReactNode }) {
 export function LiveProjectCard({ object }: { object: CanvasObject }) {
   const c = object.content as ReferenceContent;
   const [p, setP] = useState<LiveProject | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState<LoadState>(() => (object.refId ? "loading" : "ok"));
   useEffect(() => {
+    if (!object.refId) return;
     let live = true;
     (async () => {
-      try {
-        if (object.refId) setP((await fetchProject(object.refId)) ?? null);
-      } finally {
-        if (live) setLoading(false);
-      }
+      const r = await fetchProject(object.refId!);
+      if (!live) return;
+      setP(r);
+      setState(r ? "ok" : "missing");
     })();
     return () => {
       live = false;
     };
   }, [object.refId]);
 
+  if (state === "missing") return <MissingCard title={c.title} icon={<ListChecks size={16} strokeWidth={1.75} />} />;
+  const loading = state === "loading";
   const progress = p && p.total ? p.done / p.total : 0;
   return (
     <div style={cardStyle}>
@@ -124,19 +146,28 @@ export function LiveProjectCard({ object }: { object: CanvasObject }) {
 export function LiveContactCard({ object }: { object: CanvasObject }) {
   const c = object.content as ReferenceContent;
   const [ct, setCt] = useState<LiveContact | null>(null);
+  const [state, setState] = useState<LoadState>(() => (object.refId ? "loading" : "ok"));
   useEffect(() => {
+    if (!object.refId) return;
     let live = true;
     (async () => {
-      if (object.refId) {
-        const r = await fetchContact(object.refId);
-        if (live) setCt(r ?? null);
-      }
+      const r = await fetchContact(object.refId!);
+      if (!live) return;
+      setCt(r);
+      setState(r ? "ok" : "missing");
     })();
     return () => {
       live = false;
     };
   }, [object.refId]);
 
+  if (state === "missing")
+    return (
+      <MissingCard
+        title={c.title}
+        icon={<span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600 }}>{c.initials ?? "?"}</span>}
+      />
+    );
   return (
     <div style={cardStyle}>
       <div style={{ display: "flex", gap: 11, alignItems: "center" }}>
@@ -167,24 +198,37 @@ export function LiveContactCard({ object }: { object: CanvasObject }) {
 export function LiveNoteCard({ object }: { object: CanvasObject }) {
   const c = object.content as ReferenceContent;
   const [note, setNote] = useState<{ title: string | null; content: string | null } | null>(null);
+  const [state, setState] = useState<LoadState>(() => (object.refId ? "loading" : "ok"));
   const bodyRef = useRef<HTMLDivElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (!object.refId) return;
     let live = true;
     (async () => {
-      if (object.refId) {
-        const n = await fetchNote(object.refId);
-        if (live && n) {
-          setNote(n);
-          if (bodyRef.current) bodyRef.current.innerHTML = n.content ?? "";
-        }
+      const n = await fetchNote(object.refId!);
+      if (!live) return;
+      if (n) {
+        setNote(n);
+        setState("ok");
+        if (bodyRef.current) bodyRef.current.innerHTML = n.content ?? "";
+      } else {
+        setState("missing");
       }
     })();
     return () => {
       live = false;
     };
   }, [object.refId]);
+
+  // Flush/clear the pending save on unmount so a debounced write can't fire
+  // against a torn-down card.
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
 
   const onInput = () => {
     if (!object.refId || !bodyRef.current) return;
@@ -195,6 +239,7 @@ export function LiveNoteCard({ object }: { object: CanvasObject }) {
     }, 700);
   };
 
+  if (state === "missing") return <MissingCard title={c.title} icon={<FileText size={16} strokeWidth={1.75} />} />;
   return (
     <div style={cardStyle}>
       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>

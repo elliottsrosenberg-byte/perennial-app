@@ -4,10 +4,11 @@
 // reuses the app Topbar; the canvas fills the rest; suggestion chips + an Ash
 // chat bar float over the bottom. (Presence chips + board selector deferred.)
 
-import { useCallback, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Plus,
   ArrowUp,
+  ChevronUp,
   Leaf,
   StickyNote,
   Type,
@@ -16,12 +17,9 @@ import {
 } from "lucide-react";
 import Topbar from "@/components/layout/Topbar";
 import Canvas, { type CanvasHandle } from "@/components/canvas/Canvas";
+import AshHomeConversation from "@/components/home/AshHomeConversation";
+import { useAshChat } from "@/components/ash/useAshChat";
 import type { CanvasObjectRow } from "@/types/database";
-
-function openAsh(message: string) {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent("open-ash", { detail: { message } }));
-}
 
 interface Props {
   canvasId: string | null;
@@ -31,9 +29,13 @@ interface Props {
   setupComplete?: boolean;
 }
 
-// Ghost prompt shown in the Ash bar until guided setup is complete. Sending an
-// empty bar (or the placeholder itself) kicks off the guided onboarding in Ash.
+// Ghost prompt shown in the Ash bar until guided setup is complete. Accepting it
+// (sending an otherwise-empty bar) kicks off the guided onboarding in Ash.
 const SETUP_PROMPT = "Help me finish setting up";
+
+// Measure before paint on the client (so the blur can rise on the same frame as
+// the text); fall back to useEffect during SSR to avoid the hydration warning.
+const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 // Ref-free chip data (label/icon/action) so the render-time array holds no
 // ref-reading closures — dispatched via runChip below (react-hooks/refs).
@@ -46,12 +48,80 @@ const CHIPS = [
 
 export default function HomeCanvas({ canvasId, initialObjects, setupComplete = true }: Props) {
   const canvasRef = useRef<CanvasHandle>(null);
-  const [draft, setDraft] = useState("");
+  const inputRef  = useRef<HTMLInputElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
-  const runChip = useCallback((action: (typeof CHIPS)[number]["action"]) => {
+  // Measured height of the overlay (conversation + bar) so the blur can be
+  // sized to the actual content — it then grows exactly as the text does
+  // (rising with each streamed line, holding steady while Ash thinks) instead
+  // of snapping to a fixed height.
+  const [overlayH, setOverlayH] = useState(0);
+
+  // Ash on Home streams directly onto the canvas (the global docked panel is
+  // hidden on "/"): the bar below is the composer, and replies stack upward
+  // above it via <AshHomeConversation>.
+  const {
+    messages, setMessages,
+    input, setInput,
+    isStreaming,
+    setConversationId,
+    sendMessage,
+  } = useAshChat({ module: "home" });
+
+  // The conversation can be minimized ("closed down") without clearing it —
+  // any new send (or the Resume pill) re-opens it.
+  const [collapsed, setCollapsed] = useState(false);
+  const [focused, setFocused]     = useState(false);
+  const conversationOpen = messages.length > 0 && !collapsed;
+
+  // Ghost prompt: before any conversation, if guided setup isn't done, the bar
+  // invites the user to finish setting up. Accepting it (send while the bar is
+  // empty) starts the guided onboarding conversation.
+  const ghostAvailable = !setupComplete && messages.length === 0;
+  const ghostActive    = ghostAvailable && !input.trim();
+
+  // Re-measure synchronously (before paint) whenever the content changes — on
+  // resume, on open, and on each streamed token — so the blur height updates on
+  // the same frame the text does. A resize listener keeps it correct on window
+  // changes too.
+  useIsoLayoutEffect(() => {
+    if (overlayRef.current) setOverlayH(overlayRef.current.offsetHeight);
+  }, [messages, conversationOpen, collapsed]);
+  useEffect(() => {
+    function onResize() {
+      if (overlayRef.current) setOverlayH(overlayRef.current.offsetHeight);
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  function handleSend(text: string) {
+    setCollapsed(false);
+    sendMessage(text);
+  }
+
+  // Stable ref so the once-registered open-ash listener never calls a stale
+  // handleSend.
+  const sendRef = useRef(handleSend);
+  useEffect(() => { sendRef.current = handleSend; });
+
+  // External entry points (onboarding tour, etc.) still dispatch `open-ash`.
+  // A message sends straight into the conversation; a bare event just focuses
+  // the composer.
+  useEffect(() => {
+    function handler(e: Event) {
+      const detail = (e as CustomEvent<{ message?: string }>).detail ?? {};
+      if (detail.message?.trim()) sendRef.current(detail.message);
+      else inputRef.current?.focus();
+    }
+    window.addEventListener("open-ash", handler);
+    return () => window.removeEventListener("open-ash", handler);
+  }, []);
+
+  function runChip(action: (typeof CHIPS)[number]["action"]) {
     switch (action) {
       case "summarize":
-        openAsh("Summarize what's on my canvas.");
+        handleSend("Summarize what's on my canvas.");
         break;
       case "sticky":
         canvasRef.current?.create("sticky");
@@ -63,19 +133,54 @@ export default function HomeCanvas({ canvasId, initialObjects, setupComplete = t
         canvasRef.current?.uploadImage();
         break;
     }
-  }, []);
+  }
 
   function submit() {
-    const msg = draft.trim();
-    if (!msg) {
-      // Empty bar: if setup isn't done, accept the ghost prompt and start the
-      // guided onboarding in Ash. Otherwise do nothing.
-      if (!setupComplete) openAsh(SETUP_PROMPT);
-      return;
-    }
-    openAsh(msg);
-    setDraft("");
+    // Empty bar with the ghost showing → accept the "finish setting up" prompt.
+    if (ghostActive) { handleSend(SETUP_PROMPT); return; }
+    handleSend(input);
   }
+
+  function clearChat() {
+    setMessages([]);
+    setConversationId(null);
+    setCollapsed(false);
+    inputRef.current?.focus();
+  }
+
+  const placeholder = conversationOpen
+    ? "Reply to Ash…"
+    : ghostAvailable
+      ? `${SETUP_PROMPT}…`
+      : initialObjects.length > 0
+        ? "Ask Ash about your board…"
+        : "Ask Ash anything…";
+
+  // Send is enabled when there's text to send OR the ghost prompt is available.
+  const sendDisabled = (!input.trim() && !ghostActive) || isStreaming;
+
+  // The backdrop blur rises with engagement rather than snapping to full: a
+  // light baseline always sits below the bar, deepens while composing the
+  // first prompt, and — once a conversation is open — tracks the measured
+  // content height so it rises line-by-line alongside Ash's reply.
+  const engaged   = focused || input.trim().length > 0;
+  const blurLevel = conversationOpen ? "open" : engaged ? "engaged" : "idle";
+  const blurTint = {
+    idle:    { amount: 12, opacity: 0.55 },
+    engaged: { amount: 18, opacity: 0.85 },
+    open:    { amount: 22, opacity: 1 },
+  }[blurLevel];
+  const blurHeight = conversationOpen
+    ? `${Math.max(overlayH + 88, 200)}px`
+    : engaged
+      ? "220px"
+      : "116px";
+
+  // Preview of the minimized conversation so "closed" reads as "tucked away".
+  const lastMessage = messages[messages.length - 1];
+  const collapsedPreview = lastMessage
+    ? lastMessage.content.replace(/\s+/g, " ").trim().slice(0, 54)
+    : "";
 
   const chipStyle: React.CSSProperties = {
     display: "inline-flex",
@@ -100,7 +205,7 @@ export default function HomeCanvas({ canvasId, initialObjects, setupComplete = t
         greeting
         actions={
           <button
-            onClick={() => openAsh("")}
+            onClick={() => inputRef.current?.focus()}
             className="px-[13px] py-[5px] text-[11px] font-medium rounded-md text-white transition-opacity hover:opacity-90 inline-flex items-center gap-1.5 leading-none"
             style={{ background: "var(--color-sage)" }}
           >
@@ -118,14 +223,41 @@ export default function HomeCanvas({ canvasId, initialObjects, setupComplete = t
           scope="home"
         />
 
-        {/* Ash overlay — suggestion chips + chat bar */}
+        {/* Full-width blur backdrop — spans the whole screen and the strip below
+            the bar, fading up into the canvas. A light baseline is always
+            present and rises with engagement (see `blur`). Clicking it while a
+            conversation is open closes Ash down. */}
         <div
+          onClick={conversationOpen ? () => setCollapsed(true) : undefined}
+          aria-hidden
+          style={{
+            position: "absolute",
+            left: 0, right: 0, bottom: 0,
+            height: blurHeight,
+            opacity: blurTint.opacity,
+            zIndex: 1,
+            pointerEvents: conversationOpen ? "auto" : "none",
+            backdropFilter: `blur(${blurTint.amount}px)`,
+            WebkitBackdropFilter: `blur(${blurTint.amount}px)`,
+            background:
+              "linear-gradient(to bottom, rgba(var(--color-warm-white-rgb),0) 0%, rgba(var(--color-warm-white-rgb),0.5) 55%, rgba(var(--color-warm-white-rgb),0.66) 100%)",
+            maskImage: "linear-gradient(to bottom, transparent 0, black 104px, black 100%)",
+            WebkitMaskImage: "linear-gradient(to bottom, transparent 0, black 104px, black 100%)",
+            transition:
+              "height 0.3s ease, opacity 0.3s ease, backdrop-filter 0.3s ease, -webkit-backdrop-filter 0.3s ease",
+          }}
+        />
+
+        {/* Ash overlay — conversation / suggestion chips + chat bar */}
+        <div
+          ref={overlayRef}
           style={{
             position: "absolute",
             left: "50%",
             bottom: 24,
             transform: "translateX(-50%)",
             width: "min(760px, calc(100% - 120px))",
+            zIndex: 2,
             display: "flex",
             flexDirection: "column",
             gap: 12,
@@ -133,24 +265,61 @@ export default function HomeCanvas({ canvasId, initialObjects, setupComplete = t
             pointerEvents: "none",
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 10,
-              justifyContent: "center",
-              pointerEvents: "auto",
-            }}
-          >
-            {CHIPS.map((c) => (
-              <button key={c.action} onClick={() => runChip(c.action)} style={chipStyle}>
-                <span style={{ display: "flex", color: "var(--color-text-tertiary)" }}>
-                  {c.icon}
+          {conversationOpen ? (
+            <AshHomeConversation
+              messages={messages}
+              onClear={clearChat}
+              onClose={() => setCollapsed(true)}
+            />
+          ) : messages.length > 0 ? (
+            /* Minimized — tucked at the bottom, one click (or typing) reopens it */
+            <button
+              onClick={() => setCollapsed(false)}
+              title="Resume chat"
+              style={{
+                display: "flex", alignItems: "center", gap: 8,
+                maxWidth: "100%",
+                padding: "8px 14px",
+                borderRadius: "var(--radius-full)",
+                background: "var(--color-surface-raised)",
+                border: "0.5px solid var(--color-border)",
+                boxShadow: "var(--shadow-md)",
+                color: "var(--color-text-secondary)",
+                fontFamily: "var(--font-sans)", fontSize: 13,
+                cursor: "pointer", pointerEvents: "auto",
+              }}
+            >
+              <ChevronUp size={15} strokeWidth={2} style={{ color: "var(--color-sage)", flexShrink: 0 }} />
+              <span style={{ fontWeight: 600, flexShrink: 0 }}>Resume chat</span>
+              {collapsedPreview && (
+                <span style={{
+                  color: "var(--color-text-tertiary)",
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>
+                  — {collapsedPreview}…
                 </span>
-                {c.label}
-              </button>
-            ))}
-          </div>
+              )}
+            </button>
+          ) : messages.length === 0 ? (
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 10,
+                justifyContent: "center",
+                pointerEvents: "auto",
+              }}
+            >
+              {CHIPS.map((c) => (
+                <button key={c.action} onClick={() => runChip(c.action)} style={chipStyle}>
+                  <span style={{ display: "flex", color: "var(--color-text-tertiary)" }}>
+                    {c.icon}
+                  </span>
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
 
           <div
             data-tour-canvas="ash"
@@ -169,15 +338,18 @@ export default function HomeCanvas({ canvasId, initialObjects, setupComplete = t
           >
             <Plus size={20} strokeWidth={1.75} style={{ color: "var(--color-text-tertiary)", flexShrink: 0 }} />
             <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   submit();
                 }
               }}
-              placeholder={setupComplete ? "Work with Ash to help your studio grow…" : `${SETUP_PROMPT}…`}
+              placeholder={placeholder}
               style={{
                 flex: 1,
                 border: "none",
@@ -191,6 +363,7 @@ export default function HomeCanvas({ canvasId, initialObjects, setupComplete = t
             <span style={{ width: 1, height: 24, background: "var(--color-border)" }} />
             <button
               onClick={submit}
+              disabled={sendDisabled}
               aria-label="Send to Ash"
               style={{
                 flexShrink: 0,
@@ -203,7 +376,9 @@ export default function HomeCanvas({ canvasId, initialObjects, setupComplete = t
                 alignItems: "center",
                 justifyContent: "center",
                 color: "#fff",
-                cursor: "pointer",
+                cursor: sendDisabled ? "not-allowed" : "pointer",
+                opacity: sendDisabled ? 0.4 : 1,
+                transition: "opacity 0.12s ease",
               }}
             >
               <ArrowUp size={18} strokeWidth={2} />
