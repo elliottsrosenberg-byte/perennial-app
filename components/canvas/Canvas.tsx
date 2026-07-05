@@ -121,6 +121,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const [preview, setPreview] = useState<{ x: number; y: number } | null>(null);
   const [picker, setPicker] = useState<EntityKind | null>(null);
   const [imagePicker, setImagePicker] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const [editDrop, setEditDrop] = useState<null | "block" | "align" | "valign" | "color">(null);
   const [dropActive, setDropActive] = useState(false);
   const dragDepth = useRef(0);
@@ -202,6 +203,9 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
         });
       } catch (err) {
         console.error("canvas image upload failed", err);
+        setToast(
+          err instanceof Error ? err.message : "Couldn't add that image. Please try again.",
+        );
       }
     },
     [placeObject, viewportCenterWorld],
@@ -666,11 +670,18 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     function onKeyUp(e: KeyboardEvent) {
       if (e.key === " ") setSpaceDown(false);
     }
+    // If focus leaves the window mid space-hold the keyup never arrives, which
+    // would strand the canvas in hand/pan mode — reset on blur.
+    function onBlur() {
+      setSpaceDown(false);
+    }
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
     };
   }, [editingId, deleteSelected, selectTool, copySelection, pasteClipboard]);
 
@@ -886,6 +897,13 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     : null;
   const exec = (cmd: string, arg?: string) => {
     document.execCommand(cmd, false, arg);
+    // execCommand mutates the contentEditable DOM but doesn't fire React's
+    // onInput, so read the result back and persist it — otherwise formatting
+    // (bold, headings, lists, links) is lost on reload.
+    const el = document.activeElement as HTMLElement | null;
+    if (el && el.classList.contains("canvas-rich") && editingObj) {
+      onText(editingObj.id, el.innerHTML, el.textContent ?? "");
+    }
   };
   const segBtn = (active: boolean): CSSProperties => ({
     display: "flex",
@@ -912,6 +930,12 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   useEffect(() => {
     setEditDrop(null);
   }, [editingId]);
+  // Auto-dismiss the transient error toast.
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
   const bumpFont = (delta: number) => {
     if (!editingObj) return;
     const cur =
@@ -1005,7 +1029,10 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
             onCommitGeometry={commitGeometry}
             onStartEdit={setEditingId}
             onText={onText}
-            onEndEdit={() => setEditingId(null)}
+            onEndEdit={() => {
+              if (editingId) store.flushContent(editingId);
+              setEditingId(null);
+            }}
             onContextMenu={onObjectContextMenu}
             onAutoHeight={onAutoHeight}
             onOpenReference={openReference}
@@ -1299,7 +1326,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
                   onMouseDown={(e) => {
                     e.preventDefault();
                     const url = window.prompt("Link URL");
-                    if (url) document.execCommand("createLink", false, url);
+                    if (url) exec("createLink", url);
                   }}
                   style={ib()}
                 >
@@ -1509,7 +1536,36 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
         <ImagePicker onPick={placeImageFromUrl} onClose={() => setImagePicker(false)} />
       )}
 
-      <input ref={fileRef} type="file" accept="image/*" onChange={onFilePicked} style={{ display: "none" }} />
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+        onChange={onFilePicked}
+        style={{ display: "none" }}
+      />
+
+      {toast && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            maxWidth: "min(420px, calc(100% - 32px))",
+            padding: "10px 16px",
+            borderRadius: "var(--radius-full)",
+            background: "var(--color-surface-raised)",
+            border: "0.5px solid var(--color-border)",
+            boxShadow: "var(--shadow-lg)",
+            fontFamily: "var(--font-sans)",
+            fontSize: 13,
+            color: "var(--color-text-primary)",
+            zIndex: 70,
+          }}
+        >
+          {toast}
+        </div>
+      )}
     </div>
   );
 });

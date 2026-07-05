@@ -144,7 +144,9 @@ export async function searchEntities(kind: EntityKind, query: string): Promise<E
     case "event": {
       const { data } = await supabase
         .from("opportunities")
+        // Only the published feed — draft/archived rows aren't user-facing.
         .select("id, title, category, start_date, application_deadline")
+        .eq("status", "published")
         .ilike("title", like)
         .order("start_date", { ascending: true, nullsFirst: false })
         .limit(20);
