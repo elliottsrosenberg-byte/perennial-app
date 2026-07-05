@@ -4,7 +4,7 @@
 // reuses the app Topbar; the canvas fills the rest; suggestion chips + an Ash
 // chat bar float over the bottom. (Presence chips + board selector deferred.)
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Plus,
   ArrowUp,
@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import Topbar from "@/components/layout/Topbar";
 import Canvas, { type CanvasHandle } from "@/components/canvas/Canvas";
+import AshHomeModal from "@/components/ash/AshHomeModal";
 import type { CanvasObjectRow } from "@/types/database";
 
 function openAsh(message: string) {
@@ -40,6 +41,25 @@ const CHIPS = [
 export default function HomeCanvas({ canvasId, initialObjects }: Props) {
   const canvasRef = useRef<CanvasHandle>(null);
   const [draft, setDraft] = useState("");
+
+  // Ash on Home is a centered streaming modal over the canvas (the global
+  // docked panel is hidden on "/"). Every entry point — the chat bar, chips,
+  // the topbar button, and external dispatchers like the onboarding tour —
+  // funnels through the `open-ash` event this listens for.
+  const [ashOpen, setAshOpen] = useState(false);
+  const [ashMessage, setAshMessage] = useState("");
+  const [ashNonce, setAshNonce] = useState(0);
+
+  useEffect(() => {
+    function handler(e: Event) {
+      const detail = (e as CustomEvent<{ message?: string }>).detail ?? {};
+      setAshMessage(detail.message ?? "");
+      setAshNonce((n) => n + 1);
+      setAshOpen(true);
+    }
+    window.addEventListener("open-ash", handler);
+    return () => window.removeEventListener("open-ash", handler);
+  }, []);
 
   const runChip = useCallback((action: (typeof CHIPS)[number]["action"]) => {
     switch (action) {
@@ -198,6 +218,13 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
           </div>
         </div>
       </div>
+
+      <AshHomeModal
+        open={ashOpen}
+        initialMessage={ashMessage}
+        nonce={ashNonce}
+        onClose={() => setAshOpen(false)}
+      />
     </div>
   );
 }
