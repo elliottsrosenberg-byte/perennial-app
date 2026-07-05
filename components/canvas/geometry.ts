@@ -38,7 +38,7 @@ const DEFAULTS: Record<
   CanvasObjectType,
   { width: number; height: number; content: CanvasContent }
 > = {
-  text:      { width: 240, height: 52,  content: { text: "Text", fontSize: 16 } },
+  text:      { width: 240, height: 52,  content: { text: "", fontSize: 16 } },
   sticky:    { width: 220, height: 168, content: { text: "", color: "yellow" } },
   shape:     { width: 200, height: 150, content: { shape: "rect", color: "green" } },
   image:     { width: 280, height: 200, content: { url: "" } },
