@@ -4,7 +4,7 @@
 // reuses the app Topbar; the canvas fills the rest; suggestion chips + an Ash
 // chat bar float over the bottom. (Presence chips + board selector deferred.)
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import {
   Plus,
   ArrowUp,
@@ -16,13 +16,9 @@ import {
 } from "lucide-react";
 import Topbar from "@/components/layout/Topbar";
 import Canvas, { type CanvasHandle } from "@/components/canvas/Canvas";
-import AshHomeModal from "@/components/ash/AshHomeModal";
+import AshHomeConversation from "@/components/home/AshHomeConversation";
+import { useAshChat } from "@/components/ash/useAshChat";
 import type { CanvasObjectRow } from "@/types/database";
-
-function openAsh(message: string) {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent("open-ash", { detail: { message } }));
-}
 
 interface Props {
   canvasId: string | null;
@@ -40,31 +36,41 @@ const CHIPS = [
 
 export default function HomeCanvas({ canvasId, initialObjects }: Props) {
   const canvasRef = useRef<CanvasHandle>(null);
-  const [draft, setDraft] = useState("");
+  const inputRef  = useRef<HTMLInputElement>(null);
 
-  // Ash on Home is a centered streaming modal over the canvas (the global
-  // docked panel is hidden on "/"). Every entry point — the chat bar, chips,
-  // the topbar button, and external dispatchers like the onboarding tour —
-  // funnels through the `open-ash` event this listens for.
-  const [ashOpen, setAshOpen] = useState(false);
-  const [ashMessage, setAshMessage] = useState("");
-  const [ashNonce, setAshNonce] = useState(0);
+  // Ash on Home streams directly onto the canvas (the global docked panel is
+  // hidden on "/"): the bar below is the composer, and replies stack upward
+  // above it via <AshHomeConversation>.
+  const {
+    messages, setMessages,
+    input, setInput,
+    isStreaming,
+    setConversationId,
+    sendMessage,
+  } = useAshChat({ module: "home" });
 
+  // Stable ref so the once-registered open-ash listener never calls a stale
+  // sendMessage.
+  const sendRef = useRef(sendMessage);
+  useEffect(() => { sendRef.current = sendMessage; });
+
+  // External entry points (onboarding tour, etc.) still dispatch `open-ash`.
+  // A message sends straight into the conversation; a bare event just focuses
+  // the composer.
   useEffect(() => {
     function handler(e: Event) {
       const detail = (e as CustomEvent<{ message?: string }>).detail ?? {};
-      setAshMessage(detail.message ?? "");
-      setAshNonce((n) => n + 1);
-      setAshOpen(true);
+      if (detail.message?.trim()) sendRef.current(detail.message);
+      else inputRef.current?.focus();
     }
     window.addEventListener("open-ash", handler);
     return () => window.removeEventListener("open-ash", handler);
   }, []);
 
-  const runChip = useCallback((action: (typeof CHIPS)[number]["action"]) => {
+  function runChip(action: (typeof CHIPS)[number]["action"]) {
     switch (action) {
       case "summarize":
-        openAsh("Summarize what's on my canvas.");
+        sendMessage("Summarize what's on my canvas.");
         break;
       case "sticky":
         canvasRef.current?.create("sticky");
@@ -76,13 +82,16 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
         canvasRef.current?.uploadImage();
         break;
     }
-  }, []);
+  }
 
   function submit() {
-    const msg = draft.trim();
-    if (!msg) return;
-    openAsh(msg);
-    setDraft("");
+    sendMessage(input);
+  }
+
+  function clearChat() {
+    setMessages([]);
+    setConversationId(null);
+    inputRef.current?.focus();
   }
 
   const chipStyle: React.CSSProperties = {
@@ -108,7 +117,7 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
         greeting
         actions={
           <button
-            onClick={() => openAsh("")}
+            onClick={() => inputRef.current?.focus()}
             className="px-[13px] py-[5px] text-[11px] font-medium rounded-md text-white transition-opacity hover:opacity-90 inline-flex items-center gap-1.5 leading-none"
             style={{ background: "var(--color-sage)" }}
           >
@@ -141,24 +150,28 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
             pointerEvents: "none",
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 10,
-              justifyContent: "center",
-              pointerEvents: "auto",
-            }}
-          >
-            {CHIPS.map((c) => (
-              <button key={c.action} onClick={() => runChip(c.action)} style={chipStyle}>
-                <span style={{ display: "flex", color: "var(--color-text-tertiary)" }}>
-                  {c.icon}
-                </span>
-                {c.label}
-              </button>
-            ))}
-          </div>
+          {messages.length > 0 ? (
+            <AshHomeConversation messages={messages} onClear={clearChat} />
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 10,
+                justifyContent: "center",
+                pointerEvents: "auto",
+              }}
+            >
+              {CHIPS.map((c) => (
+                <button key={c.action} onClick={() => runChip(c.action)} style={chipStyle}>
+                  <span style={{ display: "flex", color: "var(--color-text-tertiary)" }}>
+                    {c.icon}
+                  </span>
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div
             style={{
@@ -176,8 +189,9 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
           >
             <Plus size={20} strokeWidth={1.75} style={{ color: "var(--color-text-tertiary)", flexShrink: 0 }} />
             <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -198,6 +212,7 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
             <span style={{ width: 1, height: 24, background: "var(--color-border)" }} />
             <button
               onClick={submit}
+              disabled={!input.trim() || isStreaming}
               aria-label="Send to Ash"
               style={{
                 flexShrink: 0,
@@ -210,7 +225,9 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
                 alignItems: "center",
                 justifyContent: "center",
                 color: "#fff",
-                cursor: "pointer",
+                cursor: !input.trim() || isStreaming ? "not-allowed" : "pointer",
+                opacity: !input.trim() || isStreaming ? 0.4 : 1,
+                transition: "opacity 0.12s ease",
               }}
             >
               <ArrowUp size={18} strokeWidth={2} />
@@ -218,13 +235,6 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
           </div>
         </div>
       </div>
-
-      <AshHomeModal
-        open={ashOpen}
-        initialMessage={ashMessage}
-        nonce={ashNonce}
-        onClose={() => setAshOpen(false)}
-      />
     </div>
   );
 }
