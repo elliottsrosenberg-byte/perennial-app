@@ -4,7 +4,7 @@
 // reuses the app Topbar; the canvas fills the rest; suggestion chips + an Ash
 // chat bar float over the bottom. (Presence chips + board selector deferred.)
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Plus,
   ArrowUp,
@@ -49,10 +49,20 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
     sendMessage,
   } = useAshChat({ module: "home" });
 
+  // The conversation can be minimized ("closed down") without clearing it —
+  // any new send re-opens it.
+  const [collapsed, setCollapsed] = useState(false);
+  const conversationOpen = messages.length > 0 && !collapsed;
+
+  function handleSend(text: string) {
+    setCollapsed(false);
+    sendMessage(text);
+  }
+
   // Stable ref so the once-registered open-ash listener never calls a stale
-  // sendMessage.
-  const sendRef = useRef(sendMessage);
-  useEffect(() => { sendRef.current = sendMessage; });
+  // handleSend.
+  const sendRef = useRef(handleSend);
+  useEffect(() => { sendRef.current = handleSend; });
 
   // External entry points (onboarding tour, etc.) still dispatch `open-ash`.
   // A message sends straight into the conversation; a bare event just focuses
@@ -70,7 +80,7 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
   function runChip(action: (typeof CHIPS)[number]["action"]) {
     switch (action) {
       case "summarize":
-        sendMessage("Summarize what's on my canvas.");
+        handleSend("Summarize what's on my canvas.");
         break;
       case "sticky":
         canvasRef.current?.create("sticky");
@@ -85,14 +95,21 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
   }
 
   function submit() {
-    sendMessage(input);
+    handleSend(input);
   }
 
   function clearChat() {
     setMessages([]);
     setConversationId(null);
+    setCollapsed(false);
     inputRef.current?.focus();
   }
+
+  const placeholder = conversationOpen
+    ? "Reply to Ash…"
+    : initialObjects.length > 0
+      ? "Ask Ash about your board…"
+      : "Ask Ash anything…";
 
   const chipStyle: React.CSSProperties = {
     display: "inline-flex",
@@ -135,7 +152,30 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
           scope="home"
         />
 
-        {/* Ash overlay — suggestion chips + chat bar */}
+        {/* Full-width blur backdrop while chatting — spans the whole screen and
+            the strip below the bar, fading up into the canvas. Clicking it
+            (outside the conversation/bar) closes Ash down. */}
+        {conversationOpen && (
+          <div
+            onClick={() => setCollapsed(true)}
+            aria-hidden
+            style={{
+              position: "absolute",
+              left: 0, right: 0, bottom: 0,
+              height: "64%",
+              zIndex: 1,
+              pointerEvents: "auto",
+              backdropFilter: "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+              background:
+                "linear-gradient(to bottom, rgba(var(--color-warm-white-rgb),0) 0%, rgba(var(--color-warm-white-rgb),0.5) 55%, rgba(var(--color-warm-white-rgb),0.66) 100%)",
+              maskImage: "linear-gradient(to bottom, transparent 0, black 104px, black 100%)",
+              WebkitMaskImage: "linear-gradient(to bottom, transparent 0, black 104px, black 100%)",
+            }}
+          />
+        )}
+
+        {/* Ash overlay — conversation / suggestion chips + chat bar */}
         <div
           style={{
             position: "absolute",
@@ -143,6 +183,7 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
             bottom: 24,
             transform: "translateX(-50%)",
             width: "min(760px, calc(100% - 120px))",
+            zIndex: 2,
             display: "flex",
             flexDirection: "column",
             gap: 12,
@@ -150,9 +191,13 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
             pointerEvents: "none",
           }}
         >
-          {messages.length > 0 ? (
-            <AshHomeConversation messages={messages} onClear={clearChat} />
-          ) : (
+          {conversationOpen ? (
+            <AshHomeConversation
+              messages={messages}
+              onClear={clearChat}
+              onClose={() => setCollapsed(true)}
+            />
+          ) : messages.length === 0 ? (
             <div
               style={{
                 display: "flex",
@@ -171,7 +216,7 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
                 </button>
               ))}
             </div>
-          )}
+          ) : null}
 
           <div
             style={{
@@ -198,7 +243,7 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
                   submit();
                 }
               }}
-              placeholder="Work with Ash to help your studio grow…"
+              placeholder={placeholder}
               style={{
                 flex: 1,
                 border: "none",
