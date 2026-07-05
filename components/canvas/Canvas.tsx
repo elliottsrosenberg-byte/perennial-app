@@ -886,14 +886,42 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     dash?: "solid" | "dashed" | "dotted";
     strokeWidth?: number;
   };
+  // Screen-space bounds of an object accounting for its rotation, so floating
+  // bars sit above the object's *visual* top-center rather than its unrotated
+  // corner.
+  const screenBounds = (o: CanvasObject) => {
+    const cx = o.x + o.width / 2;
+    const cy = o.y + o.height / 2;
+    const rad = (o.rotation * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const xs: number[] = [];
+    const ys: number[] = [];
+    for (const [dx, dy] of [
+      [-o.width / 2, -o.height / 2],
+      [o.width / 2, -o.height / 2],
+      [o.width / 2, o.height / 2],
+      [-o.width / 2, o.height / 2],
+    ] as const) {
+      xs.push((cx + dx * cos - dy * sin) * view.scale + view.x);
+      ys.push((cy + dx * sin + dy * cos) * view.scale + view.y);
+    }
+    return { centerX: (Math.min(...xs) + Math.max(...xs)) / 2, top: Math.min(...ys) };
+  };
   const toolbarPos = sole
-    ? { left: sole.x * view.scale + view.x + (sole.width * view.scale) / 2, top: sole.y * view.scale + view.y - 8 }
+    ? (() => {
+        const b = screenBounds(sole);
+        return { left: b.centerX, top: b.top - 8 };
+      })()
     : null;
 
   // ── rich-text toolbar (while editing a text-bearing object) ──
   const editingObj = editingId ? store.objects.find((o) => o.id === editingId) ?? null : null;
   const editorBarPos = editingObj
-    ? { left: editingObj.x * view.scale + view.x + (editingObj.width * view.scale) / 2, top: editingObj.y * view.scale + view.y - 48 }
+    ? (() => {
+        const b = screenBounds(editingObj);
+        return { left: b.centerX, top: b.top - 48 };
+      })()
     : null;
   const exec = (cmd: string, arg?: string) => {
     document.execCommand(cmd, false, arg);
