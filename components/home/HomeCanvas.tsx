@@ -4,7 +4,7 @@
 // reuses the app Topbar; the canvas fills the rest; suggestion chips + an Ash
 // chat bar float over the bottom. (Presence chips + board selector deferred.)
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Plus,
   ArrowUp,
@@ -26,6 +26,10 @@ interface Props {
   initialObjects: CanvasObjectRow[];
 }
 
+// Measure before paint on the client (so the blur can rise on the same frame as
+// the text); fall back to useEffect during SSR to avoid the hydration warning.
+const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
 // Ref-free chip data (label/icon/action) so the render-time array holds no
 // ref-reading closures — dispatched via runChip below (react-hooks/refs).
 const CHIPS = [
@@ -45,14 +49,6 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
   // (rising with each streamed line, holding steady while Ash thinks) instead
   // of snapping to a fixed height.
   const [overlayH, setOverlayH] = useState(0);
-  useEffect(() => {
-    const el = overlayRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => setOverlayH(el.offsetHeight));
-    ro.observe(el);
-    setOverlayH(el.offsetHeight);
-    return () => ro.disconnect();
-  }, []);
 
   // Ash on Home streams directly onto the canvas (the global docked panel is
   // hidden on "/"): the bar below is the composer, and replies stack upward
@@ -70,6 +66,21 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [focused, setFocused]     = useState(false);
   const conversationOpen = messages.length > 0 && !collapsed;
+
+  // Re-measure synchronously (before paint) whenever the content changes — on
+  // resume, on open, and on each streamed token — so the blur height updates on
+  // the same frame the text does. A resize listener keeps it correct on window
+  // changes too.
+  useIsoLayoutEffect(() => {
+    if (overlayRef.current) setOverlayH(overlayRef.current.offsetHeight);
+  }, [messages, conversationOpen, collapsed]);
+  useEffect(() => {
+    function onResize() {
+      if (overlayRef.current) setOverlayH(overlayRef.current.offsetHeight);
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   function handleSend(text: string) {
     setCollapsed(false);
