@@ -71,6 +71,7 @@
 
   /* ── Ash AI ── */
   --color-ash:        #9BA37A;
+  --color-ash-light:  #a8b886;
   --color-ash-dark:   #4a6232;
   --color-ash-mid:    #6b8a4e;
   --color-ash-tint:   rgba(155,163,122,0.10);
