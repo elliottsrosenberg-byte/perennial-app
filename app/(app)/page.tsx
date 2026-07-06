@@ -52,8 +52,14 @@ export default async function HomePage() {
       .select("id")
       .maybeSingle();
     if (claim) {
-      await seedHomeCanvas(supabase, canvasId, user.id, { firstName, guidanceLevel, practiceTypes });
-      initialObjects = await loadCanvasObjects(supabase, canvasId);
+      try {
+        await seedHomeCanvas(supabase, canvasId, user.id, { firstName, guidanceLevel, practiceTypes });
+        initialObjects = await loadCanvasObjects(supabase, canvasId);
+      } catch {
+        // Seeding failed after we claimed it — release the claim so the next
+        // load can retry instead of leaving the board permanently empty.
+        await supabase.from("canvases").update({ seeded_at: null }).eq("id", canvasId);
+      }
     }
   }
 
