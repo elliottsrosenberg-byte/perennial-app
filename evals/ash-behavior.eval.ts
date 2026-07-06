@@ -64,6 +64,7 @@ function baseContext(preferences: AshContext["preferences"] = []): AshContext {
     urgentNeeds: "Need to invoice the Foster job.",
     perennialGoals: ["invoicing", "outreach"],
     guidanceLevel: "balanced",
+    profileSetupComplete: true,
     currency: "USD",
     hourlyRate: 85,
     projects: [

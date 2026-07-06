@@ -138,6 +138,7 @@ export interface AshContext {
   urgentNeeds:         string | null;
   perennialGoals:      string[];
   guidanceLevel:       "guided" | "balanced" | "expert" | null;
+  profileSetupComplete: boolean;
   currency:            string;
   hourlyRate:          number | null;
   projects:            Array<{ id: string; title: string; status: string; due_date: string | null; priority: string }>;
@@ -181,6 +182,11 @@ export function buildDynamicContext(ctx: AshContext): string {
       expert:   "**Guidance level: EXPERT** (already runs on real tools). Assume fluency — skip the basics and the pep talk. Be a fast peer operator: help them get their existing workflow *into* Perennial and stay out of the way unless asked. Terse, high-signal.",
     }[ctx.guidanceLevel];
     if (posture) lines.push(`\n${posture}`);
+  }
+
+  // Setup status — so you proactively know when the studio isn't populated yet.
+  if (!ctx.profileSetupComplete) {
+    lines.push(`\n**Setup status: INCOMPLETE.** This user finished the quick sign-up but hasn't done the deeper guided setup — most of their profile (how they sell, pricing, challenges, integrations) and their real projects/contacts aren't in Perennial yet. So don't read the empty numbers below (0 projects, 0 hours, no contacts) as a quiet studio — it almost always just means nothing's been added yet. Early on, gently steer toward getting set up: name it, then offer to help finish setup — call **get_setup_status**, fill gaps with **save_profile_details**, add first contacts, and guide integrations. Calibrate to their guidance level: if guided, lead the setup; if expert, make it a brief one-line offer and then get out of the way. When they take you up on it (or send "Help me finish setting up"), run the full guided setup.`);
   }
 
   // Learned preferences (always honored)

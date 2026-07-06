@@ -444,6 +444,16 @@ export default function SettingsPage() {
   const [integrations, setIntegrations] = useState<IntegrationRow[]>([]);
   const [activeModal,  setActiveModal]  = useState<string | null>(null);
 
+  // Honor ?section=... on the client too. The useState initializer above runs
+  // during SSR (no window) and defaults to "account", so on a client navigation
+  // (e.g. the onboarding "Connect email & calendar" card → integrations) we
+  // re-read the param on mount and select the right tab.
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get("section");
+    const allowed: Section[] = ["account", "studio", "preferences", "notifications", "billing", "integrations"];
+    if ((allowed as string[]).includes(s ?? "")) setActive(s as Section);
+  }, []);
+
   // Open a modal automatically when redirected with ?openModal=X (used
   // by the onboarding step's Mailchimp / Beehiiv tiles so the user
   // lands on Settings with the right form already open instead of
