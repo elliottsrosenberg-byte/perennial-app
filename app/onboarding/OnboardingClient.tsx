@@ -106,6 +106,7 @@ type Step = 1 | 2 | 3;
 interface OnboardingData {
   firstName:     string;
   lastName:      string;
+  studioName:    string;
   practiceTypes: string[];
   guidanceLevel: GuidanceLevel | null;
 }
@@ -244,7 +245,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
   const [saving, setSaving] = useState(false);
 
   const [data, setData] = useState<OnboardingData>({
-    firstName: "", lastName: "", practiceTypes: [], guidanceLevel: null,
+    firstName: "", lastName: "", studioName: "", practiceTypes: [], guidanceLevel: null,
   });
 
   const firstInputRef = useRef<HTMLInputElement>(null);
@@ -312,6 +313,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
     await supabase.from("profiles").upsert({
       user_id:                userId,
       display_name:           [data.firstName, data.lastName].map(s => s.trim()).filter(Boolean).join(" ") || null,
+      studio_name:            data.studioName.trim() || null,
       practice_types:         data.practiceTypes,
       guidance_level:         data.guidanceLevel,
       onboarding_complete:    true,
@@ -379,23 +381,34 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                 First things first — tell us a bit about yourself. This takes under a minute.
               </p>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                <div>
-                  <FieldLabel>First name *</FieldLabel>
-                  <TextInput
-                    inputRef={firstInputRef as React.RefObject<HTMLInputElement>}
-                    value={data.firstName}
-                    onChange={v => set("firstName", v)}
-                    placeholder="What should Ash call you?"
-                    onEnter={() => { if (canAdvance1) setStep(2); }}
-                  />
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  <div>
+                    <FieldLabel>First name *</FieldLabel>
+                    <TextInput
+                      inputRef={firstInputRef as React.RefObject<HTMLInputElement>}
+                      value={data.firstName}
+                      onChange={v => set("firstName", v)}
+                      placeholder="What should Ash call you?"
+                      onEnter={() => { if (canAdvance1) setStep(2); }}
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel>Last name</FieldLabel>
+                    <TextInput
+                      value={data.lastName}
+                      onChange={v => set("lastName", v)}
+                      placeholder="Surname (optional)"
+                      onEnter={() => { if (canAdvance1) setStep(2); }}
+                    />
+                  </div>
                 </div>
                 <div>
-                  <FieldLabel>Last name</FieldLabel>
+                  <FieldLabel>Studio or practice name</FieldLabel>
                   <TextInput
-                    value={data.lastName}
-                    onChange={v => set("lastName", v)}
-                    placeholder="Surname (optional)"
+                    value={data.studioName}
+                    onChange={v => set("studioName", v)}
+                    placeholder="Your studio, practice, or brand name"
                     onEnter={() => { if (canAdvance1) setStep(2); }}
                   />
                 </div>
