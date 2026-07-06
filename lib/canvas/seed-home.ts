@@ -99,42 +99,15 @@ export async function seedHomeCanvas(
     id: uid(), type: "shape", x: 162, y: 240, width: 64, height: 4, rotation: 0, zIndex: 5,
     content: { shape: "line", color: "green", strokeWidth: 3, endCap: "none" }, refType: null, refId: null,
   });
-  const STEP_W = 288, STEP_H = 104, STEP_GAP = 14, STEP_X = 160, STEP_Y0 = 256;
+  // A row of tailored CTA cards — the way in for a fresh account. (No live module
+  // cards: they read as empty on day one. These are the actionable next steps.)
+  const STEP_W = 264, STEP_H = 150, STEP_GAP = 18, STEP_X = 160, STEP_Y = 256;
   cards.forEach((content, i) => {
     objects.push({
       id: uid(), type: "action",
-      x: STEP_X, y: STEP_Y0 + i * (STEP_H + STEP_GAP),
+      x: STEP_X + i * (STEP_W + STEP_GAP), y: STEP_Y,
       width: STEP_W, height: STEP_H, rotation: 0, zIndex: 6 + i,
       content, refType: null, refId: null,
-    });
-  });
-
-  // ── Connector arrow from the steps toward the module grid ──────────────────
-  objects.push({
-    id: uid(), type: "shape", x: 462, y: 300, width: 44, height: 18, rotation: 0, zIndex: 10,
-    content: { shape: "arrow", color: "grey", startCap: "none", endCap: "arrow", dash: "dotted", strokeWidth: 2 },
-    refType: null, refId: null,
-  });
-
-  // ── "Your studio" module grid (right) ──────────────────────────────────────
-  objects.push({
-    id: uid(), type: "text", x: 520, y: 208, width: 300, height: 28, rotation: 0, zIndex: 11,
-    content: { text: "Your studio", fontSize: 18, align: "left" }, refType: null, refId: null,
-  });
-  objects.push({
-    id: uid(), type: "shape", x: 522, y: 240, width: 64, height: 4, rotation: 0, zIndex: 12,
-    content: { shape: "line", color: "blue", strokeWidth: 3, endCap: "none" }, refType: null, refId: null,
-  });
-  const MOD_W = 168, MOD_H = 132, MOD_GAP = 16, MOD_X = 520, MOD_Y0 = 256;
-  const MODULES = ["projects", "tasks", "finance", "calendar"] as const;
-  MODULES.forEach((moduleKey, i) => {
-    const col = i % 2, row = Math.floor(i / 2);
-    objects.push({
-      id: uid(), type: "module",
-      x: MOD_X + col * (MOD_W + MOD_GAP),
-      y: MOD_Y0 + row * (MOD_H + MOD_GAP),
-      width: MOD_W, height: MOD_H, rotation: 0, zIndex: 13 + i,
-      content: { moduleKey }, refType: null, refId: null,
     });
   });
 
