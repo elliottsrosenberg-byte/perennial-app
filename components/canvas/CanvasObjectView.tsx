@@ -8,8 +8,9 @@
 // screen pointer deltas are divided by `scale`.
 
 import { useEffect, useRef } from "react";
-import type { CanvasObject, ShapeContent } from "./types";
+import type { CanvasObject, ImageContent, ShapeContent } from "./types";
 import CanvasObjectContent from "./CanvasObjectContent";
+import ImageCropOverlay from "./ImageCropOverlay";
 
 type Handle = "nw" | "ne" | "sw" | "se" | "n" | "s" | "e" | "w";
 const CORNERS: Handle[] = ["nw", "ne", "sw", "se"];
@@ -29,6 +30,8 @@ interface Props {
   /** True only under the Select tool — gates move/resize/rotate hit-testing. */
   interactive: boolean;
   editing: boolean;
+  /** True while this image object is in the crop editor. */
+  cropping: boolean;
   scale: number;
   onBeginDrag: (id: string, e: React.PointerEvent) => void;
   onChangeLocal: (id: string, patch: Partial<CanvasObject>) => void;
@@ -41,6 +44,16 @@ interface Props {
   onAutoHeight: (id: string, height: number) => void;
   /** Open the entity a reference card points at (double-click). */
   onOpenReference: (o: CanvasObject) => void;
+  /** Enter the crop editor for an image (double-click). */
+  onStartCrop: (id: string) => void;
+  /** Commit a crop: store the source rect and resize the object to the frame. */
+  onApplyCrop: (
+    id: string,
+    crop: { x: number; y: number; w: number; h: number },
+    geom: { x: number; y: number; width: number; height: number },
+  ) => void;
+  /** Leave the crop editor without changes. */
+  onCancelCrop: () => void;
 }
 
 function rotate(vx: number, vy: number, rad: number) {
@@ -63,6 +76,7 @@ export default function CanvasObjectView({
   soleSelected,
   interactive,
   editing,
+  cropping,
   scale,
   onBeginDrag,
   onChangeLocal,
@@ -73,6 +87,9 @@ export default function CanvasObjectView({
   onContextMenu,
   onAutoHeight,
   onOpenReference,
+  onStartCrop,
+  onApplyCrop,
+  onCancelCrop,
 }: Props) {
   const latestRef = useRef<CanvasObject>(object);
   useEffect(() => {
@@ -98,8 +115,11 @@ export default function CanvasObjectView({
   const editableText = scalable || shapeKind === "rect" || shapeKind === "ellipse";
   const isLinear = shapeKind === "line" || shapeKind === "arrow";
 
+  const isImage = object.type === "image";
+  const hasImage = isImage && !!(object.content as ImageContent).url;
+
   function onBodyPointerDown(e: React.PointerEvent) {
-    if (editing || !interactive) return; // fall through so create/hand tools work
+    if (editing || cropping || !interactive) return; // fall through so create/hand tools work
     e.stopPropagation();
     onBeginDrag(object.id, e);
   }
@@ -124,18 +144,21 @@ export default function CanvasObjectView({
       nw = Math.max(MIN_SIZE, nw);
       nh = Math.max(MIN_SIZE, nh);
 
-      // Shift on a text/sticky corner = uniform scale of the box AND its text.
-      const uniform = ev.shiftKey && scalable && handle.length === 2;
+      // Shift on a corner locks the aspect ratio (uniform scale). For
+      // text/sticky it also scales the font so the whole object grows together.
+      const lockAspect = ev.shiftKey && handle.length === 2;
       let fontPatch: Partial<CanvasObject> = {};
-      if (uniform) {
+      if (lockAspect) {
         const factor = Math.max(nw / o.width, nh / o.height);
         nw = Math.round(o.width * factor);
         nh = Math.round(o.height * factor);
-        const baseFont =
-          (o.content as { fontSize?: number }).fontSize ?? (o.type === "text" ? 16 : 13);
-        fontPatch = {
-          content: { ...o.content, fontSize: Math.max(6, Math.round(baseFont * factor)) },
-        };
+        if (scalable) {
+          const baseFont =
+            (o.content as { fontSize?: number }).fontSize ?? (o.type === "text" ? 16 : 13);
+          fontPatch = {
+            content: { ...o.content, fontSize: Math.max(6, Math.round(baseFont * factor)) },
+          };
+        }
       }
 
       const centerOld = { x: o.x + o.width / 2, y: o.y + o.height / 2 };
@@ -247,7 +270,7 @@ export default function CanvasObjectView({
         transform: `rotate(${object.rotation}deg)`,
         transformOrigin: "center center",
         zIndex: object.zIndex,
-        cursor: interactive && !editing ? "move" : editing ? "text" : "inherit",
+        cursor: cropping ? "default" : interactive && !editing ? "move" : editing ? "text" : "inherit",
         touchAction: "none",
       }}
       onPointerDown={onBodyPointerDown}
@@ -256,6 +279,11 @@ export default function CanvasObjectView({
         if (editableText && interactive) {
           e.stopPropagation();
           onStartEdit(object.id);
+          return;
+        }
+        if (interactive && hasImage) {
+          e.stopPropagation();
+          onStartCrop(object.id);
           return;
         }
         if (
@@ -275,7 +303,16 @@ export default function CanvasObjectView({
         onEndEdit={onEndEdit}
       />
 
-      {selected && !editing && !isLinear && (
+      {cropping && (
+        <ImageCropOverlay
+          object={object}
+          scale={scale}
+          onApply={(crop, geom) => onApplyCrop(object.id, crop, geom)}
+          onCancel={onCancelCrop}
+        />
+      )}
+
+      {!cropping && selected && !editing && !isLinear && (
         <div
           style={{
             position: "absolute",
@@ -288,7 +325,7 @@ export default function CanvasObjectView({
       )}
 
       {/* line/arrow: endpoint anchors instead of a bounding box */}
-      {soleSelected && interactive && !editing && isLinear && (
+      {soleSelected && interactive && !editing && !cropping && isLinear && (
         <>
           {(["start", "end"] as const).map((which) => (
             <div
@@ -314,7 +351,7 @@ export default function CanvasObjectView({
         </>
       )}
 
-      {soleSelected && interactive && !editing && !isLinear && (
+      {soleSelected && interactive && !editing && !cropping && !isLinear && (
         <>
           {/* rotate zones just outside each corner — rotate cursor on hover */}
           {CORNERS.map((corner) => (
