@@ -70,7 +70,7 @@ export async function buildAshContext(
 
     supabase
       .from("profiles")
-      .select("display_name, studio_name, tagline, bio, location, website, practice_types, work_types, selling_channels, price_range, years_in_practice, primary_challenges, business_issues, urgent_needs, perennial_goals, currency, hourly_rate, guidance_level")
+      .select("display_name, studio_name, tagline, bio, location, website, practice_types, work_types, selling_channels, price_range, years_in_practice, primary_challenges, business_issues, urgent_needs, perennial_goals, currency, hourly_rate, guidance_level, profile_setup_complete")
       .eq("user_id", userId)
       .maybeSingle(),
     loadPreferences(supabase, userId),
@@ -115,6 +115,7 @@ export async function buildAshContext(
     perennial_goals?: string[];
     currency?: string; hourly_rate?: number;
     guidance_level?: string;
+    profile_setup_complete?: boolean;
   };
   const prof = profile as Prof | null;
 
@@ -136,6 +137,7 @@ export async function buildAshContext(
     urgentNeeds:        prof?.urgent_needs ?? null,
     perennialGoals:     prof?.perennial_goals ?? [],
     guidanceLevel:      (prof?.guidance_level as AshContext["guidanceLevel"]) ?? null,
+    profileSetupComplete: prof?.profile_setup_complete ?? false,
     currency:           prof?.currency ?? "USD",
     hourlyRate:         prof?.hourly_rate ?? null,
     projects:       (projects ?? []) as AshContext["projects"],

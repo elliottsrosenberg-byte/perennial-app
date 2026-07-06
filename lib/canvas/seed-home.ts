@@ -1,17 +1,17 @@
-// First-run starter content for the Home board. Instead of static hints, we seed
-// a welcome + a small set of interactive CTA cards ("action" objects) chosen by
-// the user's discipline and guidance level, so a brand-new board already leads
-// to action: talk to Ash, create a project, connect an integration, etc. Every
-// object is a real, editable/deletable canvas object.
+// First-run starter content for the Home board. We seed a welcome, a "Start
+// here" column of interactive CTA cards (tailored by the user's discipline +
+// guidance level), a "Your studio" grid of live module cards, and a few light
+// canvas flourishes (a hand-drawn underline, accent lines, a connector arrow) so
+// a brand-new board already feels alive and demonstrates the canvas's range.
+// Every object is a real, editable/deletable canvas object.
 //
 // Runs server-side from app/(app)/page.tsx exactly once, when the Home canvas is
 // first created and the user hasn't finished guided setup yet.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { objectToColumns, type CanvasObject, type ActionContent, type StickyColor } from "@/components/canvas/types";
+import { objectToColumns, type CanvasObject, type ActionContent } from "@/components/canvas/types";
 
 function uid(): string {
-  // Web Crypto global — available in the Next.js server runtime and the browser.
   return globalThis.crypto.randomUUID();
 }
 
@@ -23,35 +23,34 @@ interface SeedOpts {
   practiceTypes: string[];
 }
 
-// The four CTA cards, tailored by guidance level. `guided` leans coaching +
-// learning; `expert` leans migration/utility; `balanced` mixes the two.
+const INTEGRATIONS_HREF = "/settings?section=integrations";
+
+// The "Start here" cards — a short, ordered checklist of first moves, tailored by
+// guidance level. `guided` leans coaching, `expert` leans migration/utility.
 function cardsFor(level: GuidanceLevel, discipline: string): ActionContent[] {
   const work = discipline ? `${discipline} ` : "";
 
   if (level === "expert") {
     return [
-      { label: "Create your active projects", sublabel: `Set up the ${work}work you have in flight.`, icon: "project", actionKind: "route", href: "/projects", color: "blue" },
-      { label: "Import your contacts", sublabel: "Galleries, clients, press, fabricators.", icon: "contact", actionKind: "route", href: "/network", color: "purple" },
-      { label: "Connect email & calendar", sublabel: "Auto-log activity and see deadlines.", icon: "calendar", actionKind: "route", href: "/settings?section=integrations", color: "orange" },
-      { label: "Ask Ash anything", sublabel: "It has full context on your studio.", icon: "ash", actionKind: "ash", prompt: "What can you help me with?", color: "green" },
+      { label: "Add your active projects", sublabel: `Get the ${work}work you have in flight into Perennial — status, deadlines, and value in one view.`, icon: "project", actionKind: "route", href: "/projects", color: "blue" },
+      { label: "Import your contacts", sublabel: "Galleries, clients, press, fabricators — bring your whole network in.", icon: "contact", actionKind: "route", href: "/network", color: "purple" },
+      { label: "Connect email, calendar & bank", sublabel: "Wire up integrations so activity and finances flow in automatically.", icon: "calendar", actionKind: "route", href: INTEGRATIONS_HREF, color: "orange" },
     ];
   }
 
   if (level === "guided") {
     return [
-      { label: "Where should I start?", sublabel: "Tell Ash what's on your plate — it'll help you prioritize.", icon: "compass", actionKind: "ash", prompt: "I just set up Perennial. Help me figure out what to focus on first.", color: "green" },
-      { label: "Set up your first project", sublabel: `Ash will build out your ${work}project with you.`, icon: "project", actionKind: "ash", prompt: "Help me set up my first project — ask me what I'm working on.", color: "blue" },
-      { label: "Learn: pricing your work", sublabel: "One of the hardest parts — Ash can walk you through it.", icon: "sparkles", actionKind: "ash", prompt: `Teach me how to think about pricing my ${work}work.`, color: "purple" },
-      { label: "Connect your calendar", sublabel: "So deadlines and events land in one place.", icon: "calendar", actionKind: "route", href: "/settings?section=integrations", color: "orange" },
+      { label: "Set up your first project", sublabel: `Tell Ash what you're making and it'll build out your ${work}project with tasks and a timeline.`, icon: "project", actionKind: "ash", prompt: "Help me set up my first project — ask me what I'm working on.", color: "blue" },
+      { label: "Connect email & calendar", sublabel: "Auto-log messages and meetings, and see every deadline in one place.", icon: "calendar", actionKind: "route", href: INTEGRATIONS_HREF, color: "orange" },
+      { label: "Ask Ash where to start", sublabel: "Not sure what matters first? Ash will look at your studio and suggest a plan.", icon: "compass", actionKind: "ash", prompt: "Help me finish setting up", color: "green" },
     ];
   }
 
   // balanced
   return [
-    { label: "What should I set up first?", sublabel: "Ash will tailor a quick plan to your studio.", icon: "compass", actionKind: "ash", prompt: "Help me set up Perennial for my studio — where should I start?", color: "green" },
-    { label: "Add your current projects", sublabel: `The ${work}work you're making or pitching.`, icon: "project", actionKind: "route", href: "/projects", color: "blue" },
-    { label: "Connect email & calendar", sublabel: "Auto-log activity and surface deadlines.", icon: "calendar", actionKind: "route", href: "/settings?section=integrations", color: "orange" },
-    { label: "Finish setting up with Ash", sublabel: "A few quick questions so Ash gets your studio.", icon: "ash", actionKind: "ash", prompt: "Help me finish setting up", color: "purple" },
+    { label: "Add your current projects", sublabel: `The ${work}work you're making or pitching — Ash can help you set it up.`, icon: "project", actionKind: "ash", prompt: "Help me set up my current projects — ask me what I'm working on.", color: "blue" },
+    { label: "Connect email & calendar", sublabel: "Auto-log activity against your contacts and surface upcoming deadlines.", icon: "calendar", actionKind: "route", href: INTEGRATIONS_HREF, color: "orange" },
+    { label: "Finish setting up with Ash", sublabel: "A few quick questions so Ash really understands your studio.", icon: "ash", actionKind: "ash", prompt: "Help me finish setting up", color: "green" },
   ];
 }
 
@@ -63,40 +62,79 @@ export async function seedHomeCanvas(
 ): Promise<void> {
   const level: GuidanceLevel = opts.guidanceLevel ?? "balanced";
   const discipline = (opts.practiceTypes[0] ?? "").toLowerCase();
-  const hi = opts.firstName ? `Welcome, ${opts.firstName} 🌱` : "Welcome to Perennial 🌱";
+  const hi = opts.firstName ? `Welcome, ${opts.firstName}` : "Welcome to Perennial";
   const sub = discipline
-    ? `Your ${discipline} studio, in one place. Start with a card below — or just ask Ash.`
-    : "Your studio, in one place. Start with a card below — or just ask Ash.";
+    ? `Your ${discipline} studio at a glance — and a space to think. Start with the steps on the left, or ask Ash anything from the bar below.`
+    : "Your studio at a glance — and a space to think. Start with the steps on the left, or ask Ash anything from the bar below.";
 
   const cards = cardsFor(level, discipline);
+  const objects: CanvasObject[] = [];
 
-  // World coordinates ≈ screen coordinates on first load (initial viewport is
-  // {x:0, y:0, scale:1}). Keep everything in the visible top-left region, clear
-  // of the left tool dock (~x<80) and the bottom Ash bar.
-  const objects: CanvasObject[] = [
-    {
-      id: uid(), type: "text", x: 150, y: 90, width: 500, height: 52, rotation: 0, zIndex: 1,
-      content: { text: hi, fontSize: 32, align: "left" },
-      refType: null, refId: null,
-    },
-    {
-      id: uid(), type: "text", x: 150, y: 144, width: 470, height: 46, rotation: 0, zIndex: 2,
-      content: { text: sub, fontSize: 15, align: "left", textColor: "grey" as StickyColor },
-      refType: null, refId: null,
-    },
-  ];
+  // World coordinates ≈ screen coordinates on first load (viewport {0,0,1}).
+  // Keep everything clear of the left tool dock (~x<80) and the bottom Ash bar.
 
-  // 2×2 grid of CTA cards.
-  const CARD_W = 250, CARD_H = 132, GAP = 20, X0 = 150, Y0 = 220;
+  // ── Welcome heading + hand-drawn underline + subtitle ──────────────────────
+  objects.push({
+    id: uid(), type: "text", x: 160, y: 72, width: 540, height: 46, rotation: 0, zIndex: 1,
+    content: { text: hi, fontSize: 30, align: "left" }, refType: null, refId: null,
+  });
+  objects.push({
+    // A loose marker underline under the welcome, for personality.
+    id: uid(), type: "drawing", x: 162, y: 114, width: 210, height: 14, rotation: 0, zIndex: 2,
+    content: { points: [[3, 11], [48, 6], [104, 11], [160, 5], [207, 9]], color: "green", strokeWidth: 3, mode: "marker" },
+    refType: null, refId: null,
+  });
+  objects.push({
+    id: uid(), type: "text", x: 160, y: 136, width: 560, height: 48, rotation: 0, zIndex: 3,
+    content: { text: sub, fontSize: 15, align: "left", textColor: "grey" }, refType: null, refId: null,
+  });
+
+  // ── "Start here" column (left) ─────────────────────────────────────────────
+  objects.push({
+    id: uid(), type: "text", x: 160, y: 208, width: 260, height: 28, rotation: 0, zIndex: 4,
+    content: { text: "Start here", fontSize: 18, align: "left" }, refType: null, refId: null,
+  });
+  objects.push({
+    // Accent underline (line) below the "Start here" label.
+    id: uid(), type: "shape", x: 162, y: 240, width: 64, height: 4, rotation: 0, zIndex: 5,
+    content: { shape: "line", color: "green", strokeWidth: 3, endCap: "none" }, refType: null, refId: null,
+  });
+  const STEP_W = 288, STEP_H = 104, STEP_GAP = 14, STEP_X = 160, STEP_Y0 = 256;
   cards.forEach((content, i) => {
-    const col = i % 2, row = Math.floor(i / 2);
     objects.push({
       id: uid(), type: "action",
-      x: X0 + col * (CARD_W + GAP),
-      y: Y0 + row * (CARD_H + GAP),
-      width: CARD_W, height: CARD_H, rotation: 0, zIndex: 3 + i,
-      content,
-      refType: null, refId: null,
+      x: STEP_X, y: STEP_Y0 + i * (STEP_H + STEP_GAP),
+      width: STEP_W, height: STEP_H, rotation: 0, zIndex: 6 + i,
+      content, refType: null, refId: null,
+    });
+  });
+
+  // ── Connector arrow from the steps toward the module grid ──────────────────
+  objects.push({
+    id: uid(), type: "shape", x: 462, y: 300, width: 44, height: 18, rotation: 0, zIndex: 10,
+    content: { shape: "arrow", color: "grey", startCap: "none", endCap: "arrow", dash: "dotted", strokeWidth: 2 },
+    refType: null, refId: null,
+  });
+
+  // ── "Your studio" module grid (right) ──────────────────────────────────────
+  objects.push({
+    id: uid(), type: "text", x: 520, y: 208, width: 300, height: 28, rotation: 0, zIndex: 11,
+    content: { text: "Your studio", fontSize: 18, align: "left" }, refType: null, refId: null,
+  });
+  objects.push({
+    id: uid(), type: "shape", x: 522, y: 240, width: 64, height: 4, rotation: 0, zIndex: 12,
+    content: { shape: "line", color: "blue", strokeWidth: 3, endCap: "none" }, refType: null, refId: null,
+  });
+  const MOD_W = 168, MOD_H = 132, MOD_GAP = 16, MOD_X = 520, MOD_Y0 = 256;
+  const MODULES = ["projects", "tasks", "finance", "calendar"] as const;
+  MODULES.forEach((moduleKey, i) => {
+    const col = i % 2, row = Math.floor(i / 2);
+    objects.push({
+      id: uid(), type: "module",
+      x: MOD_X + col * (MOD_W + MOD_GAP),
+      y: MOD_Y0 + row * (MOD_H + MOD_GAP),
+      width: MOD_W, height: MOD_H, rotation: 0, zIndex: 13 + i,
+      content: { moduleKey }, refType: null, refId: null,
     });
   });
 
