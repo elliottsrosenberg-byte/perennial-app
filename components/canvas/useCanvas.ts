@@ -66,26 +66,47 @@ export function useCanvas({
     !canvasIdProp && !!scope,
   );
 
-  // Resolve the canvas on the client when the id wasn't provided by the server.
+  // Resolve the canvas / load objects on the client.
+  //  1. No canvasId from the server → resolve it by scope+entity, then load.
+  //  2. Have a canvasId but the server payload came through with no objects →
+  //     fetch from the DB as a fallback, so a missed/empty SSR payload (e.g. the
+  //     seed committed after the server render, or an unhydrated payload) never
+  //     leaves an actually-populated board blank.
+  const didClientLoad = useRef(false);
   useEffect(() => {
-    if (canvasId || !scope) return;
     let cancelled = false;
     (async () => {
-      setLoading(true);
-      const id = await ensureCanvas(supabase, { scope, entityId });
-      if (cancelled || !id) {
-        if (!cancelled) setLoading(false);
+      if (!canvasId && scope) {
+        setLoading(true);
+        const id = await ensureCanvas(supabase, { scope, entityId });
+        if (cancelled || !id) {
+          if (!cancelled) setLoading(false);
+          return;
+        }
+        const rows = await loadCanvasObjects(supabase, id);
+        if (cancelled) return;
+        setCanvasId(id);
+        setObjects(rows.map(rowToObject));
+        setLoading(false);
         return;
       }
-      const rows = await loadCanvasObjects(supabase, id);
-      if (cancelled) return;
-      setCanvasId(id);
-      setObjects(rows.map(rowToObject));
-      setLoading(false);
+      // Fallback fetch: only when we started with nothing and haven't already
+      // done a client load — never clobber a hydrated set or the user's edits.
+      if (
+        canvasId &&
+        !didClientLoad.current &&
+        (initialObjects?.length ?? 0) === 0
+      ) {
+        didClientLoad.current = true;
+        const rows = await loadCanvasObjects(supabase, canvasId);
+        if (cancelled || rows.length === 0) return;
+        setObjects((prev) => (prev.length === 0 ? rows.map(rowToObject) : prev));
+      }
     })();
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase, canvasId, scope, entityId]);
 
   const topZ = objects.reduce((m, o) => Math.max(m, o.zIndex), 0);
