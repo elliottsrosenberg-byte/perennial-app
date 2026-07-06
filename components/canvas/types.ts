@@ -73,6 +73,11 @@ export interface ShapeContent {
 export interface ImageContent {
   url: string;
   caption?: string;
+  /** Visible source rectangle as fractions [0,1] of the natural image.
+   *  Absent = show the whole image (object-fit: cover). Set by the crop tool;
+   *  when present the object's box aspect matches the crop's so it renders
+   *  undistorted (see CanvasObjectContent / ImageCropOverlay). */
+  crop?: { x: number; y: number; w: number; h: number };
 }
 /** A reference card points at another entity in the app. Fields denormalize
  *  just enough to render the card without a join. */

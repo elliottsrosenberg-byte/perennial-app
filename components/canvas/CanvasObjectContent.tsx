@@ -368,7 +368,23 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
               src={c.url}
               alt={c.caption ?? "canvas image"}
               draggable={false}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              style={
+                // A crop stores the visible source rect as fractions of the
+                // natural image; scale/offset the img so that rect fills the
+                // box. The box aspect is kept equal to the crop's (set at crop
+                // time), so object-fit: fill introduces no distortion.
+                c.crop
+                  ? {
+                      position: "absolute",
+                      width: `${100 / c.crop.w}%`,
+                      height: `${100 / c.crop.h}%`,
+                      left: `${-(c.crop.x / c.crop.w) * 100}%`,
+                      top: `${-(c.crop.y / c.crop.h) * 100}%`,
+                      maxWidth: "none",
+                      objectFit: "fill",
+                    }
+                  : { width: "100%", height: "100%", objectFit: "cover" }
+              }
             />
           ) : (
             <div
