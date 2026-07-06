@@ -44,6 +44,7 @@ import {
   ArrowLeft,
   ArrowRight,
   FoldVertical,
+  Crop,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { CanvasObjectRow, CanvasScope } from "@/types/database";
@@ -68,6 +69,7 @@ import type {
   CanvasTool,
   StickyColor,
   ShapeContent,
+  ImageContent,
   TextAlign,
   VAlign,
   ModuleKey,
@@ -114,6 +116,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const [drawingPts, setDrawingPts] = useState<[number, number][] | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [croppingId, setCroppingId] = useState<string | null>(null);
   const [spaceDown, setSpaceDown] = useState(false);
   const [panning, setPanning] = useState(false);
   const [marquee, setMarquee] = useState<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
@@ -599,7 +602,9 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
       return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
     }
     function onKeyDown(e: KeyboardEvent) {
-      if (isTyping() || editingId) return;
+      // While cropping, the crop overlay owns Enter/Escape; swallow the rest so
+      // Delete/Backspace don't remove the image mid-crop.
+      if (isTyping() || editingId || croppingId) return;
       if (e.key === " ") {
         e.preventDefault();
         setSpaceDown(true);
@@ -683,7 +688,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [editingId, deleteSelected, selectTool, copySelection, pasteClipboard]);
+  }, [editingId, croppingId, deleteSelected, selectTool, copySelection, pasteClipboard]);
 
   // ── object callbacks ──
   const commitGeometry = useCallback(
@@ -750,6 +755,48 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     },
     [store],
   );
+  // Content patch for high-frequency edits (typing a description): optimistic
+  // local update + debounced persist, so we don't hit the DB on every keystroke.
+  const patchContentLive = useCallback(
+    (id: string, patch: Record<string, unknown>) => {
+      const o = objsRef.current.find((x) => x.id === id);
+      if (!o) return;
+      const content = { ...o.content, ...patch };
+      store.patchLocal(id, { content });
+      store.commitContentDebounced(id, content);
+    },
+    [store],
+  );
+
+  // ── image crop ──
+  const startCrop = useCallback((id: string) => {
+    setEditingId(null);
+    setSelectedIds(new Set([id]));
+    setCroppingId(id);
+  }, []);
+  const cancelCrop = useCallback(() => setCroppingId(null), []);
+  const applyCrop = useCallback(
+    (
+      id: string,
+      crop: { x: number; y: number; w: number; h: number },
+      geom: { x: number; y: number; width: number; height: number },
+    ) => {
+      const o = objsRef.current.find((x) => x.id === id);
+      if (!o) return;
+      const content = { ...o.content, crop } as unknown as Record<string, unknown>;
+      store.patchLocal(id, { content: content as unknown as CanvasObject["content"], ...geom });
+      store.commit(id, { content, ...geom });
+      setCroppingId(null);
+    },
+    [store],
+  );
+  // Leave the crop editor if the cropped image is no longer the sole selection
+  // (e.g. the user clicked away or selected something else).
+  useEffect(() => {
+    if (croppingId && !(selectedIds.size === 1 && selectedIds.has(croppingId))) {
+      setCroppingId(null);
+    }
+  }, [selectedIds, croppingId]);
 
   // ── context menu actions ──
   const duplicateSelected = useCallback(() => {
@@ -874,6 +921,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const sole = selectedIds.size === 1 ? store.objects.find((o) => selectedIds.has(o.id)) ?? null : null;
   const soleShapeKind = sole?.type === "shape" ? (sole.content as ShapeContent).shape : null;
   const soleIsLinear = soleShapeKind === "line" || soleShapeKind === "arrow";
+  const soleIsImage = sole?.type === "image";
   const soleTextBearing =
     !!sole && (sole.type === "text" || sole.type === "sticky" || soleShapeKind === "rect" || soleShapeKind === "ellipse");
   const cc = (sole?.content ?? {}) as {
@@ -1051,6 +1099,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
             soleSelected={selectedIds.size === 1 && selectedIds.has(o.id)}
             interactive={tool === "select" && !spaceDown}
             editing={o.id === editingId}
+            cropping={o.id === croppingId}
             scale={view.scale}
             onBeginDrag={beginObjectDrag}
             onChangeLocal={store.patchLocal}
@@ -1064,6 +1113,9 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
             onContextMenu={onObjectContextMenu}
             onAutoHeight={onAutoHeight}
             onOpenReference={openReference}
+            onStartCrop={startCrop}
+            onApplyCrop={applyCrop}
+            onCancelCrop={cancelCrop}
           />
         ))}
       </div>
@@ -1172,7 +1224,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
       )}
 
       {/* single-selection formatting toolbar */}
-      {sole && !editingId && toolbarPos && (
+      {sole && !editingId && !croppingId && toolbarPos && (
         <div
           onPointerDown={(e) => e.stopPropagation()}
           style={{
@@ -1191,7 +1243,40 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
             zIndex: 30,
           }}
         >
-          {soleIsLinear ? (
+          {soleIsImage ? (
+            /* image: description + crop + delete */
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                value={(sole.content as ImageContent).caption ?? ""}
+                onChange={(e) => patchContentLive(sole.id, { caption: e.target.value })}
+                onPointerDown={(e) => e.stopPropagation()}
+                placeholder="Add a description…"
+                aria-label="Image description"
+                style={{
+                  width: 190,
+                  height: 26,
+                  padding: "0 8px",
+                  border: "none",
+                  outline: "none",
+                  background: "transparent",
+                  fontFamily: "var(--font-sans)",
+                  fontSize: 13,
+                  color: "var(--color-text-primary)",
+                }}
+              />
+              {!!(sole.content as ImageContent).url && (
+                <>
+                  <button data-tip="Crop" aria-label="Crop image" onClick={() => startCrop(sole.id)} style={segBtn(false)}>
+                    <Crop size={15} strokeWidth={1.75} />
+                  </button>
+                  <span style={{ width: 1, height: 16, background: "var(--color-border)", margin: "0 2px" }} />
+                </>
+              )}
+              <button aria-label="Delete" onClick={deleteSelected} style={segBtn(false)}>
+                <Trash2 size={15} strokeWidth={1.75} />
+              </button>
+            </div>
+          ) : soleIsLinear ? (
             <>
               {/* caps + thickness + dash + delete (row 1) */}
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -1276,7 +1361,10 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
                       </button>
                     );
                   })}
-                <div style={{ flex: 1, minWidth: 8 }} />
+                {/* Only push the delete button to the right when there are
+                    controls to its left — otherwise it centers in the bar
+                    (fixes the off-center lone trash icon). */}
+                {soleTextBearing && <div style={{ flex: 1, minWidth: 8 }} />}
                 <button aria-label="Delete" onClick={deleteSelected} style={segBtn(false)}>
                   <Trash2 size={15} strokeWidth={1.75} />
                 </button>
