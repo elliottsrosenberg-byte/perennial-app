@@ -102,6 +102,23 @@ export interface ModuleContent {
   moduleKey: ModuleKey;
 }
 
+/** An onboarding call-to-action card. Clicking it either opens Ash with a
+ *  starter prompt or routes to a module — used to seed a fresh Home board with
+ *  interactive next steps instead of static hints. */
+export type ActionIcon =
+  | "ash" | "project" | "note" | "contact" | "calendar" | "sparkles" | "compass" | "plus";
+export interface ActionContent {
+  label:      string;
+  sublabel?:  string;
+  icon?:      ActionIcon;
+  /** "ash" opens Ash with `prompt`; "route" navigates to `href`. */
+  actionKind: "ash" | "route";
+  prompt?:    string;
+  href?:      string;
+  /** Accent tint key from the palette. */
+  color?:     StickyColor;
+}
+
 /** Freehand pen stroke. Points are relative to the object's box; the SVG
  *  viewBox stretches with the box so resize/rotate just work. */
 export interface DrawingContent {
@@ -118,7 +135,8 @@ export type CanvasContent =
   | ImageContent
   | ReferenceContent
   | DrawingContent
-  | ModuleContent;
+  | ModuleContent
+  | ActionContent;
 
 /** In-memory canvas object. Geometry is in canvas (world) coordinates. */
 export interface CanvasObject {

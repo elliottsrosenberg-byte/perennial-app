@@ -63,6 +63,7 @@ function baseContext(preferences: AshContext["preferences"] = []): AshContext {
     businessIssues: "Cash flow is lumpy between commissions.",
     urgentNeeds: "Need to invoice the Foster job.",
     perennialGoals: ["invoicing", "outreach"],
+    guidanceLevel: "balanced",
     currency: "USD",
     hourlyRate: 85,
     projects: [

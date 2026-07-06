@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import HomeCanvas from "@/components/home/HomeCanvas";
 import DashboardTour from "@/components/tour/DashboardTour";
 import { ensureCanvas, loadCanvasObjects } from "@/lib/canvas/api";
-import { seedHomeCanvas } from "@/lib/canvas/seed-home";
+import { seedHomeCanvas, type GuidanceLevel } from "@/lib/canvas/seed-home";
 
 // PER-70: Home is now a full-page spatial canvas ("board") with Ash overlaid,
 // replacing the old read-only dashboard of module snapshot cards.
@@ -18,15 +18,19 @@ export default async function HomePage() {
 
   let setupComplete = false;
   let firstName: string | null = null;
+  let guidanceLevel: GuidanceLevel | null = null;
+  let practiceTypes: string[] = [];
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("onboarding_complete, profile_setup_complete, display_name")
+      .select("onboarding_complete, profile_setup_complete, display_name, guidance_level, practice_types")
       .eq("user_id", user.id)
       .maybeSingle();
     if (!profile?.onboarding_complete) redirect("/onboarding");
     setupComplete = Boolean(profile?.profile_setup_complete);
     firstName = profile?.display_name?.trim().split(/\s+/)[0] ?? null;
+    guidanceLevel = (profile?.guidance_level as GuidanceLevel | null) ?? null;
+    practiceTypes = profile?.practice_types ?? [];
   }
 
   // Resolve (creating on first visit) the user's Home board + its objects.
@@ -38,7 +42,7 @@ export default async function HomePage() {
   // gate on an empty board + setup-not-complete, it fires at most once and never
   // re-seeds after the user clears the board post-setup.
   if (user && canvasId && initialObjects.length === 0 && !setupComplete) {
-    await seedHomeCanvas(supabase, canvasId, user.id, firstName);
+    await seedHomeCanvas(supabase, canvasId, user.id, { firstName, guidanceLevel, practiceTypes });
     initialObjects = await loadCanvasObjects(supabase, canvasId);
   }
 
