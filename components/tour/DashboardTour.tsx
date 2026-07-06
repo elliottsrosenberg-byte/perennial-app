@@ -196,11 +196,12 @@ export default function DashboardTour() {
       {/* Backdrop. When a target is anchored, use a spotlight cutout via a
           huge box-shadow on the highlight element so the target itself isn't
           dimmed. When centered (no anchor), use a uniform soft dim. */}
-      {highlight ? (
+      {/* Non-modal: a sage ring + soft glow around the target only — NO dimming
+          of the rest of the screen. The app stays fully live and clickable while
+          the coachmark is up. When there's no anchor (welcome step), nothing is
+          drawn here and the callout simply floats. */}
+      {highlight && (
         <div
-          // Keyed so React mounts a fresh node when transitioning from the
-          // full-screen dim backdrop — otherwise the transition animates the
-          // spotlight from `inset: 0` (left side of screen) to its target.
           key="tour-spotlight"
           aria-hidden
           style={{
@@ -210,23 +211,10 @@ export default function DashboardTour() {
             width:  highlight.w,
             height: highlight.h,
             borderRadius: highlight.radius,
-            // Sage ring on the target + a giant dim shadow extending outward.
-            // Hardcoded near-black so the spotlight works in light AND dark
-            // mode (charcoal-based dim barely shows over a dark background).
-            boxShadow: "0 0 0 2px var(--color-sage), 0 0 0 9999px rgba(0,0,0,0.32)",
+            boxShadow: "0 0 0 2px var(--color-sage), 0 0 0 6px rgba(var(--color-sage-rgb),0.18)",
             pointerEvents: "none",
             zIndex: 40,
             transition: "top 0.18s ease, left 0.18s ease, width 0.18s ease, height 0.18s ease",
-          }}
-        />
-      ) : (
-        <div
-          key="tour-dim"
-          aria-hidden
-          style={{
-            position: "fixed", inset: 0,
-            background: "rgba(0,0,0,0.32)",
-            zIndex: 40, pointerEvents: "none",
           }}
         />
       )}

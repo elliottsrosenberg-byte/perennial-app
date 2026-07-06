@@ -45,6 +45,7 @@ const DEFAULTS: Record<
   reference: { width: 300, height: 132, content: { title: "Untitled" } },
   drawing:   { width: 200, height: 120, content: { points: [], color: "olive", strokeWidth: 3, mode: "marker" } },
   module:    { width: 248, height: 148, content: { moduleKey: "tasks" } },
+  action:    { width: 250, height: 132, content: { label: "", actionKind: "ash" } },
 };
 
 let seq = 0;

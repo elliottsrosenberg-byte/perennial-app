@@ -1,29 +1,27 @@
 "use client";
 
-// Short, required sign-up modal (4 slides). Collects only what the app needs to
-// feel personalized from the first screen — name, studio, what they make, and
-// how they want to use Perennial. Everything deeper (work types, channels,
-// challenges, bio, integrations, uploads) is deferred to the conversational Ash
-// onboarding, triggered later from the home canvas. See the two-flag state model:
-//   onboarding_complete   → finished this modal (gates the /onboarding redirect)
-//   profile_setup_complete → finished the Ash-driven deep setup (starts false)
+// Short, required sign-up (3 screens). Collects only what the app needs to feel
+// personalized from the first screen — name, what they make, and how much they
+// want Perennial to guide them (their guidance level). Everything deeper is
+// gathered later by Ash, conversationally. See the state model:
+//   onboarding_complete    → finished this modal (gates the /onboarding redirect)
+//   profile_setup_complete → finished the Ash-guided deep setup (starts false)
+//   guidance_level         → guided | balanced | expert (drives Ash + the board)
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
-  Layers, Users, Receipt, Send, Clock, Globe, BookOpen,
   Armchair, Lamp, Diamond, Gem, Palette, Hammer, PenTool, Briefcase,
   Boxes, Pencil, Video, Monitor, Code2, Shapes,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { PALETTE, paletteColorForKey } from "@/lib/ui/palette";
-import AshMark from "@/components/ui/AshMark";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 3;
 
 const PRACTICE_OPTIONS = [
   "Furniture", "Objects & lighting", "Ceramics & glass", "Textiles",
@@ -33,10 +31,7 @@ const PRACTICE_OPTIONS = [
 
 // Stable key + palette colour per practice option so the Projects board can
 // default to a type list that mirrors how the user describes their work. Colours
-// are named from the canonical user-pick palette (lib/ui/palette.ts) — the same
-// source tags, pipeline stages, and project accents draw from — so no raw hex
-// lives here and users can recolour any type later. Order here is canonical; the
-// user's selection order determines which types appear first on their board.
+// are named from the canonical user-pick palette (lib/ui/palette.ts).
 const PRACTICE_TO_PROJECT_TYPE: Record<string, { key: string; palette: string }> = {
   "Furniture":          { key: "furniture",      palette: "Brown"  },
   "Objects & lighting": { key: "objects",        palette: "Orange" },
@@ -62,8 +57,6 @@ function paletteHex(name: string): string {
 }
 
 function buildProjectTypeOptions(practiceTypes: string[]) {
-  // The user's picked practice types become the priority list — their first
-  // pick anchors the Projects board's default type.
   const seen = new Set<string>();
   const out: { key: string; label: string; color: string }[] = [];
   for (const p of practiceTypes) {
@@ -72,13 +65,10 @@ function buildProjectTypeOptions(practiceTypes: string[]) {
       out.push({ key: map.key, label: p, color: paletteHex(map.palette) });
       seen.add(map.key);
     } else if (!map && !seen.has(p.toLowerCase())) {
-      // Custom "Other"-added practice — deterministic palette colour by name.
       out.push({ key: p.toLowerCase().replace(/[^a-z0-9]+/g, "_"), label: p, color: paletteColorForKey(p).hex });
       seen.add(p.toLowerCase());
     }
   }
-  // Always keep a "Client" type available if client-style work was picked, so
-  // client projects have somewhere to live.
   if (practiceTypes.includes("Client-based work") && !seen.has("client_project")) {
     out.push({ key: "client_project", label: "Client", color: paletteHex("Blue") });
   }
@@ -102,28 +92,22 @@ const PRACTICE_ICONS: Record<string, LucideIcon> = {
   "Client-based work":  Briefcase,
 };
 
-const GOAL_OPTIONS: { id: string; label: string; Icon: LucideIcon | null }[] = [
-  { id: "projects",  label: "Track projects and deadlines",          Icon: Layers   },
-  { id: "invoicing", label: "Send professional invoices",            Icon: Receipt  },
-  { id: "time",      label: "Log time and understand profitability", Icon: Clock    },
-  { id: "contacts",  label: "Build and maintain relationships",      Icon: Users    },
-  { id: "outreach",  label: "Stay on top of outreach",               Icon: Send     },
-  { id: "presence",  label: "Track opportunities and visibility",    Icon: Globe    },
-  { id: "learn",     label: "Learn how to run my studio",            Icon: BookOpen },
-  { id: "ash",       label: "Use AI to think through decisions",     Icon: null     },
+type GuidanceLevel = "guided" | "balanced" | "expert";
+const GUIDANCE_OPTIONS: { id: GuidanceLevel; title: string; sub: string; payoff: string }[] = [
+  { id: "guided",   title: "I'm just getting started", sub: "New to the business side — it's mostly in my head or scattered notes.", payoff: "Great — I'll keep things hands-on and teach as we go." },
+  { id: "balanced", title: "I'm finding my footing",   sub: "I've got some systems, but they're patchy and don't always stick.",   payoff: "Perfect — I'll guide where it helps and move fast where it doesn't." },
+  { id: "expert",   title: "I've got this down",       sub: "I already run on real tools — I just want it all in one place.",       payoff: "Got it — I'll keep it fast and skip the basics." },
 ];
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3;
 
 interface OnboardingData {
   firstName:     string;
   lastName:      string;
-  studioName:    string;
-  city:          string;
   practiceTypes: string[];
-  goals:         string[];
+  guidanceLevel: GuidanceLevel | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -135,13 +119,13 @@ function Chip({
     <button
       onClick={onClick}
       style={{
-        padding: "7px 14px",
+        padding: "8px 15px",
         borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
         transition: "all 0.1s ease", textAlign: "left",
         background: selected ? "var(--color-sage)" : "var(--color-off-white)",
         color:      selected ? "var(--color-warm-white)" : "var(--color-text-secondary)",
         border:     `0.5px solid ${selected ? "var(--color-sage)" : "var(--color-border)"}`,
-        fontSize: 12, fontWeight: 500,
+        fontSize: 12.5, fontWeight: 500,
       }}
     >
       {children}
@@ -162,7 +146,7 @@ function OtherInput({
   }
   const ready = val.trim().length > 0;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
       <span style={{ fontSize: 11, color: "var(--color-grey)", flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>Other</span>
       <input
         value={val}
@@ -226,21 +210,21 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 }
 
 function TextInput({
-  value, onChange, placeholder, onEnter, inputRef, type = "text",
+  value, onChange, placeholder, onEnter, inputRef,
 }: {
   value: string; onChange: (v: string) => void; placeholder?: string;
-  onEnter?: () => void; inputRef?: React.RefObject<HTMLInputElement>; type?: string;
+  onEnter?: () => void; inputRef?: React.RefObject<HTMLInputElement>;
 }) {
   return (
     <input
       ref={inputRef}
-      type={type}
+      type="text"
       value={value}
       onChange={e => onChange(e.target.value)}
       onKeyDown={e => { if (e.key === "Enter" && onEnter) { e.preventDefault(); onEnter(); } }}
       placeholder={placeholder}
       style={{
-        width: "100%", padding: "9px 13px", fontSize: 13,
+        width: "100%", padding: "10px 13px", fontSize: 13,
         background: "var(--color-off-white)",
         border: "0.5px solid var(--color-border)", borderRadius: 9,
         color: "var(--color-charcoal)", fontFamily: "inherit", outline: "none",
@@ -256,26 +240,11 @@ function TextInput({
 
 export default function OnboardingClient({ userId }: { userId: string }) {
   const router = useRouter();
-  // Step mirrors a ?step= query param so a refresh keeps the user in place.
-  const [step, _setStep] = useState<Step>(() => {
-    if (typeof window === "undefined") return 1;
-    const n = parseInt(new URLSearchParams(window.location.search).get("step") ?? "1", 10);
-    return (n >= 1 && n <= TOTAL_STEPS ? n : 1) as Step;
-  });
-  function setStep(next: Step) {
-    _setStep(next);
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.searchParams.set("step", String(next));
-      window.history.replaceState({}, "", url.toString());
-    }
-  }
+  const [step, setStep] = useState<Step>(1);
   const [saving, setSaving] = useState(false);
 
   const [data, setData] = useState<OnboardingData>({
-    firstName: "", lastName: "",
-    studioName: "", city: "",
-    practiceTypes: [], goals: [],
+    firstName: "", lastName: "", practiceTypes: [], guidanceLevel: null,
   });
 
   const firstInputRef = useRef<HTMLInputElement>(null);
@@ -284,29 +253,50 @@ export default function OnboardingClient({ userId }: { userId: string }) {
     setTimeout(() => firstInputRef.current?.focus(), 150);
   }, [step]);
 
+  // Prefill the name from the OAuth identity (Google/Microsoft) so most users
+  // just confirm rather than type. Only fills empty fields.
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const m = (user?.user_metadata ?? {}) as Record<string, string>;
+      const given  = m.given_name  || m.first_name;
+      const family = m.family_name || m.last_name;
+      const full   = m.full_name   || m.name;
+      setData(d => {
+        if (d.firstName || d.lastName) return d;
+        if (given || family) return { ...d, firstName: given ?? "", lastName: family ?? "" };
+        if (full) {
+          const [f, ...r] = String(full).trim().split(/\s+/);
+          return { ...d, firstName: f ?? "", lastName: r.join(" ") };
+        }
+        return d;
+      });
+    })();
+  }, []);
+
   function toggle<K extends keyof OnboardingData>(key: K, value: string) {
     setData(d => {
       const arr = d[key] as string[];
       return { ...d, [key]: arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value] };
     });
   }
-
   function set<K extends keyof OnboardingData>(key: K, value: OnboardingData[K]) {
     setData(d => ({ ...d, [key]: value }));
   }
 
   const canAdvance1 = data.firstName.trim().length > 0;
-  const canAdvance2 = data.studioName.trim().length > 0;
-  const canAdvance3 = data.practiceTypes.length > 0;
+  const canAdvance2 = data.practiceTypes.length > 0;
+  const canFinish   = data.guidanceLevel !== null;
 
   async function handleFinish() {
+    if (!canFinish) return;
     setSaving(true);
     const supabase = createClient();
 
-    // Seed the user's project_options.type from their practice picks so the
-    // Projects board defaults to a type list that matches their work. Merge with
-    // any existing project_options (status / priority) so we don't clobber other
-    // dimensions the signup trigger may have seeded.
+    // Seed project_options.type from their practice picks so the Projects board
+    // defaults to a type list that matches their work. Merge with any existing
+    // project_options so we don't clobber status/priority.
     const projectTypeOptions = buildProjectTypeOptions(data.practiceTypes);
     let projectOptionsPatch: Record<string, unknown> = {};
     if (projectTypeOptions.length > 0) {
@@ -322,24 +312,17 @@ export default function OnboardingClient({ userId }: { userId: string }) {
     await supabase.from("profiles").upsert({
       user_id:                userId,
       display_name:           [data.firstName, data.lastName].map(s => s.trim()).filter(Boolean).join(" ") || null,
-      studio_name:            data.studioName || null,
-      location:               data.city || null,
       practice_types:         data.practiceTypes,
-      perennial_goals:        data.goals,
-      onboarding_complete:    true,   // finished the required sign-up modal
-      profile_setup_complete: false,  // deep Ash-driven setup still to come
+      guidance_level:         data.guidanceLevel,
+      onboarding_complete:    true,
+      profile_setup_complete: false,
       ...projectOptionsPatch,
-      // Reset the post-onboarding tour state so a fresh onboarding always
-      // triggers the home canvas walkthrough. (Real users only onboard once;
-      // this matters mostly for testing.)
       tour_visited:           {},
       tour_dismissed:         false,
       updated_at:             new Date().toISOString(),
     });
     localStorage.setItem("perennial-just-onboarded", "1");
-    // Kick off Ash's background research on the user's niche (fire-and-forget).
-    // Practice types + goals are enough signal to warm the knowledge base while
-    // the user explores the canvas.
+    // Warm Ash's background research on their niche (fire-and-forget).
     void fetch("/api/ash/research", { method: "POST" }).catch(() => {});
     router.push("/");
     router.refresh();
@@ -388,12 +371,12 @@ export default function OnboardingClient({ userId }: { userId: string }) {
       }}>
         <div style={{ width: "100%", maxWidth: 560 }}>
 
-          {/* ── Step 1: Your name ────────────────────────────────────────────── */}
+          {/* ── Step 1: Welcome + name ───────────────────────────────────────── */}
           {step === 1 && (
             <div style={panelStyle}>
-              <h2 style={titleStyle}>First, your name</h2>
+              <h2 style={titleStyle}>Welcome to Perennial</h2>
               <p style={subtitleStyle}>
-                Ash addresses you by name. This takes under a minute — you&apos;ll be on your board shortly.
+                First things first — tell us a bit about yourself. This takes under a minute.
               </p>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
@@ -422,46 +405,12 @@ export default function OnboardingClient({ userId }: { userId: string }) {
             </div>
           )}
 
-          {/* ── Step 2: Your studio ──────────────────────────────────────────── */}
+          {/* ── Step 2: What you make ────────────────────────────────────────── */}
           {step === 2 && (
-            <div style={panelStyle}>
-              <h2 style={titleStyle}>Your studio</h2>
-              <p style={subtitleStyle}>
-                This appears in the sidebar and on your invoices. You can add a bio, logo, and billing details later in Settings.
-              </p>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div>
-                  <FieldLabel>Studio or practice name *</FieldLabel>
-                  <TextInput
-                    inputRef={firstInputRef as React.RefObject<HTMLInputElement>}
-                    value={data.studioName}
-                    onChange={v => set("studioName", v)}
-                    placeholder="Your studio or practice name"
-                    onEnter={() => { if (canAdvance2) setStep(3); }}
-                  />
-                </div>
-                <div>
-                  <FieldLabel>Where are you based?</FieldLabel>
-                  <TextInput
-                    value={data.city}
-                    onChange={v => set("city", v)}
-                    placeholder="e.g. New York, NY (optional)"
-                    onEnter={() => { if (canAdvance2) setStep(3); }}
-                  />
-                </div>
-              </div>
-
-              <StepFooter onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={!canAdvance2} />
-            </div>
-          )}
-
-          {/* ── Step 3: What you make ────────────────────────────────────────── */}
-          {step === 3 && (
             <div style={panelStyle}>
               <h2 style={titleStyle}>What do you make?</h2>
               <p style={subtitleStyle}>
-                Pick everything that fits. Your top picks become the default project types on your Projects board.
+                Pick everything that fits. Your top picks become the default project types on your board.
               </p>
 
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -471,7 +420,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                   return (
                     <Chip key={opt} selected={selected} onClick={() => toggle("practiceTypes", opt)}>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                        {Icon && <Icon size={12} strokeWidth={1.75} style={{ opacity: selected ? 0.95 : 0.75 }} />}
+                        {Icon && <Icon size={13} strokeWidth={1.75} style={{ opacity: selected ? 0.95 : 0.75 }} />}
                         {opt}
                       </span>
                     </Chip>
@@ -489,60 +438,56 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                 onAdd={v => set("practiceTypes", [...data.practiceTypes, v])}
               />
 
-              <StepFooter onBack={() => setStep(2)} onNext={() => setStep(4)} nextDisabled={!canAdvance3} />
+              <StepFooter onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={!canAdvance2} />
             </div>
           )}
 
-          {/* ── Step 4: How you want to use Perennial ────────────────────────── */}
-          {step === 4 && (
+          {/* ── Step 3: How you work today (guidance level) ──────────────────── */}
+          {step === 3 && (
             <div style={panelStyle}>
-              <h2 style={titleStyle}>How do you want to use Perennial?</h2>
+              <h2 style={titleStyle}>How do you work today?</h2>
               <p style={subtitleStyle}>
-                Pick what matters most — Ash will start here with you. You can change this any time.
+                So Perennial fits you — no wrong answer, and you can change this any time.
               </p>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {GOAL_OPTIONS.map(opt => {
-                  const sel = data.goals.includes(opt.id);
-                  const Icon = opt.Icon;
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {GUIDANCE_OPTIONS.map(opt => {
+                  const sel = data.guidanceLevel === opt.id;
                   return (
                     <button
                       key={opt.id}
-                      onClick={() => toggle("goals", opt.id)}
+                      onClick={() => set("guidanceLevel", opt.id)}
                       style={{
-                        display: "flex", alignItems: "center", gap: 14, padding: "12px 14px",
-                        borderRadius: 10, cursor: "pointer", fontFamily: "inherit", textAlign: "left",
+                        display: "flex", flexDirection: "column", gap: 3,
+                        padding: "14px 16px", borderRadius: 12, cursor: "pointer",
+                        fontFamily: "inherit", textAlign: "left",
                         background: sel ? "var(--color-sage)" : "var(--color-off-white)",
                         border: `0.5px solid ${sel ? "var(--color-sage)" : "var(--color-border)"}`,
                         transition: "all 0.1s ease",
                       }}
                     >
-                      <div style={{
-                        width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-                        background: sel ? "rgba(255,255,255,0.2)" : "var(--color-cream)",
-                        border: sel ? "none" : "0.5px solid var(--color-border)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        color: sel ? "var(--color-warm-white)" : "var(--color-charcoal)",
-                      }}>
-                        {Icon === null
-                          ? <AshMark size={16} variant={sel ? "on-dark" : "on-light"} />
-                          : <Icon size={15} strokeWidth={1.5} />}
-                      </div>
-                      <span style={{ fontSize: 12, fontWeight: 500, color: sel ? "var(--color-warm-white)" : "var(--color-text-secondary)" }}>
-                        {opt.label}
+                      <span style={{ fontSize: 14, fontWeight: 600, color: sel ? "var(--color-warm-white)" : "var(--color-charcoal)" }}>
+                        {opt.title}
                       </span>
-                      {sel && <span style={{ marginLeft: "auto", fontSize: 12, color: "rgba(255,255,255,0.8)" }}>✓</span>}
+                      <span style={{ fontSize: 12, lineHeight: 1.5, color: sel ? "rgba(255,255,255,0.85)" : "var(--color-grey)" }}>
+                        {opt.sub}
+                      </span>
                     </button>
                   );
                 })}
               </div>
 
+              {data.guidanceLevel && (
+                <p style={{ fontSize: 12, color: "var(--color-sage-text)", marginTop: 14, lineHeight: 1.5 }}>
+                  {GUIDANCE_OPTIONS.find(o => o.id === data.guidanceLevel)?.payoff}
+                </p>
+              )}
+
               <StepFooter
-                onBack={() => setStep(3)}
+                onBack={() => setStep(2)}
                 onNext={handleFinish}
                 nextLabel={saving ? "Setting up…" : "Enter Perennial"}
-                nextDisabled={saving}
-                ash
+                nextDisabled={!canFinish || saving}
               />
             </div>
           )}
@@ -577,10 +522,10 @@ const backLinkStyle: React.CSSProperties = {
 };
 
 function StepFooter({
-  onBack, onNext, nextDisabled = false, nextLabel = "Continue →", ash = false,
+  onBack, onNext, nextDisabled = false, nextLabel = "Continue →",
 }: {
   onBack?: () => void; onNext: () => void;
-  nextDisabled?: boolean; nextLabel?: string; ash?: boolean;
+  nextDisabled?: boolean; nextLabel?: string;
 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 16, borderTop: "0.5px solid var(--color-border)", marginTop: 24 }}>
@@ -596,10 +541,8 @@ function StepFooter({
           color: nextDisabled ? "var(--color-grey)" : "var(--color-warm-white)",
           border: "none", borderRadius: 9,
           cursor: nextDisabled ? "not-allowed" : "pointer", fontFamily: "inherit",
-          display: "flex", alignItems: "center", gap: 8,
         }}
       >
-        {ash && !nextDisabled && <AshMark size={14} variant="on-dark" />}
         {nextLabel}
       </button>
     </div>

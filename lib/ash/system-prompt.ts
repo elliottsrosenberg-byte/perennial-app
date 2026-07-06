@@ -137,6 +137,7 @@ export interface AshContext {
   businessIssues:      string | null;
   urgentNeeds:         string | null;
   perennialGoals:      string[];
+  guidanceLevel:       "guided" | "balanced" | "expert" | null;
   currency:            string;
   hourlyRate:          number | null;
   projects:            Array<{ id: string; title: string; status: string; due_date: string | null; priority: string }>;
@@ -170,6 +171,17 @@ export function buildDynamicContext(ctx: AshContext): string {
   if (ctx.urgentNeeds)    lines.push(`**Urgent on their plate (user's own words):** ${ctx.urgentNeeds}`);
   if (ctx.perennialGoals.length > 0)    lines.push(`**Goals from Perennial:** ${ctx.perennialGoals.map(g => ({ projects: "project tracking", invoicing: "professional invoicing", time: "time tracking & profitability", contacts: "relationship management", outreach: "gallery outreach", presence: "opportunities & visibility", learn: "learning how to run a studio", ash: "AI-assisted decisions" }[g] ?? g)).join(", ")}`);
   if (ctx.hourlyRate)   lines.push(`**Default hourly rate:** ${ctx.currency} ${ctx.hourlyRate}/hr`);
+
+  // Guidance level — how much to lead vs. get out of the way. Set by the user in
+  // onboarding, changeable in Settings. Shapes posture, not capability.
+  if (ctx.guidanceLevel) {
+    const posture = {
+      guided:   "**Guidance level: GUIDED** (new to running the business side). Lead proactively. Teach the business — pricing, cash flow, outreach — alongside the tool, in plain language. Suggest concrete next steps rather than waiting to be asked, and celebrate small wins. Assume little prior systems/PM experience; explain the *why*.",
+      balanced: "**Guidance level: BALANCED** (has some systems, still finding their footing). Teach where it adds value, but move quickly where they're already fluent. Offer a next step, then follow their lead.",
+      expert:   "**Guidance level: EXPERT** (already runs on real tools). Assume fluency — skip the basics and the pep talk. Be a fast peer operator: help them get their existing workflow *into* Perennial and stay out of the way unless asked. Terse, high-signal.",
+    }[ctx.guidanceLevel];
+    if (posture) lines.push(`\n${posture}`);
+  }
 
   // Learned preferences (always honored)
   if (ctx.preferences.length > 0) {
