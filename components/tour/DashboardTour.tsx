@@ -219,7 +219,7 @@ export default function DashboardTour() {
         />
       )}
 
-      {/* Callout */}
+      {/* Callout — light + rounded to match the onboarding UI. */}
       <div
         role="dialog"
         aria-label={`Tour step ${stepIdx + 1}: ${step.title}`}
@@ -229,18 +229,18 @@ export default function DashboardTour() {
           left: pos?.left ?? "50%",
           transform: pos ? "none" : "translate(-50%, -50%)",
           width: W, zIndex: 50,
-          // Hardcoded so the callout stays dark in both light and dark mode
-          // (var(--color-charcoal) flips to a light cream in dark mode).
-          background: "#1f211a",
-          color: "#f5f1e9",
-          borderRadius: 12,
-          boxShadow: "0 16px 48px rgba(31,33,26,0.4)",
-          padding: "14px 16px",
+          background: "var(--color-surface-raised)",
+          color: "var(--color-text-primary)",
+          border: "1px solid var(--color-border-strong)",
+          borderRadius: 16,
+          boxShadow: "0 16px 44px rgba(0,0,0,0.16)",
+          padding: "16px 18px",
           fontFamily: "inherit",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(245,241,233,0.5)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-sage-text)" }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-sage)" }} />
             Welcome tour · {stepIdx + 1} of {STEPS.length}
           </span>
           <button
@@ -249,18 +249,18 @@ export default function DashboardTour() {
             title="Skip tour"
             style={{
               background: "none", border: "none", padding: 4, cursor: "pointer",
-              color: "rgba(245,241,233,0.55)", display: "flex", alignItems: "center", justifyContent: "center",
-              borderRadius: 4,
+              color: "var(--color-text-tertiary)", display: "flex", alignItems: "center", justifyContent: "center",
+              borderRadius: 6,
             }}
           >
             <XIcon size={14} />
           </button>
         </div>
 
-        <h3 style={{ fontSize: 14, fontWeight: 600, color: "rgba(245,241,233,0.96)", marginBottom: 6 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 6, letterSpacing: "-0.01em" }}>
           {step.title}
         </h3>
-        <p style={{ fontSize: 12, color: "rgba(245,241,233,0.72)", lineHeight: 1.6, marginBottom: 14 }}>
+        <p style={{ fontSize: 12.5, color: "var(--color-text-secondary)", lineHeight: 1.6, marginBottom: 16 }}>
           {step.body}
         </p>
 
@@ -268,7 +268,7 @@ export default function DashboardTour() {
           <button
             onClick={isFirst ? skip : () => setStepIdx((i) => Math.max(0, i - 1))}
             style={{
-              fontSize: 11, color: "rgba(245,241,233,0.55)",
+              fontSize: 12, color: "var(--color-grey)",
               background: "none", border: "none", padding: "6px 4px",
               cursor: "pointer", fontFamily: "inherit",
             }}
@@ -281,11 +281,12 @@ export default function DashboardTour() {
               else        setStepIdx((i) => i + 1);
             }}
             style={{
-              padding: "7px 14px",
-              fontSize: 11, fontWeight: 600,
-              background: "var(--color-sage)", color: "#f9faf4",
-              border: "none", borderRadius: 8, cursor: "pointer",
+              padding: "9px 18px",
+              fontSize: 12, fontWeight: 600,
+              background: "var(--color-sage)", color: "var(--color-warm-white)",
+              border: "none", borderRadius: 10, cursor: "pointer",
               fontFamily: "inherit",
+              boxShadow: "0 4px 14px rgba(var(--color-sage-rgb),0.30)",
             }}
           >
             {isLast ? (step.finalCta?.label ?? "Done") : "Next →"}

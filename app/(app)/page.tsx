@@ -38,12 +38,23 @@ export default async function HomePage() {
   let initialObjects = canvasId ? await loadCanvasObjects(supabase, canvasId) : [];
 
   // First-run: seed a friendly starter board once, for a freshly-onboarded user
-  // whose board is still empty and who hasn't finished guided setup. Because we
-  // gate on an empty board + setup-not-complete, it fires at most once and never
-  // re-seeds after the user clears the board post-setup.
+  // whose board is still empty and who hasn't finished guided setup. We claim the
+  // right to seed atomically via canvases.seeded_at — an UPDATE ... WHERE
+  // seeded_at IS NULL that returns the row only for the single request that wins,
+  // so concurrent renders can't double-seed. We still require an empty board so we
+  // never add starter content on top of a user's real work.
   if (user && canvasId && initialObjects.length === 0 && !setupComplete) {
-    await seedHomeCanvas(supabase, canvasId, user.id, { firstName, guidanceLevel, practiceTypes });
-    initialObjects = await loadCanvasObjects(supabase, canvasId);
+    const { data: claim } = await supabase
+      .from("canvases")
+      .update({ seeded_at: new Date().toISOString() })
+      .eq("id", canvasId)
+      .is("seeded_at", null)
+      .select("id")
+      .maybeSingle();
+    if (claim) {
+      await seedHomeCanvas(supabase, canvasId, user.id, { firstName, guidanceLevel, practiceTypes });
+      initialObjects = await loadCanvasObjects(supabase, canvasId);
+    }
   }
 
   return (

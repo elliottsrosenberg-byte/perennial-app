@@ -329,10 +329,15 @@ export default function OnboardingClient({ userId }: { userId: string }) {
       <Blob hex={paletteHex("Purple")} size={440} bottom="-16%" left="14%" alpha={0.14} />
       <Blob hex={paletteHex("Orange")} size={360} bottom="-12%" right="6%" alpha={0.12} />
 
-      {/* Wordmark, top-left */}
-      <div style={{ position: "absolute", top: 24, left: 32, zIndex: 2 }}>
+      {/* Wordmark, top-left → perennial.design */}
+      <a
+        href="https://perennial.design"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ position: "absolute", top: 24, left: 32, zIndex: 2, display: "inline-flex" }}
+      >
         <Image src="/Logotype.svg" alt="Perennial" width={112} height={26} style={{ height: "auto", opacity: 0.85 }} />
-      </div>
+      </a>
 
       {/* Centered content */}
       <main style={{
