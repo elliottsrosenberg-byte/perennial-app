@@ -10,7 +10,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { type TourVisited } from "@/lib/tour";
 import IntroModalShell, { type IntroSlide } from "@/components/tour/IntroModalShell";
-import { WritingSurface, NoteToTasks, InlineAshTease } from "./NoteAnimations";
+import { WritingSurface, InlineAshTease } from "./NoteAnimations";
 
 const SLIDES: IntroSlide[] = [
   {

@@ -272,7 +272,7 @@ export default function FinanceTooltipTour() {
             width:  highlight.w,
             height: highlight.h,
             borderRadius: highlight.radius,
-            boxShadow: "0 0 0 2px var(--color-sage), 0 0 0 9999px rgba(0,0,0,0.28)",
+            boxShadow: "0 0 0 2px var(--color-sage), 0 0 0 6px rgba(var(--color-sage-rgb),0.18)",
             pointerEvents: "none",
             zIndex: 55,
             transition: "top 0.18s ease, left 0.18s ease, width 0.18s ease, height 0.18s ease",
@@ -286,7 +286,7 @@ export default function FinanceTooltipTour() {
           aria-hidden
           style={{
             position: "fixed", inset: 0,
-            background: "rgba(0,0,0,0.32)",
+            background: "transparent",
             zIndex: 55,
             pointerEvents: "none",
           }}
@@ -303,17 +303,18 @@ export default function FinanceTooltipTour() {
           transform: centered ? "translate(-50%, -50%)" : "none",
           width: W,
           zIndex: 60,
-          background: "#1f211a",
-          color: "#f5f1e9",
-          borderRadius: 12,
-          boxShadow: "0 16px 40px rgba(0,0,0,0.36), 0 2px 6px rgba(0,0,0,0.20)",
+          background: "var(--color-surface-raised)",
+          border: "1px solid var(--color-border-strong)",
+          color: "var(--color-text-primary)",
+          borderRadius: 16,
+          boxShadow: "0 16px 40px rgba(0,0,0,0.14), 0 2px 6px rgba(0,0,0,0.08)",
           padding: "13px 15px",
           fontFamily: "inherit",
           userSelect: "none",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-          <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(245,241,233,0.5)" }}>
+          <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-sage-text)" }}>
             Finance tour · {stepIdx + 1} of {STEPS.length}
           </span>
           <button
@@ -322,7 +323,7 @@ export default function FinanceTooltipTour() {
             title="Skip tour"
             style={{
               background: "none", border: "none", padding: 4, cursor: "pointer",
-              color: "rgba(245,241,233,0.55)", display: "flex", alignItems: "center", justifyContent: "center",
+              color: "var(--color-grey)", display: "flex", alignItems: "center", justifyContent: "center",
               borderRadius: 4,
             }}
           >
@@ -330,12 +331,12 @@ export default function FinanceTooltipTour() {
           </button>
         </div>
 
-        <h3 style={{ fontSize: 13, fontWeight: 600, color: "rgba(245,241,233,0.96)", marginBottom: 5 }}>
+        <h3 style={{ fontSize: 13, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 5 }}>
           {step.title}
         </h3>
         <p style={{
           fontSize: 11.5,
-          color: "rgba(245,241,233,0.78)",
+          color: "var(--color-text-secondary)",
           lineHeight: 1.55,
           marginBottom: 10,
         }}>
@@ -364,7 +365,7 @@ export default function FinanceTooltipTour() {
               style={{
                 display: "block", width: "100%",
                 marginTop: 8,
-                fontSize: 11, color: "rgba(245,241,233,0.55)",
+                fontSize: 11, color: "var(--color-grey)",
                 background: "none", border: "none", padding: "4px 0",
                 cursor: "pointer", fontFamily: "inherit",
               }}
@@ -379,7 +380,7 @@ export default function FinanceTooltipTour() {
               onClick={dismiss}
               style={{
                 background: "none", border: "none", padding: "6px 4px",
-                fontSize: 11, color: "rgba(245,241,233,0.55)",
+                fontSize: 11, color: "var(--color-grey)",
                 cursor: "pointer", fontFamily: "inherit",
               }}
             >
