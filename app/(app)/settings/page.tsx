@@ -59,6 +59,7 @@ interface Profile {
   notif_weekly:         boolean;
   notif_monthly:        boolean;
   tour_dismissed:       boolean;
+  guidance_level:       string | null;
 }
 
 interface IntegrationRow {
@@ -102,6 +103,7 @@ const DEFAULT_PROFILE: Profile = {
   notif_email_enabled: true, notif_deadlines: true, notif_invoice_due: true,
   notif_overdue: true, notif_payment_received: true, notif_weekly: false, notif_monthly: false,
   tour_dismissed: false,
+  guidance_level: null,
 };
 
 const PRACTICE_OPTIONS = [
@@ -442,6 +444,16 @@ export default function SettingsPage() {
   const [integrations, setIntegrations] = useState<IntegrationRow[]>([]);
   const [activeModal,  setActiveModal]  = useState<string | null>(null);
 
+  // Honor ?section=... on the client too. The useState initializer above runs
+  // during SSR (no window) and defaults to "account", so on a client navigation
+  // (e.g. the onboarding "Connect email & calendar" card → integrations) we
+  // re-read the param on mount and select the right tab.
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get("section");
+    const allowed: Section[] = ["account", "studio", "preferences", "notifications", "billing", "integrations"];
+    if ((allowed as string[]).includes(s ?? "")) setActive(s as Section);
+  }, []);
+
   // Open a modal automatically when redirected with ?openModal=X (used
   // by the onboarding step's Mailchimp / Beehiiv tiles so the user
   // lands on Settings with the right form already open instead of
@@ -521,6 +533,7 @@ export default function SettingsPage() {
           notif_weekly:        prof.notif_weekly ?? false,
           notif_monthly:       prof.notif_monthly ?? false,
           tour_dismissed:      prof.tour_dismissed ?? false,
+          guidance_level:      prof.guidance_level ?? null,
         });
       }
       if (intgs) setIntegrations(intgs as IntegrationRow[]);
@@ -583,6 +596,7 @@ export default function SettingsPage() {
         notif_weekly:         profile.notif_weekly,
         notif_monthly:        profile.notif_monthly,
         tour_dismissed:       profile.tour_dismissed,
+        guidance_level:       profile.guidance_level || null,
         updated_at:           new Date().toISOString(),
       });
 
@@ -975,6 +989,25 @@ export default function SettingsPage() {
                   <AutoThemeToggle />
                   <p className="text-[11px] mt-2" style={{ color: "var(--color-grey)" }}>
                     Light and dark are switched from the bottom-left of the sidebar.
+                  </p>
+                </div>
+
+                <Divider />
+                <GroupTitle>How Ash works with you</GroupTitle>
+                <div className="mb-1">
+                  <FieldLabel>Guidance level</FieldLabel>
+                  <SelectInput
+                    value={profile.guidance_level ?? ""}
+                    onChange={(v) => set("guidance_level", v || null)}
+                    options={[
+                      { value: "",         label: "Choose…" },
+                      { value: "guided",   label: "Guided — new to this; teach me as we go" },
+                      { value: "balanced", label: "Balanced — guide where it helps" },
+                      { value: "expert",   label: "Expert — keep it fast, skip the basics" },
+                    ]}
+                  />
+                  <p className="text-[11px] mt-2" style={{ color: "var(--color-grey)" }}>
+                    Sets how proactively Ash teaches vs. gets out of your way — and how much your home board leans on guidance. You picked this during setup; change it any time.
                   </p>
                 </div>
 

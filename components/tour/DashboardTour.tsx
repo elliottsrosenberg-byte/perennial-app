@@ -20,29 +20,23 @@ interface Step {
 
 const STEPS: Step[] = [
   {
-    id:     "overview",
-    title:  "Your home dashboard",
-    body:   "A daily lens into your studio. Each card is a live snapshot from the modules in the sidebar — no data lives here, the dashboard reads from the rest of the app.",
+    id:     "welcome",
+    title:  "This is your board",
+    body:   "Your home in Perennial is a canvas — a space to think, plan, and pull your studio together. Nothing here is fixed; arrange it however you like.",
     anchor: null,
   },
   {
-    id:     "capture",
-    title:  "Quick capture",
-    body:   "Notes, Tasks, and Calendar give you fast capture. Notes is the only card you can write in directly. Tasks lets you add quick to-dos. Calendar surfaces upcoming deadlines.",
-    anchor: '[data-tour-step="dashboard.capture"]',
-  },
-  {
-    id:     "snapshots",
-    title:  "Module snapshots",
-    body:   "Finance, Projects, and Network stay quiet until your modules have data. They each link to their module — click View all to set them up.",
-    anchor: '[data-tour-step="dashboard.snapshots"]',
+    id:     "tools",
+    title:  "Build it out",
+    body:   "Add sticky notes, text, shapes, and arrows from the toolbar — or drop in live cards from your projects, tasks, and finance so the board reflects real work.",
+    anchor: '[data-tour-canvas="tools"]',
   },
   {
     id:       "ash",
     title:    "Meet Ash",
-    body:     "Ash is your AI partner with full studio context — bottom-right of every page. Open it now and Ash will get to know you. We'll show you the rest of the modules after.",
-    anchor:   ".ash-fab",
-    finalCta: { label: "Open Ash →" },
+    body:     "Ash is your studio partner, right here on the board. Ask it anything — or tap “Help me finish setting up” to pick up where onboarding left off.",
+    anchor:   '[data-tour-canvas="ash"]',
+    finalCta: { label: "Start exploring" },
   },
 ];
 
@@ -169,48 +163,14 @@ export default function DashboardTour() {
     window.dispatchEvent(new CustomEvent("tour-visited", { detail: { visited: next } }));
   }
 
-  async function finishAndOpenAsh() {
-    // Mark the dashboard portion of the tour complete so the GettingStarted
-    // widget reflects it. Then hand off to Ash with the onboarding prompt —
-    // and set the waiting flag so the sidebar TourCallout stays hidden until
-    // the user closes Ash.
+  async function finish() {
+    // Mark the home walkthrough complete so the GettingStarted widget + sidebar
+    // module tour proceed. We no longer auto-open Ash — the "Help me finish
+    // setting up" ghost prompt in the board's Ash bar owns that handoff now, so
+    // the user starts guided setup on their own terms.
     await markHomeVisited();
     setActive(false);
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem(TOUR_WAITING_KEY, "1");
-      window.dispatchEvent(new Event("tour-waiting-ash"));
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent("open-ash", {
-          detail: { message: "I just finished onboarding." },
-        }));
-      }, 250);
-    }
   }
-
-  // If the user opens Ash directly via the floating button (rather than the
-  // tooltip's "Open Ash" CTA), still mark the home tour complete and set the
-  // waiting flag so the sidebar callout stays hidden until Ash closes.
-  // We do NOT auto-send the onboarding prompt here — the user took their own
-  // path, so they get a blank conversation.
-  async function finishOnDirectAshOpen() {
-    await markHomeVisited();
-    setActive(false);
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem(TOUR_WAITING_KEY, "1");
-      window.dispatchEvent(new Event("tour-waiting-ash"));
-    }
-  }
-
-  useEffect(() => {
-    if (!active) return;
-    if (stepIdx !== STEPS.length - 1) return;
-    const fab = document.querySelector<HTMLElement>(".ash-fab");
-    if (!fab) return;
-    const onClick = () => { finishOnDirectAshOpen(); };
-    fab.addEventListener("click", onClick);
-    return () => fab.removeEventListener("click", onClick);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, stepIdx]);
 
   async function skip() {
     // Skip the entire tour, including sidebar callouts.
@@ -236,11 +196,12 @@ export default function DashboardTour() {
       {/* Backdrop. When a target is anchored, use a spotlight cutout via a
           huge box-shadow on the highlight element so the target itself isn't
           dimmed. When centered (no anchor), use a uniform soft dim. */}
-      {highlight ? (
+      {/* Non-modal: a sage ring + soft glow around the target only — NO dimming
+          of the rest of the screen. The app stays fully live and clickable while
+          the coachmark is up. When there's no anchor (welcome step), nothing is
+          drawn here and the callout simply floats. */}
+      {highlight && (
         <div
-          // Keyed so React mounts a fresh node when transitioning from the
-          // full-screen dim backdrop — otherwise the transition animates the
-          // spotlight from `inset: 0` (left side of screen) to its target.
           key="tour-spotlight"
           aria-hidden
           style={{
@@ -250,28 +211,15 @@ export default function DashboardTour() {
             width:  highlight.w,
             height: highlight.h,
             borderRadius: highlight.radius,
-            // Sage ring on the target + a giant dim shadow extending outward.
-            // Hardcoded near-black so the spotlight works in light AND dark
-            // mode (charcoal-based dim barely shows over a dark background).
-            boxShadow: "0 0 0 2px var(--color-sage), 0 0 0 9999px rgba(0,0,0,0.32)",
+            boxShadow: "0 0 0 2px var(--color-sage), 0 0 0 6px rgba(var(--color-sage-rgb),0.18)",
             pointerEvents: "none",
             zIndex: 40,
             transition: "top 0.18s ease, left 0.18s ease, width 0.18s ease, height 0.18s ease",
           }}
         />
-      ) : (
-        <div
-          key="tour-dim"
-          aria-hidden
-          style={{
-            position: "fixed", inset: 0,
-            background: "rgba(0,0,0,0.32)",
-            zIndex: 40, pointerEvents: "none",
-          }}
-        />
       )}
 
-      {/* Callout */}
+      {/* Callout — light + rounded to match the onboarding UI. */}
       <div
         role="dialog"
         aria-label={`Tour step ${stepIdx + 1}: ${step.title}`}
@@ -281,18 +229,18 @@ export default function DashboardTour() {
           left: pos?.left ?? "50%",
           transform: pos ? "none" : "translate(-50%, -50%)",
           width: W, zIndex: 50,
-          // Hardcoded so the callout stays dark in both light and dark mode
-          // (var(--color-charcoal) flips to a light cream in dark mode).
-          background: "#1f211a",
-          color: "#f5f1e9",
-          borderRadius: 12,
-          boxShadow: "0 16px 48px rgba(31,33,26,0.4)",
-          padding: "14px 16px",
+          background: "var(--color-surface-raised)",
+          color: "var(--color-text-primary)",
+          border: "1px solid var(--color-border-strong)",
+          borderRadius: 16,
+          boxShadow: "0 16px 44px rgba(0,0,0,0.16)",
+          padding: "16px 18px",
           fontFamily: "inherit",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(245,241,233,0.5)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-sage-text)" }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-sage)" }} />
             Welcome tour · {stepIdx + 1} of {STEPS.length}
           </span>
           <button
@@ -301,18 +249,18 @@ export default function DashboardTour() {
             title="Skip tour"
             style={{
               background: "none", border: "none", padding: 4, cursor: "pointer",
-              color: "rgba(245,241,233,0.55)", display: "flex", alignItems: "center", justifyContent: "center",
-              borderRadius: 4,
+              color: "var(--color-text-tertiary)", display: "flex", alignItems: "center", justifyContent: "center",
+              borderRadius: 6,
             }}
           >
             <XIcon size={14} />
           </button>
         </div>
 
-        <h3 style={{ fontSize: 14, fontWeight: 600, color: "rgba(245,241,233,0.96)", marginBottom: 6 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--color-charcoal)", marginBottom: 6, letterSpacing: "-0.01em" }}>
           {step.title}
         </h3>
-        <p style={{ fontSize: 12, color: "rgba(245,241,233,0.72)", lineHeight: 1.6, marginBottom: 14 }}>
+        <p style={{ fontSize: 12.5, color: "var(--color-text-secondary)", lineHeight: 1.6, marginBottom: 16 }}>
           {step.body}
         </p>
 
@@ -320,7 +268,7 @@ export default function DashboardTour() {
           <button
             onClick={isFirst ? skip : () => setStepIdx((i) => Math.max(0, i - 1))}
             style={{
-              fontSize: 11, color: "rgba(245,241,233,0.55)",
+              fontSize: 12, color: "var(--color-grey)",
               background: "none", border: "none", padding: "6px 4px",
               cursor: "pointer", fontFamily: "inherit",
             }}
@@ -329,15 +277,16 @@ export default function DashboardTour() {
           </button>
           <button
             onClick={() => {
-              if (isLast) finishAndOpenAsh();
+              if (isLast) finish();
               else        setStepIdx((i) => i + 1);
             }}
             style={{
-              padding: "7px 14px",
-              fontSize: 11, fontWeight: 600,
-              background: "var(--color-sage)", color: "#f9faf4",
-              border: "none", borderRadius: 8, cursor: "pointer",
+              padding: "9px 18px",
+              fontSize: 12, fontWeight: 600,
+              background: "var(--color-sage)", color: "var(--color-warm-white)",
+              border: "none", borderRadius: 10, cursor: "pointer",
               fontFamily: "inherit",
+              boxShadow: "0 4px 14px rgba(var(--color-sage-rgb),0.30)",
             }}
           >
             {isLast ? (step.finalCta?.label ?? "Done") : "Next →"}

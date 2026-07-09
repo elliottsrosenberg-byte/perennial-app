@@ -24,7 +24,14 @@ import type { CanvasObjectRow } from "@/types/database";
 interface Props {
   canvasId: string | null;
   initialObjects: CanvasObjectRow[];
+  /** Whether the user has finished the Ash-guided deep setup. When false, the
+   *  Ash bar shows the "Help me finish setting up" ghost prompt. */
+  setupComplete?: boolean;
 }
+
+// Ghost prompt shown in the Ash bar until guided setup is complete. Accepting it
+// (sending an otherwise-empty bar) kicks off the guided onboarding in Ash.
+const SETUP_PROMPT = "Help me finish setting up";
 
 // Measure before paint on the client (so the blur can rise on the same frame as
 // the text); fall back to useEffect during SSR to avoid the hydration warning.
@@ -39,7 +46,7 @@ const CHIPS = [
   { action: "image", label: "Add an image", icon: <ImageIcon size={14} strokeWidth={1.75} /> },
 ] as const;
 
-export default function HomeCanvas({ canvasId, initialObjects }: Props) {
+export default function HomeCanvas({ canvasId, initialObjects, setupComplete = true }: Props) {
   const canvasRef = useRef<CanvasHandle>(null);
   const inputRef  = useRef<HTMLInputElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -66,6 +73,12 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [focused, setFocused]     = useState(false);
   const conversationOpen = messages.length > 0 && !collapsed;
+
+  // Ghost prompt: before any conversation, if guided setup isn't done, the bar
+  // invites the user to finish setting up. Accepting it (send while the bar is
+  // empty) starts the guided onboarding conversation.
+  const ghostAvailable = !setupComplete && messages.length === 0;
+  const ghostActive    = ghostAvailable && !input.trim();
 
   // Re-measure synchronously (before paint) whenever the content changes — on
   // resume, on open, and on each streamed token — so the blur height updates on
@@ -123,6 +136,8 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
   }
 
   function submit() {
+    // Empty bar with the ghost showing → accept the "finish setting up" prompt.
+    if (ghostActive) { handleSend(SETUP_PROMPT); return; }
     handleSend(input);
   }
 
@@ -135,9 +150,14 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
 
   const placeholder = conversationOpen
     ? "Reply to Ash…"
-    : initialObjects.length > 0
-      ? "Ask Ash about your board…"
-      : "Ask Ash anything…";
+    : ghostAvailable
+      ? `${SETUP_PROMPT}…`
+      : initialObjects.length > 0
+        ? "Ask Ash about your board…"
+        : "Ask Ash anything…";
+
+  // Send is enabled when there's text to send OR the ghost prompt is available.
+  const sendDisabled = (!input.trim() && !ghostActive) || isStreaming;
 
   // The backdrop blur rises with engagement rather than snapping to full: a
   // light baseline always sits below the bar, deepens while composing the
@@ -302,6 +322,7 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
           ) : null}
 
           <div
+            data-tour-canvas="ash"
             style={{
               width: "100%",
               display: "flex",
@@ -342,7 +363,7 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
             <span style={{ width: 1, height: 24, background: "var(--color-border)" }} />
             <button
               onClick={submit}
-              disabled={!input.trim() || isStreaming}
+              disabled={sendDisabled}
               aria-label="Send to Ash"
               style={{
                 flexShrink: 0,
@@ -355,8 +376,8 @@ export default function HomeCanvas({ canvasId, initialObjects }: Props) {
                 alignItems: "center",
                 justifyContent: "center",
                 color: "#fff",
-                cursor: !input.trim() || isStreaming ? "not-allowed" : "pointer",
-                opacity: !input.trim() || isStreaming ? 0.4 : 1,
+                cursor: sendDisabled ? "not-allowed" : "pointer",
+                opacity: sendDisabled ? 0.4 : 1,
                 transition: "opacity 0.12s ease",
               }}
             >
