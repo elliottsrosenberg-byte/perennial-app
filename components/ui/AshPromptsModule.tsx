@@ -35,8 +35,10 @@ interface Props {
   placeholder?:   string;
 }
 
-const ASH_GRADIENT = "linear-gradient(145deg, rgba(168,184,134,0.16) 0%, rgba(122,142,86,0.22) 100%)";
-const ASH_AVATAR_GRADIENT = "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)";
+// Soft sage tint for the panel; the signature gradient (shared token) for the
+// avatar + primary action. Token-based so both track dark mode.
+const ASH_GRADIENT = "linear-gradient(145deg, rgba(var(--color-sage-rgb),0.14) 0%, rgba(var(--color-sage-rgb),0.24) 100%)";
+const ASH_AVATAR_GRADIENT = "var(--gradient-ash)";
 
 function dispatchAsh(detail: Record<string, unknown>) {
   window.dispatchEvent(new CustomEvent("open-ash", { detail }));
@@ -135,7 +137,7 @@ export default function AshPromptsModule({
                 transition: "background 0.1s ease",
                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = "rgba(122,142,86,0.18)")}
+              onMouseEnter={e => (e.currentTarget.style.background = "rgba(var(--color-sage-rgb),0.18)")}
               onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
             >
               {p.label}
@@ -150,7 +152,7 @@ export default function AshPromptsModule({
         style={{
           display: "flex", alignItems: "center", gap: 6,
           padding: "4px 8px", borderRadius: 8,
-          background: "rgba(255,255,255,0.7)",
+          background: "var(--color-surface-raised)",
           border: "0.5px solid rgba(var(--color-sage-rgb),0.34)",
         }}
       >
