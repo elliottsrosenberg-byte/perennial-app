@@ -19,7 +19,7 @@ interface EmptyStateProps {
   tips?: string[];
 }
 
-const ASH_GRADIENT = "linear-gradient(145deg, #a8b886 0%, #7d9456 60%, #4a6232 100%)";
+const ASH_GRADIENT = "var(--gradient-ash)";
 
 function openAsh(message: string) {
   window.dispatchEvent(new CustomEvent("open-ash", { detail: { message } }));

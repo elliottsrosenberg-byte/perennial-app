@@ -218,10 +218,14 @@ export default function AshPanel({
           zIndex:        39,
           display:       "flex",
           flexDirection: "column",
-          background:    "var(--color-surface-raised)",
-          border:        "0.5px solid var(--color-border)",
+          // Frosted glass — the app frosts through the body so the panel reads
+          // as a floating surface rather than a flat card (see --glass-* tokens).
+          background:           "var(--glass-bg)",
+          backdropFilter:       "blur(var(--glass-blur))",
+          WebkitBackdropFilter: "blur(var(--glass-blur))",
+          border:        "0.5px solid var(--glass-border)",
           borderRadius:  18,
-          boxShadow:     "0 20px 52px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.08)",
+          boxShadow:     "var(--glass-shadow)",
           overflow:      "hidden",
           transition:    "width 0.22s ease, height 0.22s ease, bottom 0.22s ease",
           animation:     "ash-panel-in 0.18s ease-out",
