@@ -285,6 +285,7 @@ export default function ToolDock(props: Props) {
 
   return (
     <div
+      data-tour-canvas="tools"
       onPointerDown={(e) => e.stopPropagation()}
       style={{
         position: "absolute",

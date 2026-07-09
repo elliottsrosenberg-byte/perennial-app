@@ -20,6 +20,7 @@ import type {
 } from "./types";
 import { swatch } from "./palette";
 import ModuleCard from "./ModuleCard";
+import ActionCard from "./ActionCard";
 import { LiveProjectCard, LiveContactCard, LiveNoteCard, LiveTaskListCard } from "./LiveCards";
 
 const textCol = (tc?: StickyColor) =>
@@ -522,6 +523,9 @@ export default function CanvasObjectContent({ object, editing, onRichChange, onE
 
     case "module":
       return <ModuleCard object={object} />;
+
+    case "action":
+      return <ActionCard object={object} />;
 
     default:
       return null;

@@ -603,6 +603,78 @@ export const searchKnowledgeBaseTool: AshToolDefinition = {
   handler: search_knowledge_base,
 };
 
+// ─── get_setup_status ──────────────────────────────────────────────────────────
+
+async function get_setup_status(
+  _input: Record<string, never>,
+  { supabase, userId }: ToolContext
+): Promise<string> {
+  const { data: p } = await supabase
+    .from("profiles")
+    .select("display_name, studio_name, location, practice_types, perennial_goals, work_types, selling_channels, price_range, years_in_practice, primary_challenges, business_issues, urgent_needs, bio, tagline, website, profile_setup_complete")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!p) return "No profile found for this user yet.";
+
+  const { data: integ } = await supabase
+    .from("integrations")
+    .select("provider, status")
+    .eq("user_id", userId);
+
+  const { count: contactCount } = await supabase
+    .from("contacts")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  const has = (v: unknown) => (Array.isArray(v) ? v.length > 0 : Boolean(v && String(v).trim()));
+  const captured: string[] = [];
+  const missing:  string[] = [];
+  const field = (label: string, v: unknown) => (has(v) ? captured : missing).push(label);
+
+  // Captured in the short sign-up modal (don't re-ask these):
+  field("name", p.display_name);
+  field("studio name", p.studio_name);
+  field("location", p.location);
+  field("what they make (practice types)", p.practice_types);
+  field("goals for using Perennial", p.perennial_goals);
+  // Deferred to this guided setup:
+  field("how they work (work types)", p.work_types);
+  field("how they sell (channels)", p.selling_channels);
+  field("typical price point", p.price_range);
+  field("stage / years in practice", p.years_in_practice);
+  field("current challenges", p.primary_challenges);
+  field("what's broken right now", p.business_issues);
+  field("anything urgent on their plate", p.urgent_needs);
+  field("bio / studio statement", p.bio);
+  field("tagline", p.tagline);
+  field("website", p.website);
+
+  const connected = (integ ?? [])
+    .filter((i) => i.status === "active")
+    .map((i) => i.provider);
+
+  const lines: string[] = [];
+  lines.push(`Guided setup: ${p.profile_setup_complete ? "COMPLETE" : "not yet complete"}.`);
+  lines.push(`Already captured (do NOT re-ask): ${captured.join(", ") || "nothing yet"}.`);
+  lines.push(`Still missing (gather conversationally, a couple at a time): ${missing.join(", ") || "nothing — everything is filled in"}.`);
+  lines.push(`Contacts added so far: ${contactCount ?? 0}.`);
+  lines.push(`Integrations connected: ${connected.length ? connected.join(", ") : "none"}.`);
+  return lines.join("\n");
+}
+
+export const getSetupStatusTool: AshToolDefinition = {
+  name: "get_setup_status",
+  description:
+    "Check how far along the user's guided setup is — which profile details are " +
+    "already captured, which are still missing, how many contacts they've added, and " +
+    "which integrations are connected. Call this FIRST whenever the user asks you to " +
+    "help them get set up / onboarded / \"finish setting up\", so you never re-ask " +
+    "something they already provided.",
+  input_schema: { type: "object", properties: {} },
+  handler: get_setup_status,
+};
+
 // ─── Export all read tools ─────────────────────────────────────────────────────
 
 export const READ_TOOLS: AshToolDefinition[] = [
@@ -616,4 +688,5 @@ export const READ_TOOLS: AshToolDefinition[] = [
   getOutreachSummaryTool,
   getOpportunitiesTool,
   searchKnowledgeBaseTool,
+  getSetupStatusTool,
 ];
