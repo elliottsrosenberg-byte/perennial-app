@@ -138,6 +138,26 @@
   --sidebar-icon:        rgba(255,255,255,0.80);
   --sidebar-soon-text:   rgba(255,255,255,0.42);
   --sidebar-soon-bg:     rgba(255,255,255,0.14);
+
+  /* ── Glass / frosted floating surfaces ────────────────────────────────────
+     Translucent fills for OVERLAY surfaces that float above live app content
+     (the Ash panel, dialogs, inline popovers, floating menus) so the content
+     behind visibly frosts through. Blur + hairline top-rim highlight + soft
+     elevation. NOT for opaque base cards, list rows, or form fields — glass on
+     a non-floating surface just reads muddy. Redefined per theme below. */
+  --glass-blur:       20px;                 /* backdrop-filter blur for panels */
+  --glass-bg:         rgba(255,254,252,0.72);   /* translucent surface-raised  */
+  --glass-bg-strong:  rgba(255,254,252,0.88);   /* content-heavy dialogs       */
+  --glass-border:     rgba(255,255,255,0.55);   /* rim-light hairline          */
+  --glass-shadow:     0 20px 52px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.08);
+  /* Centered-dialog scrim — dark, blurred veil behind modals. Stays dark in
+     both themes (charcoal-rgb is fixed), so define once here. */
+  --glass-scrim:      rgba(var(--color-charcoal-rgb), 0.45);
+  --glass-scrim-blur: 8px;
+
+  /* Signature Ash gradient — one definition for the FAB, panel header, avatars
+     and inline Ash surfaces. Uses ash color tokens so it themes in lockstep. */
+  --gradient-ash: linear-gradient(145deg, var(--color-ash-light) 0%, var(--color-ash-mid) 60%, var(--color-ash-dark) 100%);
 }
 
 /* ─── Dark Mode — OS Preference ─────────────────────────────────────────────── */
@@ -182,6 +202,12 @@
     --shadow-md:      0 4px 16px rgba(0,0,0,0.40);
     --shadow-lg:      0 8px 32px rgba(0,0,0,0.50);
     --shadow-overlay: 0 16px 48px rgba(0,0,0,0.65);
+
+    /* Glass — dark */
+    --glass-bg:        rgba(27,30,22,0.70);
+    --glass-bg-strong: rgba(27,30,22,0.90);
+    --glass-border:    rgba(255,255,255,0.08);
+    --glass-shadow:    0 20px 52px rgba(0,0,0,0.55), 0 4px 12px rgba(0,0,0,0.40);
   }
 }
 
@@ -226,6 +252,12 @@
   --shadow-md:      0 4px 16px rgba(0,0,0,0.40);
   --shadow-lg:      0 8px 32px rgba(0,0,0,0.50);
   --shadow-overlay: 0 16px 48px rgba(0,0,0,0.65);
+
+  /* Glass — dark */
+  --glass-bg:        rgba(27,30,22,0.70);
+  --glass-bg-strong: rgba(27,30,22,0.90);
+  --glass-border:    rgba(255,255,255,0.08);
+  --glass-shadow:    0 20px 52px rgba(0,0,0,0.55), 0 4px 12px rgba(0,0,0,0.40);
 }
 
 /* ─── Force Light Mode ──────────────────────────────────────────────────────── */
@@ -269,6 +301,12 @@
   --shadow-md:      0 4px 16px rgba(0,0,0,0.10);
   --shadow-lg:      0 8px 32px rgba(0,0,0,0.14);
   --shadow-overlay: 0 16px 48px rgba(0,0,0,0.20);
+
+  /* Glass — light */
+  --glass-bg:        rgba(255,254,252,0.72);
+  --glass-bg-strong: rgba(255,254,252,0.88);
+  --glass-border:    rgba(255,255,255,0.55);
+  --glass-shadow:    0 20px 52px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.08);
 }
 
 /* ─── App Base ───────────────────────────────────────────────────────────────── */

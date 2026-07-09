@@ -257,7 +257,7 @@ function ImagePlaceholderView({ node, getPos, editor }: NodeViewProps) {
           display: "inline-flex", alignItems: "center", gap: 8,
           padding: "8px 12px", borderRadius: 8,
           border: `1px dashed ${isError ? "var(--color-red-orange)" : "var(--color-border-strong)"}`,
-          background: isError ? "rgba(220,90,60,0.06)" : "var(--color-surface-sunken)",
+          background: isError ? "rgba(var(--color-red-rgb),0.07)" : "var(--color-surface-sunken)",
           color: isError ? "var(--color-red-orange)" : "var(--color-text-tertiary)",
           fontSize: 11, fontFamily: "inherit",
         }}
@@ -560,7 +560,7 @@ export function RichToolbar({
         <button type="button" data-tour-target={generateTasksTourTarget} onClick={onGenerateTasks} disabled={suggesting} title="Generate tasks from this note" style={{
           display: "flex", alignItems: "center", gap: 5, padding: "3px 10px",
           fontSize: 11, fontWeight: 500, borderRadius: 6,
-          background: "linear-gradient(#fffefc, #fffefc) padding-box, linear-gradient(135deg, #a8b886 0%, #4a6232 100%) border-box",
+          background: "linear-gradient(var(--color-surface-raised), var(--color-surface-raised)) padding-box, var(--gradient-ash) border-box",
           border: "1px solid transparent", color: "var(--color-sage-text)",
           cursor: suggesting ? "not-allowed" : "pointer",
           opacity: suggesting ? 0.5 : 1, fontFamily: "inherit", flexShrink: 0,
@@ -628,8 +628,11 @@ export function InlineAshPopover({
   return (
     <div ref={ref} style={{
       position: "fixed", top: anchor.bottom + 4, left: anchor.left, zIndex: 500,
-      background: "var(--color-surface-raised)", border: "0.5px solid var(--color-border)",
-      borderRadius: 10, boxShadow: "var(--shadow-overlay)", width: 360, overflow: "hidden",
+      // Frosted glass — floats over the editor content (see --glass-* tokens).
+      background: "var(--glass-bg)",
+      backdropFilter: "blur(var(--glass-blur))", WebkitBackdropFilter: "blur(var(--glass-blur))",
+      border: "0.5px solid var(--glass-border)",
+      borderRadius: 10, boxShadow: "var(--glass-shadow)", width: 360, overflow: "hidden",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderBottom: "0.5px solid var(--color-border)" }}>
         <svg width="12" height="12" viewBox="0 0 20 20" fill="var(--color-sage)"><circle cx="10" cy="10" r="10"/><path d="M6 10.5c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/><circle cx="10" cy="14" r="1" fill="white"/></svg>
@@ -750,7 +753,7 @@ export function SelectionBubble({
             padding: "5px 10px", fontSize: 11, fontWeight: 500,
             borderRadius: 7, border: "none",
             background: "transparent",
-            color: "rgba(245,241,233,0.92)",
+            color: "rgba(255,255,255,0.92)",
             cursor: convertingToNote ? "not-allowed" : "pointer",
             fontFamily: "inherit",
             opacity: convertingToNote ? 0.6 : 1,

@@ -92,8 +92,9 @@ export default function Modal({
       onClick={closeOnBackdrop ? onClose : undefined}
       style={{
         position: "fixed", inset: 0, zIndex: 300,
-        background: "rgba(var(--color-charcoal-rgb),0.45)",
-        backdropFilter: "blur(4px)",
+        background: "var(--glass-scrim)",
+        backdropFilter: "blur(var(--glass-scrim-blur))",
+        WebkitBackdropFilter: "blur(var(--glass-scrim-blur))",
         display: "flex", alignItems: "center", justifyContent: "center",
         padding: 20,
         animation: "perennial-modal-bg 0.16s ease-out",
@@ -113,10 +114,14 @@ export default function Modal({
           maxHeight: "90vh",
           display: "flex",
           flexDirection: "column",
-          background: "var(--color-surface-raised)",
+          // Strong frosted glass — mostly opaque so form content stays crisp,
+          // with a hairline rim-light and blur that pick up the frosted scrim.
+          background:           "var(--glass-bg-strong)",
+          backdropFilter:       "blur(var(--glass-blur))",
+          WebkitBackdropFilter: "blur(var(--glass-blur))",
           color: "var(--color-text-primary)",
           borderRadius: 16,
-          border: "0.5px solid var(--color-border)",
+          border: "0.5px solid var(--glass-border)",
           boxShadow: "var(--shadow-overlay)",
           overflow: "hidden",
           fontFamily: "inherit",
