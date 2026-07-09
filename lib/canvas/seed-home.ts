@@ -118,5 +118,10 @@ export async function seedHomeCanvas(
     ...objectToColumns(o),
   }));
 
-  await supabase.from("canvas_objects").insert(rows);
+  // IMPORTANT: surface a failed insert. supabase returns errors rather than
+  // throwing, so an unchecked insert can silently seed nothing — which, paired
+  // with the seeded_at claim, would leave the board stuck empty forever. Throw
+  // so the caller releases the claim and retries on the next load.
+  const { error } = await supabase.from("canvas_objects").insert(rows);
+  if (error) throw new Error(`seedHomeCanvas insert failed: ${error.message}`);
 }
