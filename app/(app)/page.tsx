@@ -56,8 +56,14 @@ export default async function HomePage() {
         await seedHomeCanvas(supabase, canvasId, user.id, { firstName, guidanceLevel, practiceTypes });
         initialObjects = await loadCanvasObjects(supabase, canvasId);
       } catch {
-        // Seeding failed after we claimed it — release the claim so the next
-        // load can retry instead of leaving the board permanently empty.
+        // Seeding threw after we claimed it — release the claim so the next load
+        // retries instead of leaving the board permanently empty.
+        await supabase.from("canvases").update({ seeded_at: null }).eq("id", canvasId);
+      }
+      // Belt-and-suspenders: if we claimed but the board is still empty (a seed
+      // that silently inserted nothing), release the claim so it re-seeds next
+      // time rather than getting stuck.
+      if (initialObjects.length === 0) {
         await supabase.from("canvases").update({ seeded_at: null }).eq("id", canvasId);
       }
     }
