@@ -218,11 +218,9 @@ export default function AshPanel({
           zIndex:        39,
           display:       "flex",
           flexDirection: "column",
-          // Frosted glass — the app frosts through the body so the panel reads
-          // as a floating surface rather than a flat card (see --glass-* tokens).
-          background:           "var(--glass-bg)",
-          backdropFilter:       "blur(var(--glass-blur))",
-          WebkitBackdropFilter: "blur(var(--glass-blur))",
+          // TEMP: solid red — pipeline confirmation test only. Revert to
+          // var(--glass-bg) + backdrop blur once the deploy is verified.
+          background:    "var(--color-red-orange)",
           border:        "0.5px solid var(--glass-border)",
           borderRadius:  18,
           boxShadow:     "var(--glass-shadow)",
