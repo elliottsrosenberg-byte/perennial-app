@@ -3,7 +3,6 @@ import MobileNav from "@/components/layout/MobileNav";
 import MobileDesktopNotice from "@/components/layout/MobileDesktopNotice";
 import AshContainer from "@/components/ash/AshContainer";
 import TourTracker from "@/components/tour/TourTracker";
-import TourCallout from "@/components/tour/TourCallout";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -18,7 +17,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
       <AshContainer />
       <TourTracker />
-      <TourCallout />
     </div>
   );
 }
