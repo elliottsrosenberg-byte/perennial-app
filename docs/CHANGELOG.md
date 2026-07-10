@@ -4,6 +4,30 @@ Maintained by the weekly documentation agent. Each entry covers the prior week's
 
 ---
 
+## 2026-07-10 (week of 2026-07-03)
+
+### Features
+- `342e2d10` `b018c632` `51599943` `bec6a6a9` Canvas (PER-70): new `components/canvas/` module — spatial freeform board with sticky/text/shape/image/reference objects; `canvases` + `canvas_objects` tables (per-user RLS); `lib/canvas/seed-home.ts` seeds the first-run Home board tailored to `guidance_level` + `practice_types`; `editor_images` bucket reused for canvas image uploads
+- `342e2d10` Home / Dashboard completely reworked: page is now a full-page spatial canvas (`HomeCanvas.tsx`) with an inline Ash chat overlay (`AshHomeConversation.tsx`); server component still prefetches seed context; data-card layout retired
+- `4b0bc9d6` `a6907924` `8b310afa` `6cc9c9df` `52bfd450` `98b7caa6` `25794ff0` `689b197` Ash (PER-135): model upgraded from `claude-sonnet-4-6` to `claude-sonnet-5`; new RAG `knowledge_base` table (semi-global: `user_id IS NULL` = Perennial feed, `user_id` set = private research); new `ash_preferences` table for extracted user preferences/beliefs/values; new API routes `/api/ash/learn` (fire-and-forget preference extraction) + `/api/ash/research` (background knowledge expansion); new lib: `lib/ash/embeddings.ts`, `lib/ash/preferences.ts`, `lib/ash/research.ts`; new tool `search_knowledge_base`; self-knowledge manifest added to `lib/ash/tools/index.ts`; thinking explicitly disabled; `ash-inline` and `suggest-tasks` routes still on prior models
+- `61fa122f` Onboarding rework: 9-step wizard collapsed to 3 steps (name → practice types → guidance level); new `profile_setup_complete` (boolean, default false) and `guidance_level` (text) columns on `profiles`; Ash-guided deep setup now gates on `profile_setup_complete` instead of `onboarding_complete`; new `IntroModalShell.tsx` for shared tour-intro scaffolding
+- `14444fe9` UI: frosted-glass treatment for AshPanel and inline Ash surfaces; new `--glass-*` CSS custom properties in `globals.css` (`--glass-blur`, `--glass-bg`, `--glass-bg-strong`, `--glass-border`, `--glass-shadow`, `--glass-scrim`, `--glass-scrim-blur`); new `--gradient-ash` and `--color-ash-light`; `--color-charcoal-rgb` tint helper added
+- `17df2e54` Acquisition: "Powered by Perennial" marks added to public-facing pages (`/book/[slug]`, `/i/[token]`)
+
+### Fixes
+- `5d403fad` Finance: replaced all Teller references with Plaid in user-facing copy; updated onboarding IntegrationConnectStep Finance tile link
+
+### Infra
+- `efd706f8` `9a9c2753` `c24688449` `1c3498977` Ash evaluation suite: behavior evals for preference extraction, RAG retrieval, and response quality (test infra only, no production impact)
+
+### Docs
+- This run: `data-model.md` — add `canvases`/`canvas_objects` canvas section; add `ash_preferences` + `knowledge_base` Ash rows; update tenancy table (semi-global row); update `profiles` row (new columns)
+- This run: `modules.md` — add new Canvas module section; rewrite Home/Dashboard section (spatial canvas); update Ash section (model, routes, tables, RAG, preferences); update Onboarding section (3 steps, new flags)
+- This run: `design-system.md` — add glass/overlay token sub-section; add `--color-charcoal-rgb` / `--color-ash-light` / `--gradient-ash`
+- This run: `README.md` — add Canvas to modules table; update tenancy model note for `knowledge_base`
+
+---
+
 ## 2026-07-03 (week of 2026-06-26)
 
 ### Features

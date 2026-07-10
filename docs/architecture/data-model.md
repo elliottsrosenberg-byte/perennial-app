@@ -12,11 +12,14 @@ The schema is overwhelmingly **per-user**. 40 of 41 public tables carry a `user_
 
 | Tenancy | Tables | Access shape |
 |---|---|---|
-| **Per-user** (`user_id`-owned) | everything except `opportunities` | RLS `auth.uid() = user_id`; browser client reads/writes directly |
+| **Per-user** (`user_id`-owned) | everything except `opportunities` and `knowledge_base` | RLS `auth.uid() = user_id`; browser client reads/writes directly |
 | **Global-shared** | `opportunities` (only) | All authed users SELECT the whole feed; only `service_role` writes |
+| **Semi-global** | `knowledge_base` | Rows with `user_id IS NULL` = Perennial-curated RAG content readable by `{authenticated}`; rows with `user_id` = private per-user research readable only by that user. Writes are `service_role` only (like `opportunities`) |
 | **Public-read escape hatches** (per-user rows widened by token) | `notes` (`share_token`), `invoices` (`public_token`), `scheduling_links` (`slug`) | Owner-managed, but a single row is readable without a session via a token/slug |
 
-The single global table, `opportunities`, is a curated/Perennial feed with **no `user_id`**. Per-user engagement (`user_status`, `ash_note`) is currently stored as **shared columns on the global row** — a documented single-tenant compromise. A per-user `opportunity_state` table is the multi-user TODO (flagged in `app/api/opportunities/status/route.ts`).
+The single fully global table, `opportunities`, is a curated/Perennial feed with **no `user_id`**. Per-user engagement (`user_status`, `ash_note`) is currently stored as **shared columns on the global row** — a documented single-tenant compromise. A per-user `opportunity_state` table is the multi-user TODO (flagged in `app/api/opportunities/status/route.ts`).
+
+`knowledge_base` is semi-global: global rows (`user_id IS NULL`) are a Perennial-curated RAG knowledge feed; per-user rows hold Ash's background research for a specific user. See the Ash section below for the full table spec.
 
 ---
 
@@ -57,7 +60,7 @@ Scope key: **U** = per-user (`auth.uid() = user_id`), **G** = global-shared, **M
 
 | Table | Scope | Purpose | Key columns | RLS / write notes | Related |
 |---|---|---|---|---|---|
-| `profiles` | U | Per-user config hub (**53 cols**): identity, finance prefs (`currency`, `brand_color`, `invoice_prefix`, EIN, address, `payment_terms`), `notif_*` toggles, onboarding answers, UI state (`tour_visited`, `project_options`, `custom_categories` jsonb), `default_calendar_id`, `conferencing` jsonb. Seeded on signup via `public.handle_new_user()` trigger on `auth.users` (now exception-guarded so a seed failure never aborts signup — `supabase/migrations/20260623160000_resilient_signup_profile_trigger.sql`). Profile is also upserted on first onboarding/settings load as a self-heal path. | `user_id` (PK = `auth.uid()`), `display_name`, `studio_name`, `currency`, `brand_color`, `invoice_prefix`, `default_calendar_id`, `onboarding_complete` | **Split** SELECT/INSERT/UPDATE own; **no DELETE**, no service_role policy | `user_calendars`, `invoices`, `integrations` |
+| `profiles` | U | Per-user config hub (**55 cols**): identity, finance prefs (`currency`, `brand_color`, `invoice_prefix`, EIN, address, `payment_terms`), `notif_*` toggles, onboarding answers, UI state (`tour_visited`, `project_options`, `custom_categories` jsonb), `default_calendar_id`, `conferencing` jsonb. `profile_setup_complete` (boolean, default false) gates the Ash-guided deep setup after the short 3-step onboarding. `guidance_level` (text: `guided`\|`balanced`\|`expert`) is captured on the third onboarding step and used to seed the Home canvas. Seeded on signup via `public.handle_new_user()` trigger on `auth.users` (now exception-guarded so a seed failure never aborts signup — `supabase/migrations/20260623160000_resilient_signup_profile_trigger.sql`). Profile is also upserted on first onboarding/settings load as a self-heal path. | `user_id` (PK = `auth.uid()`), `display_name`, `studio_name`, `currency`, `brand_color`, `invoice_prefix`, `default_calendar_id`, `onboarding_complete`, `profile_setup_complete`, `guidance_level` | **Split** SELECT/INSERT/UPDATE own; **no DELETE**, no service_role policy | `user_calendars`, `invoices`, `integrations` |
 | `projects` | U | Artwork/commission records: title, type, status, priority, dates, pricing (`listing_price`, `est_value`, `rate`, `billed_hours`), physical attrs, `client_name`, `canvas_html` rich body | `id`, `user_id`, `title`, `status`, `listing_price`, `client_name`, `canvas_html` | ALL `users own projects` | `tasks`, `time_entries`, `expenses`, `notes`, `project_contacts`, `project_files`, `invoices`, `outreach_target_projects` |
 | `tasks` | U | To-dos with **polymorphic** parent FKs | `id`, `user_id`, `title`, `completed`, `project_id`, `contact_id`, `opportunity_id`, `target_id`, `organization_id`, `due_at` | ALL `users own tasks` | `projects`, `contacts`, `organizations`, `opportunities`, `outreach_targets` |
 | `reminders` | U | Lightweight project reminders (reminders→calendar deferred) | `id`, `user_id`, `project_id`, `due_date`, `completed` | ALL `users see own reminders` | `projects` |
@@ -102,6 +105,13 @@ Scope key: **U** = per-user (`auth.uid() = user_id`), **G** = global-shared, **M
 | `notes` | M | Notes; polymorphic parent FKs; `share_token` enables **public anon read** of one note; `pinned` | `id`, `user_id`, `share_token`, `project_id`, `contact_id`, `opportunity_id`, `organization_id`, `pinned` | ALL `users see own notes` **PLUS** `{anon}` SELECT `Anyone can view shared notes` where `share_token IS NOT NULL` | `projects`, `contacts`, `organizations`, `opportunities`, `note_folders`, `note_folder_items` |
 | `note_folders` | U | Folders (`name`, `position`) | `id`, `user_id`, `name`, `position` | ALL `users manage own note folders` | `notes`, `note_folder_items` |
 | `note_folder_items` | U | Join notes ↔ folder | `folder_id`, `note_id`, `user_id` | ALL `users manage own note folder items` | `note_folders`, `notes` |
+
+### Canvas
+
+| Table | Scope | Purpose | Key columns | RLS / write notes | Related |
+|---|---|---|---|---|---|
+| `canvases` | U | One canvas board per (user, scope, entity). `scope` = `home`\|`project`\|`contact`\|`organization`\|`lead`; `entity_id` NULL for the Home board; `seeded_at` stamped when `lib/canvas/seed-home.ts` populates first-run objects | `id`, `user_id`, `scope`, `entity_id`, `title`, `seeded_at` | ALL `users manage own canvases` | `canvas_objects` |
+| `canvas_objects` | U | Freeform objects on a canvas. `type` = `text`\|`sticky`\|`shape`\|`image`\|`reference`; position (`x`,`y`,`width`,`height`,`rotation`,`z_index`); `content` jsonb holds type-specific payload; `ref_type`/`ref_id` link reference objects to app entities; image objects use the `editor_images` storage bucket | `id`, `canvas_id`, `user_id`, `type`, `x`, `y`, `width`, `height`, `rotation`, `z_index`, `content` jsonb, `ref_type`, `ref_id` | ALL `users manage own canvas_objects` | `canvases` |
 
 ### Resources
 
@@ -149,6 +159,8 @@ Scope key: **U** = per-user (`auth.uid() = user_id`), **G** = global-shared, **M
 |---|---|---|---|---|---|
 | `ash_conversations` | U | Conversations scoped by `module` | `id`, `user_id`, `module`, `title` | ALL `users manage own ash_conversations` | `ash_messages` |
 | `ash_messages` | U | Messages (`role`, `content`) | `id`, `conversation_id`, `user_id`, `role`, `content` | ALL `users manage own ash_messages` | `ash_conversations` |
+| `ash_preferences` | U | Extracted user preferences/beliefs/values/concerns; `kind` (`preference`\|`belief`\|`concern`\|`value`\|`format`); `weight` (1–5); `status` (`active`\|`dismissed`); `last_seen_at` refreshed when the preference is surfaced to Ash again | `id`, `user_id`, `kind`, `content`, `weight`, `status`, `last_seen_at` | ALL `users manage own ash_preferences`. Written by `/api/ash/learn` (fire-and-forget after each Ash turn) via service-role | `ash_conversations` |
+| `knowledge_base` | **Semi-global** | RAG content store. Global rows (`user_id IS NULL`) = Perennial-curated industry knowledge (pricing, galleries, fairs, press, channels, cash-flow, contracts); per-user rows = Ash background research for a specific user. Embeddings use `vector(1024)` (voyage-3.5) with an HNSW index. `chunk_id` (unique text key), `category`, `content_hash` (dedup). Writes are service-role only — global rows via the curation pipeline, per-user rows via `lib/ash/research.ts` | `id`, `user_id`, `chunk_id`, `category`, `title`, `source`, `content`, `embedding` (vector 1024), `metadata` jsonb | SELECT: `{authenticated}` where `user_id IS NULL OR user_id = auth.uid()`. **No browser writes** — service-role only (like `opportunities`) | `ash_conversations` |
 
 ---
 

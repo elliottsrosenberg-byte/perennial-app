@@ -36,9 +36,10 @@ Routing structure:
 The app is **effectively single-user today but built for multi-user**.
 
 - 40 of 41 public tables carry a `user_id` column with an `auth.uid() = user_id` RLS policy. See [data-model.md](./data-model.md) for the three RLS authoring styles in play.
-- Exactly one table is global-shared: `opportunities` (the curated Perennial feed) — no `user_id`, `{authenticated}` reads the whole feed, only `{service_role}` writes. Its `user_status` / `ash_note` columns are a documented single-tenant compromise; a per-user opportunity-state table is the multi-user TODO.
+- Exactly one table is fully global-shared: `opportunities` (the curated Perennial feed) — no `user_id`, `{authenticated}` reads the whole feed, only `{service_role}` writes. Its `user_status` / `ash_note` columns are a documented single-tenant compromise; a per-user opportunity-state table is the multi-user TODO.
+- One table is **semi-global**: `knowledge_base` — rows with `user_id IS NULL` are a Perennial-curated RAG feed readable by all authenticated users; rows with a `user_id` are private per-user research. Writes are service-role only (like `opportunities`).
 - Public-read escape hatches widen access for specific shared rows without exposing the table: `notes.share_token`, `invoices.public_token`, `scheduling_links` slug.
-- Per-user config hub is `profiles` (PK = `auth.uid()`, ~53 columns): onboarding answers, finance defaults, notification toggles, `default_calendar_id`.
+- Per-user config hub is `profiles` (PK = `auth.uid()`, ~55 columns): onboarding answers, finance defaults, notification toggles, `default_calendar_id`, `profile_setup_complete`, `guidance_level`.
 
 ## Key conventions
 
@@ -58,7 +59,8 @@ The app is **effectively single-user today but built for multi-user**.
 
 | Module | Primary route(s) | One-liner |
 | --- | --- | --- |
-| Home / Dashboard | `app/(app)/page.tsx` (`/`) | Landing dashboard; wraps all authed routes via `app/(app)/layout.tsx` |
+| Home / Dashboard | `app/(app)/page.tsx` (`/`) | Full-page spatial canvas (`HomeCanvas.tsx`) + inline Ash chat overlay; wraps all authed routes via `app/(app)/layout.tsx` |
+| Canvas | `components/canvas/` (no own route — embedded in Home and planned for project/contact/org detail panels) | Freeform spatial board: sticky notes, text, shapes, images, entity references; `canvases` + `canvas_objects` tables |
 | Calendar | `app/(app)/calendar/page.tsx` (`/calendar`) | Week/month grid with events and tasks |
 | Scheduling (owner) | inside `/calendar` (no route) | Booking-link setup via the left-rail `SchedulingPanel` + grid compose overlay |
 | Public Booking (invitee) | `app/book/[slug]/page.tsx` (`/book/[slug]`) | Public, service-role-loaded booking page; allowlisted in `proxy.ts` |
