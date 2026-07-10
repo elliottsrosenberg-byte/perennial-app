@@ -59,6 +59,7 @@ All tokens are defined in `app/globals.css` `@theme inline` (lines ~4–88). Dar
 | `--color-sage-rgb` | `155,163,122` |
 | `--color-grey-rgb` | `154,150,144` |
 | `--color-green-deep-rgb` | `61,107,79` |
+| `--color-charcoal-rgb` | `31,33,26` |
 
 ### Status / semantic colors
 
@@ -110,9 +111,27 @@ All tokens are defined in `app/globals.css` `@theme inline` (lines ~4–88). Dar
 | `ash` | `#9BA37A` |
 | `ash-dark` | `#4a6232` |
 | `ash-mid` | `#6b8a4e` |
+| `ash-light` | `#a8b886` |
 | `ash-tint` | `rgba(155,163,122,0.10)` |
 | `ash-border` | `rgba(155,163,122,0.28)` |
 | `ash-glow` | `rgba(155,163,122,0.50)` |
+| `--gradient-ash` | `linear-gradient(145deg, var(--color-ash-light) 0%, var(--color-ash-mid) 60%, var(--color-ash-dark) 100%)` |
+
+### Glass / overlay tokens
+
+Used for frosted-glass surfaces (AshPanel, Modal overlays, inline Ash surfaces). All `--glass-*` vars have dark-mode overrides in `globals.css`.
+
+| Token | Light value |
+|---|---|
+| `--glass-blur` | `20px` |
+| `--glass-bg` | `rgba(255,254,252,0.72)` |
+| `--glass-bg-strong` | `rgba(255,254,252,0.88)` |
+| `--glass-border` | `rgba(255,255,255,0.55)` |
+| `--glass-shadow` | `0 20px 52px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.08)` |
+| `--glass-scrim` | `rgba(var(--color-charcoal-rgb), 0.45)` |
+| `--glass-scrim-blur` | `8px` |
+
+Usage: `backdrop-filter: blur(var(--glass-blur)); background: var(--glass-bg); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow);`. Use `--glass-bg-strong` for panels that need higher opacity (reading surfaces). `--glass-scrim` + `--glass-scrim-blur` for modal backdrop overlays.
 
 ### Radii
 

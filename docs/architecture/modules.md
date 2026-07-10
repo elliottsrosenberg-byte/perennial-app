@@ -997,6 +997,50 @@ This document is a module-by-module architecture reference for the Perennial app
 
 ---
 
+## Canvas (spatial board)
+
+| | |
+|---|---|
+| **Routes** | No own route — embedded in Home (`/`) via `HomeCanvas.tsx`; planned for project/contact/org detail panels (PER-88) |
+
+### Main components
+- `components/canvas/HomeCanvas.tsx` — root canvas for the Home view; pan/zoom surface, renders `canvas_objects`; seeds first-run board via `lib/canvas/seed-home.ts`; direct browser-client reads/writes
+- `components/canvas/CanvasObject.tsx` — renders a single canvas object by `type`; dispatches to type-specific sub-renderers
+- `components/canvas/objects/StickyObject.tsx`, `TextObject.tsx`, `ShapeObject.tsx`, `ImageObject.tsx`, `ReferenceObject.tsx` — per-type renderers + editors
+- `components/canvas/CanvasToolbar.tsx` — floating toolbar: insert sticky/text/shape/image/reference
+- `components/canvas/CanvasControls.tsx` — zoom in/out + fit-to-screen buttons
+- `components/canvas/SelectionBox.tsx` — multi-select rubber-band + move/resize handles
+- `lib/canvas/seed-home.ts` — first-run seed: reads `profiles.guidance_level` + `practice_types` + recent projects/contacts/tasks from the server fetch; builds an array of `canvas_objects` INSERT payloads tailored to the user; stamps `canvases.seeded_at`
+- `lib/canvas/types.ts` — `CanvasScope`, `Canvas`, `CanvasObject`, `CanvasObjectType`, `CanvasRefType` TypeScript types (also exported from `types/database.ts`)
+
+### API routes
+- None — canvas reads/writes go directly via the browser Supabase client (per-user RLS)
+
+### Tables
+`canvases` (`scope='home'`; `entity_id` NULL for Home board; `seeded_at` stamped once) · `canvas_objects` (all objects on the board: `type`, `x/y/width/height/rotation/z_index`, `content` jsonb, optional `ref_type`/`ref_id`) · Supabase Storage `editor_images` bucket (reused for image-type objects)
+
+### Key patterns
+- Browser-client writes only (no API route). `canvases.user_id` + RLS `auth.uid() = user_id` is the full auth story.
+- Canvas scope model: `scope` + optional `entity_id` give every entity its own board (`home` has no entity; `project`/`contact`/`organization`/`lead` scopes planned for PER-88)
+- `content` jsonb shape varies by `type`: text → `{body: string}`, sticky → `{body, color}`, shape → `{kind, fill}`, image → `{storage_path}`, reference → resolved via `ref_type`/`ref_id`
+- Image uploads reuse `lib/uploads/editor-image.ts` + `editor_images` bucket (same helper as the rich-text editor)
+- `seeded_at` is stamped **once** after the first seed run; `HomeCanvas` checks `seeded_at IS NULL` on mount to decide whether to call `seed-home.ts`
+
+### Cross-module links
+- `lib/canvas/seed-home.ts` reads `profiles.guidance_level` + `practice_types`; deep-links into modules via `reference` objects (`ref_type`, `ref_id`)
+- `editor_images` bucket shared with `RichEditor` (notes/contacts/projects canvas_html)
+- `AshHomeConversation` co-mounted with `HomeCanvas`; canvas context passed to Ash for relevance
+
+### Known TODOs / mocked
+- PER-88: wire Canvas into project/contact/organization/lead detail panels (scope model already supports it, just not mounted yet)
+- Real-time collaboration (multi-cursor, CRDT) not implemented — last-write-wins on `canvas_objects` rows
+- Undo/redo not implemented
+
+### Mobile issues
+- Full-page pan/zoom canvas is primarily a desktop interaction; touch panning works but object editing (resize handles, text input) is desktop-first
+
+---
+
 ## Home / Dashboard
 
 | | |
@@ -1004,41 +1048,41 @@ This document is a module-by-module architecture reference for the Perennial app
 | **Routes** | `/` (`app/(app)/page.tsx`) · `app/(app)/layout.tsx` (wraps all authed app routes) |
 
 ### Main components
-- `app/(app)/page.tsx` — async server component, fetches all card data in one `Promise.all` and forces `/onboarding` redirect if `profiles.onboarding_complete` is false
+- `app/(app)/page.tsx` — async server component; forces `/onboarding` redirect if `profiles.onboarding_complete` is false; fetches canvas seed context (profiles, recent projects/contacts/tasks) in a `Promise.all` and hands it to `HomeCanvas`
 - `app/(app)/layout.tsx` — flex shell: Sidebar + MobileNav + MobileDesktopNotice + `<main>` + AshContainer + TourTracker + TourCallout
-- `components/home/WelcomeBanner.tsx` — post-onboarding banner gated on localStorage `perennial-just-onboarded`; reads `profiles.studio_name/perennial_goals/primary_challenges`
-- `components/home/NotesCard.tsx` (only writable card — uses `getRichExtensions` editor)
-- `components/home/TasksCard.tsx` (HomeTask type, client-held state, quick-add)
-- `components/home/CalendarCard.tsx` (CalendarItem from projects+tasks due dates)
-- `components/home/FinanceCard.tsx`
-- `components/home/ProjectsCard.tsx`
-- `components/home/ContactsCard.tsx`
+- `components/canvas/HomeCanvas.tsx` — full-page spatial freeform canvas; renders `canvas_objects` on a pan/zoom surface; on first visit seeds the board via `lib/canvas/seed-home.ts` and stamps `canvases.seeded_at`
+- `components/ash/AshHomeConversation.tsx` — inline Ash chat overlay mounted inside the Home canvas view; contextualizes Ash to the canvas + onboarding state
+- `components/home/WelcomeBanner.tsx` — post-onboarding banner gated on localStorage `perennial-just-onboarded`
 - `components/layout/Topbar.tsx` — shared header; greeting mode shows time-of-day greeting + date
 - `components/finance/QuickTimerButton.tsx` (in Topbar actions)
 
+> **Prior art (retired):** The old data-card layout (`NotesCard`, `TasksCard`, `CalendarCard`, `FinanceCard`, `ProjectsCard`, `ContactsCard`) has been replaced by the canvas + inline Ash surface.
+
 ### API routes
-- None directly from the page; cards link out via Link navigation. QuickTimerButton hits finance timer APIs
+- None directly from the page. QuickTimerButton hits finance timer APIs. Canvas reads/writes go directly via the browser Supabase client.
 
 ### Tables
-`profiles` (onboarding_complete gate) · `notes` · `tasks` · `invoices` + `invoice_line_items` · `time_entries` · `expenses` · `projects` · `contacts` + `organizations` · `active_timers`
+`profiles` (`onboarding_complete` + `profile_setup_complete` + `guidance_level` — gate and seed inputs) · `canvases` (Home board, `scope='home'`, `entity_id` NULL) · `canvas_objects` (objects on the home board) · `projects`, `contacts`, `tasks` (server-side fetch for canvas seed context)
 
 ### Key patterns
-- Server-component fetches initial data: page.tsx runs ~10 parallel Supabase queries server-side, passes plain data into client cards which then own interaction state
-- Each card is a read-only live snapshot of another module ("no data lives here") except NotesCard/TasksCard which allow capture
+- Server component fetches seed context, then `HomeCanvas` owns canvas state (reads/writes `canvas_objects` via browser client)
+- First visit: `HomeCanvas` checks `canvases.seeded_at IS NULL`; if so calls `lib/canvas/seed-home.ts` which builds objects tailored to `profiles.guidance_level` + `profiles.practice_types`, inserts them, and stamps `seeded_at`
+- `AshHomeConversation` is a specialized Ash surface — it reads `profile_setup_complete` to decide whether to surface the guided-setup flow or a general welcome
 - `data-tour-step` anchors (`dashboard.capture`, `dashboard.snapshots`) consumed by DashboardTour spotlight
 
 ### Cross-module links
 - Topbar quick actions deep-link with query params: `/notes?new=1`, `/projects?new=1`
-- Card "View all" links: `/finance`, `/projects`, `/network` (+ `/network?new=1`, `/network?import=1`), `/calendar`, `/tasks`, `/notes`, `/presence`
-- CalendarItem aggregates `projects.due_date` + `tasks.due_date` — implicit FK join in page query
-- Finance card derives billable amount via `time_entries.project.rate` join
+- Canvas `reference` objects deep-link into other modules (`/projects?id=…`, `/network?id=…`, etc.)
+- `lib/canvas/seed-home.ts` reads `profiles.guidance_level` + `practice_types` + recent projects/contacts to choose seeded object content
+- `AshHomeConversation` fires `open-ash` with canvas context when the user wants to expand Ash to the full panel
 
 ### Known TODOs / mocked
+- Canvas editing on the Home board is live. Canvas for other scopes (`project`/`contact`/`organization`/`lead`) is planned (PER-88) but not yet wired
 - Account → "Photo upload coming in a future update" (profile photo not implemented; settings page)
-- All notification toggles beyond send + payment-confirmation are UI-only per memory (need a cron)
+- All notification toggles beyond send + payment-confirmation are UI-only (need a cron)
 
 ### Mobile issues
-- `page.tsx:176` outer container is `overflow-y-auto md:overflow-hidden` — relies on md+ for the fixed-height 2-row grid; on mobile it scrolls but the auto-fit grid `minmax(280px,1fr)` (page.tsx:187,196) forces single-column stacking (acceptable, but desktop-first by design)
+- `HomeCanvas.tsx` is a full-page pan/zoom canvas — touch pinch-to-zoom and drag panning have basic touch handler support but the editing UX (text, resize handles) is desktop-first
 - Topbar action buttons (Quick note / New project / QuickTimer) sit in a non-wrapping flex row and can crowd on narrow widths
 
 ---
@@ -1111,45 +1155,45 @@ This document is a module-by-module architecture reference for the Perennial app
 |---|---|
 | **Routes** | `/onboarding` (`app/onboarding/page.tsx` — outside the `(app)` group, no sidebar) · auth-gated: redirects to `/login` if no user, to `/` if `onboarding_complete` |
 
+**Two-tier onboarding model:**
+1. **Short onboarding** (`/onboarding`, 3 steps) — gates the `onboarding_complete` flag; fast path into the app.
+2. **Ash-guided deep setup** — surfaces inside the app (in `AshHomeConversation`) once the user is at `/`; gates on `profile_setup_complete`. Ash prompts for missing context, collects studio details, and sets `profile_setup_complete=true` when done.
+
 ### Main components
 - `app/onboarding/page.tsx` — server component: auth check + `onboarding_complete` redirect, renders OnboardingClient
-- `app/onboarding/OnboardingClient.tsx` — client wizard, 9 steps (`TOTAL_STEPS=9`); modal max-width 680px
-- Steps: 1 Welcome, 2 About you (First + Last name, composed into `display_name`; no schema change), 3 Studio identity + billing + practice types + **logo upload + brand color picker** (uploads via `uploadStudioLogo` → `studio-logos` bucket; saves to `profiles.logo_url/logo_path/brand_color`), 4 How you work (make options now include "Graphic design", "Websites", "Software" with `key/color/icon` mappings → `profiles.project_options.type`), 5 How you sell + price, 6 Where you are + challenges/issues (cap 3, with "That's 3 — remove one" feedback UI and `OtherInput` `disabled` prop), 7 Goals, 8 Resource upload (FileDropzone), 9 Integration connect (IntegrationConnectStep; multi-account providers show "+ Add another" when one is already connected)
-- Helpers in-file: Chip, SingleChip, OtherInput, StepProgress, SelectInput, StepFooter, FileDropzone, IntegrationConnectStep, StudioBrandStep (logo + color sub-component)
+- `app/onboarding/OnboardingClient.tsx` — client wizard, **3 steps** (`TOTAL_STEPS=3`); modal max-width 680px
+  - Step 1: Name (`display_name`, composed from `firstName` + `lastName`)
+  - Step 2: Practice types (`profiles.practice_types`, multi-select with `key/color/icon`)
+  - Step 3: Guidance level (`profiles.guidance_level`: `guided`\|`balanced`\|`expert`) — drives Home canvas seed + Ash verbosity
+- `components/ui/IntroModalShell.tsx` — shared scaffolding for module intro modals (title, body, CTA row, AshMark branding); adopted by per-module tour intros this week
 - `lib/profile/business.ts` (shared composeStudioAddress/BUSINESS_TYPES/COUNTRIES)
-- `lib/uploads/studio-logo.ts` (reused from Settings for the Step 3 logo upload)
 - `components/ui/AshMark.tsx`
 
 ### API routes
-- `/api/integrations/connect-status` (IntegrationConnectStep checks which providers connected)
-- OAuth start routes with `?next=/onboarding?step=9`: `/api/auth/google` (uses `prompt=select_account` so a different Google account can be chosen; supports multi-account), `/api/auth/microsoft`, `/api/auth/instagram`, `/api/auth/google-analytics` (threads `next` via OAuth `state` so callback returns to onboarding instead of `/presence`)
 - No dedicated save API — writes directly via supabase client
+- OAuth start routes still supported for the integrations tile (now in the Ash-guided deep setup path, not the short wizard)
 
 ### Tables
-`profiles` (upsert on finish/skip: display_name [composed from firstName + lastName], studio_name, tagline, bio, location, website, phone, ein, billingPatch structured address, practice_types, work_types, selling_channels, price_range, years_in_practice, primary_challenges, business_issues, urgent_needs, perennial_goals, logo_url, logo_path, brand_color, onboarding_complete=true, project_options jsonb merge [includes new make-option keys: graphic_design/websites/software], tour_visited={}, tour_dismissed=false) · `resources` (handleFinish inserts one row per staged file) · Supabase Storage `resources` bucket (file uploads namespaced `${userId}/...`) · Supabase Storage `studio-logos` bucket (Step 3 logo upload)
+`profiles` (upsert on finish: `display_name`, `practice_types`, `guidance_level`, `onboarding_complete=true`, `tour_visited={}`, `tour_dismissed=false`)
 
 ### Key patterns
-- Step state mirrored to `?step=` query (`history.replaceState`) so OAuth round-trips return to the right step
-- Two save paths share `billingPatch()`: `handleFinish` (full) + `handleSkip` (partial) so neither drops billing data
-- `buildProjectTypeOptions` maps practice picks → `profiles.project_options.type`, merged with existing jsonb so Projects board defaults match the user's craft
+- Step state mirrored to `?step=` query (`history.replaceState`) so browser back/refresh stays on the right step
+- `guidance_level` drives `lib/canvas/seed-home.ts`: `guided` → richer Ash prompts + tutorial stickies; `expert` → minimal seed
 - On finish sets localStorage `perennial-just-onboarded`=1 (consumed by WelcomeBanner) and resets tour state so DashboardTour fires
-- OAuth providers redirect back here; API-key providers (Mailchimp/Beehiiv) redirect to `/settings?openModal=X` to reuse the settings connect form rather than duplicate UI
+- `profile_setup_complete` remains false after the short wizard; `AshHomeConversation` uses this flag to offer the guided setup conversation in-canvas
 
 ### Cross-module links
-- Seeds Projects board types (`profiles.project_options`)
-- Uploads land in the Resources module (`resources` table + storage)
-- Billing identity shared with Settings/Invoices/Stripe via `composeStudioAddress`
-- `practice_types`/goals/challenges later surfaced to Ash (system prompt context) and WelcomeBanner `CHALLENGE_MODULES` deep-links
-- IntegrationConnectStep mirrors Settings integrations; Finance tile links to `/finance` for Teller
+- `practice_types` seeded here feeds Ash system prompt context, Calendar opportunity filter, and the Home canvas seed (via `lib/canvas/seed-home.ts`)
+- `guidance_level` controls Home canvas seed density and Ash response verbosity
+- Billing identity / logo / integrations collected in the Ash-guided deep setup (separate from the short wizard), shared with Settings/Invoices/Stripe via `composeStudioAddress`
 
 ### Known TODOs / mocked
-- Partial upload failure is swallowed (onboarding continues) — surfaced as `uploadError` only
-- "Skip for now" fully bypasses with minimal profile write
+- The Ash-guided deep setup conversation (in `AshHomeConversation`) collects studio details that previously lived in onboarding steps 3–9; those steps are now retired
+- "Skip for now" still fully bypasses with minimal profile write
 
 ### Mobile issues
-- Wizard centered at maxWidth 560 (good) but step 3 uses several CSS-grid `1fr 1fr` and `2fr 1fr 1fr` (lines 750,792,806,811,914,937) that don't collapse on small screens
-- Botanical accent images width 620/460 absolutely positioned (578,634) — overflow hidden so mostly safe
-- panelStyle padding 36px/40px (1429) is generous for phones
+- Wizard centered at maxWidth 560 (good for 3 short steps)
+- Botanical accent images still absolutely positioned — overflow hidden so mostly safe
 
 ---
 
@@ -1210,30 +1254,44 @@ This document is a module-by-module architecture reference for the Perennial app
 
 ### Main components
 - `components/ash/AshContainer.tsx` — floating FAB, open/expanded/convKey state, listens for window events to open with context
-- `components/ash/AshPanel.tsx` — chat panel: streaming, history dropdown, suggestions, markdown render (`react-markdown` + `remark-gfm`), tool-running indicator
+- `components/ash/AshPanel.tsx` — chat panel: streaming, history dropdown, suggestions, markdown render (`react-markdown` + `remark-gfm`), tool-running indicator; **frosted-glass** surface (`--glass-*` tokens)
+- `components/ash/AshHomeConversation.tsx` — inline Ash chat surface embedded in the Home canvas; drives Ash-guided deep setup when `profile_setup_complete=false`
 - `components/ui/AshMark.tsx`, `components/layout/AshIcon.tsx`
-- `app/api/ash/route.ts` — Anthropic SDK streaming agentic loop (nodejs runtime, maxDuration 60), prompt caching on static system prompt + server-side web_search
-- `lib/ash/context.ts` (`buildAshContext`), `lib/ash/system-prompt.ts`, `lib/ash/tools/{index,read,write,types}.ts`
+- `app/api/ash/route.ts` — Anthropic SDK streaming agentic loop (nodejs runtime, maxDuration 60), **model `claude-sonnet-5`**, thinking explicitly disabled (`thinking: { type: "disabled" }`), prompt caching on static system prompt + server-side web_search; fire-and-forget `POST /api/ash/learn` ping after each completed turn
+- `lib/ash/context.ts` (`buildAshContext`), `lib/ash/system-prompt.ts`, `lib/ash/tools/{index,read,write,types}.ts` (self-knowledge manifest added to `tools/index.ts`)
+- `lib/ash/embeddings.ts` — voyage-3.5 embedding helper for RAG
+- `lib/ash/preferences.ts` — read/write `ash_preferences` rows; dedup + weight update logic
+- `lib/ash/research.ts` — background knowledge expansion: writes private `knowledge_base` rows (per-user, `user_id` set) via service-role client
+
+> **Model note:** `/api/ash/route.ts` → `claude-sonnet-5`. `/api/notes/ash-inline/route.ts` → `claude-sonnet-4-6` (inline editor). `/api/notes/suggest-tasks/route.ts` → `claude-haiku-4-5-20251001` (cheap task extraction). Different models serve different cost/latency points.
 
 ### API routes
 - `/api/ash` (POST — SSE-style stream: `{text}`, `{tool}`, `{done, conversationId}`)
+- `/api/ash/learn` (POST — fire-and-forget; extracts preferences/beliefs/values from a completed turn; writes `ash_preferences` via service-role)
+- `/api/ash/research` (POST — background research dispatch; calls `lib/ash/research.ts`; writes private `knowledge_base` rows)
 
 ### Tables
-`ash_conversations` (insert new conv, list recent 10 for history, module column) · `ash_messages` (insert user msg, load history limit 24/50, role+content) · Ash READ tools query: `projects`, `tasks`, `contacts`, `contact_activities`, `notes`, `invoices`, `expenses`, `time_entries`, `outreach_pipelines`, `outreach_targets`, `opportunities` · Ash WRITE tools mutate: `projects`, `tasks`, `contacts`, `organizations`, `notes`, `time_entries`, `contact_activities` · `context.ts` reads: `profiles`, `projects`, `tasks`, `contacts`, `notes`, `invoices`, `time_entries`
+`ash_conversations` (insert new conv, list recent 10 for history, `module` column) · `ash_messages` (insert user msg, load history limit 24/50, `role`+`content`) · `ash_preferences` (read top-weighted `active` preferences → injected into system prompt; written by `/api/ash/learn`) · `knowledge_base` (RAG retrieval via `search_knowledge_base` tool; embedding cosine search on `vector(1024)` index; both global + per-user rows) · Ash READ tools query: `projects`, `tasks`, `contacts`, `contact_activities`, `notes`, `invoices`, `expenses`, `time_entries`, `outreach_pipelines`, `outreach_targets`, `opportunities` · Ash WRITE tools mutate: `projects`, `tasks`, `contacts`, `organizations`, `notes`, `time_entries`, `contact_activities` · `context.ts` reads: `profiles`, `projects`, `tasks`, `contacts`, `notes`, `invoices`, `time_entries`
 
 ### Key patterns
 - Custom window events for cross-view sync: `open-ash` (with optional message + project context), `set-project-context`/`clear-project-context`, and Ash dispatches `ash:turn-complete` on finish so other views (project panel, tasks) refetch
-- `convKey` remount trick: incrementing key forces AshPanel to reset state + auto-send an injected message (used by DashboardTour final step sending "I just finished onboarding.")
+- `convKey` remount trick: incrementing key forces AshPanel to reset state + auto-send an injected message (used by DashboardTour final step)
 - Streaming fetch + ReadableStream reader parsing `data: ` lines; agentic tool loop server-side
 - Per-module suggestions + module label from pathname (`getModule`); project-specific suggestions override generic when `projectContext` set
-- sessionStorage `perennial-tour-waiting-ash` coordinates with TourCallout — closing Ash fires `tour-ash-closed`
-- System prompt uses Anthropic prompt caching (`cache_control` ephemeral) + appended dynamic context
+- System prompt uses Anthropic prompt caching (`cache_control` ephemeral) + appended dynamic context; top-weighted `ash_preferences` injected as a pinned block above dynamic context
+- After each turn: `/api/ash` triggers a fire-and-forget POST to `/api/ash/learn` — this route calls `claude-sonnet-5` (or a cheaper haiku tier) to extract preference signals and upsert into `ash_preferences`
+- `search_knowledge_base` tool: cosine similarity search on `knowledge_base.embedding` using voyage-3.5 query embedding; returns top-k chunks with category + source; available to all Ash turns
 
 ### Cross-module links
 - Reads/writes across nearly every module's tables via tools (projects/tasks/contacts/notes/finance/outreach/opportunities)
-- Context personalized from `profiles` onboarding data (practice_types, goals, challenges, bio)
+- Context personalized from `profiles` onboarding data (`practice_types`, `guidance_level`, goals, challenges, bio) + accumulated `ash_preferences`
+- `AshHomeConversation` embedded in Home canvas; its flow drives the Ash-guided deep setup and sets `profile_setup_complete=true`
 - Tightly coupled to the onboarding→DashboardTour→Ash hand-off flow
-- Uses Anthropic server-side web_search tool for external facts
+- Uses Anthropic server-side web_search tool for external facts; `lib/ash/research.ts` for asynchronous background depth
+
+### Known TODOs / mocked
+- `/api/ash/research` background dispatch is fire-and-forget with no retry or progress feedback
+- `ash_preferences` weight decay (downgrade stale preferences over time) not yet implemented
 
 ### Known TODOs / mocked
 - Input "+" attach-context button: title "Attach context (coming soon)" — not implemented (AshPanel ~654)
