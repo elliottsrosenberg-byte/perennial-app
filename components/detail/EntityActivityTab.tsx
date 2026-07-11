@@ -16,7 +16,8 @@
 // e.g. the network panels, which use `activities.length` for a tab-count badge)
 // or uncontrolled (the tab loads + owns its own list, e.g. the Target panel).
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { ContactActivityType } from "@/types/database";
 import { Clock } from "lucide-react";
@@ -55,6 +56,72 @@ const TYPE_PLACEHOLDER: Record<ContactActivityType, string> = {
   note:    "Quick note…",
 };
 
+/** Decode the HTML entities that show up in raw Gmail headers/snippets
+ *  (e.g. `I&#39;ll`, `&lt;a@b.com&gt;`, `Ben &amp; Co`). Numeric + the common
+ *  named entities cover everything the Gmail metadata API returns. */
+function decodeEntities(input: string): string {
+  if (!input || input.indexOf("&") === -1) return input;
+  return input
+    .replace(/&#(\d+);/g,          (_, n: string) => { try { return String.fromCodePoint(Number(n)); } catch { return _; } })
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, n: string) => { try { return String.fromCodePoint(parseInt(n, 16)); } catch { return _; } })
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g,   "<")
+    .replace(/&gt;/g,   ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g,  "&"); // must be last so it doesn't double-decode
+}
+
+interface EmailMeta {
+  subject?:   string;
+  snippet?:   string;
+  from?:      string;
+  to?:        string;
+  direction?: "in" | "out";
+  threadId?:  string;
+}
+
+/** Pull the email fields out of an activity's metadata (all optional — older
+ *  seeded rows only have `content`). */
+function emailMeta(a: EntityActivity): EmailMeta {
+  const m = (a.metadata ?? {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
+  const dir = str(m.direction);
+  return {
+    subject:   str(m.subject),
+    snippet:   str(m.snippet),
+    from:      str(m.from),
+    to:        str(m.to),
+    direction: dir === "out" ? "out" : dir === "in" ? "in" : undefined,
+    threadId:  str(m.gmail_thread_id),
+  };
+}
+
+/** Human name from an email header value like `"Jenna Kim" <jenna@x.com>` or a
+ *  bare address; falls back to the address. Handles a comma-list by taking the
+ *  first recipient. */
+function displayNameFromHeader(value?: string): string {
+  if (!value) return "";
+  const first = value.split(",")[0].trim();
+  const named = first.match(/^"?([^"<]*?)"?\s*<([^>]+)>$/);
+  if (named && named[1].trim()) return decodeEntities(named[1].trim());
+  const bare = first.match(/<([^>]+)>/);
+  return decodeEntities(bare ? bare[1] : first);
+}
+
+/** The "who" line for an email row — outbound shows the recipient, inbound the
+ *  sender. */
+function emailCounterparty(meta: EmailMeta): { label: string; who: string } {
+  if (meta.direction === "out") return { label: "To",   who: displayNameFromHeader(meta.to) };
+  return { label: "From", who: displayNameFromHeader(meta.from) };
+}
+
+/** A row in the timeline — either a single non-email activity, or a whole Gmail
+ *  thread collapsed into one conversation entry (messages newest-first). */
+type TimelineItem =
+  | { kind: "activity"; occurredAt: string; activity: EntityActivity }
+  | { kind: "thread";   occurredAt: string; key: string; messages: EntityActivity[] };
+
 /** Convert a Date to the `YYYY-MM-DDTHH:mm` shape required by datetime-local
  *  inputs, in the user's local timezone. */
 function toLocalDateTimeInput(d: Date): string {
@@ -73,17 +140,6 @@ function fmtWhenLabel(iso: string): string {
   if (d.toDateString() === today.toDateString())   return `Today ${timeStr}`;
   if (d.toDateString() === yest.toDateString())    return `Yesterday ${timeStr}`;
   return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${timeStr}`;
-}
-
-function groupByDate(activities: EntityActivity[]) {
-  const result: { label: string; items: EntityActivity[] }[] = [];
-  const map = new Map<string, EntityActivity[]>();
-  for (const a of activities) {
-    const label = fmtDate(a.occurred_at);
-    if (!map.has(label)) { map.set(label, []); result.push({ label, items: map.get(label)! }); }
-    map.get(label)!.push(a);
-  }
-  return result;
 }
 
 export default function EntityActivityTab({
@@ -124,6 +180,7 @@ export default function EntityActivityTab({
   const activities    = isControlled ? controlledActivities! : ownActivities;
   const setActivities = (isControlled ? setControlledActivities! : setOwnActivities) as React.Dispatch<React.SetStateAction<EntityActivity[]>>;
 
+  const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
   const [actInput,   setActInput]   = useState("");
   const [actType,    setActType]    = useState<ContactActivityType>("note");
   const [whenLocal,  setWhenLocal]  = useState<string>(() => toLocalDateTimeInput(new Date()));
@@ -144,7 +201,45 @@ export default function EntityActivityTab({
   }, [activitiesTable, fkColumn, id, setActivities]);
 
   const filtered = filterType ? activities.filter(a => a.type === filterType) : activities;
-  const grouped  = groupByDate(filtered);
+
+  // Build the timeline: email activities collapse into one entry per Gmail
+  // thread (a conversation), everything else is a single entry. Entries are
+  // ordered — and date-grouped — by their most-recent message.
+  const grouped = useMemo(() => {
+    const threads = new Map<string, EntityActivity[]>();
+    const items: TimelineItem[] = [];
+    for (const a of filtered) {
+      if (a.type === "email") {
+        const key = emailMeta(a).threadId ?? a.id;
+        const arr = threads.get(key);
+        if (arr) arr.push(a); else threads.set(key, [a]);
+      } else {
+        items.push({ kind: "activity", occurredAt: a.occurred_at, activity: a });
+      }
+    }
+    for (const [key, msgs] of threads) {
+      msgs.sort((x, y) => new Date(y.occurred_at).getTime() - new Date(x.occurred_at).getTime());
+      items.push({ kind: "thread", key, messages: msgs, occurredAt: msgs[0].occurred_at });
+    }
+    items.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+
+    const result: { label: string; items: TimelineItem[] }[] = [];
+    const map = new Map<string, TimelineItem[]>();
+    for (const it of items) {
+      const label = fmtDate(it.occurredAt);
+      if (!map.has(label)) { map.set(label, []); result.push({ label, items: map.get(label)! }); }
+      map.get(label)!.push(it);
+    }
+    return result;
+  }, [filtered]);
+
+  const toggleThread = useCallback((key: string) => {
+    setExpandedThreads(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
 
   // Reset the editor to "now" once typing/editing settles back to an empty
   // composer, so the next log entry doesn't accidentally inherit a stale time.
@@ -185,6 +280,88 @@ export default function EntityActivityTab({
 
   const canSubmit = !!actInput.trim() && !loadingAct;
   const isScheduledFuture = new Date(whenLocal).getTime() > Date.now() + 60_000;
+
+  // ── Timeline row renderers ────────────────────────────────────────────────
+  function renderActivity(act: EntityActivity) {
+    const cfg = ACTIVITY_CONFIG[act.type];
+    const isFuture = new Date(act.occurred_at).getTime() > Date.now() + 60_000;
+    return (
+      <div key={act.id} style={{ display: "flex", gap: 10, marginBottom: 12, opacity: isFuture ? 0.78 : 1 }}>
+        <div style={{ width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: cfg.bg, color: cfg.color, border: "0.5px solid var(--color-border)" }}>{cfg.icon}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)" }}>{cfg.label}</span>
+            {isFuture && <span style={{ fontSize: 9, color: "var(--color-gold)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Scheduled</span>}
+            <span style={{ fontSize: 10, marginLeft: "auto", color: "var(--color-grey)" }}>{fmtTime(act.occurred_at)}</span>
+          </div>
+          {act.content && <p style={{ fontSize: 12, lineHeight: 1.6, color: "var(--color-text-secondary)" }}>{decodeEntities(act.content)}</p>}
+        </div>
+      </div>
+    );
+  }
+
+  /** One message inside an expanded thread. */
+  function renderEmailMessage(msg: EntityActivity) {
+    const m  = emailMeta(msg);
+    const cp = emailCounterparty(m);
+    const sent = m.direction === "out";
+    return (
+      <div key={msg.id}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 1 }}>
+          <span style={{ fontSize: 10, fontWeight: 600, color: sent ? "var(--color-sage)" : "var(--color-blue)" }}>{sent ? "Sent" : "Received"}</span>
+          {cp.who && <span style={{ fontSize: 10, color: "var(--color-text-tertiary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sent ? "to" : "from"} {cp.who}</span>}
+          <span style={{ fontSize: 10, marginLeft: "auto", color: "var(--color-grey)", flexShrink: 0, paddingLeft: 6 }}>{fmtWhenLabel(msg.occurred_at)}</span>
+        </div>
+        {(m.snippet || msg.content) && (
+          <p style={{ fontSize: 11.5, lineHeight: 1.5, color: "var(--color-text-secondary)" }}>{decodeEntities(m.snippet ?? msg.content ?? "")}</p>
+        )}
+      </div>
+    );
+  }
+
+  /** An email conversation collapsed to one entry; expandable when it has more
+   *  than one message. */
+  function renderThread(item: Extract<TimelineItem, { kind: "thread" }>) {
+    const cfg      = ACTIVITY_CONFIG.email;
+    const latest   = item.messages[0];
+    const meta     = emailMeta(latest);
+    const subject  = decodeEntities(meta.subject ?? latest.content ?? "(no subject)");
+    const cp       = emailCounterparty(meta);
+    const count    = item.messages.length;
+    const multi    = count > 1;
+    const expanded = expandedThreads.has(item.key);
+    return (
+      <div key={item.key} style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+        <div style={{ width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: cfg.bg, color: cfg.color, border: "0.5px solid var(--color-border)" }}>{cfg.icon}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            onClick={multi ? () => toggleThread(item.key) : undefined}
+            style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2, cursor: multi ? "pointer" : "default" }}
+          >
+            {multi && (
+              <ChevronRight size={12} strokeWidth={2} style={{ flexShrink: 0, color: "var(--color-grey)", transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.12s ease" }} />
+            )}
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-charcoal)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{subject}</span>
+            {multi && (
+              <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 600, color: cfg.color, background: cfg.bg, borderRadius: 999, padding: "1px 7px" }}>{count}</span>
+            )}
+            <span style={{ fontSize: 10, marginLeft: "auto", color: "var(--color-grey)", flexShrink: 0, paddingLeft: 6 }}>{fmtTime(latest.occurred_at)}</span>
+          </div>
+          <div style={{ fontSize: 10.5, color: "var(--color-text-tertiary)", marginBottom: 3 }}>
+            {cp.who ? <>{cp.label} <span style={{ color: "var(--color-text-secondary)", fontWeight: 500 }}>{cp.who}</span></> : "Email"}
+          </div>
+          {meta.snippet && !expanded && (
+            <p style={{ fontSize: 12, lineHeight: 1.55, color: "var(--color-text-secondary)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{decodeEntities(meta.snippet)}</p>
+          )}
+          {expanded && (
+            <div style={{ marginTop: 4, borderLeft: "1.5px solid var(--color-border)", paddingLeft: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+              {item.messages.map(renderEmailMessage)}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
@@ -322,23 +499,9 @@ export default function EntityActivityTab({
           : grouped.map(({ label, items }) => (
             <div key={label}>
               <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", padding: "8px 0 6px", color: "var(--color-grey)" }}>{label}</div>
-              {items.map(act => {
-                const cfg = ACTIVITY_CONFIG[act.type];
-                const isFuture = new Date(act.occurred_at).getTime() > Date.now() + 60_000;
-                return (
-                  <div key={act.id} style={{ display: "flex", gap: 10, marginBottom: 12, opacity: isFuture ? 0.78 : 1 }}>
-                    <div style={{ width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: cfg.bg, color: cfg.color, border: "0.5px solid var(--color-border)" }}>{cfg.icon}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)" }}>{cfg.label}</span>
-                        {isFuture && <span style={{ fontSize: 9, color: "var(--color-gold)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Scheduled</span>}
-                        <span style={{ fontSize: 10, marginLeft: "auto", color: "var(--color-grey)" }}>{fmtTime(act.occurred_at)}</span>
-                      </div>
-                      {act.content && <p style={{ fontSize: 12, lineHeight: 1.6, color: "var(--color-text-secondary)" }}>{act.content}</p>}
-                    </div>
-                  </div>
-                );
-              })}
+              {items.map(it => it.kind === "thread"
+                ? renderThread(it)
+                : renderActivity(it.activity))}
             </div>
           ))
         }
