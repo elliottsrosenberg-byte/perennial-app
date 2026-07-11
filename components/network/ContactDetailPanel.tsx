@@ -1093,6 +1093,7 @@ export default function ContactDetailPanel({
                 activitiesTable="contact_activities"
                 fkColumn="contact_id"
                 id={contact.id}
+                mailSync
                 activities={activities}
                 setActivities={setActivities}
                 parent={{

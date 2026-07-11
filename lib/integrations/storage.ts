@@ -6,6 +6,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { setIntegrationSecret, deleteIntegrationSecrets } from "./vault";
+import type { SyncContext } from "./sync-context";
 import type {
   IntegrationRow,
   OAuthTokenSet,
@@ -13,6 +14,12 @@ import type {
   ProviderId,
   IntegrationStatus,
 } from "./types";
+
+/** The Supabase client to write with — the context's admin client in the
+ *  background cron, otherwise a fresh user-scoped client. */
+async function writer(ctx?: SyncContext) {
+  return ctx?.db ?? (await createClient());
+}
 
 /** Look up an integration by (user_id, provider, account_id). Returns
  *  null if the user hasn't connected that account yet. Used at the start
@@ -121,8 +128,9 @@ export async function writeTokens(
 export async function recordSyncSuccess(
   integrationId: string,
   syncState: Record<string, unknown>,
+  ctx?: SyncContext,
 ): Promise<void> {
-  const supabase = await createClient();
+  const supabase = await writer(ctx);
   const { error } = await supabase
     .from("integrations")
     .update({
@@ -142,8 +150,8 @@ export async function recordSyncSuccess(
  *  (refresh token missing or rejected by the provider) and only a fresh
  *  OAuth grant fixes it. The Calendar rail and Settings surface a Reconnect
  *  prompt for accounts in this state instead of silently dropping events. */
-export async function recordReauthRequired(integrationId: string, message: string): Promise<void> {
-  const supabase = await createClient();
+export async function recordReauthRequired(integrationId: string, message: string, ctx?: SyncContext): Promise<void> {
+  const supabase = await writer(ctx);
   await supabase
     .from("integrations")
     .update({
@@ -157,8 +165,8 @@ export async function recordReauthRequired(integrationId: string, message: strin
 
 /** Clear a prior 'needs_reauth'/'error' state after a token refresh (or any
  *  call) succeeds again. No-op write cost when already active. */
-export async function clearIntegrationError(integrationId: string): Promise<void> {
-  const supabase = await createClient();
+export async function clearIntegrationError(integrationId: string, ctx?: SyncContext): Promise<void> {
+  const supabase = await writer(ctx);
   await supabase
     .from("integrations")
     .update({ status: "active", last_error: null, last_error_at: null, updated_at: new Date().toISOString() })
@@ -168,8 +176,8 @@ export async function clearIntegrationError(integrationId: string): Promise<void
 
 /** Record a sync failure. Switches `status` to 'error' so the Settings UI
  *  can surface the issue. */
-export async function recordSyncError(integrationId: string, message: string): Promise<void> {
-  const supabase = await createClient();
+export async function recordSyncError(integrationId: string, message: string, ctx?: SyncContext): Promise<void> {
+  const supabase = await writer(ctx);
   const { error } = await supabase
     .from("integrations")
     .update({
