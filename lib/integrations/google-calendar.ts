@@ -12,9 +12,9 @@
 //     each instance gets its own activity
 //   - Hard cap of 500 events per run
 
-import { createClient } from "@/lib/supabase/server";
 import { getValidGoogleAccessToken } from "./google-tokens";
 import { recordSyncSuccess, recordSyncError } from "./storage";
+import { resolveSyncContext, type SyncContext } from "./sync-context";
 import type { IntegrationRow } from "./types";
 
 const GCAL_API = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
@@ -58,12 +58,13 @@ function eventStartIso(e: GCalEvent): string {
   return s ?? new Date().toISOString();
 }
 
-export async function syncGoogleCalendar(integration: IntegrationRow): Promise<SyncResult> {
+export async function syncGoogleCalendar(integration: IntegrationRow, context?: SyncContext): Promise<SyncResult> {
   if (integration.provider !== "google" || !integration.scopes?.calendar) {
     return { eventsScanned: 0, activitiesCreated: 0, contactsMatched: 0 };
   }
 
-  const supabase = await createClient();
+  const ctx      = await resolveSyncContext(context);
+  const supabase = ctx.db;
   const userId   = integration.user_id;
 
   // Load matchable contacts (lowercase email → contact ids)
@@ -89,11 +90,11 @@ export async function syncGoogleCalendar(integration: IntegrationRow): Promise<S
       ...integration.sync_state,
       gcal_last_synced_at: new Date().toISOString(),
       gcal_last_events:    0,
-    });
+    }, ctx);
     return { eventsScanned: 0, activitiesCreated: 0, contactsMatched: 0 };
   }
 
-  const token   = await getValidGoogleAccessToken(integration.id);
+  const token   = await getValidGoogleAccessToken(integration.id, ctx);
   const ownEmail = integration.account_name?.toLowerCase() ?? null;
 
   const now     = new Date();
@@ -202,18 +203,21 @@ export async function syncGoogleCalendar(integration: IntegrationRow): Promise<S
     gcal_last_synced_at:   new Date().toISOString(),
     gcal_last_events:      events.length,
     gcal_last_activities:  activitiesCreated,
-  });
+  }, ctx);
 
   return { eventsScanned: events.length, activitiesCreated, contactsMatched: matchedContactIds.size };
 }
 
-export async function safeSyncGoogleCalendar(integration: IntegrationRow): Promise<{ ok: true; result: SyncResult } | { ok: false; error: string }> {
+export async function safeSyncGoogleCalendar(
+  integration: IntegrationRow,
+  context?: SyncContext,
+): Promise<{ ok: true; result: SyncResult } | { ok: false; error: string }> {
   try {
-    const result = await syncGoogleCalendar(integration);
+    const result = await syncGoogleCalendar(integration, context);
     return { ok: true, result };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await recordSyncError(integration.id, message).catch(() => undefined);
+    await recordSyncError(integration.id, message, context).catch(() => undefined);
     return { ok: false, error: message };
   }
 }
