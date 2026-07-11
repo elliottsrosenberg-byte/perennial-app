@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { usePathname } from "next/navigation";
-import AshPanel from "./AshPanel";
+import AshDock from "./AshDock";
 import AshMark from "@/components/ui/AshMark";
 import { ASH_GRADIENT } from "./theme";
 
@@ -20,7 +20,6 @@ interface ProjectCtxState {
 export default function AshContainer() {
   const pathname = usePathname();
   const [open,        setOpen]        = useState(false);
-  const [expanded,    setExpanded]    = useState(false);
   const [convKey,     setConvKey]     = useState(0);
   const [autoMessage, setAutoMessage] = useState<string | undefined>(undefined);
   const [projectCtx,  setProjectCtx]  = useState<ProjectCtxState | undefined>(undefined);
@@ -29,7 +28,6 @@ export default function AshContainer() {
 
   const handleClose = useCallback(() => {
     setOpen(false);
-    setExpanded(false);
     // If this Ash session was opened by the post-onboarding dashboard tour,
     // clearing the waiting flag here lets the sidebar TourCallout begin.
     if (typeof window !== "undefined" && sessionStorage.getItem("perennial-tour-waiting-ash") === "1") {
@@ -37,8 +35,6 @@ export default function AshContainer() {
       window.dispatchEvent(new Event("tour-ash-closed"));
     }
   }, []);
-  const handleExpand   = useCallback(() => setExpanded(true),  []);
-  const handleCollapse = useCallback(() => setExpanded(false), []);
 
   // Listen for "open-ash" events (with optional auto-message and project context)
   useEffect(() => {
@@ -118,13 +114,10 @@ export default function AshContainer() {
         <AshMark size={26} variant="on-dark" animate />
       </button>
 
-      <AshPanel
+      <AshDock
         key={convKey}
         open={open}
-        expanded={expanded}
         onClose={handleClose}
-        onExpand={handleExpand}
-        onCollapse={handleCollapse}
         module={module}
         autoMessage={autoMessage}
         projectContext={projectCtx}
