@@ -26,12 +26,13 @@ export function useAshChat({ module, onFirstMessage }: UseAshChatOptions) {
   const [input,          setInput]          = useState("");
   const [isStreaming,    setIsStreaming]    = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationTitle, setConversationTitle] = useState<string | null>(null);
   const [activeTool,     setActiveTool]     = useState<string | null>(null);
 
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim() || isStreaming) return;
 
-    if (messages.length === 0) onFirstMessage?.();
+    if (messages.length === 0) { onFirstMessage?.(); setConversationTitle(null); }
 
     const userMsg: AshMessage = { id: `u-${Date.now()}`, role: "user",      content: content.trim() };
     const ashMsg:  AshMessage = { id: `a-${Date.now()}`, role: "assistant", content: "", streaming: true };
@@ -71,6 +72,7 @@ export function useAshChat({ module, onFirstMessage }: UseAshChatOptions) {
             }
             if (p.tool) setActiveTool(p.tool);
             if (p.done && p.conversationId) { setConversationId(p.conversationId); turnConvId = p.conversationId; }
+            if (p.title) setConversationTitle(p.title);
           } catch { /* ignore */ }
         }
       }
@@ -106,6 +108,7 @@ export function useAshChat({ module, onFirstMessage }: UseAshChatOptions) {
     input, setInput,
     isStreaming,
     conversationId, setConversationId,
+    conversationTitle, setConversationTitle,
     activeTool,
     sendMessage,
   };

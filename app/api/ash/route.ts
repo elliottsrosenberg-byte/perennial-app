@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { buildAshContext } from "@/lib/ash/context";
 import { STATIC_SYSTEM_PROMPT, buildDynamicContext } from "@/lib/ash/system-prompt";
 import { ANTHROPIC_TOOLS, executeTool, buildCapabilitiesManifest } from "@/lib/ash/tools";
+import { generateConversationTitle } from "@/lib/ash/title";
 
 export const runtime    = "nodejs";
 export const maxDuration = 60;
@@ -169,6 +170,18 @@ export async function POST(req: Request) {
           }
 
           send({ done: true, conversationId: activeConversationId });
+
+          // Brand-new conversation (no incoming id): name it from the first
+          // exchange, save it, and stream the title so the dock header + Sidebar
+          // can show it. Best-effort — never blocks the reply itself.
+          if (!conversationId && activeConversationId && fullAssistantResponse) {
+            const title = await generateConversationTitle(anthropic, message, fullAssistantResponse);
+            if (title) {
+              await supabase.from("ash_conversations").update({ title }).eq("id", activeConversationId);
+              send({ title });
+            }
+          }
+
           controller.close();
         } catch (err) {
           console.error("[Ash API] Stream error:", err);
