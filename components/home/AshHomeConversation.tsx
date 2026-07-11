@@ -17,6 +17,9 @@ interface Props {
   onClear: () => void;
   /** Minimize the conversation without clearing it. */
   onClose: () => void;
+  /** Hide the built-in New chat / Close controls (the caller supplies its own,
+   *  e.g. AshDock's control row). Defaults to false for Home. */
+  hideControls?: boolean;
 }
 
 const ctrlBtn: React.CSSProperties = {
@@ -31,7 +34,7 @@ const ctrlBtn: React.CSSProperties = {
   cursor: "pointer",
 };
 
-export default function AshHomeConversation({ messages, onClear, onClose }: Props) {
+export default function AshHomeConversation({ messages, onClear, onClose, hideControls = false }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
   // Keep the newest message (just above the bar) in view as content streams in.
@@ -59,16 +62,18 @@ export default function AshHomeConversation({ messages, onClear, onClose }: Prop
         }
       `}</style>
       {/* Controls — crisp, above the faded top edge of the stack */}
-      <div style={{ position: "absolute", top: -2, right: 6, zIndex: 2, display: "flex", gap: 8 }}>
-        <button onClick={onClear} title="New chat" aria-label="Start a new chat" style={ctrlBtn}>
-          <RotateCcw size={12} strokeWidth={1.9} />
-          New chat
-        </button>
-        <button onClick={onClose} title="Close" aria-label="Close Ash" style={{ ...ctrlBtn, gap: 5 }}>
-          <ChevronDown size={13} strokeWidth={1.9} />
-          Close
-        </button>
-      </div>
+      {!hideControls && (
+        <div style={{ position: "absolute", top: -2, right: 6, zIndex: 2, display: "flex", gap: 8 }}>
+          <button onClick={onClear} title="New chat" aria-label="Start a new chat" style={ctrlBtn}>
+            <RotateCcw size={12} strokeWidth={1.9} />
+            New chat
+          </button>
+          <button onClick={onClose} title="Close" aria-label="Close Ash" style={{ ...ctrlBtn, gap: 5 }}>
+            <ChevronDown size={13} strokeWidth={1.9} />
+            Close
+          </button>
+        </div>
+      )}
 
       <div
         className="ash-scroll"
