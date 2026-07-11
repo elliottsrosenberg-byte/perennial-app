@@ -70,49 +70,62 @@ export default function AshContainer() {
 
   return (
     <>
-      {/* Floating Ash button — fades out when panel is open */}
-      <button
-        onClick={() => setOpen(true)}
-        title="Ask Ash"
-        aria-label="Open Ash"
-        className="ash-fab"
+      {/* Launcher — a centered pill at the bottom, in the same spot the dock
+          rises from, so opening Ash reads as one motion rather than a jump from
+          a corner. Fades out while the dock is open. */}
+      <div
         style={{
-          position:       "fixed",
-          bottom:         24,
-          right:          24,
-          width:          44,
-          height:         44,
-          borderRadius:   "50%",
-          border:         "none",
-          cursor:         "pointer",
-          zIndex:         open ? 0 : 40,
-          display:        "flex",
-          alignItems:     "center",
-          justifyContent: "center",
-          background:     ASH_GRADIENT,
-          boxShadow:      "0 2px 10px rgba(var(--color-sage-rgb),0.38), 0 1px 3px rgba(0,0,0,0.12)",
-          animation:      "ash-glow 4.5s ease-in-out infinite",
-          transition:     "transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease",
-          flexShrink:     0,
-          opacity:        open ? 0 : 1,
-          pointerEvents:  open ? "none" : "auto",
-        }}
-        onMouseEnter={(e) => {
-          if (open) return;
-          e.currentTarget.style.transform          = "scale(1.07)";
-          e.currentTarget.style.animationPlayState = "paused";
-          e.currentTarget.style.boxShadow          =
-            "0 6px 24px rgba(var(--color-sage-rgb),0.65), 0 2px 6px rgba(0,0,0,0.15)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform          = "scale(1)";
-          e.currentTarget.style.animationPlayState = "running";
-          e.currentTarget.style.boxShadow          =
-            "0 2px 10px rgba(var(--color-sage-rgb),0.38), 0 1px 3px rgba(0,0,0,0.12)";
+          position: "fixed",
+          left: "var(--sidebar-width, 52px)", right: 0, bottom: 24,
+          zIndex: open ? 0 : 40,
+          display: "flex", justifyContent: "center",
+          pointerEvents: "none",
+          opacity: open ? 0 : 1,
+          transition: "opacity 0.18s ease",
         }}
       >
-        <AshMark size={26} variant="on-dark" animate />
-      </button>
+        <button
+          onClick={() => setOpen(true)}
+          title="Ask Ash"
+          aria-label="Open Ash"
+          className="ash-fab"
+          style={{
+            display: "flex", alignItems: "center", gap: 9,
+            padding: "10px 18px 10px 12px",
+            borderRadius: "var(--radius-full)",
+            border: "none", cursor: "pointer",
+            background: ASH_GRADIENT,
+            color: "#fff",
+            fontFamily: "var(--font-sans)", fontSize: 14, fontWeight: 600,
+            boxShadow: "0 4px 16px rgba(var(--color-sage-rgb),0.42), 0 1px 3px rgba(0,0,0,0.12)",
+            animation: "ash-glow 4.5s ease-in-out infinite",
+            transition: "transform 0.15s ease, box-shadow 0.15s ease",
+            pointerEvents: open ? "none" : "auto",
+          }}
+          onMouseEnter={(e) => {
+            if (open) return;
+            e.currentTarget.style.transform          = "translateY(-1px)";
+            e.currentTarget.style.animationPlayState = "paused";
+            e.currentTarget.style.boxShadow          =
+              "0 8px 26px rgba(var(--color-sage-rgb),0.6), 0 2px 6px rgba(0,0,0,0.15)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform          = "translateY(0)";
+            e.currentTarget.style.animationPlayState = "running";
+            e.currentTarget.style.boxShadow          =
+              "0 4px 16px rgba(var(--color-sage-rgb),0.42), 0 1px 3px rgba(0,0,0,0.12)";
+          }}
+        >
+          <span style={{
+            width: 26, height: 26, borderRadius: "50%",
+            background: "rgba(255,255,255,0.18)", flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <AshMark size={16} variant="on-dark" animate />
+          </span>
+          Ask Ash
+        </button>
+      </div>
 
       <AshDock
         key={convKey}
