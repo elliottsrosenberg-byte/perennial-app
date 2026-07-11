@@ -1,7 +1,8 @@
-// Manually trigger a Gmail sync for the calling user. Used by the
-// "Sync now" button in Settings → Integrations during development;
-// the same `safeSyncGmail` entry will later be called by the pg_cron
-// scheduled job.
+// Manually trigger a Gmail + Calendar sync for the calling user. Used by the
+// "Sync now" button in Settings → Integrations and by the sync-on-open path in
+// the contact Activity tab. Runs in the user's session context; the background
+// pg_cron job (`/api/cron/integrations-sync`) calls the same `safeSync*`
+// entries under the service-role context for every account on a schedule.
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
