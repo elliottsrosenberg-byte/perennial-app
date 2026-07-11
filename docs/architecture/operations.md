@@ -145,8 +145,34 @@ Claude Code = the hands (*does* it). Linear never touches the codebase; the agen
 | File | Schedule | What it does | Auth |
 | --- | --- | --- | --- |
 | `app/api/cron/opportunities-ingest/route.ts` | Weekly (configured in the **Vercel dashboard**, no `vercel.json`) | `GET` returns a worklist (draft / unverified / stale >21d opportunities, ≤80). `POST {items}` upserts opportunities by title + stamps `last_verified_at`. Uses `createAdminClient()` (service-role) | `Authorization: Bearer $CRON_SECRET` |
+| `app/api/cron/integrations-sync/route.ts` | Every ~2 min, driven by **Supabase pg_cron** (not Vercel) — see runbook below | Iterates the 10 least-recently-synced active Google integrations and runs Gmail + Calendar sync under the service-role context. Each Gmail run does a small "new mail" slice plus one page of the resumable full-inbox backfill (`sync_state.gmail_backfill`), so history fills in progressively without any long request. `maxDuration=300` | `Authorization: Bearer $CRON_SECRET` |
 
 `CRON_SECRET` must be set in Vercel for the cron to authenticate (tracked: PER-66).
+
+### Enabling the integrations-sync pg_cron job (per environment)
+
+The DB side ships in migration `20260708120000_integrations_sync_cron.sql` (enables
+`pg_net` + `pg_cron`, adds `public.trigger_integrations_sync()` which reads the
+target URL + bearer secret from Vault). The schedule itself is **not** in git —
+the URL/secret are environment-specific and the secret must never be committed.
+Enable it once per environment (staging, then prod) **after the endpoint is
+deployed**, running as the postgres/service role:
+
+```sql
+-- 1. Store the two Vault secrets (values are env-specific; never commit them).
+select vault.create_secret('https://<your-app-domain>', 'integrations_cron_app_url');
+select vault.create_secret('<the CRON_SECRET value>',   'integrations_cron_secret');
+
+-- 2. Schedule the job (every 2 minutes). Re-running unschedule first is safe.
+select cron.unschedule('integrations-sync')
+  where exists (select 1 from cron.job where jobname = 'integrations-sync');
+select cron.schedule('integrations-sync', '*/2 * * * *', $$ select public.trigger_integrations_sync(); $$);
+```
+
+To rotate the secret/URL later, `select vault.update_secret(id, '<new>')` on the
+matching `vault.secrets` row. To pause: `select cron.unschedule('integrations-sync')`.
+Inspect runs via `select * from cron.job_run_details order by start_time desc limit 20;`
+and outbound calls via `select * from net._http_response order by created desc limit 20;`.
 
 ---
 

@@ -16,11 +16,12 @@
 // e.g. the network panels, which use `activities.length` for a tab-count badge)
 // or uncontrolled (the tab loads + owns its own list, e.g. the Target panel).
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { ContactActivityType } from "@/types/database";
 import { Clock } from "lucide-react";
 import { fmtDayRelative as fmtDate, fmtTime } from "@/lib/format/date";
+import MailActivityBanner from "@/components/network/MailActivityBanner";
 
 export type ActivitiesTable  = "contact_activities" | "organization_activities";
 export type ActivityFkColumn = "contact_id" | "organization_id";
@@ -90,6 +91,7 @@ export default function EntityActivityTab({
   filterType,
   parent,
   onLogged,
+  mailSync,
   activities: controlledActivities,
   setActivities: setControlledActivities,
 }: {
@@ -98,6 +100,9 @@ export default function EntityActivityTab({
   id:              string;
   /** When set, only this activity type is shown in the timeline. */
   filterType?:     "note";
+  /** Show the mail connect/sync banner above the timeline (contacts only) —
+   *  email activity is synced from the connected Gmail/Outlook account. */
+  mailSync?:       boolean;
   /** Optional parent freshness bump — when a past/now entry is logged that is
    *  newer than the current value, the parent row's column is updated and the
    *  caller is notified so its local copy stays in sync. */
@@ -131,6 +136,12 @@ export default function EntityActivityTab({
     createClient().from(activitiesTable).select("*").eq(fkColumn, id).order("occurred_at", { ascending: false })
       .then(({ data }) => { if (data) setOwnActivities(data as EntityActivity[]); });
   }, [activitiesTable, fkColumn, id, isControlled]);
+
+  // Re-pull the timeline — used after a background mail sync writes new rows.
+  const reloadActivities = useCallback(() => {
+    createClient().from(activitiesTable).select("*").eq(fkColumn, id).order("occurred_at", { ascending: false })
+      .then(({ data }) => { if (data) setActivities(data as EntityActivity[]); });
+  }, [activitiesTable, fkColumn, id, setActivities]);
 
   const filtered = filterType ? activities.filter(a => a.type === filterType) : activities;
   const grouped  = groupByDate(filtered);
@@ -305,6 +316,7 @@ export default function EntityActivityTab({
 
       {/* ── Timeline ──────────────────────────────────────────────────────── */}
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
+        {mailSync && <MailActivityBanner onSynced={reloadActivities} />}
         {grouped.length === 0
           ? <p style={{ fontSize: 12, textAlign: "center", padding: "32px 0", color: "var(--color-grey)" }}>No activity yet.</p>
           : grouped.map(({ label, items }) => (
