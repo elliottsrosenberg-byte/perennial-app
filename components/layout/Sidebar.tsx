@@ -104,9 +104,46 @@ export default function Sidebar() {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [tooltip,     setTooltip]     = useState<TooltipState | null>(null);
+  const [recentChats, setRecentChats] = useState<{ id: string; label: string }[]>([]);
 
   const appMenuRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
+
+  // Recent Ash conversations, listed under the modules. Refreshed on mount and
+  // whenever a chat closes (AshContainer fires "ash-history-refresh").
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("ash_conversations")
+        .select("id, module, updated_at")
+        .order("updated_at", { ascending: false })
+        .limit(6);
+      if (!data) { if (!cancelled) setRecentChats([]); return; }
+      const rows = await Promise.all(
+        data.map(async (conv) => {
+          const { data: msgs } = await supabase
+            .from("ash_messages")
+            .select("content")
+            .eq("conversation_id", conv.id)
+            .eq("role", "user")
+            .order("created_at", { ascending: true })
+            .limit(1);
+          const preview = msgs?.[0]?.content?.replace(/\s+/g, " ").trim();
+          return { id: conv.id, label: preview && preview.length > 0 ? preview : "New conversation" };
+        })
+      );
+      if (!cancelled) setRecentChats(rows);
+    }
+    void load();
+    window.addEventListener("ash-history-refresh", load);
+    return () => { cancelled = true; window.removeEventListener("ash-history-refresh", load); };
+  }, []);
+
+  function openChat(id: string) {
+    window.dispatchEvent(new CustomEvent("open-ash", { detail: { conversationId: id } }));
+  }
 
   useEffect(() => {
     setTheme(paintCurrentTheme());
@@ -343,6 +380,36 @@ export default function Sidebar() {
               </div>
             </div>
           ))}
+
+          {/* ── Recent Ash chats — under the modules ── */}
+          {expanded && recentChats.length > 0 && (
+            <div style={{ padding: "12px 7px 0" }}>
+              <p style={{ padding: "0 8px 5px", fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: C.soonText }}>
+                Recent chats
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                {recentChats.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => openChat(c.id)}
+                    title={c.label}
+                    style={{
+                      ...itemBase, width: "100%", textAlign: "left",
+                      background: "transparent", border: "none", fontFamily: "inherit",
+                      color: C.dimText, minWidth: 0,
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = C.hoverBg; e.currentTarget.style.color = C.hoverText; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.dimText; }}
+                  >
+                    <MessageSquare size={14} strokeWidth={1.75} style={{ flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {c.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </nav>
 
         {/* ── Timer badge (shows only when running) ── */}

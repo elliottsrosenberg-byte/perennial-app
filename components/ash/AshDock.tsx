@@ -7,19 +7,19 @@
 // Home's on-canvas Ash, so the assistant reads as part of the app rather than a
 // bolted-on widget.
 //
-// A slim control row above the composer gives Claude-style New chat / History /
-// Close; History raises a recent-conversations list you can jump back into.
+// Dismissal: click anywhere outside the chat, press Escape, or hit the pull-down
+// handle centered above the chat — all slide it back down. Chat history lives in
+// the left Sidebar (a conversation opens here via the `open-ash` event).
 //
 // Positioning uses --sidebar-width (set by Sidebar) so the dock stays centered
 // in the content area and reacts when the rail expands/collapses.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Plus, ArrowUp, RotateCcw, Clock, ChevronDown } from "lucide-react";
+import { Plus, ArrowUp, RotateCcw, ChevronDown } from "lucide-react";
 import AshHomeConversation from "@/components/home/AshHomeConversation";
 import { createClient } from "@/lib/supabase/client";
-import { timeAgoDays as timeAgo } from "@/lib/format/date";
 import { useAshChat } from "./useAshChat";
-import { moduleLabel, moduleSuggestions, MODULE_LABELS } from "./moduleMeta";
+import { moduleLabel, moduleSuggestions } from "./moduleMeta";
 
 interface ProjectCtx {
   title:    string;
@@ -27,19 +27,14 @@ interface ProjectCtx {
   priority: string;
 }
 
-interface ConvSummary {
-  id:         string;
-  module:     string | null;
-  updated_at: string;
-  preview:    string;
-}
-
 interface Props {
-  open:            boolean;
-  onClose:         () => void;
-  module:          string;
-  autoMessage?:    string;
-  projectContext?: ProjectCtx;
+  open:                 boolean;
+  onClose:              () => void;
+  module:               string;
+  autoMessage?:         string;
+  projectContext?:      ProjectCtx;
+  /** When set, load this past conversation on open (from the Sidebar history). */
+  loadConversationId?:  string | null;
 }
 
 // Measure before paint so the blur rises on the same frame as the text; fall
@@ -58,7 +53,7 @@ const ctrlBtn: React.CSSProperties = {
   cursor: "pointer",
 };
 
-export default function AshDock({ open, onClose, module, autoMessage, projectContext }: Props) {
+export default function AshDock({ open, onClose, module, autoMessage, projectContext, loadConversationId }: Props) {
   const {
     messages, setMessages,
     input, setInput,
@@ -71,10 +66,7 @@ export default function AshDock({ open, onClose, module, autoMessage, projectCon
   const overlayRef = useRef<HTMLDivElement>(null);
   const [overlayH, setOverlayH] = useState(0);
   const [focused,  setFocused]  = useState(false);
-
-  const [showHistory, setShowHistory] = useState(false);
-  const [recentConvs, setRecentConvs] = useState<ConvSummary[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [closing,  setClosing]  = useState(false);
 
   const label       = moduleLabel(module);
   const hasMessages = messages.length > 0;
@@ -87,11 +79,15 @@ export default function AshDock({ open, onClose, module, autoMessage, projectCon
       ]
     : moduleSuggestions(module);
 
+  // Reset the closing flag whenever the dock (re)opens — the component stays
+  // mounted while hidden, so this clears a stale slide-out from last time.
+  useEffect(() => { if (open) setClosing(false); }, [open]);
+
   // Re-measure the overlay (before paint) so the blur backdrop tracks the actual
   // content height and rises line-by-line as Ash streams.
   useIsoLayoutEffect(() => {
     if (overlayRef.current) setOverlayH(overlayRef.current.offsetHeight);
-  }, [messages, open, showHistory, recentConvs]);
+  }, [messages, open]);
   useEffect(() => {
     function onResize() {
       if (overlayRef.current) setOverlayH(overlayRef.current.offsetHeight);
@@ -105,76 +101,23 @@ export default function AshDock({ open, onClose, module, autoMessage, projectCon
     if (open) setTimeout(() => inputRef.current?.focus(), 120);
   }, [open]);
 
-  // Escape closes the history list first, then the dock.
+  // Slide the dock down, then tell the parent to unmount it.
+  const closeRef = useRef(onClose);
+  useEffect(() => { closeRef.current = onClose; });
+  function requestClose() {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(() => closeRef.current(), 240);
+  }
+
+  // Escape closes.
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== "Escape") return;
-      if (showHistory) setShowHistory(false);
-      else if (open) onClose();
-    }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape" && open) requestClose(); }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, showHistory, onClose]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-send on mount when an autoMessage arrives (the parent remounts the dock
-  // via key= so this fires once per opened conversation).
-  const sendRef = useRef(sendMessage);
-  useEffect(() => { sendRef.current = sendMessage; });
-  useEffect(() => {
-    if (!autoMessage) return;
-    const msg = autoMessage;
-    const timer = setTimeout(() => sendRef.current(msg), 300);
-    return () => clearTimeout(timer);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function send(text: string) {
-    if (!text.trim() || isStreaming) return;
-    setShowHistory(false);
-    sendMessage(text);
-  }
-
-  function submit() { send(input); }
-
-  function newConversation() {
-    setMessages([]);
-    setConversationId(null);
-    setShowHistory(false);
-    setTimeout(() => inputRef.current?.focus(), 60);
-  }
-
-  // Load recent conversations for the history list.
-  async function toggleHistory() {
-    const next = !showHistory;
-    setShowHistory(next);
-    if (!next) return;
-    setLoadingHistory(true);
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("ash_conversations")
-      .select("id, module, updated_at")
-      .order("updated_at", { ascending: false })
-      .limit(12);
-    if (data) {
-      const previews = await Promise.all(
-        data.map(async (conv) => {
-          const { data: msgs } = await supabase
-            .from("ash_messages")
-            .select("content")
-            .eq("conversation_id", conv.id)
-            .eq("role", "user")
-            .order("created_at", { ascending: true })
-            .limit(1);
-          return {
-            id: conv.id, module: conv.module, updated_at: conv.updated_at,
-            preview: msgs?.[0]?.content?.slice(0, 64) ?? "—",
-          } as ConvSummary;
-        })
-      );
-      setRecentConvs(previews);
-    }
-    setLoadingHistory(false);
-  }
-
+  // Load a past conversation (from Sidebar history).
   async function loadConversation(convId: string) {
     const supabase = createClient();
     const { data } = await supabase
@@ -189,49 +132,80 @@ export default function AshDock({ open, onClose, module, autoMessage, projectCon
       })));
       setConversationId(convId);
     }
-    setShowHistory(false);
+  }
+
+  // On mount: auto-send a message, or load a past conversation. The parent
+  // remounts the dock via key= so this fires once per opened session.
+  const sendRef = useRef(sendMessage);
+  useEffect(() => { sendRef.current = sendMessage; });
+  useEffect(() => {
+    if (autoMessage) {
+      const msg = autoMessage;
+      const timer = setTimeout(() => sendRef.current(msg), 300);
+      return () => clearTimeout(timer);
+    }
+    if (loadConversationId) void loadConversation(loadConversationId);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function send(text: string) {
+    if (!text.trim() || isStreaming) return;
+    sendMessage(text);
+  }
+  function submit() { send(input); }
+
+  function newConversation() {
+    setMessages([]);
+    setConversationId(null);
+    setTimeout(() => inputRef.current?.focus(), 60);
   }
 
   if (!open) return null;
 
   // The blur ramps with engagement and, once a conversation is open, tracks the
   // measured content height so it rises with each streamed line.
-  const engaged   = focused || input.trim().length > 0 || hasMessages || showHistory;
-  const level     = (hasMessages || showHistory) ? "open" : engaged ? "engaged" : "idle";
+  const engaged   = focused || input.trim().length > 0 || hasMessages;
+  const level     = hasMessages ? "open" : engaged ? "engaged" : "idle";
   const blurTint  = { idle: { amount: 12, opacity: 0.6 }, engaged: { amount: 18, opacity: 0.9 }, open: { amount: 22, opacity: 1 } }[level];
-  const blurHeight = (hasMessages || showHistory) ? `${Math.max(overlayH + 96, 240)}px` : engaged ? "260px" : "184px";
+  const blurHeight = hasMessages ? `${Math.max(overlayH + 96, 240)}px` : engaged ? "260px" : "184px";
 
   const sendDisabled = !input.trim() || isStreaming;
+  const overlayAnim  = closing ? "ash-dock-fall 0.24s ease-in forwards" : "ash-dock-rise 0.28s ease-out";
 
   return (
     <>
       <style>{`
         @keyframes ash-dock-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes ash-dock-fall { from { opacity: 1; transform: translateY(0); }  to { opacity: 0; transform: translateY(28px); } }
       `}</style>
 
-      {/* Full-width blur backdrop — frosts the page content behind and fades up
-          into it. Clicking it closes the dock. Offset by the sidebar so it only
-          covers the content area. */}
+      {/* Click-outside catcher — clicking anywhere off the chat slides it down. */}
       <div
-        onClick={onClose}
+        onClick={requestClose}
+        aria-hidden
+        style={{ position: "fixed", left: "var(--sidebar-width, 52px)", right: 0, top: 0, bottom: 0, zIndex: 37 }}
+      />
+
+      {/* Full-width blur backdrop — frosts the page content behind and fades up
+          into it. Purely visual; the catcher above handles clicks. */}
+      <div
         aria-hidden
         style={{
           position: "fixed",
           left: "var(--sidebar-width, 52px)", right: 0, bottom: 0,
           height: blurHeight,
-          opacity: blurTint.opacity,
-          zIndex: 38,
+          opacity: closing ? 0 : blurTint.opacity,
+          zIndex: 38, pointerEvents: "none",
           backdropFilter: `blur(${blurTint.amount}px)`,
           WebkitBackdropFilter: `blur(${blurTint.amount}px)`,
           background:
             "linear-gradient(to bottom, rgba(var(--color-warm-white-rgb),0) 0%, rgba(var(--color-warm-white-rgb),0.5) 55%, rgba(var(--color-warm-white-rgb),0.66) 100%)",
           maskImage: "linear-gradient(to bottom, transparent 0, black 104px, black 100%)",
           WebkitMaskImage: "linear-gradient(to bottom, transparent 0, black 104px, black 100%)",
-          transition: "height 0.3s ease, opacity 0.3s ease, backdrop-filter 0.3s ease, -webkit-backdrop-filter 0.3s ease",
+          transition: "height 0.3s ease, opacity 0.24s ease, backdrop-filter 0.3s ease, -webkit-backdrop-filter 0.3s ease",
         }}
       />
 
-      {/* Centered overlay — conversation/history + control row + composer. */}
+      {/* Centered overlay — pull-down handle + conversation + composer. */}
       <div
         style={{
           position: "fixed",
@@ -247,65 +221,20 @@ export default function AshDock({ open, onClose, module, autoMessage, projectCon
             width: "min(760px, calc(100% - 96px))",
             display: "flex", flexDirection: "column", gap: 10, alignItems: "stretch",
             pointerEvents: "none",
-            animation: "ash-dock-rise 0.28s ease-out",
+            animation: overlayAnim,
           }}
         >
-          {/* Content area: history list, conversation, or empty suggestions. */}
-          {showHistory ? (
-            <div style={{
-              pointerEvents: "auto",
-              background: "var(--color-surface-raised)",
-              border: "0.5px solid var(--color-border)",
-              borderRadius: "var(--radius-xl)",
-              boxShadow: "var(--shadow-lg)",
-              maxHeight: "44vh", overflowY: "auto",
-            }} className="ash-scroll">
-              <div style={{
-                padding: "10px 14px 8px", position: "sticky", top: 0,
-                background: "var(--color-surface-raised)",
-                borderBottom: "0.5px solid var(--color-border)",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-              }}>
-                <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-tertiary)" }}>
-                  Recent chats
-                </span>
-                <button onClick={newConversation} style={{ fontSize: 11, color: "var(--color-ash)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>
-                  + New chat
-                </button>
-              </div>
-              {loadingHistory ? (
-                <p style={{ padding: "16px 14px", fontSize: 12, color: "var(--color-text-tertiary)" }}>Loading…</p>
-              ) : recentConvs.length === 0 ? (
-                <p style={{ padding: "16px 14px", fontSize: 12, color: "var(--color-text-tertiary)" }}>No recent conversations yet.</p>
-              ) : (
-                recentConvs.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => loadConversation(c.id)}
-                    style={{
-                      display: "block", width: "100%", textAlign: "left",
-                      padding: "10px 14px", background: "transparent", border: "none",
-                      borderBottom: "0.5px solid var(--color-border)", cursor: "pointer",
-                      fontFamily: "inherit", transition: "background 0.08s ease",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-surface-sunken)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
-                      <span style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-tertiary)" }}>
-                        {MODULE_LABELS[c.module ?? ""] ?? c.module ?? "Perennial"}
-                      </span>
-                      <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>{timeAgo(c.updated_at)}</span>
-                    </div>
-                    <p style={{ fontSize: 12.5, color: "var(--color-text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", margin: 0 }}>
-                      {c.preview}
-                    </p>
-                  </button>
-                ))
-              )}
-            </div>
-          ) : hasMessages ? (
-            <AshHomeConversation messages={messages} onClear={newConversation} onClose={onClose} hideControls />
+          {/* Pull-down close handle — centered above the chat. */}
+          <div style={{ display: "flex", justifyContent: "center", pointerEvents: "auto" }}>
+            <button onClick={requestClose} title="Close Ash" aria-label="Close Ash" style={{ ...ctrlBtn, padding: "4px 12px", gap: 5 }}>
+              <ChevronDown size={14} strokeWidth={2} />
+              Close
+            </button>
+          </div>
+
+          {/* Content: conversation, or empty-state suggestions. */}
+          {hasMessages ? (
+            <AshHomeConversation messages={messages} onClear={newConversation} onClose={requestClose} hideControls />
           ) : (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, pointerEvents: "auto" }}>
               <p style={{ fontSize: 12, color: "var(--color-text-tertiary)", fontFamily: "var(--font-sans)", textAlign: "center" }}>
@@ -319,24 +248,14 @@ export default function AshDock({ open, onClose, module, autoMessage, projectCon
             </div>
           )}
 
-          {/* Control row — New chat / History / Close, right-aligned. */}
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", pointerEvents: "auto" }}>
-            {hasMessages && !showHistory && (
+          {/* New chat — small control, only once a conversation exists. */}
+          {hasMessages && (
+            <div style={{ display: "flex", justifyContent: "flex-end", pointerEvents: "auto" }}>
               <button onClick={newConversation} title="New chat" style={ctrlBtn}>
                 <RotateCcw size={12} strokeWidth={1.9} /> New chat
               </button>
-            )}
-            <button
-              onClick={toggleHistory}
-              title="Recent chats"
-              style={{ ...ctrlBtn, ...(showHistory ? { background: "var(--color-ash-tint)", color: "var(--color-ash-dark)", borderColor: "var(--color-ash-border)" } : null) }}
-            >
-              <Clock size={12} strokeWidth={1.9} /> History
-            </button>
-            <button onClick={onClose} title="Close Ash" style={ctrlBtn}>
-              <ChevronDown size={13} strokeWidth={1.9} /> Close
-            </button>
-          </div>
+            </div>
+          )}
 
           {/* Composer — matches the Home Ash bar. */}
           <div
