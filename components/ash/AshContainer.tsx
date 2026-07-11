@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { ChevronUp } from "lucide-react";
 import AshDock from "./AshDock";
 import AshMark from "@/components/ui/AshMark";
 import { ASH_GRADIENT } from "./theme";
@@ -22,12 +23,15 @@ export default function AshContainer() {
   const [open,        setOpen]        = useState(false);
   const [convKey,     setConvKey]     = useState(0);
   const [autoMessage, setAutoMessage] = useState<string | undefined>(undefined);
+  const [loadConvId,  setLoadConvId]  = useState<string | null>(null);
   const [projectCtx,  setProjectCtx]  = useState<ProjectCtxState | undefined>(undefined);
 
   const module = getModule(pathname);
 
   const handleClose = useCallback(() => {
     setOpen(false);
+    // A chat likely just happened — nudge the Sidebar history list to refresh.
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("ash-history-refresh"));
     // If this Ash session was opened by the post-onboarding dashboard tour,
     // clearing the waiting flag here lets the sidebar TourCallout begin.
     if (typeof window !== "undefined" && sessionStorage.getItem("perennial-tour-waiting-ash") === "1") {
@@ -36,14 +40,22 @@ export default function AshContainer() {
     }
   }, []);
 
-  // Listen for "open-ash" events (with optional auto-message and project context)
+  // Listen for "open-ash" events (auto-message, project context, or a past
+  // conversation id from the Sidebar history).
   useEffect(() => {
     function handler(e: Event) {
-      const detail = (e as CustomEvent<{ message?: string; project?: ProjectCtxState }>).detail ?? {};
+      const detail = (e as CustomEvent<{ message?: string; project?: ProjectCtxState; conversationId?: string }>).detail ?? {};
       if (detail.message) {
-        // New conversation keyed so AshPanel resets state and auto-sends
+        // New session keyed so the dock resets state and auto-sends.
         setConvKey(k => k + 1);
         setAutoMessage(detail.message);
+        setLoadConvId(null);
+      }
+      if (detail.conversationId) {
+        // New session keyed so the dock remounts and loads the past chat.
+        setConvKey(k => k + 1);
+        setLoadConvId(detail.conversationId);
+        setAutoMessage(undefined);
       }
       if (detail.project) setProjectCtx(detail.project);
       setOpen(true);
@@ -124,6 +136,7 @@ export default function AshContainer() {
             <AshMark size={16} variant="on-dark" animate />
           </span>
           Ask Ash
+          <ChevronUp size={16} strokeWidth={2.25} style={{ flexShrink: 0, marginLeft: 1, opacity: 0.9 }} />
         </button>
       </div>
 
@@ -134,6 +147,7 @@ export default function AshContainer() {
         module={module}
         autoMessage={autoMessage}
         projectContext={projectCtx}
+        loadConversationId={loadConvId}
       />
     </>
   );
