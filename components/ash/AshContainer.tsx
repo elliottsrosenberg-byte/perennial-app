@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { ChevronUp } from "lucide-react";
 import AshDock from "./AshDock";
 import AshMark from "@/components/ui/AshMark";
 import { ASH_GRADIENT } from "./theme";
@@ -103,8 +102,8 @@ export default function AshContainer() {
           className="ash-fab"
           style={{
             display: "flex", alignItems: "center", gap: 9,
-            padding: "10px 18px 10px 12px",
-            borderRadius: "var(--radius-full)",
+            padding: "9px 17px 9px 11px",
+            borderRadius: "var(--radius-lg)",
             border: "none", cursor: "pointer",
             background: ASH_GRADIENT,
             color: "#fff",
@@ -129,14 +128,13 @@ export default function AshContainer() {
           }}
         >
           <span style={{
-            width: 26, height: 26, borderRadius: "50%",
+            width: 26, height: 26, borderRadius: "var(--radius-md)",
             background: "rgba(255,255,255,0.18)", flexShrink: 0,
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>
             <AshMark size={16} variant="on-dark" animate />
           </span>
           Ask Ash
-          <ChevronUp size={16} strokeWidth={2.25} style={{ flexShrink: 0, marginLeft: 1, opacity: 0.9 }} />
         </button>
       </div>
 

@@ -117,12 +117,15 @@ export default function Sidebar() {
       const supabase = createClient();
       const { data } = await supabase
         .from("ash_conversations")
-        .select("id, module, updated_at")
+        .select("id, title, updated_at")
         .order("updated_at", { ascending: false })
         .limit(6);
       if (!data) { if (!cancelled) setRecentChats([]); return; }
       const rows = await Promise.all(
         data.map(async (conv) => {
+          // Prefer the generated title; fall back to the first message for
+          // older/untitled conversations.
+          if (conv.title) return { id: conv.id, label: conv.title };
           const { data: msgs } = await supabase
             .from("ash_messages")
             .select("content")

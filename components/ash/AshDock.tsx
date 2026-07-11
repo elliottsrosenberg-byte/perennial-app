@@ -17,6 +17,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Plus, ArrowUp, RotateCcw, ChevronDown } from "lucide-react";
 import AshHomeConversation from "@/components/home/AshHomeConversation";
+import AshMark from "@/components/ui/AshMark";
 import { createClient } from "@/lib/supabase/client";
 import { useAshChat } from "./useAshChat";
 import { moduleLabel, moduleSuggestions } from "./moduleMeta";
@@ -59,6 +60,7 @@ export default function AshDock({ open, onClose, module, autoMessage, projectCon
     input, setInput,
     isStreaming,
     setConversationId,
+    conversationTitle, setConversationTitle,
     sendMessage,
   } = useAshChat({ module });
 
@@ -117,21 +119,21 @@ export default function AshDock({ open, onClose, module, autoMessage, projectCon
     return () => window.removeEventListener("keydown", onKey);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load a past conversation (from Sidebar history).
+  // Load a past conversation (from Sidebar history) — messages + its title.
   async function loadConversation(convId: string) {
     const supabase = createClient();
-    const { data } = await supabase
-      .from("ash_messages")
-      .select("role, content")
-      .eq("conversation_id", convId)
-      .order("created_at", { ascending: true })
-      .limit(50);
-    if (data) {
-      setMessages(data.map((m, i) => ({
+    const [{ data: msgs }, { data: conv }] = await Promise.all([
+      supabase.from("ash_messages").select("role, content")
+        .eq("conversation_id", convId).order("created_at", { ascending: true }).limit(50),
+      supabase.from("ash_conversations").select("title").eq("id", convId).maybeSingle(),
+    ]);
+    if (msgs) {
+      setMessages(msgs.map((m, i) => ({
         id: `hist-${i}`, role: m.role as "user" | "assistant", content: m.content,
       })));
       setConversationId(convId);
     }
+    setConversationTitle(conv?.title ?? null);
   }
 
   // On mount: auto-send a message, or load a past conversation. The parent
@@ -156,6 +158,7 @@ export default function AshDock({ open, onClose, module, autoMessage, projectCon
   function newConversation() {
     setMessages([]);
     setConversationId(null);
+    setConversationTitle(null);
     setTimeout(() => inputRef.current?.focus(), 60);
   }
 
@@ -224,12 +227,38 @@ export default function AshDock({ open, onClose, module, autoMessage, projectCon
             animation: overlayAnim,
           }}
         >
-          {/* Pull-down close handle — centered above the chat. */}
+          {/* Header — chat title, steady at the top, with the pull-down close. */}
           <div style={{ display: "flex", justifyContent: "center", pointerEvents: "auto" }}>
-            <button onClick={requestClose} title="Close Ash" aria-label="Close Ash" style={{ ...ctrlBtn, padding: "4px 12px", gap: 5 }}>
-              <ChevronDown size={14} strokeWidth={2} />
-              Close
-            </button>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 9, maxWidth: "100%",
+              padding: "5px 6px 5px 13px",
+              borderRadius: "var(--radius-full)",
+              background: "var(--color-surface-raised)",
+              border: "0.5px solid var(--color-border)",
+              boxShadow: "var(--shadow-sm)",
+            }}>
+              <AshMark size={13} variant="on-light" />
+              <span style={{
+                fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 340,
+              }}>
+                {conversationTitle ?? `Ash · ${label}`}
+              </span>
+              <button
+                onClick={requestClose}
+                title="Close Ash" aria-label="Close Ash"
+                style={{
+                  flexShrink: 0, width: 24, height: 24, borderRadius: "var(--radius-full)",
+                  border: "none", background: "transparent", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "var(--color-text-tertiary)", transition: "background 0.1s ease",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-surface-sunken)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              >
+                <ChevronDown size={15} strokeWidth={2} />
+              </button>
+            </div>
           </div>
 
           {/* Content: conversation, or empty-state suggestions. */}
