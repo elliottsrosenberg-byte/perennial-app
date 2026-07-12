@@ -53,6 +53,29 @@ const FIELD_OPTIONS: { value: FieldKey; label: string }[] = [
   ...FIELDS.map(f => ({ value: f.key, label: f.label })),
 ];
 
+// ─── Sample CSV ─────────────────────────────────────────────────────────────
+//
+// A ready-to-edit template using the exact header names we auto-detect, so a
+// user unsure of the format can download it, fill in their own rows, and re-upload.
+
+const SAMPLE_CSV = `First Name,Last Name,Email,Phone,Organization,Title,Location,Website,Tags,Lead
+Amelia,Breiner,amelia@pottedplanter.com,(555) 555-5555,Potted Planter,Owner,"Hendersonville, NC",https://pottedplanter.com,"influencer, local",
+Benjamin,Mwangi,ben@greenhouseco.com,(555) 222-3333,Greenhouse Co,Buyer,"Bonita Springs, FL",https://greenhouseco.com,"trade show, wholesale",yes
+Elizabeth,Nemec,liz@example.com,(555) 111-4444,,Herbalist,"Toronto, ON",,herbs,
+`;
+
+function downloadSampleCSV() {
+  const blob = new Blob([SAMPLE_CSV], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "perennial-contacts-sample.csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ─── CSV parser ───────────────────────────────────────────────────────────────
 //
 // Minimal RFC-4180 parser — handles quoted fields, embedded commas, escaped
@@ -436,6 +459,22 @@ export default function ImportContactsModal({ onClose, onImported }: Props) {
                   {parseError}
                 </p>
               )}
+
+              <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 12, textAlign: "center" }}>
+                Not sure of the format?{" "}
+                <button
+                  type="button"
+                  onClick={downloadSampleCSV}
+                  style={{
+                    background: "none", border: "none", padding: 0, cursor: "pointer",
+                    fontFamily: "inherit", fontSize: 11, fontWeight: 500,
+                    color: "var(--color-sage)", textDecoration: "underline",
+                  }}
+                >
+                  Download a sample CSV
+                </button>
+                {" "}and edit it in Excel or Google Sheets.
+              </p>
 
               <div style={{
                 marginTop: 16, padding: "12px 14px", borderRadius: 10,
