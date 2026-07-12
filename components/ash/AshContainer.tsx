@@ -23,6 +23,7 @@ export default function AshContainer() {
   const [convKey,     setConvKey]     = useState(0);
   const [autoMessage, setAutoMessage] = useState<string | undefined>(undefined);
   const [loadConvId,  setLoadConvId]  = useState<string | null>(null);
+  const [handoff,     setHandoff]     = useState(false);
   const [projectCtx,  setProjectCtx]  = useState<ProjectCtxState | undefined>(undefined);
 
   const module = getModule(pathname);
@@ -43,18 +44,23 @@ export default function AshContainer() {
   // conversation id from the Sidebar history).
   useEffect(() => {
     function handler(e: Event) {
-      const detail = (e as CustomEvent<{ message?: string; project?: ProjectCtxState; conversationId?: string }>).detail ?? {};
+      const detail = (e as CustomEvent<{ message?: string; project?: ProjectCtxState; conversationId?: string; handoff?: boolean }>).detail ?? {};
       if (detail.message) {
         // New session keyed so the dock resets state and auto-sends.
         setConvKey(k => k + 1);
         setAutoMessage(detail.message);
         setLoadConvId(null);
+        setHandoff(false);
       }
       if (detail.conversationId) {
-        // New session keyed so the dock remounts and loads the past chat.
+        // New session keyed so the dock remounts and loads the past chat. A
+        // handoff (from the home canvas mid-onboarding) also refetches once the
+        // in-flight turn finishes, so the guidance Ash streamed after navigating
+        // lands in the dock.
         setConvKey(k => k + 1);
         setLoadConvId(detail.conversationId);
         setAutoMessage(undefined);
+        setHandoff(Boolean(detail.handoff));
       }
       if (detail.project) setProjectCtx(detail.project);
       setOpen(true);
@@ -146,6 +152,7 @@ export default function AshContainer() {
         autoMessage={autoMessage}
         projectContext={projectCtx}
         loadConversationId={loadConvId}
+        handoff={handoff}
       />
     </>
   );

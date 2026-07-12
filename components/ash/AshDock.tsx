@@ -36,6 +36,10 @@ interface Props {
   projectContext?:      ProjectCtx;
   /** When set, load this past conversation on open (from the Sidebar history). */
   loadConversationId?:  string | null;
+  /** True when loadConversationId is a live conversation handed off from the
+   *  home canvas mid-onboarding — refetch once the in-flight turn completes so
+   *  the guidance Ash streamed after navigating shows up here. */
+  handoff?:             boolean;
 }
 
 // Measure before paint so the blur rises on the same frame as the text; fall
@@ -54,7 +58,7 @@ const ctrlBtn: React.CSSProperties = {
   cursor: "pointer",
 };
 
-export default function AshDock({ open, onClose, module, autoMessage, projectContext, loadConversationId }: Props) {
+export default function AshDock({ open, onClose, module, autoMessage, projectContext, loadConversationId, handoff }: Props) {
   const {
     messages, setMessages,
     input, setInput,
@@ -148,6 +152,25 @@ export default function AshDock({ open, onClose, module, autoMessage, projectCon
     }
     if (loadConversationId) void loadConversation(loadConversationId);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handoff from the home canvas: the turn that navigated here is still
+  // streaming server-side, so the conversation we just loaded is missing its
+  // tail. Refetch once it finishes so the post-navigation guidance appears.
+  const loadRef = useRef(loadConversation);
+  useEffect(() => { loadRef.current = loadConversation; });
+  useEffect(() => {
+    if (!handoff || !loadConversationId) return;
+    let done = false;
+    function refetch() {
+      if (done) return;
+      done = true;
+      void loadRef.current(loadConversationId!);
+    }
+    window.addEventListener("ash:turn-complete", refetch);
+    // Fallback in case the turn finished before this listener attached.
+    const timer = setTimeout(refetch, 3500);
+    return () => { window.removeEventListener("ash:turn-complete", refetch); clearTimeout(timer); };
+  }, [handoff, loadConversationId]);
 
   function send(text: string) {
     if (!text.trim() || isStreaming) return;

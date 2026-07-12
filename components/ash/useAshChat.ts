@@ -78,9 +78,13 @@ export function useAshChat({ module, onFirstMessage }: UseAshChatOptions) {
             if (p.tool) setActiveTool(p.tool);
             if (p.action && typeof window !== "undefined") {
               // Ash wants to route the user somewhere (a module, or a "new X"
-              // form). A global bridge with router access executes it.
+              // form). A global bridge with router access executes it. Carry the
+              // conversation id so a home→module hop can keep this conversation
+              // going in the persistent dock.
               setActiveTool(null);
-              window.dispatchEvent(new CustomEvent("perennial:ash-action", { detail: p.action }));
+              window.dispatchEvent(new CustomEvent("perennial:ash-action", {
+                detail: { action: p.action, conversationId: p.conversationId ?? turnConvId ?? conversationId },
+              }));
             }
             if (p.prompt) {
               setActiveTool(null);
