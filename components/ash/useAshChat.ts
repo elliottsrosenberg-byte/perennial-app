@@ -6,12 +6,17 @@
 // AshChatView; chrome (header/dimensions/open state) lives in each surface.
 
 import { useCallback, useState } from "react";
+import type { AshPrompt } from "@/lib/ash/interactive-types";
 
 export interface AshMessage {
   id:         string;
   role:       "user" | "assistant";
   content:    string;
   streaming?: boolean;
+  /** An interactive prompt (tappable choices / answer fields) Ash attached to
+   *  this turn. Rendered inline by AshPromptCard; answering it sends a normal
+   *  user message back. */
+  prompt?:    AshPrompt;
 }
 
 interface UseAshChatOptions {
@@ -71,6 +76,12 @@ export function useAshChat({ module, onFirstMessage }: UseAshChatOptions) {
               ));
             }
             if (p.tool) setActiveTool(p.tool);
+            if (p.prompt) {
+              setActiveTool(null);
+              setMessages((prev) => prev.map((m) =>
+                m.id === ashMsg.id ? { ...m, prompt: p.prompt } : m
+              ));
+            }
             if (p.done && p.conversationId) { setConversationId(p.conversationId); turnConvId = p.conversationId; }
             if (p.title) setConversationTitle(p.title);
           } catch { /* ignore */ }
