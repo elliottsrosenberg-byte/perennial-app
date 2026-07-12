@@ -169,7 +169,10 @@ export async function POST(req: Request) {
               if (block.name === NAVIGATE_TOOL_NAME) {
                 const action = normalizeNavAction(block.input);
                 if (action) {
-                  send({ action });
+                  // Include the conversation id so a home→module navigation can
+                  // hand the live conversation off to the persistent dock (the
+                  // client only learns the id at end-of-turn otherwise).
+                  send({ action, conversationId: activeConversationId });
                   // Unlike ask_user, keep the turn going so Ash can guide the
                   // user through the page/form it just opened.
                   toolResults.push({
