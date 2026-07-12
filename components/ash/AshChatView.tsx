@@ -127,8 +127,14 @@ export default function AshChatView({
             </div>
           </div>
         ) : (
-          messages.map((msg) => (
-            <AshMessageRow key={msg.id} message={msg} assistantMaxWidth={assistantMaxWidth} />
+          messages.map((msg, i) => (
+            <AshMessageRow
+              key={msg.id}
+              message={msg}
+              assistantMaxWidth={assistantMaxWidth}
+              onSubmitPrompt={sendMessage}
+              isLast={i === messages.length - 1}
+            />
           ))
         )}
         <div ref={messagesEndRef} />

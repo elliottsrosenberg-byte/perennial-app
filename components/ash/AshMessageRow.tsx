@@ -8,6 +8,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import AshMark from "@/components/ui/AshMark";
+import AshPromptCard from "./AshPromptCard";
 import { ASH_GRADIENT } from "./theme";
 import type { AshMessage } from "./useAshChat";
 
@@ -15,9 +16,14 @@ interface AshMessageRowProps {
   message: AshMessage;
   /** Max width of an assistant block ("none" lets it fill its column). */
   assistantMaxWidth: number | "none";
+  /** Submit an interactive prompt answer as a new user turn. */
+  onSubmitPrompt?: (text: string) => void;
+  /** Whether this row is the latest message — an attached prompt is only
+   *  interactive while true (a newer message means it's already been dealt with). */
+  isLast?: boolean;
 }
 
-export default function AshMessageRow({ message: msg, assistantMaxWidth }: AshMessageRowProps) {
+export default function AshMessageRow({ message: msg, assistantMaxWidth, onSubmitPrompt, isLast = true }: AshMessageRowProps) {
   return (
     <div
       style={{
@@ -60,7 +66,7 @@ export default function AshMessageRow({ message: msg, assistantMaxWidth }: AshMe
           maxWidth: assistantMaxWidth,
           minWidth: 0,
         }}>
-          {msg.streaming && !msg.content ? (
+          {msg.streaming && !msg.content && !msg.prompt ? (
             <div style={{ display: "flex", gap: 4, alignItems: "center", height: 22, paddingTop: 2 }}>
               {[0, 0.22, 0.44].map((d) => (
                 <div key={d} style={{
@@ -71,14 +77,25 @@ export default function AshMessageRow({ message: msg, assistantMaxWidth }: AshMe
               ))}
             </div>
           ) : (
-            <div
-              className="ash-md"
-              style={{ fontSize: 13, lineHeight: 1.75, color: "var(--color-text-secondary)", wordBreak: "break-word" }}
-            >
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {msg.content}
-              </ReactMarkdown>
-            </div>
+            <>
+              {msg.content && (
+                <div
+                  className="ash-md"
+                  style={{ fontSize: 13, lineHeight: 1.75, color: "var(--color-text-secondary)", wordBreak: "break-word" }}
+                >
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {msg.content}
+                  </ReactMarkdown>
+                </div>
+              )}
+              {msg.prompt && (
+                <AshPromptCard
+                  prompt={msg.prompt}
+                  active={isLast && !!onSubmitPrompt}
+                  onSubmit={(text) => onSubmitPrompt?.(text)}
+                />
+              )}
+            </>
           )}
         </div>
       )}

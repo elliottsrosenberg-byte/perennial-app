@@ -263,7 +263,7 @@ export default function AshDock({ open, onClose, module, autoMessage, projectCon
 
           {/* Content: conversation, or empty-state suggestions. */}
           {hasMessages ? (
-            <AshHomeConversation messages={messages} onClear={newConversation} onClose={requestClose} hideControls />
+            <AshHomeConversation messages={messages} onClear={newConversation} onClose={requestClose} onSubmitPrompt={sendMessage} hideControls />
           ) : (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, pointerEvents: "auto" }}>
               <p style={{ fontSize: 12, color: "var(--color-text-tertiary)", fontFamily: "var(--font-sans)", textAlign: "center" }}>

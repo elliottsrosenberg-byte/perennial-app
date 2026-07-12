@@ -7,12 +7,14 @@
 
 import { READ_TOOLS  } from "./read";
 import { WRITE_TOOLS } from "./write";
+import { askUserTool } from "./interactive";
 import type { AshToolDefinition, ToolContext } from "./types";
 
 export type { AshToolDefinition, ToolContext };
 
-// All registered tools
-export const ALL_TOOLS: AshToolDefinition[] = [...READ_TOOLS, ...WRITE_TOOLS];
+// All registered tools. `ask_user` is a UI tool (no DB side effect) — the API
+// route intercepts it to render an interactive card and end the turn.
+export const ALL_TOOLS: AshToolDefinition[] = [...READ_TOOLS, ...WRITE_TOOLS, askUserTool];
 
 // Anthropic-format tool definitions (passed to messages.create)
 export const ANTHROPIC_TOOLS = ALL_TOOLS.map(({ name, description, input_schema }) => ({
@@ -44,6 +46,9 @@ ${reads}
 
 **Take action — create and update the user's records (write):**
 ${writes}
+
+**Ask with structure:**
+- **ask_user** — show tappable multiple-choice and/or short/long answer fields inline in chat instead of asking in prose, then wait for the reply. Use it to keep setup and onboarding light.
 
 You also have web search for external facts. You cannot send email, move money, or take actions outside this list — be honest about that boundary.`;
 }
