@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Task, Contact, UserCalendar } from "@/types/database";
 import { ChevronLeft, ChevronRight, Plus, CheckSquare, MoreHorizontal, CalendarClock } from "lucide-react";
@@ -1075,6 +1076,17 @@ export default function CalendarClient({
     if (typeof window === "undefined") return;
     try { window.localStorage.setItem(OPP_VIS_STORAGE_KEY, oppMode); } catch { /* ignore */ }
   }, [oppMode]);
+
+  // Ash (and deep links) can open a create form via ?new=event|task.
+  const searchParams = useSearchParams();
+  const navRouter    = useRouter();
+  useEffect(() => {
+    const n = searchParams.get("new");
+    if (!n) return;
+    if (n === "event")     { setNewEventPrefill(null); setNewEventOpen(true); }
+    else if (n === "task") { setNewTaskOpen(true); }
+    navRouter.replace("/calendar");
+  }, [searchParams, navRouter]);
   const ENGAGED_STATUSES = ["saved", "applied", "attending", "exhibiting"];
   const oppVisible = (o: CalendarOpportunity) => {
     if (oppMode === "saved") return !!o.user_status && ENGAGED_STATUSES.includes(o.user_status);

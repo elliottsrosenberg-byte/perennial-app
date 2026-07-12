@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { OutreachPipeline, PipelineStage, OutreachTarget, Contact } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
 import Topbar from "@/components/layout/Topbar";
@@ -95,6 +96,17 @@ function OutreachClientInner({ initialPipelines, initialTargets, initialContacts
     setNewTargetDefaults({ pipelineId: pipelineId ?? selectedPipelineId ?? undefined, stageId });
     setShowNewTarget(true);
   }
+
+  // Ash (and deep links) can open the new-target form via ?new=target.
+  const searchParams = useSearchParams();
+  const navRouter    = useRouter();
+  useEffect(() => {
+    if (searchParams.get("new") === "target") {
+      setActiveSection("pipeline");
+      setShowNewTarget(true);
+      navRouter.replace("/outreach");
+    }
+  }, [searchParams, navRouter]);
 
   // Open a specific target from anywhere in the module (e.g. lead card chip
   // → "in {pipeline}" → opens the linked target). The event is fired by

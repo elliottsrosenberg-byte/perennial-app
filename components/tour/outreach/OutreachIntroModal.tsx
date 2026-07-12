@@ -10,6 +10,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { type TourVisited } from "@/lib/tour";
 import IntroModalShell, { type IntroSlide } from "@/components/tour/IntroModalShell";
+import { launchAshSetup } from "@/components/tour/launchAshSetup";
 import {
   PipelineMaterialize, DragStage, FollowUpBar, RailSwitch,
 } from "./OutreachAnimations";
@@ -113,6 +114,7 @@ export default function OutreachIntroModal() {
       slides={SLIDES}
       onSkip={() => close(false)}
       onGetStarted={() => close(true)}
+      onSetupWithAsh={() => { void close(false); launchAshSetup("Outreach"); }}
     />
   );
 }
