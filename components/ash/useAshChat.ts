@@ -92,8 +92,25 @@ export function useAshChat({ module, onFirstMessage }: UseAshChatOptions) {
                 m.id === ashMsg.id ? { ...m, prompt: p.prompt } : m
               ));
             }
-            if (p.done && p.conversationId) { setConversationId(p.conversationId); turnConvId = p.conversationId; }
-            if (p.title) setConversationTitle(p.title);
+            if (p.done && p.conversationId) {
+              // A brand-new conversation just got its id — surface it in the
+              // Sidebar's "Recent chats" immediately (with its first-message
+              // preview) rather than waiting for the dock to close.
+              const isNewConversation = !turnConvId;
+              setConversationId(p.conversationId);
+              turnConvId = p.conversationId;
+              if (isNewConversation && typeof window !== "undefined") {
+                window.dispatchEvent(new Event("ash-history-refresh"));
+              }
+            }
+            if (p.title) {
+              setConversationTitle(p.title);
+              // Title arrives moments after the turn — refresh again so the
+              // Sidebar swaps the preview for the generated title.
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new Event("ash-history-refresh"));
+              }
+            }
           } catch { /* ignore */ }
         }
       }
