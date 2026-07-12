@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { TimeEntry, ActiveTimer, Expense, Invoice, Project } from "@/types/database";
 import OverviewTab from "./OverviewTab";
@@ -84,6 +85,18 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
     window.addEventListener("finance:set-tab", onSetTab);
     return () => window.removeEventListener("finance:set-tab", onSetTab);
   }, []);
+
+  // Ash (and deep links) can open a create form via ?new=invoice|time|expense.
+  const searchParams = useSearchParams();
+  const router       = useRouter();
+  useEffect(() => {
+    const n = searchParams.get("new");
+    if (!n) return;
+    if (n === "invoice")      { setActiveTab("invoices"); setShowNewInvoice(true); }
+    else if (n === "time")    { setActiveTab("time");     setShowLogTime(true); }
+    else if (n === "expense") { setActiveTab("banking");  setShowAddExpense(true); }
+    router.replace("/finance");
+  }, [searchParams, router]);
 
   // Close the 3-dots menu on outside click. Items will land here as the
   // module grows — for now the menu is intentionally a placeholder.

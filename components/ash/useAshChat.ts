@@ -76,6 +76,12 @@ export function useAshChat({ module, onFirstMessage }: UseAshChatOptions) {
               ));
             }
             if (p.tool) setActiveTool(p.tool);
+            if (p.action && typeof window !== "undefined") {
+              // Ash wants to route the user somewhere (a module, or a "new X"
+              // form). A global bridge with router access executes it.
+              setActiveTool(null);
+              window.dispatchEvent(new CustomEvent("perennial:ash-action", { detail: p.action }));
+            }
             if (p.prompt) {
               setActiveTool(null);
               setMessages((prev) => prev.map((m) =>

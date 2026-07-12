@@ -4,7 +4,9 @@ import { buildAshContext } from "@/lib/ash/context";
 import { STATIC_SYSTEM_PROMPT, buildDynamicContext } from "@/lib/ash/system-prompt";
 import { ANTHROPIC_TOOLS, executeTool, buildCapabilitiesManifest } from "@/lib/ash/tools";
 import { ASK_USER_TOOL_NAME } from "@/lib/ash/tools/interactive";
+import { NAVIGATE_TOOL_NAME } from "@/lib/ash/tools/navigation";
 import { normalizeAshPrompt, serializeAskForHistory } from "@/lib/ash/interactive-types";
+import { normalizeNavAction, describeNavAction } from "@/lib/ash/app-navigation";
 import { generateConversationTitle } from "@/lib/ash/title";
 
 export const runtime    = "nodejs";
@@ -158,6 +160,28 @@ export async function POST(req: Request) {
                     type:        "tool_result",
                     tool_use_id: block.id,
                     content:     "ask_user input was invalid (need at least one well-formed question). Ask in plain text instead, or retry with a valid prompt.",
+                    is_error:    true,
+                  });
+                }
+                continue;
+              }
+
+              if (block.name === NAVIGATE_TOOL_NAME) {
+                const action = normalizeNavAction(block.input);
+                if (action) {
+                  send({ action });
+                  // Unlike ask_user, keep the turn going so Ash can guide the
+                  // user through the page/form it just opened.
+                  toolResults.push({
+                    type:        "tool_result",
+                    tool_use_id: block.id,
+                    content:     describeNavAction(action),
+                  });
+                } else {
+                  toolResults.push({
+                    type:        "tool_result",
+                    tool_use_id: block.id,
+                    content:     "navigate input was invalid (unknown module/create target). Tell the user where to go in words instead.",
                     is_error:    true,
                   });
                 }
