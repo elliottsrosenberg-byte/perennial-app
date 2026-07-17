@@ -396,7 +396,8 @@ This document is a module-by-module architecture reference for the Perennial app
 - `components/network/ContactDetailPanel.tsx` — scrim/detail panel (1644 lines); tabs Canvas/Activity/Tasks/Notes/Files, Tiptap rich editor with inline Ash, convert-lead-to-contact at line 1170
 - `components/network/OrganizationDetailPanel.tsx` — org scrim panel; canvas, activity, files, tags, "People at this org" rail, invoice roll-up, fires `network:open-contact` + `outreach:open-target`
 - `components/network/NewContactModal.tsx`, `NewOrganizationModal.tsx` — create modals
-- `components/network/ImportContactsModal.tsx` — CSV importer + column-mapping (reuses editor-image helper for embedded images per AGENTS.md)
+- `components/network/ImportContactsModal.tsx` — CSV importer + column-mapping (reuses editor-image helper for embedded images per AGENTS.md); "Download a sample CSV" link provides a pre-headed template
+- `components/network/MailActivityBanner.tsx` — Activity-tab banner: shows a connect-email nudge when no Google/Microsoft account is linked; once connected, triggers sync-on-open and displays live backfill progress
 - `components/network/NetworkOptionsMenu.tsx` — 3-dot menu (show-archived toggle; tag-manager is placeholder)
 
 ### Key patterns
@@ -1250,20 +1251,22 @@ This document is a module-by-module architecture reference for the Perennial app
 
 | | |
 |---|---|
-| **Routes** | No own route — globally mounted via `app/(app)/layout.tsx` as a fixed floating FAB + panel on every authed page |
+| **Routes** | No own route — globally mounted via `app/(app)/layout.tsx`; launcher is a centered bottom pill that rises as `AshDock` on every authed non-home page |
 
 ### Main components
-- `components/ash/AshContainer.tsx` — floating FAB, open/expanded/convKey state, listens for window events to open with context
-- `components/ash/AshPanel.tsx` — chat panel: streaming, history dropdown, suggestions, markdown render (`react-markdown` + `remark-gfm`), tool-running indicator; **frosted-glass** surface (`--glass-*` tokens)
+- `components/ash/AshContainer.tsx` — bottom-center pill launcher, open/convKey state, listens for `open-ash` + `set-project-context`/`clear-project-context` window events; dispatches `ash-history-refresh` on dock close
+- `components/ash/AshDock.tsx` — **primary chat surface**: full-width frosted-glass panel anchored at `bottom:0`, `left: var(--sidebar-width)`, `right:0`; receives `loadConversationId?` prop to resume a past chat opened from Sidebar Recent chats; click-outside + Escape dismiss; `AshPanel` + `AshChatView` retained in tree but **currently unused** (kept for rollback)
+- `components/ash/moduleMeta.ts` — centralizes per-module display labels (`MODULE_LABELS`) and starter suggestions (`moduleSuggestions()`); replaces the old inline `getModule()` inside `AshPanel`
 - `components/ash/AshHomeConversation.tsx` — inline Ash chat surface embedded in the Home canvas; drives Ash-guided deep setup when `profile_setup_complete=false`
 - `components/ui/AshMark.tsx`, `components/layout/AshIcon.tsx`
 - `app/api/ash/route.ts` — Anthropic SDK streaming agentic loop (nodejs runtime, maxDuration 60), **model `claude-sonnet-5`**, thinking explicitly disabled (`thinking: { type: "disabled" }`), prompt caching on static system prompt + server-side web_search; fire-and-forget `POST /api/ash/learn` ping after each completed turn
-- `lib/ash/context.ts` (`buildAshContext`), `lib/ash/system-prompt.ts`, `lib/ash/tools/{index,read,write,types}.ts` (self-knowledge manifest added to `tools/index.ts`)
+- `lib/ash/context.ts` (`buildAshContext`), `lib/ash/system-prompt.ts`, `lib/ash/tools/{index,read,write,types}.ts` (self-knowledge manifest in `tools/index.ts`)
+- `lib/ash/title.ts` — LLM-generated conversation title: calls `claude-haiku-4-5`, max_tokens 24, returns a 3–6 word Title Case string (or null on failure); dispatched into Sidebar Recent chats after first exchange
 - `lib/ash/embeddings.ts` — voyage-3.5 embedding helper for RAG
 - `lib/ash/preferences.ts` — read/write `ash_preferences` rows; dedup + weight update logic
 - `lib/ash/research.ts` — background knowledge expansion: writes private `knowledge_base` rows (per-user, `user_id` set) via service-role client
 
-> **Model note:** `/api/ash/route.ts` → `claude-sonnet-5`. `/api/notes/ash-inline/route.ts` → `claude-sonnet-4-6` (inline editor). `/api/notes/suggest-tasks/route.ts` → `claude-haiku-4-5-20251001` (cheap task extraction). Different models serve different cost/latency points.
+> **Model note:** `/api/ash/route.ts` → `claude-sonnet-5`. `/api/notes/ash-inline/route.ts` → `claude-sonnet-4-6` (inline editor). `/api/notes/suggest-tasks/route.ts` → `claude-haiku-4-5-20251001` (cheap task extraction). `lib/ash/title.ts` → `claude-haiku-4-5` (title generation). Different models serve different cost/latency points.
 
 ### API routes
 - `/api/ash` (POST — SSE-style stream: `{text}`, `{tool}`, `{done, conversationId}`)
@@ -1271,15 +1274,17 @@ This document is a module-by-module architecture reference for the Perennial app
 - `/api/ash/research` (POST — background research dispatch; calls `lib/ash/research.ts`; writes private `knowledge_base` rows)
 
 ### Tables
-`ash_conversations` (insert new conv, list recent 10 for history, `module` column) · `ash_messages` (insert user msg, load history limit 24/50, `role`+`content`) · `ash_preferences` (read top-weighted `active` preferences → injected into system prompt; written by `/api/ash/learn`) · `knowledge_base` (RAG retrieval via `search_knowledge_base` tool; embedding cosine search on `vector(1024)` index; both global + per-user rows) · Ash READ tools query: `projects`, `tasks`, `contacts`, `contact_activities`, `notes`, `invoices`, `expenses`, `time_entries`, `outreach_pipelines`, `outreach_targets`, `opportunities` · Ash WRITE tools mutate: `projects`, `tasks`, `contacts`, `organizations`, `notes`, `time_entries`, `contact_activities` · `context.ts` reads: `profiles`, `projects`, `tasks`, `contacts`, `notes`, `invoices`, `time_entries`
+`ash_conversations` (insert new conv, list recent 10 for history, `module` column, LLM-generated `title`) · `ash_messages` (insert user msg, load history limit 24/50, `role`+`content`) · `ash_preferences` (read top-weighted `active` preferences → injected into system prompt; written by `/api/ash/learn`) · `knowledge_base` (RAG retrieval via `search_knowledge_base` tool; embedding cosine search on `vector(1024)` index; both global + per-user rows) · Ash READ tools query: `projects`, `tasks`, `contacts`, `contact_activities`, `notes`, `invoices`, `expenses`, `time_entries`, `outreach_pipelines`, `outreach_targets`, `opportunities` · Ash WRITE tools mutate: `projects`, `tasks`, `contacts`, `organizations`, `notes`, `time_entries`, `contact_activities` · `context.ts` reads: `profiles`, `projects`, `tasks`, `contacts`, `notes`, `invoices`, `time_entries`
 
 ### Key patterns
-- Custom window events for cross-view sync: `open-ash` (with optional message + project context), `set-project-context`/`clear-project-context`, and Ash dispatches `ash:turn-complete` on finish so other views (project panel, tasks) refetch
-- `convKey` remount trick: incrementing key forces AshPanel to reset state + auto-send an injected message (used by DashboardTour final step)
+- Custom window events for cross-view sync: `open-ash` (with optional `message`, `projectContext`, and `conversationId` to resume a past chat), `set-project-context`/`clear-project-context`, `ash:turn-complete` (dispatched on finish so project panel + tasks refetch)
+- `ash-history-refresh`: dispatched by `useAshChat` (on new conv id + after title resolves) and by `AshContainer` (on dock close); listened by `Sidebar` to re-fetch the Recent chats list
+- `loadConversationId` prop on `AshDock` + `useAshChat`: when set, loads the conversation's stored messages instead of starting blank (powered by `open-ash` event from Sidebar Recent chats)
+- `convKey` remount trick: incrementing key forces the chat hook to reset state + auto-send an injected message (used by DashboardTour final step)
 - Streaming fetch + ReadableStream reader parsing `data: ` lines; agentic tool loop server-side
-- Per-module suggestions + module label from pathname (`getModule`); project-specific suggestions override generic when `projectContext` set
+- Per-module suggestions + module label from `moduleSuggestions()` / `MODULE_LABELS` in `moduleMeta.ts`; project-specific suggestions override generic when `projectContext` set
 - System prompt uses Anthropic prompt caching (`cache_control` ephemeral) + appended dynamic context; top-weighted `ash_preferences` injected as a pinned block above dynamic context
-- After each turn: `/api/ash` triggers a fire-and-forget POST to `/api/ash/learn` — this route calls `claude-sonnet-5` (or a cheaper haiku tier) to extract preference signals and upsert into `ash_preferences`
+- After each turn: `/api/ash` triggers a fire-and-forget POST to `/api/ash/learn` — extracts preference signals and upserts into `ash_preferences`; `lib/ash/title.ts` generates a short LLM title and patches `ash_conversations.title`
 - `search_knowledge_base` tool: cosine similarity search on `knowledge_base.embedding` using voyage-3.5 query embedding; returns top-k chunks with category + source; available to all Ash turns
 
 ### Cross-module links
@@ -1288,18 +1293,16 @@ This document is a module-by-module architecture reference for the Perennial app
 - `AshHomeConversation` embedded in Home canvas; its flow drives the Ash-guided deep setup and sets `profile_setup_complete=true`
 - Tightly coupled to the onboarding→DashboardTour→Ash hand-off flow
 - Uses Anthropic server-side web_search tool for external facts; `lib/ash/research.ts` for asynchronous background depth
+- Sidebar "Recent chats" section surfaces `ash_conversations` (most recent 10) and dispatches `open-ash` with `conversationId` to resume a past chat in `AshDock`
 
 ### Known TODOs / mocked
 - `/api/ash/research` background dispatch is fire-and-forget with no retry or progress feedback
 - `ash_preferences` weight decay (downgrade stale preferences over time) not yet implemented
-
-### Known TODOs / mocked
-- Input "+" attach-context button: title "Attach context (coming soon)" — not implemented (AshPanel ~654)
+- Input "+" attach-context button: title "Attach context (coming soon)" — not implemented
 
 ### Mobile issues
-- AshPanel hardcoded dimensions: `W=360` floating / `680` expanded, `H=480` / `calc(100vh-80px)` (`AshPanel.tsx:108-109`) — the 360-wide panel at `bottom:20 right:20` overflows/crowds small phones; expanded 680 exceeds mobile viewport
-- History dropdown fixed width 260 (AshPanel ~374)
-- FAB fixed bottom/right 24 — fine
+- `AshDock` is full-width (`left: var(--sidebar-width)`, `right: 0`) — more mobile-friendly than the old 360px corner `AshPanel`; on mobile `--sidebar-width` resolves to 52px so the dock spans almost the full screen width
+- `AshPanel` + `AshChatView` hardcoded dimensions (360/680px width, 480px/calc(100vh-80px) height) are now irrelevant since those components are unused
 
 ---
 
@@ -1310,7 +1313,7 @@ This document is a module-by-module architecture reference for the Perennial app
 | **Routes** | `app/(app)/layout.tsx` wraps all authed routes · Renders: Sidebar (desktop), MobileNav (mobile), MobileDesktopNotice, AshContainer, TourTracker, TourCallout |
 
 ### Main components
-- `components/layout/Sidebar.tsx` — desktop rail (`hidden md:flex`), collapsible 200px/52px, nav groups, theme toggle, app menu, profile menu; fetches `isAdmin` from `GET /api/admin/check` on mount — Design system / View as / Curate links in the bottom-left are shown **only for admins**; non-admins see Settings only
+- `components/layout/Sidebar.tsx` — desktop rail (`hidden md:flex`), collapsible 200px/52px, nav groups, theme toggle, app menu, profile menu; fetches `isAdmin` from `GET /api/admin/check` on mount — Design system / View as / Curate links in the bottom-left are shown **only for admins**; non-admins see Settings only; **"Recent chats" section** lists the 10 most recent `ash_conversations` and dispatches `open-ash` with `conversationId` to resume them in `AshDock`; listens for `ash-history-refresh` to re-fetch the list after each Ash turn or dock close
 - `components/layout/MobileNav.tsx` — mobile top bar + slide-in drawer (`md:hidden`), full nav + Settings + Logout
 - `components/layout/MobileDesktopNotice.tsx` — dismissible "best on desktop" banner (localStorage, useSyncExternalStore)
 - `components/layout/Topbar.tsx` — per-page header (title/greeting/actions)
@@ -1326,6 +1329,7 @@ This document is a module-by-module architecture reference for the Perennial app
 ### Key patterns
 - Sidebar sets CSS var `--sidebar-width` (200px/52px) on document root so fixed overlays/scrim panels lay out relative to it
 - Custom event `profile-updated` from Settings updates sidebar studio_name live; `perennial-theme-changed` syncs theme across Sidebar + Settings; auto-theme re-evaluated on 60s interval + window focus
+- `ash-history-refresh` event causes Sidebar to re-fetch Recent chats (dispatched by `useAshChat` on new conv + after title resolves, and by `AshContainer` on dock close)
 - Collapsed-mode hover tooltips rendered via fixed-position portal outside `overflow:hidden` aside
 - Click-outside handlers for app menu + profile menu
 - `data-tour-key` on nav links consumed by TourCallout anchor positioning

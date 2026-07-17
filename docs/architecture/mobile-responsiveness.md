@@ -224,8 +224,8 @@ Native `<select>` / `<input type=date|time>` are used in:
 - Native `<select>`/`<input type=date>` (`appearance:auto`).
 
 ### Ash (AI assistant)
-- `AshPanel.tsx:108-109` — hardcoded `W=360` floating / `680` expanded, `H=480` / `calc(100vh-80px)`; the 360-wide panel at `bottom:20 right:20` crowds small phones, expanded 680 exceeds mobile viewport.
-- History dropdown `width 260` (~`:374`); FAB `bottom/right 24` — fine.
+- `AshDock` is full-width (`left: var(--sidebar-width)`, `right: 0`, `bottom: 0`): on mobile `--sidebar-width` resolves to 52px so the dock spans nearly the full screen — an improvement over the old 360px corner panel. No known overflow issues with the current layout.
+- `AshPanel.tsx` (hardcoded 360/680px width) and `AshChatView` are now **unused** — retained only for rollback; their dimension constraints are no longer a live mobile concern.
 
 ### Tour / Onboarding walkthrough
 - `DashboardTour` callout `W=320`, clamped via `getBoundingClientRect` — mostly mobile-safe, but anchors to desktop `[data-tour-step]` sections.

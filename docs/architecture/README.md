@@ -79,6 +79,6 @@ The app is **effectively single-user today but built for multi-user**.
 | Integrations | no route (in Settings) | Shared connection plumbing; Presence is the primary consumer |
 | Onboarding | `app/onboarding/page.tsx` (`/onboarding`) | Outside `(app)`, no sidebar; redirects on auth/completion |
 | Admin / Curate | `app/(app)/admin/page.tsx` (`/admin`) · `app/(app)/admin/users/page.tsx` (`/admin/users`) | Opportunity/suggestion curation + admin user list with "View as" impersonation; both gated to `ADMIN_USER_IDS` |
-| Ash | no route (in layout) | Global AI assistant FAB + panel on every authed page |
+| Ash | no route (in layout) | Global AI assistant: centered bottom-pill launcher + `AshDock` full-width panel on every authed non-home page; chat history in Sidebar "Recent chats" |
 
 See [modules.md](./modules.md) for the full per-module breakdown including all deep-link params and public surfaces.
