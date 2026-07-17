@@ -198,11 +198,12 @@ These are `window` `CustomEvent`s (`dispatchEvent` / `addEventListener`). When y
 
 | Event | Dispatched by | Listened by |
 |---|---|---|
-| `open-ash` | `components/ui/AshPromptsModule.tsx`, `components/home/WelcomeBanner.tsx`, `components/ui/EmptyState.tsx`, `components/presence/PresenceClient.tsx`, `components/tour/calendar/CalendarTooltipTour.tsx` | `components/ash/AshContainer.tsx` |
+| `open-ash` | `components/ui/AshPromptsModule.tsx`, `components/home/WelcomeBanner.tsx`, `components/ui/EmptyState.tsx`, `components/presence/PresenceClient.tsx`, `components/tour/calendar/CalendarTooltipTour.tsx`, `components/layout/Sidebar.tsx` (with `{ conversationId }` to resume a past chat) | `components/ash/AshContainer.tsx` |
+| `ash-history-refresh` | `lib/ash/useAshChat.ts` (on new conv id + after title resolves), `components/ash/AshContainer.tsx` (on dock close) | `components/layout/Sidebar.tsx` (re-fetches Recent chats list) |
 | `set-project-context` / `clear-project-context` | `components/projects/ProjectDetailPanel.tsx` | `components/ash/AshContainer.tsx` |
 | `set-contact-context` / `clear-contact-context` | `components/network/ContactDetailPanel.tsx` | ⚠ **NONE** — dispatched but no listener (Ash only wires project context) |
 | `set-organization-context` / `clear-organization-context` | `components/network/OrganizationDetailPanel.tsx` | ⚠ **NONE** — dispatched but no listener |
-| `ash:turn-complete` | `components/ash/AshPanel.tsx` | `components/projects/ProjectDetailPanel.tsx` (refetch tasks + notes) |
+| `ash:turn-complete` | `lib/ash/useAshChat.ts` (formerly `AshPanel.tsx`) | `components/projects/ProjectDetailPanel.tsx` (refetch tasks + notes) |
 | `ash:write-tool-ran` | `components/ui/RichEditor.tsx` | ⚠ **no listener found** |
 | `calendar:refresh-events` | `components/calendar/EventCard.tsx`, `CalendarOptionsMenu.tsx`, `CalendarSourcesPanel.tsx` | `components/calendar/CalendarClient.tsx` |
 | `calendar:event-created` | `components/calendar/EventCard.tsx` | `components/calendar/CalendarClient.tsx` |

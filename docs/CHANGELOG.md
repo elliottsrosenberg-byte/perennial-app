@@ -4,6 +4,25 @@ Maintained by the weekly documentation agent. Each entry covers the prior week's
 
 ---
 
+## 2026-07-17 (week of 2026-07-10)
+
+### Features
+- `bd11051` Ash (PER-?): **AshDock** — new primary Ash surface replacing the corner `AshPanel`; `components/ash/AshDock.tsx` is a full-width frosted-glass panel anchored `bottom:0 left:var(--sidebar-width) right:0`; launcher changed from floating corner FAB to a centered bottom pill; `components/ash/moduleMeta.ts` centralizes per-module labels + starter suggestions (formerly inline in `AshPanel`); `lib/ash/title.ts` — LLM-generated 3–6 word titles via `claude-haiku-4-5` (best-effort, null on failure), patched into `ash_conversations.title`; **Sidebar "Recent chats"** surfaces the 10 most recent `ash_conversations` and dispatches `open-ash` with `conversationId` to resume a past chat; `AshPanel` + `AshChatView` retained but unused (rollback)
+- `d2743ad` Ash: Sidebar recent-chats list updates immediately after each turn (no manual refresh needed) — `ash-history-refresh` window event dispatched by `useAshChat` on new conv id + after title resolves, and by `AshContainer` on dock close; `Sidebar` listens and re-fetches
+- `bbcc9cd` Network (PER-146): scheduled Gmail activity sync — pg_cron job runs every ~2 min via pg_net to `/api/integrations/sync`; full historical inbox backfill on first connect; Gmail threads stored in `contact_activities` (type `email`); `SyncContext` added for service-role cron path (no user session); runbook in `operations.md`
+- `b54bc1a` Network (PER-146): email activity UI — `EntityActivityTab` now groups Gmail messages by subject/thread with expand/collapse; sender + recipient displayed per message; `components/network/MailActivityBanner.tsx` — Activity-tab banner showing connect-email nudge (no Google/Microsoft account) or live backfill progress once connected
+
+### Fixes / polish
+- `c7e13c0` Network (PER-38): "Download a sample CSV" link in `ImportContactsModal` — provides a pre-headed template so users know expected column format before importing
+
+### Docs
+- This run: `modules.md` — Ash section rewritten (AshDock primary surface, moduleMeta.ts, lib/ash/title.ts, Sidebar Recent chats, ash-history-refresh pattern, AshPanel/AshChatView unused); Layout section updated (Sidebar Recent chats + event); Network section updated (MailActivityBanner, ImportContactsModal sample CSV note)
+- This run: `change-playbook.md` — Section 6 events table: add `ash-history-refresh` row; update `open-ash` row (Sidebar dispatcher + conversationId detail); update `ash:turn-complete` dispatcher (useAshChat, not AshPanel)
+- This run: `README.md` — Ash row updated (bottom-pill dock + Sidebar Recent chats)
+- This run: `mobile-responsiveness.md` — Ash section updated (AshDock full-width layout, AshPanel unused)
+
+---
+
 ## 2026-07-10 (week of 2026-07-03)
 
 ### Features
