@@ -2,6 +2,7 @@ import Sidebar from "@/components/layout/Sidebar";
 import MobileNav from "@/components/layout/MobileNav";
 import MobileDesktopNotice from "@/components/layout/MobileDesktopNotice";
 import AshContainer from "@/components/ash/AshContainer";
+import AshActionBridge from "@/components/ash/AshActionBridge";
 import TourTracker from "@/components/tour/TourTracker";
 import TourCallout from "@/components/tour/TourCallout";
 
@@ -17,6 +18,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <AshContainer />
+      <AshActionBridge />
       <TourTracker />
       <TourCallout />
     </div>

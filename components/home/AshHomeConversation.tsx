@@ -20,6 +20,8 @@ interface Props {
   /** Hide the built-in New chat / Close controls (the caller supplies its own,
    *  e.g. AshDock's control row). Defaults to false for Home. */
   hideControls?: boolean;
+  /** Submit an interactive prompt answer as a new user turn. */
+  onSubmitPrompt?: (text: string) => void;
 }
 
 const ctrlBtn: React.CSSProperties = {
@@ -34,7 +36,7 @@ const ctrlBtn: React.CSSProperties = {
   cursor: "pointer",
 };
 
-export default function AshHomeConversation({ messages, onClear, onClose, hideControls = false }: Props) {
+export default function AshHomeConversation({ messages, onClear, onClose, hideControls = false, onSubmitPrompt }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
   // Keep the newest message (just above the bar) in view as content streams in.
@@ -87,8 +89,14 @@ export default function AshHomeConversation({ messages, onClear, onClose, hideCo
           WebkitMaskImage: "linear-gradient(to bottom, transparent 0, black 64px, black 100%)",
         }}
       >
-        {messages.map((m) => (
-          <AshMessageRow key={m.id} message={m} assistantMaxWidth="none" />
+        {messages.map((m, i) => (
+          <AshMessageRow
+            key={m.id}
+            message={m}
+            assistantMaxWidth="none"
+            onSubmitPrompt={onSubmitPrompt}
+            isLast={i === messages.length - 1}
+          />
         ))}
         <div ref={endRef} />
       </div>

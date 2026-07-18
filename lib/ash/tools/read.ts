@@ -675,6 +675,165 @@ export const getSetupStatusTool: AshToolDefinition = {
   handler: get_setup_status,
 };
 
+// ─── get_module_status ──────────────────────────────────────────────────────────
+//
+// Per-module onboarding: how populated one module is right now + what a healthy
+// starting point looks like, so Ash can walk the user through setting up that
+// single module (Projects, Network, Finance, …) rather than only the profile.
+
+const MODULE_BASELINES: Record<string, { label: string; baseline: string }> = {
+  projects: {
+    label: "Projects",
+    baseline:
+      "A good start is 2–4 real active pieces of work — a commission, a studio edition, a client project — each with a status, a rough due date, and (if known) an estimated value. Create them with create_project as the user names them; add first tasks with add_task.",
+  },
+  network: {
+    label: "Network",
+    baseline:
+      "A good start is a handful of the relationships that actually matter — a gallery or two, key collectors, a fabricator, any press who've covered them. Add them with create_contact (pass organization for galleries/shops). A few is plenty; depth beats a dumped address book.",
+  },
+  contacts: {
+    label: "Network",
+    baseline:
+      "A good start is a handful of the relationships that actually matter — a gallery or two, key collectors, a fabricator, any press who've covered them. Add them with create_contact (pass organization for galleries/shops).",
+  },
+  finance: {
+    label: "Finance",
+    baseline:
+      "A good start is a default hourly rate set, any unpaid invoices entered so cash flow is real, and time tracking started on an active project. Bank connection and invoicing need the user in the Finance module — point them there with a link; you can log time with log_time.",
+  },
+  calendar: {
+    label: "Calendar",
+    baseline:
+      "A good start is the next few real deadlines on the calendar — fair application dates, client deliverables, project due dates — plus Google Calendar connected so external events show up. Add dated tasks with add_task; connecting Google needs the user in Settings → Integrations.",
+  },
+  outreach: {
+    label: "Outreach",
+    baseline:
+      "A good start is one or two live pursuits in the pipeline — a gallery they're courting, a fair they mean to apply to, a press pitch — so follow-ups don't slip. The pipeline lives in the Outreach module; capture the people involved now with create_contact and the follow-up steps with add_task.",
+  },
+  notes: {
+    label: "Notes",
+    baseline:
+      "A good start is capturing whatever's currently living in their head or scattered across apps — ideas, meeting notes, research. Create them with create_note, linked to a project or contact where it fits.",
+  },
+  presence: {
+    label: "Presence",
+    baseline:
+      "A good start is their website and main social/newsletter noted, plus a few saved opportunities (fairs, open calls, grants) worth pursuing. Website/socials save to the profile via save_profile_details; the opportunities feed lives in the Presence module.",
+  },
+  resources: {
+    label: "Resources",
+    baseline:
+      "A good start is the core business documents in one place — a contract template, artist statement/bio, a rate sheet, brand assets. Uploading files needs the user in the Resources module; you can draft the written pieces (bio, statement) with them and save them to the profile.",
+  },
+};
+
+async function get_module_status(
+  input: { module: string },
+  { supabase, userId }: ToolContext
+): Promise<string> {
+  const key = (input.module ?? "").toLowerCase();
+  const meta = MODULE_BASELINES[key];
+  if (!meta) {
+    return `Unknown module "${input.module}". Known: ${Object.keys(MODULE_BASELINES).join(", ")}.`;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const countOf = async (table: string, filters?: (q: any) => any) => {
+    let q: any = supabase.from(table).select("id", { count: "exact", head: true }).eq("user_id", userId); // eslint-disable-line @typescript-eslint/no-explicit-any
+    if (filters) q = filters(q);
+    const { count } = await q;
+    return count ?? 0;
+  };
+
+  const lines: string[] = [`Module: ${meta.label}.`];
+
+  switch (key) {
+    case "projects": {
+      const [total, active] = await Promise.all([
+        countOf("projects"),
+        countOf("projects", (q) => q.neq("status", "complete").neq("status", "cut")),
+      ]);
+      lines.push(`Current: ${total} projects (${active} active).`);
+      break;
+    }
+    case "network":
+    case "contacts": {
+      const [contacts, orgs] = await Promise.all([
+        countOf("contacts", (q) => q.eq("archived", false)),
+        countOf("organizations"),
+      ]);
+      lines.push(`Current: ${contacts} contacts, ${orgs} organizations.`);
+      break;
+    }
+    case "finance": {
+      const [invoices, timeEntries] = await Promise.all([
+        countOf("invoices"),
+        countOf("time_entries"),
+      ]);
+      const { data: prof } = await supabase.from("profiles").select("hourly_rate").eq("user_id", userId).maybeSingle();
+      lines.push(`Current: ${invoices} invoices, ${timeEntries} time entries, default hourly rate ${prof?.hourly_rate ? `set (${prof.hourly_rate})` : "not set"}.`);
+      break;
+    }
+    case "calendar": {
+      const [dated, cals] = await Promise.all([
+        countOf("tasks", (q) => q.not("due_date", "is", null).eq("completed", false)),
+        countOf("user_calendars"),
+      ]);
+      lines.push(`Current: ${dated} upcoming dated tasks, ${cals} connected calendars.`);
+      break;
+    }
+    case "outreach": {
+      const targets = await countOf("outreach_targets");
+      lines.push(`Current: ${targets} outreach targets in the pipeline.`);
+      break;
+    }
+    case "notes": {
+      const notes = await countOf("notes");
+      lines.push(`Current: ${notes} notes.`);
+      break;
+    }
+    case "presence": {
+      const { data: prof } = await supabase.from("profiles").select("website").eq("user_id", userId).maybeSingle();
+      const saved = await countOf("opportunities", (q) => q.eq("user_status", "saved"));
+      lines.push(`Current: website ${prof?.website ? "on file" : "not set"}, ${saved} saved opportunities.`);
+      break;
+    }
+    case "resources": {
+      const resources = await countOf("resources");
+      lines.push(`Current: ${resources} resources/documents.`);
+      break;
+    }
+  }
+
+  lines.push(`Healthy starting point: ${meta.baseline}`);
+  return lines.join("\n");
+}
+
+export const getModuleStatusTool: AshToolDefinition = {
+  name: "get_module_status",
+  description:
+    "Check how populated a single module is right now and what a healthy starting point looks like, " +
+    "so you can guide the user through setting up THAT module (not just their profile). Call this when " +
+    "the user asks you to help set up / fill in / get going with a specific area — Projects, Network, " +
+    "Finance, Calendar, Outreach, Notes, Presence, or Resources — or when they're sitting in an empty " +
+    "module. Then walk them through it: one crisp line on what the module is for, gather the essentials " +
+    "with ask_user, and populate it with the write tools.",
+  input_schema: {
+    type: "object",
+    properties: {
+      module: {
+        type: "string",
+        enum: ["projects", "network", "finance", "calendar", "outreach", "notes", "presence", "resources"],
+        description: "Which module to check.",
+      },
+    },
+    required: ["module"],
+  },
+  handler: get_module_status,
+};
+
 // ─── Export all read tools ─────────────────────────────────────────────────────
 
 export const READ_TOOLS: AshToolDefinition[] = [
@@ -689,4 +848,5 @@ export const READ_TOOLS: AshToolDefinition[] = [
   getOpportunitiesTool,
   searchKnowledgeBaseTool,
   getSetupStatusTool,
+  getModuleStatusTool,
 ];

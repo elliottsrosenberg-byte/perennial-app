@@ -3,6 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { buildAshContext } from "@/lib/ash/context";
 import { STATIC_SYSTEM_PROMPT, buildDynamicContext } from "@/lib/ash/system-prompt";
 import { ANTHROPIC_TOOLS, executeTool, buildCapabilitiesManifest } from "@/lib/ash/tools";
+import { ASK_USER_TOOL_NAME } from "@/lib/ash/tools/interactive";
+import { NAVIGATE_TOOL_NAME } from "@/lib/ash/tools/navigation";
+import { normalizeAshPrompt, serializeAskForHistory } from "@/lib/ash/interactive-types";
+import { normalizeNavAction, describeNavAction } from "@/lib/ash/app-navigation";
 import { generateConversationTitle } from "@/lib/ash/title";
 
 export const runtime    = "nodejs";
@@ -127,11 +131,65 @@ export async function POST(req: Request) {
 
             // Execute each tool call
             const toolResults: Anthropic.ToolResultBlockParam[] = [];
+            // `ask_user` renders an interactive card and ends the turn — the
+            // widget IS Ash's message, so we stop the agentic loop after it
+            // rather than feeding a result back for the model to keep talking.
+            let askShown = false;
             for (const block of msg.content) {
               if (block.type !== "tool_use") continue;
 
               // Notify the client which tool is running
               send({ tool: block.name });
+
+              if (block.name === ASK_USER_TOOL_NAME) {
+                const prompt = normalizeAshPrompt(block.input);
+                if (prompt) {
+                  send({ prompt });
+                  // Persist a compact note so the reply the user sends next reads
+                  // in context (the live widget isn't part of the saved text).
+                  fullAssistantResponse += serializeAskForHistory(prompt);
+                  askShown = true;
+                  toolResults.push({
+                    type:        "tool_result",
+                    tool_use_id: block.id,
+                    content:     "Interactive prompt shown to the user. Their reply arrives as the next message.",
+                  });
+                } else {
+                  // Malformed input — let the model recover (retry or ask in prose).
+                  toolResults.push({
+                    type:        "tool_result",
+                    tool_use_id: block.id,
+                    content:     "ask_user input was invalid (need at least one well-formed question). Ask in plain text instead, or retry with a valid prompt.",
+                    is_error:    true,
+                  });
+                }
+                continue;
+              }
+
+              if (block.name === NAVIGATE_TOOL_NAME) {
+                const action = normalizeNavAction(block.input);
+                if (action) {
+                  // Include the conversation id so a home→module navigation can
+                  // hand the live conversation off to the persistent dock (the
+                  // client only learns the id at end-of-turn otherwise).
+                  send({ action, conversationId: activeConversationId });
+                  // Unlike ask_user, keep the turn going so Ash can guide the
+                  // user through the page/form it just opened.
+                  toolResults.push({
+                    type:        "tool_result",
+                    tool_use_id: block.id,
+                    content:     describeNavAction(action),
+                  });
+                } else {
+                  toolResults.push({
+                    type:        "tool_result",
+                    tool_use_id: block.id,
+                    content:     "navigate input was invalid (unknown module/create target). Tell the user where to go in words instead.",
+                    is_error:    true,
+                  });
+                }
+                continue;
+              }
 
               const result = await executeTool(
                 block.name,
@@ -145,6 +203,9 @@ export async function POST(req: Request) {
                 content:     result,
               });
             }
+
+            // The card is the message — don't let the model keep generating.
+            if (askShown) break;
 
             // Append assistant turn + tool results and loop
             messages = [

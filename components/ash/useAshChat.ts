@@ -6,12 +6,17 @@
 // AshChatView; chrome (header/dimensions/open state) lives in each surface.
 
 import { useCallback, useState } from "react";
+import type { AshPrompt } from "@/lib/ash/interactive-types";
 
 export interface AshMessage {
   id:         string;
   role:       "user" | "assistant";
   content:    string;
   streaming?: boolean;
+  /** An interactive prompt (tappable choices / answer fields) Ash attached to
+   *  this turn. Rendered inline by AshPromptCard; answering it sends a normal
+   *  user message back. */
+  prompt?:    AshPrompt;
 }
 
 interface UseAshChatOptions {
@@ -71,6 +76,22 @@ export function useAshChat({ module, onFirstMessage }: UseAshChatOptions) {
               ));
             }
             if (p.tool) setActiveTool(p.tool);
+            if (p.action && typeof window !== "undefined") {
+              // Ash wants to route the user somewhere (a module, or a "new X"
+              // form). A global bridge with router access executes it. Carry the
+              // conversation id so a home→module hop can keep this conversation
+              // going in the persistent dock.
+              setActiveTool(null);
+              window.dispatchEvent(new CustomEvent("perennial:ash-action", {
+                detail: { action: p.action, conversationId: p.conversationId ?? turnConvId ?? conversationId },
+              }));
+            }
+            if (p.prompt) {
+              setActiveTool(null);
+              setMessages((prev) => prev.map((m) =>
+                m.id === ashMsg.id ? { ...m, prompt: p.prompt } : m
+              ));
+            }
             if (p.done && p.conversationId) {
               // A brand-new conversation just got its id — surface it in the
               // Sidebar's "Recent chats" immediately (with its first-message
