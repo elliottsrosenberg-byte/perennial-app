@@ -10,6 +10,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { type TourVisited } from "@/lib/tour";
 import IntroModalShell, { type IntroSlide } from "@/components/tour/IntroModalShell";
+import { launchAshSetup } from "@/components/tour/launchAshSetup";
 import { WritingSurface, InlineAshTease } from "./NoteAnimations";
 
 const SLIDES: IntroSlide[] = [
@@ -106,6 +107,7 @@ export default function NotesIntroModal() {
       slides={SLIDES}
       onSkip={() => close(false)}
       onGetStarted={() => close(true)}
+      onSetupWithAsh={() => { void close(false); launchAshSetup("Notes"); }}
     />
   );
 }

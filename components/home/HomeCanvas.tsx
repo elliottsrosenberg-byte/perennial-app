@@ -270,6 +270,7 @@ export default function HomeCanvas({ canvasId, initialObjects, setupComplete = t
               messages={messages}
               onClear={clearChat}
               onClose={() => setCollapsed(true)}
+              onSubmitPrompt={sendMessage}
             />
           ) : messages.length > 0 ? (
             /* Minimized — tucked at the bottom, one click (or typing) reopens it */
