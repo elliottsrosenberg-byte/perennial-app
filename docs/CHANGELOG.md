@@ -4,6 +4,12 @@ Maintained by the weekly documentation agent. Each entry covers the prior week's
 
 ---
 
+## 2026-09-11 (week of 2026-09-04)
+
+No significant changes this week — no application code commits landed on `main` since the 2026-09-04 docs refresh. No architecture doc edits needed.
+
+---
+
 ## 2026-09-04 (week of 2026-08-28)
 
 No significant changes this week — no application code commits landed on `main` since the 2026-08-28 docs refresh. No architecture doc edits needed.
