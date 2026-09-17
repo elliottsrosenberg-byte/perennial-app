@@ -1,17 +1,16 @@
 // Admin: act on a user-submitted opportunity suggestion — promote it into the
 // curated feed (as a draft, for a final review) or dismiss it. Service-role
-// writes; gated to a signed-in user.
+// writes; gated to ADMIN_USER_IDS via getAdminUser().
 
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getAdminUser } from "@/lib/admin/guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  const adminUser = await getAdminUser();
+  if (!adminUser) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const body = (await req.json().catch(() => null)) as { id?: string; action?: string } | null;
   if (!body?.id || !["promote", "dismiss"].includes(body.action ?? "")) {
