@@ -48,7 +48,7 @@ export default async function CalendarPage() {
   let practiceTypes: string[] = [];
   if (user) {
     const { data: profile } = await supabase
-      .from("profiles").select("practice_types").eq("id", user.id).maybeSingle();
+      .from("profiles").select("practice_types").eq("user_id", user.id).maybeSingle();
     practiceTypes = (profile?.practice_types as string[] | null) ?? [];
   }
 
