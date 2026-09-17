@@ -1,10 +1,10 @@
 // Admin: create/update opportunities in the curated feed. Writes use the
 // service-role client (the opportunities write policy is service_role-only);
 // reads happen client-side via the authenticated select-all policy. Gated to
-// a signed-in user — pre-launch that's the owner. TODO: real admin-role gate.
+// ADMIN_USER_IDS via getAdminUser().
 
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getAdminUser } from "@/lib/admin/guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -17,9 +17,8 @@ const FIELDS = [
 ] as const;
 
 export async function POST(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  const adminUser = await getAdminUser();
+  if (!adminUser) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body || typeof body.title !== "string" || !body.title.trim()) {
