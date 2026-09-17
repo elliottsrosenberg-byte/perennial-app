@@ -14,6 +14,10 @@ export const maxDuration = 60;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// Per-user Ash messages per UTC day. Deliberately generous — this exists to
+// stop a runaway account, not to meter normal use.
+const ASH_DAILY_MESSAGE_CAP = 200;
+
 // ─── POST /api/ash ─────────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
@@ -30,6 +34,25 @@ export async function POST(req: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return new Response("Unauthorized", { status: 401 });
+
+    // ── Daily message cap ───────────────────────────────────────────────────────
+    // Fair-use ceiling: every Ash turn runs on the shared platform Anthropic
+    // key, so one account must not be able to spend without bound. Generous
+    // enough that a real user never notices; resets at midnight UTC.
+    const dayStart = new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const { count: sentToday } = await supabase
+      .from("ash_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("role", "user")
+      .gte("created_at", dayStart.toISOString());
+    if ((sentToday ?? 0) >= ASH_DAILY_MESSAGE_CAP) {
+      return Response.json(
+        { error: "daily_limit", message: "You've hit today's Ash limit — it resets at midnight UTC. Your conversations are saved, so pick this up again tomorrow." },
+        { status: 429 },
+      );
+    }
 
     // ── Context + history (parallel) ────────────────────────────────────────────
     const [context, historyResult, convResult] = await Promise.all([
