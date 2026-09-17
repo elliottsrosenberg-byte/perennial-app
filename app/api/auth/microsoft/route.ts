@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { microsoftAdapter } from "@/lib/integrations/microsoft";
 import { resolveUpstreamScopes } from "@/lib/integrations/registry";
 import { appOrigin } from "@/lib/url";
+import { integrationLive } from "@/lib/launch-flags";
+import { isAdminUserId } from "@/lib/admin/guard";
 
 export const runtime = "nodejs";
 
@@ -36,6 +38,11 @@ export async function GET(req: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.redirect(new URL("/login?next=/settings", req.url));
+
+    // Launch gate — admins may still connect for testing (lib/launch-flags.ts).
+    if (!integrationLive("microsoft") && !isAdminUserId(user.id)) {
+      return NextResponse.redirect(settingsErrorUrl(appUrl, "coming_soon"));
+    }
 
     const redirectUri = `${appUrl}/api/auth/microsoft/callback`;
     const scopes = resolveUpstreamScopes("microsoft", {

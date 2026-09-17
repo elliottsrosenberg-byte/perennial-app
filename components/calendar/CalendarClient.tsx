@@ -21,6 +21,7 @@ import QuickTaskCard, { type QuickTaskInput } from "./QuickTaskCard";
 import CalendarIntroModal from "@/components/tour/calendar/CalendarIntroModal";
 import CalendarTooltipTour from "@/components/tour/calendar/CalendarTooltipTour";
 import { fmtTime } from "@/lib/format/date";
+import { integrationLive } from "@/lib/launch-flags";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -2302,7 +2303,7 @@ export default function CalendarClient({
           {!anyConnected && (
             <div data-tour-target="calendar.integrations" className="mx-3 mt-5 mb-3 flex flex-col gap-2">
               <button
-                onClick={() => window.location.href = "/api/auth/google?next=/calendar"}
+                onClick={() => window.location.href = integrationLive("google") ? "/api/auth/google?next=/calendar" : "/settings?section=integrations&provider=google&error=coming_soon"}
                 className="w-full flex items-center gap-2 p-3 rounded-lg transition-colors text-left"
                 style={{ background: "var(--color-cream)", border: "0.5px solid var(--color-border)" }}
                 onMouseEnter={e => e.currentTarget.style.borderColor = "var(--color-sage)"}
@@ -2312,13 +2313,13 @@ export default function CalendarClient({
                   <path d="M43.6 20H24v8.4h11.2C33.6 33.4 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l6-6C34.5 6.3 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c10 0 19-7.2 19-20 0-1.3-.1-2.7-.4-4z" fill="#4285F4"/>
                 </svg>
                 <div>
-                  <p className="text-[11px] font-medium" style={{ color: "var(--color-charcoal)" }}>Connect Google Calendar</p>
+                  <p className="text-[11px] font-medium" style={{ color: "var(--color-charcoal)" }}>{integrationLive("google") ? "Connect Google Calendar" : "Google Calendar — coming soon"}</p>
                   <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>Read-only · events alongside tasks</p>
                 </div>
               </button>
 
               <button
-                onClick={() => window.location.href = "/api/auth/microsoft?next=/calendar"}
+                onClick={() => window.location.href = integrationLive("microsoft") ? "/api/auth/microsoft?next=/calendar" : "/settings?section=integrations&provider=microsoft&error=coming_soon"}
                 className="w-full flex items-center gap-2 p-3 rounded-lg transition-colors text-left"
                 style={{ background: "var(--color-cream)", border: "0.5px solid var(--color-border)" }}
                 onMouseEnter={e => e.currentTarget.style.borderColor = "#0078d4"}
@@ -2331,7 +2332,7 @@ export default function CalendarClient({
                   <path d="M28 17H17v11h11V17z" fill="#FFB900"/>
                 </svg>
                 <div>
-                  <p className="text-[11px] font-medium" style={{ color: "var(--color-charcoal)" }}>Connect Outlook Calendar</p>
+                  <p className="text-[11px] font-medium" style={{ color: "var(--color-charcoal)" }}>{integrationLive("microsoft") ? "Connect Outlook Calendar" : "Outlook Calendar — coming soon"}</p>
                   <p className="text-[10px]" style={{ color: "var(--color-grey)" }}>Read-only · events alongside tasks</p>
                 </div>
               </button>
@@ -2535,12 +2536,12 @@ export default function CalendarClient({
               heading="Your week, in one place"
               body="Bring your real calendar in and add tasks for anything you don't want to forget. Perennial keeps both side-by-side, so the next thing to do is always in sight."
               action={{
-                label: "Connect Google Calendar",
-                onClick: () => { window.location.href = "/api/auth/google?next=/calendar"; },
+                label: integrationLive("google") ? "Connect Google Calendar" : "Google Calendar — coming soon",
+                onClick: () => { window.location.href = integrationLive("google") ? "/api/auth/google?next=/calendar" : "/settings?section=integrations&provider=google&error=coming_soon"; },
               }}
               secondaryAction={{
-                label: "Connect Outlook",
-                onClick: () => { window.location.href = "/api/auth/microsoft?next=/calendar"; },
+                label: integrationLive("microsoft") ? "Connect Outlook" : "Outlook — coming soon",
+                onClick: () => { window.location.href = integrationLive("microsoft") ? "/api/auth/microsoft?next=/calendar" : "/settings?section=integrations&provider=microsoft&error=coming_soon"; },
               }}
               tips={[
                 "Connections are read-only — events show up here but stay editable in Google or Outlook.",

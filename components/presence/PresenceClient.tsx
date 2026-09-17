@@ -10,6 +10,7 @@ import PressTab from "./PressTab";
 import { tagsForPractices, disciplineLabel } from "@/lib/opportunities/disciplines";
 import { MoreHorizontal, Plus, ChevronDown } from "lucide-react";
 import { detectHostingPlatform, guideFor } from "@/lib/presence/detectHostingPlatform";
+import { integrationLive } from "@/lib/launch-flags";
 import Select from "@/components/ui/Select";
 import DatePicker from "@/components/ui/DatePicker";
 import Modal from "@/components/ui/Modal";
@@ -522,20 +523,20 @@ function OverviewTab({ onTabChange, opps, instagram, plausible, newsletter, onCo
         {plausible ? (
           <StatCard label="Website" value={plausible.metadata.sessions ? String(plausible.metadata.sessions) : plausible.metadata.visitors_30d ? String(plausible.metadata.visitors_30d) : "—"} sub="Sessions · last 30 days" subUp detail={plausible.metadata.property_name as string ?? plausible.account_name ?? ""} badge="Connected" helpText="Sessions from Google Analytics." askAsh ashMessage="How can I drive more traffic to my website?" onClick={() => onTabChange("website")} />
         ) : (
-          <div onClick={() => window.location.href = "/api/auth/google-analytics"} className="flex flex-col gap-1 rounded-xl p-4 flex-1 shrink-0 cursor-pointer" style={{ background:"var(--color-warm-white)", boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)" }}>
+          <div onClick={integrationLive("google_analytics") ? () => window.location.href = "/api/auth/google-analytics" : undefined} className={`flex flex-col gap-1 rounded-xl p-4 flex-1 shrink-0 ${integrationLive("google_analytics") ? "cursor-pointer" : ""}`} style={{ background:"var(--color-warm-white)", boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)" }}>
             <span style={{ fontSize:10, color:"var(--color-grey)", fontWeight:600, letterSpacing:"0.06em", textTransform:"uppercase" }}>Website</span>
             <div style={{ fontSize:22, fontWeight:700, color:"var(--color-grey)", opacity:0.3 }}>—</div>
-            <div style={{ fontSize:11, color:"var(--color-sage)", fontWeight:500 }}>Connect Google Analytics →</div>
+            <div style={{ fontSize:11, color:integrationLive("google_analytics") ? "var(--color-sage)" : "var(--color-grey)", fontWeight:500 }}>{integrationLive("google_analytics") ? "Connect Google Analytics →" : "Google Analytics — coming soon"}</div>
           </div>
         )}
         {/* Socials stat — real data if Instagram connected */}
         {instagram ? (
           <StatCard label="Socials" value={instagram.metadata.followers_count ? String(instagram.metadata.followers_count) : "—"} sub={instagram.metadata.engagement_rate ? `${instagram.metadata.engagement_rate}% engagement rate` : "Followers"} subUp detail={instagram.account_name ?? "@instagram"} badge="Connected" helpText="Your follower count and engagement rate." askAsh ashMessage="How can I grow my Instagram following as a designer?" onClick={() => onTabChange("socials")} />
         ) : (
-          <div onClick={() => window.location.href = "/api/auth/instagram"} className="flex flex-col gap-1 rounded-xl p-4 flex-1 shrink-0 cursor-pointer" style={{ background:"var(--color-warm-white)", boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)" }}>
+          <div onClick={integrationLive("instagram") ? () => window.location.href = "/api/auth/instagram" : undefined} className={`flex flex-col gap-1 rounded-xl p-4 flex-1 shrink-0 ${integrationLive("instagram") ? "cursor-pointer" : ""}`} style={{ background:"var(--color-warm-white)", boxShadow:"0 1px 4px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.07)" }}>
             <span style={{ fontSize:10, color:"var(--color-grey)", fontWeight:600, letterSpacing:"0.06em", textTransform:"uppercase" }}>Socials</span>
             <div style={{ fontSize:22, fontWeight:700, color:"var(--color-grey)", opacity:0.3 }}>—</div>
-            <div style={{ fontSize:11, color:"var(--color-sage)", fontWeight:500 }}>Connect Instagram →</div>
+            <div style={{ fontSize:11, color:integrationLive("instagram") ? "var(--color-sage)" : "var(--color-grey)", fontWeight:500 }}>{integrationLive("instagram") ? "Connect Instagram →" : "Instagram — coming soon"}</div>
           </div>
         )}
         {/* Newsletter stat — real data if any newsletter connected */}
@@ -2689,14 +2690,14 @@ export default function PresenceClient({ initialOpportunities, practiceTypes = [
       {tab === "website"       && (
         <WebsiteTab
           integration={plausible}
-          onConnect={() => window.location.href = "/api/auth/google-analytics"}
+          onConnect={() => window.location.href = integrationLive("google_analytics") ? "/api/auth/google-analytics" : "/settings?section=integrations&provider=google_analytics&error=coming_soon"}
           onDisconnect={() => disconnectIntegration("google_analytics")}
         />
       )}
       {tab === "socials"       && (
         <SocialsTab
           instagram={instagram}
-          onConnect={() => window.location.href = "/api/auth/instagram"}
+          onConnect={() => window.location.href = integrationLive("instagram") ? "/api/auth/instagram" : "/settings?section=integrations&provider=instagram&error=coming_soon"}
           onDisconnect={() => disconnectIntegration("instagram")}
           onRefreshed={updateIntegration}
         />

@@ -8,6 +8,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { plaidPost, PlaidNotConfiguredError, type PlaidLinkTokenCreateResponse, type PlaidErrorBody } from "@/lib/integrations/plaid";
+import { integrationLive } from "@/lib/launch-flags";
+import { isAdminUserId } from "@/lib/admin/guard";
 
 export const runtime = "nodejs";
 
@@ -15,6 +17,12 @@ export async function POST(req: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Launch gate — bank connections open when Plaid production access is
+  // approved; admins may still test (lib/launch-flags.ts).
+  if (!integrationLive("banking") && !isAdminUserId(user.id)) {
+    return NextResponse.json({ error: "Bank connections are coming soon." }, { status: 503 });
+  }
 
   const url = new URL(req.url);
   // Webhook URL is computed from the request so it works in dev,

@@ -6,6 +6,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { instagramAdapter } from "@/lib/integrations/instagram";
 import { appOrigin } from "@/lib/url";
+import { integrationLive } from "@/lib/launch-flags";
+import { isAdminUserId } from "@/lib/admin/guard";
 
 export const runtime = "nodejs";
 
@@ -38,6 +40,11 @@ export async function GET(req: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.redirect(new URL("/login?next=/settings?section=integrations", req.url));
+
+    // Launch gate — admins may still connect for testing (lib/launch-flags.ts).
+    if (!integrationLive("instagram") && !isAdminUserId(user.id)) {
+      return NextResponse.redirect(settingsErrorUrl(appUrl, "coming_soon"));
+    }
 
     const redirectUri = `${appUrl}/api/auth/instagram/callback`;
 

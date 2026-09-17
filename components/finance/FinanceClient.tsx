@@ -11,6 +11,8 @@ import TimeTab from "./TimeTab";
 // pulls expense rows via shared API routes that pre-date this change.
 import InvoicesTab from "./InvoicesTab";
 import BankingTab from "./BankingTab";
+import ComingSoonOverlay from "@/components/layout/ComingSoonOverlay";
+import { integrationLive } from "@/lib/launch-flags";
 import LogTimeModal from "./LogTimeModal";
 import AddExpenseModal from "./AddExpenseModal";
 import NewInvoiceModal from "./NewInvoiceModal";
@@ -346,17 +348,28 @@ export default function FinanceClient({ initialTimeEntries, initialActiveTimer, 
           />
         )}
         {activeTab === "banking" && (
-          <BankingTab
-            projects={projects}
-            onExpenseCreated={(e) => setExpenses((prev) => [e, ...prev])}
-            onExpenseUpdated={(e) => setExpenses((prev) => prev.map((x) => x.id === e.id ? e : x))}
-            onExpenseDeleted={(id) => setExpenses((prev) => prev.filter((x) => x.id !== id))}
-            onInvoiceMarkedPaid={(invoiceId, paidAt) =>
-              setInvoices((prev) => prev.map((inv) =>
-                inv.id === invoiceId ? { ...inv, status: "paid" as const, paid_at: paidAt } : inv,
-              ))
-            }
-          />
+          // Launch gate: bank sync needs Plaid production access — until
+          // then the tab renders under a "Coming soon" scrim
+          // (lib/launch-flags.ts to re-enable).
+          <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+            {!integrationLive("banking") && (
+              <ComingSoonOverlay
+                module="Banking"
+                description="Connect your bank to see transactions and cash flow alongside your invoices. We're finishing our bank-connection approval — it'll open up soon."
+              />
+            )}
+            <BankingTab
+              projects={projects}
+              onExpenseCreated={(e) => setExpenses((prev) => [e, ...prev])}
+              onExpenseUpdated={(e) => setExpenses((prev) => prev.map((x) => x.id === e.id ? e : x))}
+              onExpenseDeleted={(id) => setExpenses((prev) => prev.filter((x) => x.id !== id))}
+              onInvoiceMarkedPaid={(invoiceId, paidAt) =>
+                setInvoices((prev) => prev.map((inv) =>
+                  inv.id === invoiceId ? { ...inv, status: "paid" as const, paid_at: paidAt } : inv,
+                ))
+              }
+            />
+          </div>
         )}
       </div>
 
