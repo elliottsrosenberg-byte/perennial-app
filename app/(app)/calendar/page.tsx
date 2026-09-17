@@ -38,19 +38,27 @@ export default async function CalendarPage() {
     // page doesn't ship every opportunity in the world.
     supabase
       .from("opportunities")
-      .select("id, title, event_type, category, start_date, end_date, location, user_status, tags")
+      .select("id, title, event_type, category, start_date, end_date, location, tags")
       .not("start_date", "is", null),
   ]);
 
   // The user's practice types → discipline tags, so the calendar can filter
-  // opportunities to "Recommended".
+  // opportunities to "Recommended". Also overlay the user's per-user
+  // opportunity statuses (opportunity_user_status) onto the shared rows.
   const { data: { user } } = await supabase.auth.getUser();
   let practiceTypes: string[] = [];
+  const oppStatusById = new Map<string, string>();
   if (user) {
-    const { data: profile } = await supabase
-      .from("profiles").select("practice_types").eq("user_id", user.id).maybeSingle();
+    const [{ data: profile }, { data: oppStatuses }] = await Promise.all([
+      supabase.from("profiles").select("practice_types").eq("user_id", user.id).maybeSingle(),
+      supabase.from("opportunity_user_status").select("opportunity_id, status").eq("user_id", user.id),
+    ]);
     practiceTypes = (profile?.practice_types as string[] | null) ?? [];
+    for (const s of oppStatuses ?? []) oppStatusById.set(s.opportunity_id as string, s.status as string);
   }
+  const mergedOpportunities = (opportunities ?? [])
+    .map((o) => ({ ...o, user_status: oppStatusById.get(o.id) ?? null }))
+    .filter((o) => o.user_status !== "hidden");
 
   // Collapse the per-row integrations into per-provider connection
   // summaries the CalendarClient uses to render its status panel and
@@ -89,7 +97,7 @@ export default async function CalendarPage() {
         }[]
       }
       initialContacts={(contacts ?? []) as Pick<Contact, "id" | "first_name" | "last_name">[]}
-      initialOpportunities={(opportunities ?? []) as Pick<Opportunity, "id" | "title" | "event_type" | "category" | "start_date" | "end_date" | "location" | "user_status" | "tags">[]}
+      initialOpportunities={mergedOpportunities as Pick<Opportunity, "id" | "title" | "event_type" | "category" | "start_date" | "end_date" | "location" | "user_status" | "tags">[]}
       practiceTypes={practiceTypes}
       googleConnected={!!googleConn}
       googleAccountName={googleConn?.accountName ?? null}
