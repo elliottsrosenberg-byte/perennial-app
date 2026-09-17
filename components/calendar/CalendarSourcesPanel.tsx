@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { UserCalendar } from "@/types/database";
 import { PALETTE_SWATCHES } from "@/lib/ui/palette";
+import { integrationLive } from "@/lib/launch-flags";
 import { ChevronDown, ChevronRight, Eye, EyeOff, MoreHorizontal, Plus, ExternalLink, Trash2, Star, RefreshCw, Unplug } from "lucide-react";
 
 interface Props {
@@ -461,15 +462,21 @@ export default function CalendarSourcesPanel({ refreshNonce = 0 }: Props) {
               overflow: "hidden",
               padding: 4,
             }}>
-              <AccountChoice
-                label="Connect Google Calendar"
-                onClick={() => { window.location.href = "/api/auth/google?next=/calendar"; }}
-              />
-              <AccountChoice
-                label="Connect Outlook"
-                onClick={() => { window.location.href = "/api/auth/microsoft?next=/calendar"; }}
-              />
-              <div style={{ height: 1, background: "var(--color-border)", margin: "2px 0" }} />
+              {integrationLive("google") && (
+                <AccountChoice
+                  label="Connect Google Calendar"
+                  onClick={() => { window.location.href = "/api/auth/google?next=/calendar"; }}
+                />
+              )}
+              {integrationLive("microsoft") && (
+                <AccountChoice
+                  label="Connect Outlook"
+                  onClick={() => { window.location.href = "/api/auth/microsoft?next=/calendar"; }}
+                />
+              )}
+              {(integrationLive("google") || integrationLive("microsoft")) && (
+                <div style={{ height: 1, background: "var(--color-border)", margin: "2px 0" }} />
+              )}
               <AccountChoice
                 label="Manage integrations"
                 external

@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Mail, RefreshCw } from "lucide-react";
+import { integrationLive } from "@/lib/launch-flags";
 
 interface MailIntegration {
   id:          string;
@@ -129,6 +130,9 @@ export default function MailActivityBanner({ onSynced }: { onSynced: () => void 
   const backfill  = backfillOf(rows);
 
   // ── Not connected → connect nudge ─────────────────────────────────────
+  // Launch gate: while the Google OAuth app is pending verification, don't
+  // pitch a connect flow strangers can't complete (lib/launch-flags.ts).
+  if (!connected && !integrationLive("google")) return null;
   if (!connected) {
     return (
       <div

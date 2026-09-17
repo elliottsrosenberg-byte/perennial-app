@@ -13,6 +13,7 @@ import {
 } from "@/lib/uploads/studio-logo";
 import { COUNTRIES, BUSINESS_TYPES, composeStudioAddress } from "@/lib/profile/business";
 import { isAutoTheme, setAutoTheme } from "@/lib/theme";
+import { integrationLive } from "@/lib/launch-flags";
 import { timeAgoNumericFallback as formatRelative } from "@/lib/format/date";
 import Toggle from "@/components/ui/Toggle";
 import Select from "@/components/ui/Select";
@@ -1421,9 +1422,13 @@ export default function SettingsPage() {
                       iconBg: "rgba(99,91,255,0.10)",
                       href: "/api/auth/stripe",
                     },
-                  ].map(({ provider, name, desc, iconBg, href, note, soon, modal }: { provider: string; name: string; desc: string; iconBg: string; href?: string | null; note?: string; soon?: boolean; modal?: string }) => {
+                  ].map(({ provider, name, desc, iconBg, href, note, soon: soonFlag, modal }: { provider: string; name: string; desc: string; iconBg: string; href?: string | null; note?: string; soon?: boolean; modal?: string }) => {
                     const connected = !!getIntegration(provider);
                     if (connected) return null;
+                    // Launch gate: providers whose third-party app is still
+                    // pending approval render as "Coming soon" (see
+                    // lib/launch-flags.ts to re-enable).
+                    const soon = soonFlag || !integrationLive(provider);
                     return (
                       <div
                         key={provider}
@@ -1896,6 +1901,7 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   start_failed:                 "Something went wrong starting the connection flow. Check the function logs.",
   callback_failed:              "Something went wrong completing the connection flow.",
   access_denied:                "You declined the consent screen. No connection was made.",
+  coming_soon:                  "This integration isn't available yet — it's coming soon.",
 };
 
 const PROVIDER_FRIENDLY: Record<string, string> = {

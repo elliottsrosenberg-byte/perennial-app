@@ -11,6 +11,8 @@ import { createClient } from "@/lib/supabase/server";
 import { googleAdapter } from "@/lib/integrations/google";
 import { resolveUpstreamScopes } from "@/lib/integrations/registry";
 import { appOrigin } from "@/lib/url";
+import { integrationLive } from "@/lib/launch-flags";
+import { isAdminUserId } from "@/lib/admin/guard";
 
 // Explicit Node.js runtime — matches the project convention for routes
 // that touch the database, and avoids any Edge-runtime ambiguity that
@@ -59,6 +61,13 @@ export async function GET(req: Request) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.redirect(new URL("/login?next=/settings", req.url));
+    }
+
+    // Launch gate — the Google OAuth app is pending verification. Admins
+    // (ADMIN_USER_IDS) may still connect/reconnect for testing; everyone
+    // else sees "coming soon" (flip in lib/launch-flags.ts when approved).
+    if (!integrationLive("google") && !isAdminUserId(user.id)) {
+      return NextResponse.redirect(settingsErrorUrl(appUrl, "coming_soon"));
     }
 
     const redirectUri = `${appUrl}/api/auth/google/callback`;

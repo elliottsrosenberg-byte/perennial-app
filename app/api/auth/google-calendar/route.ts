@@ -1,6 +1,18 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { integrationLive } from "@/lib/launch-flags";
+import { isAdminUserId } from "@/lib/admin/guard";
 
 export async function GET(req: Request) {
+  // Launch gate — admins may still connect for testing (lib/launch-flags.ts).
+  if (!integrationLive("google")) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!isAdminUserId(user?.id)) {
+      const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
+      return NextResponse.redirect(`${origin}/settings?section=integrations&provider=google&error=coming_soon`);
+    }
+  }
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
   if (!clientId) {
     return NextResponse.json({ error: "Google Client ID not configured." }, { status: 503 });
