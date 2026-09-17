@@ -7,12 +7,16 @@
 
 import { READ_TOOLS  } from "./read";
 import { WRITE_TOOLS } from "./write";
+import { askUserTool } from "./interactive";
+import { navigateTool } from "./navigation";
 import type { AshToolDefinition, ToolContext } from "./types";
 
 export type { AshToolDefinition, ToolContext };
 
-// All registered tools
-export const ALL_TOOLS: AshToolDefinition[] = [...READ_TOOLS, ...WRITE_TOOLS];
+// All registered tools. `ask_user` and `navigate` are UI tools (no DB side
+// effect) — the API route intercepts them to drive the client (render an
+// interactive card / route the user through the app).
+export const ALL_TOOLS: AshToolDefinition[] = [...READ_TOOLS, ...WRITE_TOOLS, askUserTool, navigateTool];
 
 // Anthropic-format tool definitions (passed to messages.create)
 export const ANTHROPIC_TOOLS = ALL_TOOLS.map(({ name, description, input_schema }) => ({
@@ -44,6 +48,12 @@ ${reads}
 
 **Take action — create and update the user's records (write):**
 ${writes}
+
+**Ask with structure:**
+- **ask_user** — show tappable multiple-choice and/or short/long answer fields inline in chat instead of asking in prose, then wait for the reply. Use it to keep setup and onboarding light.
+
+**Move with the user:**
+- **navigate** — take the user to a module, and optionally open its 'new X' form so they can fill it in. The 'do it with me' path during setup, alongside doing it FOR them with the write tools.
 
 You also have web search for external facts. You cannot send email, move money, or take actions outside this list — be honest about that boundary.`;
 }

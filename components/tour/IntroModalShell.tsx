@@ -7,6 +7,8 @@
 
 import { useState } from "react";
 import { X as XIcon } from "lucide-react";
+import AshMark from "@/components/ui/AshMark";
+import { ASH_GRADIENT } from "@/components/ash/theme";
 
 export interface IntroSlide {
   title: string;
@@ -20,13 +22,16 @@ interface Props {
   slides:         IntroSlide[];
   /** Skip / dismiss (X, or Back on the first slide). */
   onSkip:         () => void;
-  /** Final CTA on the last slide. */
+  /** Final CTA on the last slide — the "I'll do it myself" path (tooltip tour). */
   onGetStarted:   () => void;
   getStartedLabel?: string;
+  /** When set, the last slide offers a primary "Set up with Ash" choice
+   *  alongside onGetStarted ("I'll do it myself"). */
+  onSetupWithAsh?: () => void;
 }
 
 export default function IntroModalShell({
-  label, slides, onSkip, onGetStarted, getStartedLabel = "Get started",
+  label, slides, onSkip, onGetStarted, getStartedLabel = "Get started", onSetupWithAsh,
 }: Props) {
   const [stepIdx, setStepIdx] = useState(0);
   const isLast  = stepIdx === slides.length - 1;
@@ -136,24 +141,54 @@ export default function IntroModalShell({
             style={{
               fontSize: 12, color: "var(--color-grey)",
               background: "none", border: "none", padding: "8px 6px",
-              cursor: "pointer", fontFamily: "inherit",
+              cursor: "pointer", fontFamily: "inherit", flexShrink: 0,
             }}
           >
             {isFirst ? "Skip" : "← Back"}
           </button>
-          <button
-            onClick={() => (isLast ? onGetStarted() : setStepIdx((i) => i + 1))}
-            style={{
-              padding: "11px 24px",
-              fontSize: 13, fontWeight: 600,
-              background: "var(--color-sage)", color: "var(--color-warm-white)",
-              border: "none", borderRadius: 12, cursor: "pointer",
-              fontFamily: "inherit",
-              boxShadow: "0 6px 18px rgba(var(--color-sage-rgb),0.30)",
-            }}
-          >
-            {isLast ? getStartedLabel : "Next →"}
-          </button>
+
+          {isLast && onSetupWithAsh ? (
+            /* Last slide, two ways in: do it with Ash, or on your own. */
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button
+                onClick={onGetStarted}
+                style={{
+                  padding: "11px 14px", fontSize: 12.5, fontWeight: 600,
+                  background: "none", color: "var(--color-text-secondary)",
+                  border: "none", borderRadius: 12, cursor: "pointer", fontFamily: "inherit",
+                }}
+              >
+                I&rsquo;ll do it myself
+              </button>
+              <button
+                onClick={onSetupWithAsh}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 7,
+                  padding: "11px 20px", fontSize: 13, fontWeight: 600,
+                  background: ASH_GRADIENT, color: "#fff",
+                  border: "none", borderRadius: 12, cursor: "pointer", fontFamily: "inherit",
+                  boxShadow: "0 6px 18px rgba(var(--color-sage-rgb),0.30)",
+                }}
+              >
+                <AshMark size={14} variant="on-dark" />
+                Set up with Ash
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => (isLast ? onGetStarted() : setStepIdx((i) => i + 1))}
+              style={{
+                padding: "11px 24px",
+                fontSize: 13, fontWeight: 600,
+                background: "var(--color-sage)", color: "var(--color-warm-white)",
+                border: "none", borderRadius: 12, cursor: "pointer",
+                fontFamily: "inherit",
+                boxShadow: "0 6px 18px rgba(var(--color-sage-rgb),0.30)",
+              }}
+            >
+              {isLast ? getStartedLabel : "Next →"}
+            </button>
+          )}
         </div>
       </div>
     </div>
