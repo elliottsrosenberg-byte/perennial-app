@@ -54,6 +54,17 @@ export function useAshChat({ module, onFirstMessage }: UseAshChatOptions) {
         body:    JSON.stringify({ message: content.trim(), conversationId, module }),
       });
 
+      if (res.status === 429) {
+        // Daily cap reached — surface the server's friendly message in the
+        // assistant bubble instead of the generic failure copy.
+        const body = await res.json().catch(() => null) as { message?: string } | null;
+        setMessages((p) => p.map((m) =>
+          m.id === ashMsg.id
+            ? { ...m, content: body?.message ?? "You've hit today's Ash limit — try again tomorrow." }
+            : m
+        ));
+        return;
+      }
       if (!res.ok || !res.body) throw new Error("Failed");
 
       const reader      = res.body.getReader();
