@@ -499,18 +499,27 @@ async function get_opportunities(
 
   let q = supabase
     .from("opportunities")
-    .select("id, title, event_type, category, start_date, end_date, location, about, user_status, ash_note, website_url")
-    .or(`end_date.gte.${today},end_date.is.null,start_date.gte.${today}`)
-    .neq("user_status", "hidden");
+    .select("id, title, event_type, category, start_date, end_date, location, about, ash_note, website_url")
+    .or(`end_date.gte.${today},end_date.is.null,start_date.gte.${today}`);
 
-  if (input.category)    q = q.eq("category", input.category);
-  if (input.user_status) q = q.eq("user_status", input.user_status);
+  if (input.category) q = q.eq("category", input.category);
 
-  const { data } = await q.order("start_date", { ascending: true, nullsFirst: false }).limit(15);
+  // Statuses are per-user (opportunity_user_status), overlaid after the read.
+  const [{ data }, { data: statuses }] = await Promise.all([
+    q.order("start_date", { ascending: true, nullsFirst: false }).limit(30),
+    supabase.from("opportunity_user_status").select("opportunity_id, status").eq("user_id", userId),
+  ]);
+  const statusById = new Map((statuses ?? []).map((s) => [s.opportunity_id as string, s.status as string]));
 
-  if (!data?.length) return "No upcoming opportunities found.";
+  const rows = (data ?? [])
+    .map((o) => ({ ...o, user_status: statusById.get(o.id) ?? null }))
+    .filter((o) => o.user_status !== "hidden")
+    .filter((o) => (input.user_status ? o.user_status === input.user_status : true))
+    .slice(0, 15);
 
-  return JSON.stringify(data.map((o) => ({
+  if (!rows.length) return "No upcoming opportunities found.";
+
+  return JSON.stringify(rows.map((o) => ({
     id:          o.id,
     title:       o.title,
     category:    o.category,
@@ -796,8 +805,12 @@ async function get_module_status(
     }
     case "presence": {
       const { data: prof } = await supabase.from("profiles").select("website").eq("user_id", userId).maybeSingle();
-      const saved = await countOf("opportunities", (q) => q.eq("user_status", "saved"));
-      lines.push(`Current: website ${prof?.website ? "on file" : "not set"}, ${saved} saved opportunities.`);
+      const { count: saved } = await supabase
+        .from("opportunity_user_status")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("status", "saved");
+      lines.push(`Current: website ${prof?.website ? "on file" : "not set"}, ${saved ?? 0} saved opportunities.`);
       break;
     }
     case "resources": {
