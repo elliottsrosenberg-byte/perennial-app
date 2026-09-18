@@ -174,8 +174,7 @@ The shell lives in `app/(app)/layout.tsx` (flex shell: `Sidebar` + `MobileNav` +
 
 | Situation | Example route |
 |---|---|
-| Global/shared table | `/api/opportunities/status` (sets `user_status` on the global feed; whitelists ONLY `user_status`, validates against an ALLOWED set) |
-| Admin-curated global feed | `/api/admin/opportunities`, `/api/admin/suggestions` (⚠ TODO: no real admin-role gate yet — any signed-in user can curate) |
+| Admin-curated global feed | `/api/admin/opportunities`, `/api/admin/suggestions` (gated to `ADMIN_USER_IDS` via `lib/admin/guard.ts`) |
 | Cron bulk ingest | `/api/cron/opportunities-ingest` (CRON_SECRET-gated) |
 | No user session (signed payload / public token) | `/api/stripe/webhook`, `/api/finance/*`, `/i/[token]` |
 | Public booking visitor (no session) | `/api/book/[slug]`, `lib/scheduling/*` (integration id always resolved from the link, never visitor input) |
@@ -186,7 +185,7 @@ The shell lives in `app/(app)/layout.tsx` (flex shell: `Sidebar` + `MobileNav` +
 1. Create the table with a `user_id` column and an RLS policy `auth.uid() = user_id`.
 2. Write/read directly via `lib/supabase/client.ts` from the relevant client component. **Do not** add an API route.
 3. If a module's data must refresh another view after the write, fire the appropriate cross-view event ([Section 6](#6-cross-view-sync-events)).
-4. Only if the table is global/shared/public: copy the **service-role route pattern** — `await auth.getUser()` (or verify a shared secret / signature) **FIRST**, then `createAdminClient()` and **strictly whitelist the columns and values** you write (mirror `/api/opportunities/status`).
+4. Only if the table is global/shared/public: copy the **service-role route pattern** — `await auth.getUser()` (or verify a shared secret / signature) **FIRST**, then `createAdminClient()` and **strictly whitelist the columns and values** you write (mirror `/api/cron/opportunities-ingest`).
 
 > Most module pages are server components that batch-fetch with `Promise.all` and hand initial state to a client (e.g. `app/(app)/projects/page.tsx`, `app/(app)/calendar/page.tsx`, `app/(app)/finance/page.tsx`). When you add a per-user table that a page renders on load, add its fetch to that page's `Promise.all`.
 
