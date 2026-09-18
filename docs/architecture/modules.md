@@ -695,7 +695,7 @@ This document is a module-by-module architecture reference for the Perennial app
 - `lib/opportunities/disciplines.ts` — `tagsForPractices()`/`disciplineLabel()` map profile `practice_types` to recommended tags
 
 ### API routes
-- `POST /api/opportunities/status` (sets `user_status`: saved/applied/attending/exhibiting/hidden or null via service-role admin client — `postOppStatus` line 203)
+- `POST /api/opportunities/status` (upserts/deletes rows in `opportunity_user_status` via the user's own browser client — no service-role needed; replaces legacy shared `user_status` column write)
 - `opportunity_suggestions` insert is direct via Supabase browser client (SuggestListingModal line 2107)
 
 ### Tables
@@ -758,7 +758,7 @@ This document is a module-by-module architecture reference for the Perennial app
 ### Key patterns
 - Per-provider validation in `/connect`: each branch calls the provider API (Plausible aggregate, Beehiiv publications, etc.) before persisting (`connect/route.ts` lines 25-60+)
 - `website_sites` supports multiple sites per user and returns an embeddable `site_token` (first-party tracking alternative to GA4)
-- Auth-gated routes all do `supabase.auth.getUser()` then RLS-scoped writes; `opportunities/status` uses `createAdminClient` (service role) to write shared curated rows
+- Auth-gated routes all do `supabase.auth.getUser()` then RLS-scoped writes; `opportunities/status` uses the user's own browser client (RLS) to write `opportunity_user_status` — no service role
 
 ### Cross-module links
 - `integrations` table is shared across Presence (instagram/google_analytics/newsletter), Calendar (google-calendar/apple-icloud/microsoft), and Finance (plaid/teller) — provider string namespaces them
@@ -1256,9 +1256,16 @@ This document is a module-by-module architecture reference for the Perennial app
 ### Main components
 - `components/ash/AshContainer.tsx` — bottom-center pill launcher, open/convKey state, listens for `open-ash` + `set-project-context`/`clear-project-context` window events; dispatches `ash-history-refresh` on dock close
 - `components/ash/AshDock.tsx` — **primary chat surface**: full-width frosted-glass panel anchored at `bottom:0`, `left: var(--sidebar-width)`, `right:0`; receives `loadConversationId?` prop to resume a past chat opened from Sidebar Recent chats; click-outside + Escape dismiss; `AshPanel` + `AshChatView` retained in tree but **currently unused** (kept for rollback)
+- `components/ash/AshPromptCard.tsx` — renders `ask_user` structured-input widgets (multiple-choice single/multi, long-answer, short-answer) inline in chat; submitting sends clean answer back as user's next turn
+- `components/ash/AshActionBridge.tsx` — mounted in `app/(app)/layout.tsx`; listens for `perennial:ash-action` window events; resolves to router push via `lib/ash/app-navigation.ts`; if navigating away from Home, opens Ash dock with same `conversationId`
 - `components/ash/moduleMeta.ts` — centralizes per-module display labels (`MODULE_LABELS`) and starter suggestions (`moduleSuggestions()`); replaces the old inline `getModule()` inside `AshPanel`
 - `components/ash/AshHomeConversation.tsx` — inline Ash chat surface embedded in the Home canvas; drives Ash-guided deep setup when `profile_setup_complete=false`
 - `components/ui/AshMark.tsx`, `components/layout/AshIcon.tsx`
+- `lib/ash/app-navigation.ts` — `resolveAshNavigation()` maps Ash module+form targets to deep-link hrefs
+- `lib/ash/interactive-types.ts` — TypeScript types for `ask_user` prompt widgets and `navigate` action SSE events
+- `lib/ash/tools/interactive.ts` — `ask_user` tool definition (server intercepts before completing the turn; emits `{type:'prompt', promptId, fields}` SSE event)
+- `lib/ash/tools/navigation.ts` — `navigate` tool definition (server intercepts; emits `{type:'action', actionType:'navigate', module, openForm?}` SSE event)
+- `components/tour/launchAshSetup.ts` — opens Ash dock scoped to a module with "Help me set up my X" prompt; used by all 9 module intro modals
 - `app/api/ash/route.ts` — Anthropic SDK streaming agentic loop (nodejs runtime, maxDuration 60), **model `claude-sonnet-5`**, thinking explicitly disabled (`thinking: { type: "disabled" }`), prompt caching on static system prompt + server-side web_search; fire-and-forget `POST /api/ash/learn` ping after each completed turn
 - `lib/ash/context.ts` (`buildAshContext`), `lib/ash/system-prompt.ts`, `lib/ash/tools/{index,read,write,types}.ts` (self-knowledge manifest in `tools/index.ts`)
 - `lib/ash/title.ts` — LLM-generated conversation title: calls `claude-haiku-4-5`, max_tokens 24, returns a 3–6 word Title Case string (or null on failure); dispatched into Sidebar Recent chats after first exchange
@@ -1269,7 +1276,7 @@ This document is a module-by-module architecture reference for the Perennial app
 > **Model note:** `/api/ash/route.ts` → `claude-sonnet-5`. `/api/notes/ash-inline/route.ts` → `claude-sonnet-4-6` (inline editor). `/api/notes/suggest-tasks/route.ts` → `claude-haiku-4-5-20251001` (cheap task extraction). `lib/ash/title.ts` → `claude-haiku-4-5` (title generation). Different models serve different cost/latency points.
 
 ### API routes
-- `/api/ash` (POST — SSE-style stream: `{text}`, `{tool}`, `{done, conversationId}`)
+- `/api/ash` (POST — SSE-style stream: `{text}`, `{tool}`, `{done, conversationId}`, `{type:'prompt', promptId, fields}` (ask_user intercept — ends turn; client renders AshPromptCard), `{type:'action', actionType:'navigate', ...}` (navigate intercept — handled by AshActionBridge))
 - `/api/ash/learn` (POST — fire-and-forget; extracts preferences/beliefs/values from a completed turn; writes `ash_preferences` via service-role)
 - `/api/ash/research` (POST — background research dispatch; calls `lib/ash/research.ts`; writes private `knowledge_base` rows)
 
@@ -1277,7 +1284,11 @@ This document is a module-by-module architecture reference for the Perennial app
 `ash_conversations` (insert new conv, list recent 10 for history, `module` column, LLM-generated `title`) · `ash_messages` (insert user msg, load history limit 24/50, `role`+`content`) · `ash_preferences` (read top-weighted `active` preferences → injected into system prompt; written by `/api/ash/learn`) · `knowledge_base` (RAG retrieval via `search_knowledge_base` tool; embedding cosine search on `vector(1024)` index; both global + per-user rows) · Ash READ tools query: `projects`, `tasks`, `contacts`, `contact_activities`, `notes`, `invoices`, `expenses`, `time_entries`, `outreach_pipelines`, `outreach_targets`, `opportunities` · Ash WRITE tools mutate: `projects`, `tasks`, `contacts`, `organizations`, `notes`, `time_entries`, `contact_activities` · `context.ts` reads: `profiles`, `projects`, `tasks`, `contacts`, `notes`, `invoices`, `time_entries`
 
 ### Key patterns
-- Custom window events for cross-view sync: `open-ash` (with optional `message`, `projectContext`, and `conversationId` to resume a past chat), `set-project-context`/`clear-project-context`, `ash:turn-complete` (dispatched on finish so project panel + tasks refetch)
+- Custom window events for cross-view sync: `open-ash` (with optional `message`, `projectContext`, and `conversationId` to resume a past chat), `set-project-context`/`clear-project-context`, `ash:turn-complete` (dispatched on finish so project panel + tasks refetch), `perennial:ash-action` (dispatched by SSE handler for `ask_user`/`navigate` intercepts; consumed by `AshActionBridge`)
+- `ask_user`/`navigate` tool intercept pattern: server intercepts these tools before completing the turn, emits dedicated SSE event types (`prompt`/`action`), client dispatches `perennial:ash-action` → `AshActionBridge` resolves and handles
+- Per-module "Set up with Ash" fork: all 9 `IntroModalShell`-based intro modals offer dual CTA via `launchAshSetup()`; Finance/Calendar/Outreach gained `?new=` URL handlers for Ash-navigated create flows
+- Per-user daily message cap: 200 messages/day counted from `ash_messages` for current UTC day; `/api/ash` returns 429 with friendly body; `useAshChat` renders it in the assistant bubble
+- `get_module_status` read tool (`lib/ash/tools/read.ts`): returns per-module entity counts + setup state for all 8 modules (Projects, Network, Finance, Calendar, Outreach, Notes, Presence, Resources)
 - `ash-history-refresh`: dispatched by `useAshChat` (on new conv id + after title resolves) and by `AshContainer` (on dock close); listened by `Sidebar` to re-fetch the Recent chats list
 - `loadConversationId` prop on `AshDock` + `useAshChat`: when set, loads the conversation's stored messages instead of starting blank (powered by `open-ash` event from Sidebar Recent chats)
 - `convKey` remount trick: incrementing key forces the chat hook to reset state + auto-send an injected message (used by DashboardTour final step)
@@ -1310,7 +1321,7 @@ This document is a module-by-module architecture reference for the Perennial app
 
 | | |
 |---|---|
-| **Routes** | `app/(app)/layout.tsx` wraps all authed routes · Renders: Sidebar (desktop), MobileNav (mobile), MobileDesktopNotice, AshContainer, TourTracker, TourCallout |
+| **Routes** | `app/(app)/layout.tsx` wraps all authed routes · Renders: Sidebar (desktop), MobileNav (mobile), MobileDesktopNotice, AshContainer, AshActionBridge, TourTracker, TourCallout |
 
 ### Main components
 - `components/layout/Sidebar.tsx` — desktop rail (`hidden md:flex`), collapsible 200px/52px, nav groups, theme toggle, app menu, profile menu; fetches `isAdmin` from `GET /api/admin/check` on mount — Design system / View as / Curate links in the bottom-left are shown **only for admins**; non-admins see Settings only; **"Recent chats" section** lists the 10 most recent `ash_conversations` and dispatches `open-ash` with `conversationId` to resume them in `AshDock`; listens for `ash-history-refresh` to re-fetch the list after each Ash turn or dock close

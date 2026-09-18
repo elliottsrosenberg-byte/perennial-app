@@ -36,7 +36,7 @@ Routing structure:
 The app is **effectively single-user today but built for multi-user**.
 
 - 40 of 41 public tables carry a `user_id` column with an `auth.uid() = user_id` RLS policy. See [data-model.md](./data-model.md) for the three RLS authoring styles in play.
-- Exactly one table is fully global-shared: `opportunities` (the curated Perennial feed) — no `user_id`, `{authenticated}` reads the whole feed, only `{service_role}` writes. Its `user_status` / `ash_note` columns are a documented single-tenant compromise; a per-user opportunity-state table is the multi-user TODO.
+- Exactly one table is fully global-shared: `opportunities` (the curated Perennial feed) — no `user_id`, `{authenticated}` reads the whole feed, only `{service_role}` writes. The legacy `user_status` / `ash_note` columns on the row are unread; per-user engagement is now in the separate `opportunity_user_status` table (per-user RLS).
 - One table is **semi-global**: `knowledge_base` — rows with `user_id IS NULL` are a Perennial-curated RAG feed readable by all authenticated users; rows with a `user_id` are private per-user research. Writes are service-role only (like `opportunities`).
 - Public-read escape hatches widen access for specific shared rows without exposing the table: `notes.share_token`, `invoices.public_token`, `scheduling_links` slug.
 - Per-user config hub is `profiles` (PK = `auth.uid()`, ~55 columns): onboarding answers, finance defaults, notification toggles, `default_calendar_id`, `profile_setup_complete`, `guidance_level`.

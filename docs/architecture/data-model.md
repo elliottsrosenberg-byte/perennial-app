@@ -17,7 +17,7 @@ The schema is overwhelmingly **per-user**. 40 of 41 public tables carry a `user_
 | **Semi-global** | `knowledge_base` | Rows with `user_id IS NULL` = Perennial-curated RAG content readable by `{authenticated}`; rows with `user_id` = private per-user research readable only by that user. Writes are `service_role` only (like `opportunities`) |
 | **Public-read escape hatches** (per-user rows widened by token) | `notes` (`share_token`), `invoices` (`public_token`), `scheduling_links` (`slug`) | Owner-managed, but a single row is readable without a session via a token/slug |
 
-The single fully global table, `opportunities`, is a curated/Perennial feed with **no `user_id`**. Per-user engagement (`user_status`, `ash_note`) is currently stored as **shared columns on the global row** — a documented single-tenant compromise. A per-user `opportunity_state` table is the multi-user TODO (flagged in `app/api/opportunities/status/route.ts`).
+The single fully global table, `opportunities`, is a curated/Perennial feed with **no `user_id`**. Per-user engagement status is now stored in the separate **`opportunity_user_status`** table (standard per-user RLS, PK `user_id + opportunity_id`) rather than on the shared row. The legacy `user_status` and `ash_note` columns remain on `opportunities` but are no longer read or written.
 
 `knowledge_base` is semi-global: global rows (`user_id IS NULL`) are a Perennial-curated RAG knowledge feed; per-user rows hold Ash's background research for a specific user. See the Ash section below for the full table spec.
 
@@ -31,7 +31,7 @@ A write goes through a **service-role API route** *only* when RLS would (correct
 
 | Surface | Route | Why service-role |
 |---|---|---|
-| Opportunity engagement | `app/api/opportunities/status` | Writes `user_status` on the **global** feed. Does `auth.getUser()`, then `createAdminClient().update(...).eq('id', id)`, whitelisting **only** `user_status` and validating against an allowed set |
+| Opportunity status write | `app/api/opportunities/status` | **Per-user table** `opportunity_user_status` — route does `auth.getUser()` then writes via the user's own session (standard RLS), **no service-role needed**. Was previously a service-role write to the global row; migrated when `opportunity_user_status` was introduced (migration `20260917230000_opportunity_user_status.sql`) |
 | Opportunity / suggestion curation | `app/api/admin/opportunities`, `app/api/admin/suggestions` (at `/admin`) | Writes to the global feed. **Auth-gated to any signed-in user only** (pre-launch == owner; carries a `TODO: real admin-role gate` — no role check yet) |
 | Weekly opportunity ingest | `app/api/cron/opportunities-ingest` | Bulk ingest; `CRON_SECRET`-gated (needs `CRON_SECRET` in Vercel) |
 | Public invoice view + payment | `app/i/[token]`, `app/api/stripe/webhook`, `app/api/finance/*` | No session — lookup by `public_token` / Stripe-signed payload |
@@ -150,7 +150,8 @@ Scope key: **U** = per-user (`auth.uid() = user_id`), **G** = global-shared, **M
 
 | Table | Scope | Purpose | Key columns | RLS / write notes | Related |
 |---|---|---|---|---|---|
-| `opportunities` | **G** | Curated global feed (events/calls/grants), 27 cols. **Single-tenant compromise**: `user_status` (`saved/applied/attending/exhibiting/hidden`) and `ash_note` are **shared columns on the global row** | `id`, `title`, `is_perennial_feed`, `status`, `user_status`, `source`, `last_verified_at` | **No `user_id`.** SELECT `read_opportunities` `{authenticated}` USING `true`. Write `service_write_opportunities` `{service_role}` only. **Browser writes silently no-op.** Writes via cron ingest / `/admin` / `app/api/opportunities/status` (auth-checked → service-role) | `opportunity_suggestions`, `notes`, `tasks` |
+| `opportunities` | **G** | Curated global feed (events/calls/grants), 27 cols. Legacy `user_status` and `ash_note` columns exist on the row but are **unread** — per-user engagement is now in `opportunity_user_status`. | `id`, `title`, `is_perennial_feed`, `status`, `source`, `last_verified_at` | **No `user_id`.** SELECT `read_opportunities` `{authenticated}` USING `true`. Write `service_write_opportunities` `{service_role}` only. Writes via cron ingest / `/admin`. | `opportunity_user_status`, `opportunity_suggestions`, `notes`, `tasks` |
+| `opportunity_user_status` | U | Per-user engagement with a curated opportunity. Replaces the legacy `opportunities.user_status` shared column. PK `(user_id, opportunity_id)`. | `user_id`, `opportunity_id`, `status` (`saved`/`applied`/`attending`/`exhibiting`/`hidden`), `created_at`, `updated_at` | ALL `users manage own opportunity status` (`auth.uid() = user_id` + WITH CHECK). Browser client reads/writes directly — no service-role needed. | `opportunities` |
 | `opportunity_suggestions` | U | User-submitted opportunity suggestions for admin curation | `id`, `user_id`, `title`, `status` | **Split**: INSERT own + SELECT own (**no UPDATE/DELETE** for users); admin promotes via service-role (`app/api/admin/suggestions`) | `opportunities` |
 
 ### Ash (AI assistant)
@@ -290,8 +291,8 @@ State syncs across views via ~24 custom `window` events (no typed bus today — 
 
 ## 10. Open backend TODOs (flagged in code/memory)
 
-- **Opportunities single-tenant trap:** `user_status` is one global column on the shared row — one user's save/hide overwrites everyone's. Add a per-user `opportunity_state` table (`user_id`, `opportunity_id`, `status`) with standard own-rows RLS; point `app/api/opportunities/status` at it. (Flagged in the route's own comment.)
-- **No admin-role gate:** `app/api/admin/opportunities` and `app/api/admin/suggestions` authorize **any** signed-in user (pre-launch == owner). Gate on a `profiles.role` / allowlist before launch — these are service-role writes to a global table.
+- ~~**Opportunities single-tenant trap**~~ **RESOLVED (2026-09-17):** `opportunity_user_status` table added (migration `20260917230000`); per-user RLS; legacy `user_status`/`ash_note` columns on `opportunities` are unread. ⚠️ Migration NOT yet applied to staging (DB password auth failure — apply after resetting staging password).
+- ~~**No admin-role gate**~~ **RESOLVED (2026-09-17):** `/admin` page and `/api/admin/opportunities` + `/api/admin/suggestions` now require `getAdminUser()` gated to `ADMIN_USER_IDS` via `lib/admin/guard.ts`.
 - **Stale-after-navigation:** adopt one convention — `router.refresh()` after cross-module writes, or a per-module refetch on mount/`visibilitychange` (as `CalendarClient` does for events).
 - **Untyped event bus:** add a typed events module (const map + typed dispatch/subscribe) so listeners can't silently drift from dispatchers — the Ash-context gap is exactly this failure mode.
 - **`CRON_SECRET`** must be set in Vercel for `app/api/cron/opportunities-ingest`.

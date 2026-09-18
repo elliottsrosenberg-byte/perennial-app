@@ -4,6 +4,33 @@ Maintained by the weekly documentation agent. Each entry covers the prior week's
 
 ---
 
+## 2026-09-18 (week of 2026-09-11)
+
+### Features
+
+- **Per-user opportunity status table** (`97486dc`): New `opportunity_user_status` table (PK `user_id + opportunity_id`, standard RLS) replaces the legacy shared `user_status` column on `opportunities`. Each user's saves/hides/applications are now fully isolated. Migration `20260917230000_opportunity_user_status.sql` applied to prod; existing owner statuses backfilled. `/api/opportunities/status` now writes this per-user table via browser client (no service-role).
+- **Ash interactive prompts + per-module setup** (`76e74d3`): `ask_user` tool — server intercepts before completing turn, emits `{type:'prompt'}` SSE event, `AshPromptCard.tsx` renders tappable widgets (multiple-choice/long-answer/short-answer). `navigate` tool — emits `{type:'action', actionType:'navigate'}` SSE event, new `AshActionBridge` component (mounted in layout) dispatches to router + opens Ash dock for continuity. All 9 module intro modals gain "Set up with Ash" CTA via `launchAshSetup.ts`. Finance/Calendar/Outreach gained `?new=` URL handlers for Ash-triggered create flows. New `get_module_status` read tool returns per-module entity counts + setup state. New `lib/ash/app-navigation.ts`, `interactive-types.ts`, `tools/interactive.ts`, `tools/navigation.ts`.
+- **Ash 200/day rate cap** (`ee6a15c`): `/api/ash` counts today's `ash_messages` rows; returns 429 with friendly body when limit exceeded; `useAshChat` renders it in the assistant bubble.
+- **Integration launch gating** (`4523bcf`): `lib/launch-flags.ts` — single-file feature flag (`INTEGRATION_LIVE`) per provider; `integrationLive(provider)` helper resolves aliases (`plaid→banking`, `meta→instagram`). All integrations default to `false`; flip flag + deploy to re-enable.
+
+### Fixes
+
+- **Admin gate hardened** (`e062dde`): `/admin` page, `/api/admin/opportunities`, and `/api/admin/suggestions` now all require `getAdminUser()` gated to `ADMIN_USER_IDS` via new `lib/admin/guard.ts`. Previously any signed-in user could write to the global curation feed.
+- **`profiles` table PK bug** (`5be9cf6`): Calendar and Presence `page.tsx` were querying `profiles.eq("id", userId)` — `profiles` PK is `user_id`, not `id`, so the query always returned empty. Fixed to `.eq("user_id", userId)`.
+
+### Docs
+
+- `data-model.md`: Updated `opportunities` table entry (legacy columns noted); added `opportunity_user_status` table row; resolved two Section 10 TODOs (opportunities single-tenant trap, admin gate).
+- `README.md`: Updated tenancy model paragraph re: opportunities.
+- `modules.md`: Updated `/api/opportunities/status` route description; added `AshActionBridge`, `AshPromptCard`, `launchAshSetup`, and supporting `lib/ash/` files to Ash section; added new key patterns (ask_user/navigate intercept, per-module setup, rate cap, get_module_status); updated Layout routes table.
+- `change-playbook.md`: Removed obsolete service-role row for opportunities status; updated admin gate example.
+
+### Needs review
+
+- **Migration NOT applied to staging** — `20260917230000_opportunity_user_status.sql` failed on staging due to DB password auth failure. Apply after resetting staging DB password.
+
+---
+
 ## 2026-09-11 (week of 2026-09-04)
 
 No significant changes this week — no application code commits landed on `main` since the 2026-09-04 docs refresh. No architecture doc edits needed.
