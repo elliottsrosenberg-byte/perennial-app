@@ -55,12 +55,12 @@ export function useAshChat({ module, onFirstMessage }: UseAshChatOptions) {
       });
 
       if (res.status === 429) {
-        // Daily cap reached — surface the server's friendly message in the
+        // Weekly credits spent — surface the server's friendly message in the
         // assistant bubble instead of the generic failure copy.
         const body = await res.json().catch(() => null) as { message?: string } | null;
         setMessages((p) => p.map((m) =>
           m.id === ashMsg.id
-            ? { ...m, content: body?.message ?? "You've hit today's Ash limit — try again tomorrow." }
+            ? { ...m, content: body?.message ?? "You've used this week's Ash credits — they reset Monday." }
             : m
         ));
         return;

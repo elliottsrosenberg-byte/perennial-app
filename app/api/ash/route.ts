@@ -8,15 +8,13 @@ import { NAVIGATE_TOOL_NAME } from "@/lib/ash/tools/navigation";
 import { normalizeAshPrompt, serializeAskForHistory } from "@/lib/ash/interactive-types";
 import { normalizeNavAction, describeNavAction } from "@/lib/ash/app-navigation";
 import { generateConversationTitle } from "@/lib/ash/title";
+import { getCreditState, debitCredits, exhaustedMessage } from "@/lib/ash/credits";
+import { creditsForTurn } from "@/lib/plans";
 
 export const runtime    = "nodejs";
 export const maxDuration = 60;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-// Per-user Ash messages per UTC day. Deliberately generous — this exists to
-// stop a runaway account, not to meter normal use.
-const ASH_DAILY_MESSAGE_CAP = 200;
 
 // ─── POST /api/ash ─────────────────────────────────────────────────────────────
 
@@ -35,21 +33,20 @@ export async function POST(req: Request) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return new Response("Unauthorized", { status: 401 });
 
-    // ── Daily message cap ───────────────────────────────────────────────────────
-    // Fair-use ceiling: every Ash turn runs on the shared platform Anthropic
-    // key, so one account must not be able to spend without bound. Generous
-    // enough that a real user never notices; resets at midnight UTC.
-    const dayStart = new Date();
-    dayStart.setUTCHours(0, 0, 0, 0);
-    const { count: sentToday } = await supabase
-      .from("ash_messages")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("role", "user")
-      .gte("created_at", dayStart.toISOString());
-    if ((sentToday ?? 0) >= ASH_DAILY_MESSAGE_CAP) {
+    // ── Weekly Ash credits ──────────────────────────────────────────────────────
+    // Pre-flight only checks that the user has something left; the actual charge
+    // happens after the turn, priced by what Ash did (see lib/plans.ts). A turn
+    // that starts is always allowed to finish.
+    const credits = await getCreditState(supabase, user.id);
+    if (credits.exhausted) {
       return Response.json(
-        { error: "daily_limit", message: "You've hit today's Ash limit — it resets at midnight UTC. Your conversations are saved, so pick this up again tomorrow." },
+        {
+          error:     "credits_exhausted",
+          message:   exhaustedMessage(credits),
+          resetsAt:  credits.resetsAt,
+          allowance: credits.allowance,
+          plan:      credits.plan.id,
+        },
         { status: 429 },
       );
     }
@@ -95,6 +92,9 @@ export async function POST(req: Request) {
     ];
 
     let fullAssistantResponse = "";
+    // What this turn actually did — decides what it costs (lib/plans.ts).
+    let usedTools     = false;
+    let usedWebSearch = false;
     const encoder = new TextEncoder();
     const toolCtx = { supabase, userId: user.id };
 
@@ -148,6 +148,16 @@ export async function POST(req: Request) {
             }
 
             const msg = await stream.finalMessage();
+
+            // Price the turn: Anthropic's server-side search shows up as
+            // server_tool_use / web_search_tool_result blocks; our own tools as
+            // tool_use blocks.
+            for (const block of msg.content) {
+              if (block.type === "tool_use") usedTools = true;
+              else if (block.type === "server_tool_use" || block.type === "web_search_tool_result") {
+                usedWebSearch = true;
+              }
+            }
 
             // No tool calls — conversation turn is complete
             if (msg.stop_reason !== "tool_use") break;
@@ -253,7 +263,24 @@ export async function POST(req: Request) {
             ]);
           }
 
-          send({ done: true, conversationId: activeConversationId });
+          // ── Charge the turn ───────────────────────────────────────────────────
+          // After the fact, priced by what Ash did. Stream the new balance back
+          // so the dock can show it without a second round-trip.
+          const charge = creditsForTurn({ usedTools, usedWebSearch });
+          if (!credits.unlimited) {
+            await debitCredits(user.id, charge.credits, charge.reason, activeConversationId);
+          }
+          send({
+            done:           true,
+            conversationId: activeConversationId,
+            credits: credits.unlimited ? { unlimited: true } : {
+              spent:     charge.credits,
+              reason:    charge.reason,
+              remaining: Math.max(0, (credits.remaining ?? 0) - charge.credits),
+              allowance: credits.allowance,
+              resetsAt:  credits.resetsAt,
+            },
+          });
 
           // Brand-new conversation (no incoming id): name it from the first
           // exchange, save it, and stream the title so the dock header + Sidebar
